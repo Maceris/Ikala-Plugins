@@ -33,6 +33,19 @@ public final class Clusters {
      * @return The triangles of each cluster.
      */
     public static int[][] split(@NonNull LodMesh mesh, int cap) {
+        return split(mesh, cap, 1);
+    }
+
+    /**
+     * Split a mesh's triangles into clusters, a big mesh on several threads, giving the same
+     * clusters as on one.
+     *
+     * @param mesh The mesh.
+     * @param cap The most triangles a cluster may have.
+     * @param threads How many threads to split on.
+     * @return The triangles of each cluster.
+     */
+    public static int[][] split(@NonNull LodMesh mesh, int cap, int threads) {
         final int n = mesh.getTriangleCount();
         if (n <= cap) {
             final int[] all = new int[n];
@@ -61,7 +74,7 @@ public final class Clusters {
             }
             builder.position(t, x / CORNERS, y / CORNERS, z / CORNERS);
         }
-        final int[] part = GraphPartitioner.partition(builder.build(), cap);
+        final int[] part = GraphPartitioner.partition(builder.build(), cap, threads);
         final int parts = GraphPartitioner.partCount(part);
         final int[] sizes = new int[parts];
         for (int p : part) {

@@ -91,7 +91,19 @@ public final class TJunctions {
      * @param py Its y.
      * @param pz Its z.
      */
-    private record Line(long dx, long dy, long dz, long px, long py, long pz) {}
+    record Line(long dx, long dy, long dz, long px, long py, long pz) {
+        @Override
+        public int hashCode() {
+            // The steps are small and alike, so mix them well rather than sum them
+            long h = dx * 0x9E3779B97F4A7C15L;
+            h = (h ^ (h >>> 29) ^ dy) * 0xBF58476D1CE4E5B9L;
+            h = (h ^ (h >>> 31) ^ dz) * 0x94D049BB133111EBL;
+            h = (h ^ (h >>> 29) ^ px) * 0x9E3779B97F4A7C15L;
+            h = (h ^ (h >>> 31) ^ py) * 0xBF58476D1CE4E5B9L;
+            h = (h ^ (h >>> 29) ^ pz) * 0x94D049BB133111EBL;
+            return (int) (h ^ (h >>> 32));
+        }
+    }
 
     /**
      * An edge on a line.
@@ -105,11 +117,37 @@ public final class TJunctions {
      */
     private record Segment(double from, double to, boolean forward, int tag, int first, int last) {}
 
-    /** Where an edge lies. */
-    private record Placed(Line line, double from, double to, boolean forward) {}
+    /**
+     * Where an edge lies.
+     *
+     * @param line Its line.
+     * @param from Where it starts along the line.
+     * @param to Where it ends, past the start.
+     * @param forward Whether it runs along the line's direction.
+     */
+    record Placed(Line line, double from, double to, boolean forward) {}
+
+    /** The edges on one line, and once asked for, them sorted. */
+    private static final class Filed {
+        /** The segments, in the order filed. */
+        final List<Segment> segments = new ArrayList<>();
+
+        /** The segments sorted by start, or null until asked for since the last was filed. */
+        Sorted sorted;
+    }
 
     /** The edges filed by line. */
-    private final Map<Line, List<Segment>> lines = new HashMap<>();
+    private final Map<Line, Filed> lines = new HashMap<>();
+
+    /**
+     * A line's segments sorted by where they start, with the longest one's length, for finding
+     * overlaps without walking every segment on a long line. Made when first asked for.
+     *
+     * @param from Each segment's start, in order.
+     * @param segments The segments in the same order.
+     * @param longest The longest segment's length.
+     */
+    private record Sorted(double @NonNull [] from, @NonNull Segment[] segments, double longest) {}
 
     /**
      * Where an edge between two points lies.
@@ -118,7 +156,7 @@ public final class TJunctions {
      * @param b The other.
      * @return Where it lies, or null if it has no length.
      */
-    private static Placed place(double @NonNull [] a, double @NonNull [] b) {
+    static Placed place(double @NonNull [] a, double @NonNull [] b) {
         final double[] d = new double[AXES];
         double length = 0;
         for (int axis = 0; axis < AXES; ++axis) {
@@ -165,15 +203,28 @@ public final class TJunctions {
      * @param last The vertex at b, or -1.
      */
     public void add(double @NonNull [] a, double @NonNull [] b, int tag, int first, int last) {
-        final Placed placed = place(a, b);
+        add(place(a, b), tag, first, last);
+    }
+
+    /**
+     * File an open edge already placed.
+     *
+     * @param placed Where it lies, from {@link #place}, or null if it has no length.
+     * @param tag Who it belongs to.
+     * @param first The vertex at its start, or -1.
+     * @param last The vertex at its end.
+     */
+    void add(Placed placed, int tag, int first, int last) {
         if (placed == null) {
             return;
         }
         // The segment's first vertex is the one at its low end
         final int low = placed.forward() ? first : last;
         final int high = placed.forward() ? last : first;
-        lines.computeIfAbsent(placed.line(), k -> new ArrayList<>())
-                .add(new Segment(placed.from(), placed.to(), placed.forward(), tag, low, high));
+        final Filed filed = lines.computeIfAbsent(placed.line(), k -> new Filed());
+        filed.sorted = null;
+        filed.segments.add(
+                new Segment(placed.from(), placed.to(), placed.forward(), tag, low, high));
     }
 
     /**
@@ -189,7 +240,7 @@ public final class TJunctions {
         if (placed == null) {
             return true;
         }
-        final List<Segment> on = lines.get(placed.line());
+        final List<Segment> on = segmentsOn(placed.line());
         if (on == null) {
             return false;
         }
@@ -223,22 +274,85 @@ public final class TJunctions {
      * @return True if another's edge overlaps it.
      */
     public boolean overlapsOther(double @NonNull [] a, double @NonNull [] b, int tag) {
-        final Placed placed = place(a, b);
+        return overlapsOther(place(a, b), tag);
+    }
+
+    /**
+     * Whether an edge already placed shares a stretch of its line with an edge with another tag.
+     * Only segments starting from the longest one's length before it can reach it, so the search
+     * starts there in the line's sorted segments.
+     *
+     * @param placed Where it lies, from {@link #place}, or null if it has no length.
+     * @param tag The tag to look past.
+     * @return True if another's edge overlaps it.
+     */
+    boolean overlapsOther(Placed placed, int tag) {
         if (placed == null) {
             return false;
         }
-        final List<Segment> on = lines.get(placed.line());
+        final Sorted on = sortedOn(placed.line());
         if (on == null) {
             return false;
         }
-        for (Segment segment : on) {
-            if (segment.tag() != tag
-                    && segment.from() < placed.to() - ALONG_SLACK
-                    && segment.to() > placed.from() + ALONG_SLACK) {
+        final double end = placed.to() - ALONG_SLACK;
+        final double start = placed.from() + ALONG_SLACK;
+        // The first segment that could reach past the start
+        int low = 0;
+        int high = on.from().length;
+        final double earliest = start - on.longest();
+        while (low < high) {
+            final int middle = (low + high) >>> 1;
+            if (on.from()[middle] < earliest) {
+                low = middle + 1;
+            } else {
+                high = middle;
+            }
+        }
+        for (int i = low; i < on.from().length && on.from()[i] < end; ++i) {
+            final Segment segment = on.segments()[i];
+            if (segment.tag() != tag && segment.to() > start) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * A line's segments sorted by start, made the first time they are asked for.
+     *
+     * @param line The line.
+     * @return The segments, or null if the line has none.
+     */
+    private Sorted sortedOn(@NonNull Line line) {
+        final Filed filed = lines.get(line);
+        if (filed == null) {
+            return null;
+        }
+        if (filed.sorted != null) {
+            return filed.sorted;
+        }
+        final Segment[] segments = filed.segments.toArray(new Segment[0]);
+        Arrays.sort(segments, (p, q) -> Double.compare(p.from(), q.from()));
+        final double[] from = new double[segments.length];
+        double longest = 0;
+        for (int i = 0; i < segments.length; ++i) {
+            from[i] = segments[i].from();
+            longest = Math.max(longest, segments[i].to() - segments[i].from());
+        }
+        final Sorted made = new Sorted(from, segments, longest);
+        filed.sorted = made;
+        return made;
+    }
+
+    /**
+     * The segments filed on a line.
+     *
+     * @param line The line.
+     * @return Them in the order filed, or null if there are none.
+     */
+    private List<Segment> segmentsOn(@NonNull Line line) {
+        final Filed filed = lines.get(line);
+        return filed == null ? null : filed.segments;
     }
 
     /**
@@ -254,7 +368,7 @@ public final class TJunctions {
         if (placed == null) {
             return new int[0];
         }
-        final List<Segment> on = lines.get(placed.line());
+        final List<Segment> on = segmentsOn(placed.line());
         if (on == null) {
             return new int[0];
         }

@@ -10,8 +10,6 @@ import lombok.NonNull;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.function.IntPredicate;
 
 /**
@@ -382,17 +380,92 @@ public final class LodMesh {
             return this;
         }
 
-        /** Where each position is, for welding. */
-        private final Map<Position, Integer> welding = new HashMap<>();
+        /**
+         * Each vertex by where it is, for welding: an open addressing table of vertex indices, -1
+         * where empty, compared by their positions' exact bits, so finding one allocates nothing.
+         */
+        private int[] welding = emptyTable(INITIAL_CAPACITY * 2);
 
         /**
-         * A position, compared by its exact bits.
+         * A welding table with nothing in it.
+         *
+         * @param size Its size, a power of two.
+         * @return The table.
+         */
+        private static int[] emptyTable(int size) {
+            final int[] table = new int[Integer.highestOneBit(Math.max(2, size - 1)) << 1];
+            Arrays.fill(table, -1);
+            return table;
+        }
+
+        /**
+         * A position's bits, with -0 the same as 0.
+         *
+         * @param value The coordinate.
+         * @return Its bits.
+         */
+        private static int bits(float value) {
+            return Float.floatToIntBits(value + 0f);
+        }
+
+        /**
+         * Where a position's search starts in a table.
          *
          * @param x The x bits.
          * @param y The y bits.
          * @param z The z bits.
+         * @param mask The table's size less 1.
+         * @return The first slot to look in.
          */
-        private record Position(int x, int y, int z) {}
+        private static int slot(int x, int y, int z, int mask) {
+            int h = x * 0x9E3779B1 + y * 0x85EBCA77 + z * 0xC2B2AE3D;
+            h ^= h >>> 15;
+            h *= 0x2C1B3C6D;
+            h ^= h >>> 13;
+            return h & mask;
+        }
+
+        /**
+         * The slot holding the vertex at a position, or the empty slot it would go in.
+         *
+         * @param x The x bits.
+         * @param y The y bits.
+         * @param z The z bits.
+         * @return The slot.
+         */
+        private int lookup(int x, int y, int z) {
+            final int mask = welding.length - 1;
+            int at = slot(x, y, z, mask);
+            while (true) {
+                final int vertex = welding[at];
+                if (vertex < 0
+                        || (bits(positions[vertex * AXES]) == x
+                                && bits(positions[vertex * AXES + 1]) == y
+                                && bits(positions[vertex * AXES + 2]) == z)) {
+                    return at;
+                }
+                at = (at + 1) & mask;
+            }
+        }
+
+        /** Double the welding table, keeping it at most half full. */
+        private void growWelding() {
+            final int[] table = emptyTable(welding.length * 2);
+            final int mask = table.length - 1;
+            for (int vertex = 0; vertex < vertexCount; ++vertex) {
+                int at =
+                        slot(
+                                bits(positions[vertex * AXES]),
+                                bits(positions[vertex * AXES + 1]),
+                                bits(positions[vertex * AXES + 2]),
+                                mask);
+                while (table[at] >= 0) {
+                    at = (at + 1) & mask;
+                }
+                table[at] = vertex;
+            }
+            welding = table;
+        }
 
         /**
          * Start a mesh.
@@ -413,14 +486,9 @@ public final class LodMesh {
          */
         public int vertex(float x, float y, float z) {
             // +0 makes -0 and 0 the same position
-            final Position key =
-                    new Position(
-                            Float.floatToIntBits(x + 0f),
-                            Float.floatToIntBits(y + 0f),
-                            Float.floatToIntBits(z + 0f));
-            Integer existing = welding.get(key);
-            if (existing != null) {
-                return existing;
+            final int at = lookup(bits(x), bits(y), bits(z));
+            if (welding[at] >= 0) {
+                return welding[at];
             }
             if ((vertexCount + 1) * AXES > positions.length) {
                 positions = Arrays.copyOf(positions, positions.length * 2);
@@ -429,8 +497,11 @@ public final class LodMesh {
             positions[vertexCount * AXES] = x;
             positions[vertexCount * AXES + 1] = y;
             positions[vertexCount * AXES + 2] = z;
-            welding.put(key, vertexCount);
-            return vertexCount++;
+            welding[at] = vertexCount++;
+            if (vertexCount * 2 > welding.length) {
+                growWelding();
+            }
+            return vertexCount - 1;
         }
 
         /**
@@ -442,13 +513,7 @@ public final class LodMesh {
          * @return Its index, or -1 if there is none there.
          */
         public int find(float x, float y, float z) {
-            final Integer existing =
-                    welding.get(
-                            new Position(
-                                    Float.floatToIntBits(x + 0f),
-                                    Float.floatToIntBits(y + 0f),
-                                    Float.floatToIntBits(z + 0f)));
-            return existing == null ? -1 : existing;
+            return welding[lookup(bits(x), bits(y), bits(z))];
         }
 
         /**

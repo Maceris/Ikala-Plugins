@@ -203,6 +203,7 @@ public final class BakeTexels {
         final double[] weights = new double[CORNERS];
         final double[] point = new double[AXES];
         final double[] childWeights = new double[CORNERS];
+        final double[][] scratch = new double[SCRATCH][AXES];
         for (int t = 0; t < triangles; ++t) {
             final double[] u = new double[CORNERS];
             final double[] v = new double[CORNERS];
@@ -226,7 +227,7 @@ public final class BakeTexels {
                 for (int x = x0; x <= x1; ++x) {
                     at[0] = x + HALF;
                     at[1] = y + HALF;
-                    final double distance = closestWeights(u, v, at, weights);
+                    final double distance = closestWeights(u, v, at, weights, scratch);
                     final int texel = y * width + x;
                     if (distance > BakeLayout.GUTTER || distance >= taken[texel]) {
                         continue;
@@ -272,11 +273,34 @@ public final class BakeTexels {
             double @NonNull [] v,
             double @NonNull [] p,
             double @NonNull [] out) {
-        final double[] a = {u[0], v[0], 0};
-        final double[] b = {u[1], v[1], 0};
-        final double[] c = {u[2], v[2], 0};
-        final double[] q = {p[0], p[1], 0};
-        final double[] closest = new double[AXES];
+        return closestWeights(u, v, p, out, new double[SCRATCH][AXES]);
+    }
+
+    /** Points {@link #closestWeights} needs for scratch: the triangle's, the point, the closest. */
+    static final int SCRATCH = 5;
+
+    /**
+     * The barycentric weights of the closest point of a flat triangle to a point, and how far it
+     * is, with scratch kept between calls.
+     *
+     * @param u The triangle's corners' u.
+     * @param v Their v.
+     * @param p The point.
+     * @param out Receives the weights.
+     * @param scratch {@link #SCRATCH} points of 3 doubles to use.
+     * @return The distance, 0 if the point is inside.
+     */
+    static double closestWeights(
+            double @NonNull [] u,
+            double @NonNull [] v,
+            double @NonNull [] p,
+            double @NonNull [] out,
+            double @NonNull [][] scratch) {
+        final double[] a = flat(scratch[0], u[0], v[0]);
+        final double[] b = flat(scratch[1], u[1], v[1]);
+        final double[] c = flat(scratch[2], u[2], v[2]);
+        final double[] q = flat(scratch[3], p[0], p[1]);
+        final double[] closest = scratch[4];
         Geometry.closestOnTriangle(q, a, b, c, closest);
         // Weights of the closest point, which is on the triangle
         final double e1u = u[1] - u[0];
@@ -296,5 +320,20 @@ public final class BakeTexels {
             out[0] = 1 - out[1] - out[2];
         }
         return Math.sqrt(Geometry.distanceSquared(q, closest));
+    }
+
+    /**
+     * Set a point on the plane z = 0.
+     *
+     * @param out The point.
+     * @param x Its x.
+     * @param y Its y.
+     * @return The point.
+     */
+    private static double[] flat(double @NonNull [] out, double x, double y) {
+        out[0] = x;
+        out[1] = y;
+        out[2] = 0;
+        return out;
     }
 }

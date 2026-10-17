@@ -50,19 +50,24 @@ public final class Grouping {
             return new int[][] {active.clone()};
         }
         Graph.Builder builder = new Graph.Builder(n);
-        // Shared edges
-        Map<Edge, Integer> firstUse = new HashMap<>();
+        // Shared edges: the first cluster to use each edge, and every later one joined to it
+        int edgeCount = 0;
+        for (int id : active) {
+            edgeCount += dag.clusters().get(id).corners().length / AXES;
+        }
+        final EdgeTable firstUse = new EdgeTable(edgeCount);
         for (int i = 0; i < n; ++i) {
             final LodDag.Cluster cluster = dag.clusters().get(active[i]);
             final float[] corners = cluster.corners();
             for (int t = 0; t < corners.length; t += Clusters.TRIANGLE_VALUES) {
                 for (int corner = 0; corner < AXES; ++corner) {
-                    final Edge edge =
-                            Edge.of(
-                                    Corner.of(corners, t + corner * AXES),
-                                    Corner.of(corners, t + ((corner + 1) % AXES) * AXES));
-                    final Integer other = firstUse.putIfAbsent(edge, i);
-                    if (other != null && other != i) {
+                    final int other =
+                            firstUse.putIfAbsent(
+                                    corners,
+                                    t + corner * AXES,
+                                    t + ((corner + 1) % AXES) * AXES,
+                                    i);
+                    if (other >= 0 && other != i) {
                         builder.edge(i, other, 1);
                     }
                 }
@@ -262,6 +267,201 @@ public final class Grouping {
             }
         }
         return uses;
+    }
+
+    /**
+     * A value for each edge between two corners, either way round, in an open addressing table of
+     * the corners' exact bits, so counting a level's shared edges allocates no key objects. Corners
+     * compare as {@link Corner} does.
+     */
+    static final class EdgeTable {
+        /** Ints in a key: two corners' bits. */
+        private static final int KEY = 2 * AXES;
+
+        /** Each slot's key. */
+        private int[] keys;
+
+        /** Each slot's value, -1 where empty. */
+        private int[] values;
+
+        /** How many slots are used. */
+        private int size;
+
+        /**
+         * Make a table.
+         *
+         * @param expected How many edges it may get, for its first size.
+         */
+        EdgeTable(int expected) {
+            allocate(Integer.highestOneBit(Math.max(4, expected * 2 - 1)) << 1);
+        }
+
+        /**
+         * Make the table empty at a size.
+         *
+         * @param slots The size, a power of two.
+         */
+        private void allocate(int slots) {
+            keys = new int[slots * KEY];
+            values = new int[slots];
+            Arrays.fill(values, -1);
+            size = 0;
+        }
+
+        /**
+         * Give an edge a value unless it has one.
+         *
+         * @param corners Flat corners, 3 floats each.
+         * @param p Where one corner starts.
+         * @param q Where the other starts.
+         * @param value The value, at least 0.
+         * @return The edge's value before, or -1 if it had none and now has this one.
+         */
+        int putIfAbsent(float @NonNull [] corners, int p, int q, int value) {
+            final int at = slot(corners, p, q, true);
+            if (values[at] >= 0) {
+                return values[at];
+            }
+            values[at] = value;
+            added();
+            return -1;
+        }
+
+        /**
+         * Count one more use of an edge, from 0 for a new one.
+         *
+         * @param corners Flat corners, 3 floats each.
+         * @param p Where one corner starts.
+         * @param q Where the other starts.
+         */
+        void count(float @NonNull [] corners, int p, int q) {
+            final int at = slot(corners, p, q, true);
+            if (values[at] >= 0) {
+                ++values[at];
+                return;
+            }
+            values[at] = 1;
+            added();
+        }
+
+        /**
+         * An edge's value.
+         *
+         * @param corners Flat corners, 3 floats each.
+         * @param p Where one corner starts.
+         * @param q Where the other starts.
+         * @return The value, or -1 if it has none.
+         */
+        int get(float @NonNull [] corners, int p, int q) {
+            final int at = slot(corners, p, q, false);
+            return at < 0 ? -1 : values[at];
+        }
+
+        /** Note a new edge, growing the table to keep it at most half full. */
+        private void added() {
+            if (++size * 2 > values.length) {
+                grow();
+            }
+        }
+
+        /**
+         * The slot an edge is in, or for a new edge the empty slot it goes in, with its key set.
+         *
+         * @param corners Flat corners, 3 floats each.
+         * @param p Where one corner starts.
+         * @param q Where the other starts.
+         * @param claim Whether to claim an empty slot for a new edge; if not, -1 is returned.
+         * @return The slot.
+         */
+        private int slot(float @NonNull [] corners, int p, int q, boolean claim) {
+            final int px = Float.floatToIntBits(corners[p] + 0f);
+            final int py = Float.floatToIntBits(corners[p + 1] + 0f);
+            final int pz = Float.floatToIntBits(corners[p + 2] + 0f);
+            final int qx = Float.floatToIntBits(corners[q] + 0f);
+            final int qy = Float.floatToIntBits(corners[q + 1] + 0f);
+            final int qz = Float.floatToIntBits(corners[q + 2] + 0f);
+            final boolean pFirst = px != qx ? px < qx : py != qy ? py < qy : pz < qz;
+            final int ax = pFirst ? px : qx;
+            final int ay = pFirst ? py : qy;
+            final int az = pFirst ? pz : qz;
+            final int bx = pFirst ? qx : px;
+            final int by = pFirst ? qy : py;
+            final int bz = pFirst ? qz : pz;
+            final int mask = values.length - 1;
+            int at = hash(ax, ay, az, bx, by, bz) & mask;
+            while (values[at] >= 0) {
+                final int k = at * KEY;
+                if (keys[k] == ax
+                        && keys[k + 1] == ay
+                        && keys[k + 2] == az
+                        && keys[k + 3] == bx
+                        && keys[k + 4] == by
+                        && keys[k + 5] == bz) {
+                    return at;
+                }
+                at = (at + 1) & mask;
+            }
+            if (!claim) {
+                return -1;
+            }
+            final int k = at * KEY;
+            keys[k] = ax;
+            keys[k + 1] = ay;
+            keys[k + 2] = az;
+            keys[k + 3] = bx;
+            keys[k + 4] = by;
+            keys[k + 5] = bz;
+            return at;
+        }
+
+        /**
+         * Mix an edge's corners' bits.
+         *
+         * @param ax The first corner's x bits.
+         * @param ay Its y bits.
+         * @param az Its z bits.
+         * @param bx The second corner's x bits.
+         * @param by Its y bits.
+         * @param bz Its z bits.
+         * @return The hash.
+         */
+        private static int hash(int ax, int ay, int az, int bx, int by, int bz) {
+            int h = ax * 0x9E3779B1 + ay * 0x85EBCA77 + az * 0xC2B2AE3D;
+            h = h * 0x27D4EB2F + bx * 0x165667B1 + by * 0x61C88647 + bz * 0x7FEB352D;
+            h ^= h >>> 15;
+            h *= 0x2C1B3C6D;
+            h ^= h >>> 13;
+            return h;
+        }
+
+        /** Double the table, keeping every edge. */
+        private void grow() {
+            final int[] oldKeys = keys;
+            final int[] oldValues = values;
+            allocate(oldValues.length * 2);
+            final int mask = values.length - 1;
+            for (int old = 0; old < oldValues.length; ++old) {
+                if (oldValues[old] < 0) {
+                    continue;
+                }
+                final int k = old * KEY;
+                final int h =
+                        hash(
+                                oldKeys[k],
+                                oldKeys[k + 1],
+                                oldKeys[k + 2],
+                                oldKeys[k + 3],
+                                oldKeys[k + 4],
+                                oldKeys[k + 5]);
+                int at = h & mask;
+                while (values[at] >= 0) {
+                    at = (at + 1) & mask;
+                }
+                System.arraycopy(oldKeys, k, keys, at * KEY, KEY);
+                values[at] = oldValues[old];
+                ++size;
+            }
+        }
     }
 
     /** Static helpers only. */

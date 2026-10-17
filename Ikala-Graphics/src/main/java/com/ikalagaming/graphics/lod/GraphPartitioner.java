@@ -1,10 +1,13 @@
 package com.ikalagaming.graphics.lod;
 
-import com.ikalagaming.util.IntArrayList;
-
 import lombok.NonNull;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ForkJoinWorkerThread;
+import java.util.concurrent.RecursiveTask;
 
 /**
  * Splits a graph into parts no heavier than a cap, cutting as little edge weight as it can, the way
@@ -58,8 +61,175 @@ final class GraphPartitioner {
             nodes[v] = v;
         }
         final int[] next = {0};
-        split(graph, nodes, Math.max(1, cap), part, next);
+        // Each node's index in the set being split, -1 elsewhere, shared by every split
+        final int[] local = new int[graph.nodeCount()];
+        Arrays.fill(local, -1);
+        split(graph, nodes, Math.max(1, cap), part, next, local);
         return part;
+    }
+
+    /** Below this many nodes a split's halves are split on the same thread. */
+    private static final int PARALLEL_NODES = 1 << 14;
+
+    /**
+     * Split a graph on several threads, giving the same parts, numbered the same, as {@link
+     * #partition(Graph, int)}: each split's halves are split at once, on a pool of lowest priority
+     * daemon threads of its own, and the parts are gathered left half first.
+     *
+     * @param graph The graph.
+     * @param cap The most weight any part may have; at least the heaviest node.
+     * @param threads How many threads to split on.
+     * @return The part of each node, numbered from 0 in no particular order.
+     */
+    static int[] partition(@NonNull Graph graph, int cap, int threads) {
+        if (threads <= 1 || graph.nodeCount() < PARALLEL_NODES) {
+            return partition(graph, cap);
+        }
+        final int[] nodes = new int[graph.nodeCount()];
+        for (int v = 0; v < nodes.length; ++v) {
+            nodes[v] = v;
+        }
+        final ThreadLocal<int[]> scratch =
+                ThreadLocal.withInitial(
+                        () -> {
+                            final int[] local = new int[graph.nodeCount()];
+                            Arrays.fill(local, -1);
+                            return local;
+                        });
+        final ForkJoinPool pool =
+                new ForkJoinPool(
+                        threads,
+                        owner -> {
+                            final ForkJoinWorkerThread worker =
+                                    ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(
+                                            owner);
+                            worker.setName("LOD split " + worker.getPoolIndex());
+                            worker.setDaemon(true);
+                            worker.setPriority(Thread.MIN_PRIORITY);
+                            return worker;
+                        },
+                        null,
+                        false);
+        final List<int[]> parts;
+        try {
+            parts = pool.invoke(new SplitTask(graph, nodes, Math.max(1, cap), scratch));
+        } finally {
+            pool.shutdownNow();
+        }
+        final int[] part = new int[graph.nodeCount()];
+        for (int id = 0; id < parts.size(); ++id) {
+            for (int v : parts.get(id)) {
+                part[v] = id;
+            }
+        }
+        return part;
+    }
+
+    /** Splits a set of nodes until each part fits, its halves at once, gathering the parts. */
+    private static final class SplitTask extends RecursiveTask<List<int[]>> {
+        /** The whole graph. */
+        private final transient Graph graph;
+
+        /** The nodes to split. */
+        private final int[] nodes;
+
+        /** The most weight a part may have. */
+        private final int cap;
+
+        /** Each thread's scratch as long as the graph, all -1. */
+        private final transient ThreadLocal<int[]> scratch;
+
+        /**
+         * Split some nodes.
+         *
+         * @param graph The whole graph.
+         * @param nodes The nodes to split.
+         * @param cap The most weight a part may have.
+         * @param scratch Each thread's scratch.
+         */
+        SplitTask(
+                @NonNull Graph graph,
+                int @NonNull [] nodes,
+                int cap,
+                @NonNull ThreadLocal<int[]> scratch) {
+            this.graph = graph;
+            this.nodes = nodes;
+            this.cap = cap;
+            this.scratch = scratch;
+        }
+
+        @Override
+        protected List<int[]> compute() {
+            int weight = 0;
+            for (int v : nodes) {
+                weight += graph.nodeWeights()[v];
+            }
+            if (weight <= cap || nodes.length <= 1) {
+                final List<int[]> one = new ArrayList<>(1);
+                one.add(nodes);
+                return one;
+            }
+            final int[][] halves = halves(graph, nodes, weight, cap, scratch.get());
+            final SplitTask left = new SplitTask(graph, halves[0], cap, scratch);
+            final SplitTask right = new SplitTask(graph, halves[1], cap, scratch);
+            final List<int[]> out;
+            if (nodes.length < PARALLEL_NODES) {
+                out = left.compute();
+                out.addAll(right.compute());
+                return out;
+            }
+            left.fork();
+            final List<int[]> rightParts = right.compute();
+            out = left.join();
+            out.addAll(rightParts);
+            return out;
+        }
+    }
+
+    /**
+     * Bisect a set of nodes too heavy for a part, as {@link #split} does.
+     *
+     * @param graph The whole graph.
+     * @param nodes The nodes.
+     * @param weight Their total weight.
+     * @param cap The most weight a part may have.
+     * @param local Scratch as long as the graph, all -1, and left so.
+     * @return The left side's nodes, then the right side's, each in their order in the set.
+     */
+    private static int[][] halves(
+            @NonNull Graph graph,
+            int @NonNull [] nodes,
+            int weight,
+            int cap,
+            int @NonNull [] local) {
+        final int parts = (weight + cap - 1) / cap;
+        final int leftParts = parts / 2;
+        final double leftTarget = (double) weight * leftParts / parts;
+        final Graph sub = induced(graph, nodes, local);
+        boolean[] left = bisect(sub, leftTarget);
+        int leftCount = 0;
+        for (boolean side : left) {
+            leftCount += side ? 1 : 0;
+        }
+        if (leftCount == 0 || leftCount == nodes.length) {
+            left = splitByPosition(sub, leftTarget);
+            leftCount = 0;
+            for (boolean side : left) {
+                leftCount += side ? 1 : 0;
+            }
+        }
+        final int[] a = new int[leftCount];
+        final int[] b = new int[nodes.length - leftCount];
+        int ai = 0;
+        int bi = 0;
+        for (int i = 0; i < nodes.length; ++i) {
+            if (left[i]) {
+                a[ai++] = nodes[i];
+            } else {
+                b[bi++] = nodes[i];
+            }
+        }
+        return new int[][] {a, b};
     }
 
     /**
@@ -84,13 +254,15 @@ final class GraphPartitioner {
      * @param cap The most weight a part may have.
      * @param part The part of each node, written.
      * @param next The next part number.
+     * @param local Scratch as long as the graph, all -1, and left so.
      */
     private static void split(
             @NonNull Graph graph,
             int @NonNull [] nodes,
             int cap,
             int @NonNull [] part,
-            int @NonNull [] next) {
+            int @NonNull [] next,
+            int @NonNull [] local) {
         int weight = 0;
         for (int v : nodes) {
             weight += graph.nodeWeights()[v];
@@ -102,35 +274,9 @@ final class GraphPartitioner {
             }
             return;
         }
-        final int parts = (weight + cap - 1) / cap;
-        final int leftParts = parts / 2;
-        final double leftTarget = (double) weight * leftParts / parts;
-        final Graph sub = induced(graph, nodes);
-        boolean[] left = bisect(sub, leftTarget);
-        int leftCount = 0;
-        for (boolean side : left) {
-            leftCount += side ? 1 : 0;
-        }
-        if (leftCount == 0 || leftCount == nodes.length) {
-            left = splitByPosition(sub, leftTarget);
-            leftCount = 0;
-            for (boolean side : left) {
-                leftCount += side ? 1 : 0;
-            }
-        }
-        final int[] a = new int[leftCount];
-        final int[] b = new int[nodes.length - leftCount];
-        int ai = 0;
-        int bi = 0;
-        for (int i = 0; i < nodes.length; ++i) {
-            if (left[i]) {
-                a[ai++] = nodes[i];
-            } else {
-                b[bi++] = nodes[i];
-            }
-        }
-        split(graph, a, cap, part, next);
-        split(graph, b, cap, part, next);
+        final int[][] halves = halves(graph, nodes, weight, cap, local);
+        split(graph, halves[0], cap, part, next, local);
+        split(graph, halves[1], cap, part, next, local);
     }
 
     /**
@@ -143,35 +289,59 @@ final class GraphPartitioner {
     static Graph induced(@NonNull Graph graph, int @NonNull [] nodes) {
         final int[] local = new int[graph.nodeCount()];
         Arrays.fill(local, -1);
+        return induced(graph, nodes, local);
+    }
+
+    /**
+     * The graph made of some nodes and the edges between them, renumbered from 0 in their order,
+     * with scratch kept between calls, so splitting a big graph again and again doesn't allocate
+     * one as long as it each time.
+     *
+     * @param graph The whole graph.
+     * @param nodes The nodes to keep.
+     * @param local Scratch as long as the graph, all -1, and left so.
+     * @return The smaller graph.
+     */
+    private static Graph induced(
+            @NonNull Graph graph, int @NonNull [] nodes, int @NonNull [] local) {
         for (int i = 0; i < nodes.length; ++i) {
             local[nodes[i]] = i;
         }
+        final int[] graphOffsets = graph.offsets();
+        final int[] graphTargets = graph.targets();
+        int edges = 0;
+        for (int v : nodes) {
+            for (int e = graphOffsets[v]; e < graphOffsets[v + 1]; ++e) {
+                if (local[graphTargets[e]] >= 0) {
+                    ++edges;
+                }
+            }
+        }
         final int[] offsets = new int[nodes.length + 1];
-        IntArrayList targets = new IntArrayList();
-        IntArrayList weights = new IntArrayList();
+        final int[] targets = new int[edges];
+        final int[] weights = new int[edges];
         final int[] nodeWeights = new int[nodes.length];
         final double[] positions = new double[nodes.length * AXES];
+        int out = 0;
         for (int i = 0; i < nodes.length; ++i) {
             final int v = nodes[i];
-            offsets[i] = targets.size();
-            for (int e = graph.offsets()[v]; e < graph.offsets()[v + 1]; ++e) {
-                final int u = local[graph.targets()[e]];
+            offsets[i] = out;
+            for (int e = graphOffsets[v]; e < graphOffsets[v + 1]; ++e) {
+                final int u = local[graphTargets[e]];
                 if (u >= 0) {
-                    targets.addInt(u);
-                    weights.addInt(graph.edgeWeights()[e]);
+                    targets[out] = u;
+                    weights[out] = graph.edgeWeights()[e];
+                    ++out;
                 }
             }
             nodeWeights[i] = graph.nodeWeights()[v];
             System.arraycopy(graph.positions(), v * AXES, positions, i * AXES, AXES);
         }
-        offsets[nodes.length] = targets.size();
-        return new Graph(
-                nodes.length,
-                offsets,
-                targets.toIntArray(),
-                weights.toIntArray(),
-                nodeWeights,
-                positions);
+        offsets[nodes.length] = out;
+        for (int v : nodes) {
+            local[v] = -1;
+        }
+        return new Graph(nodes.length, offsets, targets, weights, nodeWeights, positions);
     }
 
     /**
@@ -246,7 +416,8 @@ final class GraphPartitioner {
             }
             ++coarseCount;
         }
-        Graph.Builder builder = new Graph.Builder(coarseCount);
+        // Each edge is stored both ways, and added once
+        Graph.Builder builder = new Graph.Builder(coarseCount, graph.targets().length / 2);
         final int[] weights = new int[coarseCount];
         final double[] positions = new double[coarseCount * AXES];
         for (int v = 0; v < n; ++v) {
@@ -293,6 +464,7 @@ final class GraphPartitioner {
         for (int attempt = 0; attempt < Math.min(SEEDS, n); ++attempt) {
             final boolean[] left = new boolean[n];
             final long[] tie = new long[n];
+            final Frontier frontier = new Frontier(graph, seed);
             double weight = 0;
             int current = seed;
             while (current >= 0
@@ -300,12 +472,16 @@ final class GraphPartitioner {
                 left[current] = true;
                 weight += graph.nodeWeights()[current];
                 for (int e = graph.offsets()[current]; e < graph.offsets()[current + 1]; ++e) {
-                    tie[graph.targets()[e]] += graph.edgeWeights()[e];
+                    final int u = graph.targets()[e];
+                    tie[u] += graph.edgeWeights()[e];
+                    if (!left[u]) {
+                        frontier.tied(u, tie[u]);
+                    }
                 }
                 if (weight >= leftTarget) {
                     break;
                 }
-                current = mostTied(graph, left, tie, seed);
+                current = frontier.next(left, tie);
             }
             final long cut = cut(graph, left);
             if (balanced(graph, left, leftTarget, tolerance) && cut < bestCut) {
@@ -321,36 +497,132 @@ final class GraphPartitioner {
     }
 
     /**
-     * The next node to add: the outside node most tied to the left side, or if none is tied (the
-     * left side reached the end of its component), the outside node nearest the seed.
-     *
-     * @param graph The graph.
-     * @param left Which nodes are on the left.
-     * @param tie How much edge weight each node has to the left side.
-     * @param seed The seed.
-     * @return The node, or -1 if every node is on the left.
+     * The nodes a growing left side may take next: the outside node most tied to it, ties going to
+     * the lowest node, or if none is tied (the left side reached the end of its component), the
+     * outside node nearest the seed, ties going to the lowest node. Kept in a heap of ties and an
+     * order by distance, so each step costs a few heap moves instead of a pass over every node.
      */
-    private static int mostTied(
-            @NonNull Graph graph, boolean @NonNull [] left, long @NonNull [] tie, int seed) {
-        int best = -1;
-        long bestTie = 0;
-        double nearest = Double.MAX_VALUE;
-        int nearestNode = -1;
-        for (int v = 0; v < graph.nodeCount(); ++v) {
-            if (left[v]) {
-                continue;
-            }
-            if (tie[v] > bestTie) {
-                bestTie = tie[v];
-                best = v;
-            }
-            final double d = distanceSquared(graph, v, seed);
-            if (d < nearest) {
-                nearest = d;
-                nearestNode = v;
+    private static final class Frontier {
+        /** The graph. */
+        private final Graph graph;
+
+        /** The seed. */
+        private final int seed;
+
+        /** Outside nodes by how tied they are, stale entries skipped. */
+        private final GainHeap heap;
+
+        /** Every node by distance from the seed, once a fallback first needs it. */
+        private int[] byDistance;
+
+        /** How far through {@link #byDistance} every node is on the left. */
+        private int nearest;
+
+        /**
+         * Start growing from a seed.
+         *
+         * @param graph The graph.
+         * @param seed The seed.
+         */
+        Frontier(@NonNull Graph graph, int seed) {
+            this.graph = graph;
+            this.seed = seed;
+            heap = new GainHeap(Math.min(graph.nodeCount(), INITIAL_FRONTIER));
+        }
+
+        /**
+         * Note that an outside node is now this tied to the left side.
+         *
+         * @param node The node.
+         * @param tie Its tie.
+         */
+        void tied(int node, long tie) {
+            if (tie > 0) {
+                heap.push(node, tie);
             }
         }
-        return best >= 0 ? best : nearestNode;
+
+        /**
+         * The next node to add.
+         *
+         * @param left Which nodes are on the left.
+         * @param tie How much edge weight each node has to the left side.
+         * @return The node, or -1 if every node is on the left.
+         */
+        int next(boolean @NonNull [] left, long @NonNull [] tie) {
+            int node;
+            while ((node = heap.pop(tie)) >= 0) {
+                if (!left[node]) {
+                    return node;
+                }
+            }
+            if (byDistance == null) {
+                byDistance = byDistanceFrom(graph, seed);
+            }
+            while (nearest < byDistance.length && left[byDistance[nearest]]) {
+                ++nearest;
+            }
+            return nearest < byDistance.length ? byDistance[nearest] : -1;
+        }
+    }
+
+    /** How many entries a frontier's heap starts with room for. */
+    private static final int INITIAL_FRONTIER = 64;
+
+    /**
+     * Every node, nearest a node first, ties going to the lowest node.
+     *
+     * @param graph The graph.
+     * @param from The node.
+     * @return The nodes in order.
+     */
+    private static int[] byDistanceFrom(@NonNull Graph graph, int from) {
+        final int n = graph.nodeCount();
+        final double[] distance = new double[n];
+        final int[] order = new int[n];
+        for (int v = 0; v < n; ++v) {
+            distance[v] = distanceSquared(graph, v, from);
+            order[v] = v;
+        }
+        // Stable, so nodes the same distance away stay lowest first
+        mergeSort(order, new int[n], distance, 0, n);
+        return order;
+    }
+
+    /**
+     * Sort part of an array of nodes by a key each, keeping the order of equal keys.
+     *
+     * @param nodes The nodes.
+     * @param scratch As long as the nodes.
+     * @param key Each node's key.
+     * @param from The first index.
+     * @param to One past the last index.
+     */
+    private static void mergeSort(
+            int @NonNull [] nodes,
+            int @NonNull [] scratch,
+            double @NonNull [] key,
+            int from,
+            int to) {
+        if (to - from < 2) {
+            return;
+        }
+        final int middle = (from + to) >>> 1;
+        mergeSort(nodes, scratch, key, from, middle);
+        mergeSort(nodes, scratch, key, middle, to);
+        if (key[nodes[middle - 1]] <= key[nodes[middle]]) {
+            return;
+        }
+        System.arraycopy(nodes, from, scratch, from, to - from);
+        int a = from;
+        int b = middle;
+        for (int out = from; out < to; ++out) {
+            if (b >= to || (a < middle && key[scratch[a]] <= key[scratch[b]])) {
+                nodes[out] = scratch[a++];
+            } else {
+                nodes[out] = scratch[b++];
+            }
+        }
     }
 
     /**

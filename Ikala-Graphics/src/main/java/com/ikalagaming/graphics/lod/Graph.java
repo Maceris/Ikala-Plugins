@@ -66,7 +66,21 @@ record Graph(
          * @param nodes How many nodes.
          */
         Builder(int nodes) {
+            this(nodes, 0);
+        }
+
+        /**
+         * Start a graph with room for some edges.
+         *
+         * @param nodes How many nodes.
+         * @param edges How many edges it is expected to get.
+         */
+        Builder(int nodes, int edges) {
             this.nodes = nodes;
+            if (edges > weights.length) {
+                weights = new int[edges];
+                ends = new int[edges * 2];
+            }
             nodeWeights = new int[nodes];
             Arrays.fill(nodeWeights, 1);
             positions = new double[nodes * AXES];

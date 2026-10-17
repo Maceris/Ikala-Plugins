@@ -367,6 +367,10 @@ final class TriangleBvh {
                     continue;
                 }
                 final int base = t * TRIANGLE_VALUES;
+                // A triangle whose box is no nearer than the best can't be nearer either
+                if (triangleBoxDistanceSquared(base, point) >= best) {
+                    continue;
+                }
                 for (int axis = 0; axis < AXES; ++axis) {
                     scratch.a[axis] = corners[base + axis];
                     scratch.b[axis] = corners[base + AXES + axis];
@@ -403,6 +407,27 @@ final class TriangleBvh {
         }
         Geometry.closestOnTriangle(point, scratch.a, scratch.b, scratch.c, scratch.closest);
         return Geometry.distanceSquared(point, scratch.closest);
+    }
+
+    /**
+     * The squared distance from a point to a triangle's box, 0 inside it.
+     *
+     * @param base Where the triangle's corners start.
+     * @param point The point.
+     * @return The squared distance.
+     */
+    private double triangleBoxDistanceSquared(int base, double @NonNull [] point) {
+        double sum = 0;
+        for (int axis = 0; axis < AXES; ++axis) {
+            final double a = corners[base + axis];
+            final double b = corners[base + AXES + axis];
+            final double c = corners[base + 2 * AXES + axis];
+            final double below = Math.min(a, Math.min(b, c)) - point[axis];
+            final double above = point[axis] - Math.max(a, Math.max(b, c));
+            final double outside = Math.max(0, Math.max(below, above));
+            sum += outside * outside;
+        }
+        return sum;
     }
 
     /**
