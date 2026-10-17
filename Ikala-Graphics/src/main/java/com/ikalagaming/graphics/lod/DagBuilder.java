@@ -740,17 +740,26 @@ public final class DagBuilder {
             }
             final int[][] groups = Grouping.group(dag, active);
             final Map<Grouping.Corner, Integer> owners = owners(groups);
-            final GroupedEdges grouped = groupedEdges(groups);
-            lockTJunctions(owners, grouped, pool);
-            lockFaceContacts(owners, grouped, pool);
             if (cellMin != null) {
                 lockCellBoundary(owners, active);
             }
+            // Corners a group shares with another or with the cell's neighbors, before the locks
+            // that only keep borders crack free join them: a part with one of these goes on past
+            // its group, so it never folds away
+            final Set<Grouping.Corner> shared = new HashSet<>();
+            for (Map.Entry<Grouping.Corner, Integer> entry : owners.entrySet()) {
+                if (entry.getValue() < 0) {
+                    shared.add(entry.getKey());
+                }
+            }
+            final GroupedEdges grouped = groupedEdges(groups);
+            lockTJunctions(owners, grouped, pool);
+            lockFaceContacts(owners, grouped, pool);
             final List<Grouping.Edge> rim = rim(active, false);
             lockRimNearBorders(owners, rim);
             List<Future<Built>> futures = new ArrayList<>();
             for (int[] group : groups) {
-                futures.add(pool.submit(() -> buildGroup(group, owners, rim)));
+                futures.add(pool.submit(() -> buildGroup(group, owners, shared, rim)));
             }
             int trianglesIn = 0;
             int trianglesOut = 0;
@@ -1461,6 +1470,7 @@ public final class DagBuilder {
     private Built buildGroup(
             int @NonNull [] children,
             @NonNull Map<Grouping.Corner, Integer> owners,
+            @NonNull Set<Grouping.Corner> shared,
             @NonNull List<Grouping.Edge> rim) {
         final long start = System.nanoTime();
         // Children can be of different levels in a parent cell; the group is above the highest
@@ -1534,6 +1544,11 @@ public final class DagBuilder {
             merged = welded;
         }
         lockEars(merged);
+        // Far enough out, small parts standing free of the group's borders go: their look stays in
+        // the blend around them, and the measured error counts what is missing
+        if (averaging && childError > 0) {
+            merged = foldSmallParts(merged, childError, shared, sourceCluster, sourceTriangle);
+        }
         // Where textured triangles' appearance breaks, seams' vertices only slide along them, and
         // where seams meet or end they stay put; each side's triangles give the output its
         // attributes again
@@ -1899,6 +1914,102 @@ public final class DagBuilder {
         final double clusterArea = 2 * area / children.length;
         final double texels = BAKE_PACKING * options.bakeTile() * options.bakeTile();
         return Math.sqrt(clusterArea / texels) * bakeDensity() <= childError;
+    }
+
+    /**
+     * Take out a merged group's small parts: connected parts no wider than the children's error, by
+     * {@link Geometry#partWidths}, which is also what the measured error charges for them, so
+     * folding never raises it; and that go on nowhere past the group: no corner shared with another
+     * group or the cell's neighbors, and none on the open border. A part locked only where it rests
+     * against another group's faces, as a chest on someone else's floor, folds: taking it out whole
+     * leaves no crack. The largest part, by area, always stays, so a group never comes out empty.
+     * The parts' triangles stay sources for the blended look, so their color lands on the surfaces
+     * around them, as far as those face the same way.
+     *
+     * @param merged The merged group.
+     * @param childError The children's largest error.
+     * @param shared The corners other groups or cells share.
+     * @param sourceCluster Each merged triangle's source cluster, filtered in place.
+     * @param sourceTriangle Each merged triangle's index in its cluster, filtered in place.
+     * @return The mesh without its small parts, with the same vertices; or the mesh itself if none
+     *     went.
+     */
+    private LodMesh foldSmallParts(
+            @NonNull LodMesh merged,
+            double childError,
+            @NonNull Set<Grouping.Corner> shared,
+            @NonNull IntArrayList sourceCluster,
+            @NonNull IntArrayList sourceTriangle) {
+        final int[] part = VirtualEdges.components(merged);
+        final int vertices = merged.getVertexCount();
+        final double[] widths = Geometry.partWidths(merged, part);
+        final boolean[] locked = new boolean[vertices];
+        for (int v = 0; v < vertices; ++v) {
+            final int root = part[v];
+            final Grouping.Corner corner =
+                    new Grouping.Corner(
+                            Float.floatToIntBits((float) merged.position(v, 0) + 0f),
+                            Float.floatToIntBits((float) merged.position(v, 1) + 0f),
+                            Float.floatToIntBits((float) merged.position(v, 2) + 0f));
+            locked[root] |= shared.contains(corner) || openBorder.contains(corner);
+        }
+        final double[] area = new double[vertices];
+        int largest = -1;
+        for (int t = 0; t < merged.getTriangleCount(); ++t) {
+            final int root = part[merged.corner(t, 0)];
+            area[root] += Geometry.triangleArea(merged, t);
+            if (largest < 0 || area[root] > area[largest]) {
+                largest = root;
+            }
+        }
+        final boolean[] fold = new boolean[vertices];
+        boolean any = false;
+        for (int root = 0; root < vertices; ++root) {
+            if (part[root] != root || locked[root] || root == largest || area[root] <= 0) {
+                continue;
+            }
+            if (widths[root] <= childError) {
+                fold[root] = true;
+                any = true;
+            }
+        }
+        if (!any) {
+            return merged;
+        }
+        final LodMesh.Builder kept =
+                LodMesh.builder(merged.getOrigin()).leafError(merged.getLeafError());
+        for (int v = 0; v < vertices; ++v) {
+            final int at =
+                    kept.vertex(
+                            (float) merged.position(v, 0),
+                            (float) merged.position(v, 1),
+                            (float) merged.position(v, 2));
+            if (at != v) {
+                throw new IllegalStateException("Merged vertices weren't distinct");
+            }
+            if (merged.isLocked(v)) {
+                kept.lock(v);
+            }
+        }
+        final int[] clusters = sourceCluster.toIntArray();
+        final int[] triangles = sourceTriangle.toIntArray();
+        sourceCluster.clear();
+        sourceTriangle.clear();
+        for (int t = 0; t < merged.getTriangleCount(); ++t) {
+            if (fold[part[merged.corner(t, 0)]]) {
+                continue;
+            }
+            if (kept.triangle(
+                    merged.corner(t, 0),
+                    merged.corner(t, 1),
+                    merged.corner(t, 2),
+                    merged.material(t),
+                    merged.visibility(t))) {
+                sourceCluster.addInt(clusters[t]);
+                sourceTriangle.addInt(triangles[t]);
+            }
+        }
+        return kept.build();
     }
 
     /**

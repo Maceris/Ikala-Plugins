@@ -108,4 +108,43 @@ class HausdorffTest {
         // The middle of the gap is a block from either strip
         assertEquals(1, Hausdorff.between(bridge.build(), input.build(), SPACING), 0.05);
     }
+
+    /**
+     * A free part taken away costs its width, however far it floated from what is left, while an
+     * attached spike, which is no part of its own, still costs its height.
+     */
+    @Test
+    void testRemovedFreePartCostsItsWidth() {
+        final LodMesh.Builder builder = LodMesh.builder(new double[3]);
+        grid(builder, 0);
+        // A thin strip floating 2 above the grid, 0.1 wide and 2 long, on a slant
+        final int a = builder.vertex(1, 2, 1);
+        final int b = builder.vertex(1.1f, 2, 1);
+        final int c = builder.vertex(2.1f, 2, 3);
+        final int d = builder.vertex(2, 2, 3);
+        builder.triangle(a, d, c, 0);
+        builder.triangle(a, c, b, 0);
+        assertEquals(0.1, Hausdorff.between(flat(0), builder.build(), SPACING), 0.02);
+        assertEquals(3, Hausdorff.between(flat(0), spiked(3, 1), SPACING), 1e-6);
+    }
+
+    /** A part's width is the middle side of a box along its principal axes. */
+    @Test
+    void testPartWidths() {
+        // A flat panel is as wide as its shorter side, slanted or not
+        final LodMesh.Builder builder = LodMesh.builder(new double[3]);
+        final int a = builder.vertex(0, 0, 0);
+        final int b = builder.vertex(2, 2, 0);
+        final int c = builder.vertex(2, 2, 1);
+        final int d = builder.vertex(0, 0, 1);
+        builder.triangle(a, b, c, 0);
+        builder.triangle(a, c, d, 0);
+        final LodMesh panel = builder.build();
+        final int[] part = VirtualEdges.components(panel);
+        assertEquals(1, Geometry.partWidths(panel, part)[part[a]], 1e-6);
+        // A grid of 4 by 4
+        final LodMesh grid = flat(0);
+        final int[] gridPart = VirtualEdges.components(grid);
+        assertEquals(SIZE, Geometry.partWidths(grid, gridPart)[gridPart[0]], 1e-6);
+    }
 }

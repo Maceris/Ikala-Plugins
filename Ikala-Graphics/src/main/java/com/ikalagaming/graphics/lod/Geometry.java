@@ -2,6 +2,8 @@ package com.ikalagaming.graphics.lod;
 
 import lombok.NonNull;
 
+import java.util.Arrays;
+
 /**
  * Distances and closest points between points, segments and triangles, in doubles. The closest
  * point routines follow Ericson, <i>Real-Time Collision Detection</i> (2005), §5.1.
@@ -13,6 +15,12 @@ final class Geometry {
 
     /** Below this, a length or determinant is treated as zero. */
     private static final double EPSILON = 1e-12;
+
+    /** Distinct entries of a symmetric 3x3 matrix. */
+    private static final int COVARIANCES = 6;
+
+    /** Jacobi sweeps at most; a 3x3 matrix converges in a handful. */
+    private static final int JACOBI_SWEEPS = 16;
 
     /**
      * A triangle's area.
@@ -315,6 +323,150 @@ final class Geometry {
             }
         }
         return best;
+    }
+
+    /**
+     * How wide each connected part of a mesh is: the middle side of a box around it along its
+     * principal axes. Taking a part away changes no pixel farther than that from the rest of the
+     * picture, from any side: a flat panel is as wide as its shorter side, a thin rod or strip as
+     * its thickness, a cube as its side. A part bent around corners gets a looser box, so more.
+     *
+     * @param mesh The mesh.
+     * @param part Each vertex's part, by its root vertex, as {@link VirtualEdges#components} gives.
+     * @return Each root vertex's part's width; other vertices' entries are 0.
+     */
+    static double @NonNull [] partWidths(@NonNull LodMesh mesh, int @NonNull [] part) {
+        final int vertices = mesh.getVertexCount();
+        final int[] count = new int[vertices];
+        final double[] mean = new double[vertices * AXES];
+        for (int v = 0; v < vertices; ++v) {
+            ++count[part[v]];
+            for (int axis = 0; axis < AXES; ++axis) {
+                mean[part[v] * AXES + axis] += mesh.position(v, axis);
+            }
+        }
+        for (int v = 0; v < vertices; ++v) {
+            for (int axis = 0; axis < AXES; ++axis) {
+                mean[v * AXES + axis] /= Math.max(1, count[v]);
+            }
+        }
+        // Covariances about the means: xx, yy, zz, xy, xz, yz
+        final double[] covariance = new double[vertices * COVARIANCES];
+        for (int v = 0; v < vertices; ++v) {
+            final int root = part[v];
+            final double x = mesh.position(v, 0) - mean[root * AXES];
+            final double y = mesh.position(v, 1) - mean[root * AXES + 1];
+            final double z = mesh.position(v, 2) - mean[root * AXES + 2];
+            final int at = root * COVARIANCES;
+            covariance[at] += x * x;
+            covariance[at + 1] += y * y;
+            covariance[at + 2] += z * z;
+            covariance[at + 3] += x * y;
+            covariance[at + 4] += x * z;
+            covariance[at + 5] += y * z;
+        }
+        final double[] axes = new double[vertices * AXES * AXES];
+        final double[] matrix = new double[AXES * AXES];
+        final double[] vectors = new double[AXES * AXES];
+        for (int root = 0; root < vertices; ++root) {
+            if (part[root] != root) {
+                continue;
+            }
+            final int at = root * COVARIANCES;
+            matrix[0] = covariance[at];
+            matrix[4] = covariance[at + 1];
+            matrix[8] = covariance[at + 2];
+            matrix[1] = covariance[at + 3];
+            matrix[3] = covariance[at + 3];
+            matrix[2] = covariance[at + 4];
+            matrix[6] = covariance[at + 4];
+            matrix[5] = covariance[at + 5];
+            matrix[7] = covariance[at + 5];
+            eigenvectors(matrix, vectors);
+            System.arraycopy(vectors, 0, axes, root * AXES * AXES, AXES * AXES);
+        }
+        // Each part's extent along each of its axes
+        final double[] lo = new double[vertices * AXES];
+        final double[] hi = new double[vertices * AXES];
+        Arrays.fill(lo, Double.POSITIVE_INFINITY);
+        Arrays.fill(hi, Double.NEGATIVE_INFINITY);
+        for (int v = 0; v < vertices; ++v) {
+            final int root = part[v];
+            for (int k = 0; k < AXES; ++k) {
+                double along = 0;
+                for (int axis = 0; axis < AXES; ++axis) {
+                    along += mesh.position(v, axis) * axes[(root * AXES + k) * AXES + axis];
+                }
+                lo[root * AXES + k] = Math.min(lo[root * AXES + k], along);
+                hi[root * AXES + k] = Math.max(hi[root * AXES + k], along);
+            }
+        }
+        final double[] widths = new double[vertices];
+        final double[] sides = new double[AXES];
+        for (int root = 0; root < vertices; ++root) {
+            if (part[root] != root) {
+                continue;
+            }
+            for (int k = 0; k < AXES; ++k) {
+                sides[k] = hi[root * AXES + k] - lo[root * AXES + k];
+            }
+            Arrays.sort(sides);
+            widths[root] = sides[1];
+        }
+        return widths;
+    }
+
+    /**
+     * The eigenvectors of a symmetric 3x3 matrix, by cyclic Jacobi rotations.
+     *
+     * @param matrix The matrix, row by row; overwritten.
+     * @param vectors The unit eigenvectors, one per row, written.
+     */
+    static void eigenvectors(double @NonNull [] matrix, double @NonNull [] vectors) {
+        Arrays.fill(vectors, 0);
+        for (int k = 0; k < AXES; ++k) {
+            vectors[k * AXES + k] = 1;
+        }
+        for (int sweep = 0; sweep < JACOBI_SWEEPS; ++sweep) {
+            final double off =
+                    matrix[1] * matrix[1] + matrix[2] * matrix[2] + matrix[5] * matrix[5];
+            if (off <= EPSILON * EPSILON) {
+                return;
+            }
+            for (int p = 0; p < AXES - 1; ++p) {
+                for (int q = p + 1; q < AXES; ++q) {
+                    final double apq = matrix[p * AXES + q];
+                    if (Math.abs(apq) <= EPSILON * EPSILON) {
+                        continue;
+                    }
+                    // The rotation that zeroes the p, q entry
+                    final double theta = (matrix[q * AXES + q] - matrix[p * AXES + p]) / (2 * apq);
+                    final double t =
+                            Math.signum(theta == 0 ? 1 : theta)
+                                    / (Math.abs(theta) + Math.sqrt(theta * theta + 1));
+                    final double c = 1 / Math.sqrt(t * t + 1);
+                    final double s = t * c;
+                    for (int k = 0; k < AXES; ++k) {
+                        final double kp = matrix[k * AXES + p];
+                        final double kq = matrix[k * AXES + q];
+                        matrix[k * AXES + p] = c * kp - s * kq;
+                        matrix[k * AXES + q] = s * kp + c * kq;
+                    }
+                    for (int k = 0; k < AXES; ++k) {
+                        final double pk = matrix[p * AXES + k];
+                        final double qk = matrix[q * AXES + k];
+                        matrix[p * AXES + k] = c * pk - s * qk;
+                        matrix[q * AXES + k] = s * pk + c * qk;
+                    }
+                    for (int k = 0; k < AXES; ++k) {
+                        final double vp = vectors[p * AXES + k];
+                        final double vq = vectors[q * AXES + k];
+                        vectors[p * AXES + k] = c * vp - s * vq;
+                        vectors[q * AXES + k] = s * vp + c * vq;
+                    }
+                }
+            }
+        }
     }
 
     /**
