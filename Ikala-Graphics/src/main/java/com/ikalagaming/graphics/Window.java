@@ -398,10 +398,24 @@ public class Window {
      * @return The horizontal content scale, where 1 is 96 DPI on Windows.
      */
     public float getContentScale() {
-        float[] x = new float[1];
-        float[] y = new float[1];
-        glfwGetWindowContentScale(windowHandle, x, y);
-        return x[0];
+        glfwGetWindowContentScale(windowHandle, contentScaleX, contentScaleY);
+        return contentScaleX[0];
+    }
+
+    /** Where {@link #getContentScale} reads the horizontal scale into, kept between calls. */
+    private final float[] contentScaleX = new float[1];
+
+    /** Where it reads the vertical scale into. */
+    private final float[] contentScaleY = new float[1];
+
+    /**
+     * Wait for input, or until some time passes, whichever comes first, handling any that comes as
+     * {@link #pollEvents} would. Main thread.
+     *
+     * @param seconds The longest to wait.
+     */
+    public void waitEvents(double seconds) {
+        glfwWaitEventsTimeout(seconds);
     }
 
     /**

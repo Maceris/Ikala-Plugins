@@ -80,6 +80,9 @@ public class GraphicsManager {
     /** The (fractional) number of seconds between frame renders at the target FPS. */
     private static final float FRAME_TIME = 1f / TARGET_FPS;
 
+    /** How long before the next frame or update the main thread stops waiting, in seconds. */
+    private static final double WAKE_EARLY = 0.0015;
+
     /** The (fractional) number of seconds between updates at the target UPS. */
     private static final float UPDATE_TIME = 1f / TARGET_UPS;
 
@@ -535,6 +538,15 @@ public class GraphicsManager {
             // Update the next time we should render a frame
             lastRenderTime = currentTime;
             nextRenderTime = currentTime + FRAME_TIME;
+        }
+
+        // Nothing is due until the next update or frame: wait for input rather than spin the main
+        // loop, which would otherwise call this hundreds of thousands of times a second. The wait
+        // can overshoot by a timer tick, so it ends a little early and the last stretch polls, to
+        // keep frames evenly spaced.
+        final double idle = Math.min(nextUpdateTime, nextRenderTime) - getTime() - WAKE_EARLY;
+        if (idle > 0) {
+            window.waitEvents(Math.min(idle, FRAME_TIME));
         }
 
         return Launcher.STATUS_OK;
