@@ -72,6 +72,12 @@ public final class DagBuilder {
     private static final int LOW_16 = 0xFFFF;
 
     /**
+     * The resolution a group is taken to reach, as a multiple of its children's error, for telling
+     * what in it is finer than that: each level about doubles the error.
+     */
+    private static final double VOLUME_RESOLUTION_STEP = 2;
+
+    /**
      * How to build.
      *
      * @param virtualEdgeFactor r for virtual edges as a multiple of each group's average edge
@@ -435,6 +441,9 @@ public final class DagBuilder {
      * @param faces Each output cluster's triangles as faces of the merged mesh, or null if not
      *     kept.
      * @param bases Each output cluster's base triangles, packed by {@link #base}.
+     * @param bakeTiles Each output cluster's tile, packed by {@link LodDag#packTile}, if it bakes.
+     * @param bakes Each output cluster's tile mapping, if it bakes.
+     * @param volumeKinds Whether each child's triangles would go to a volume, by child id.
      */
     private record Built(
             int[] children,
@@ -460,7 +469,8 @@ public final class DagBuilder {
             List<int[]> faces,
             List<long[]> bases,
             int[] bakeTiles,
-            List<BakeTexels> bakes) {}
+            List<BakeTexels> bakes,
+            Map<Integer, byte[]> volumeKinds) {}
 
     /** The options. */
     private final Options options;
@@ -1620,6 +1630,11 @@ public final class DagBuilder {
             merged = welded;
         }
         lockEars(merged);
+        // What would go to a volume rather than stay triangles, see MacroSurfaces
+        final Map<Integer, byte[]> volumeKinds =
+                childError > 0
+                        ? volumeKinds(children, merged, childError, sourceCluster, sourceTriangle)
+                        : Map.of();
         // Far enough out, small parts standing free of the group's borders go: their look stays in
         // the blend around them, and the measured error counts what is missing
         if (averaging && childError > 0) {
@@ -1804,7 +1819,8 @@ public final class DagBuilder {
                 options.keepLineage() ? outFaces : null,
                 outBases,
                 bakeTiles,
-                bakes);
+                bakes,
+                volumeKinds);
     }
 
     /**
@@ -2177,6 +2193,76 @@ public final class DagBuilder {
     }
 
     /**
+     * Whether each of a group's merged triangles would go to a volume rather than stay a triangle:
+     * a cut out one once the children's error is past its texture's repeat, so its holes can't be
+     * told apart, and any one that isn't on a macro-surface at the resolution the group is about to
+     * reach, taken as {@link #VOLUME_RESOLUTION_STEP} times its middle triangle's error. The
+     * middle, not the largest: one child carrying a large error up from far below would otherwise
+     * make the whole group finer than its resolution, though the rest of it is drawn up close.
+     *
+     * @param children The group's children.
+     * @param merged The merged triangles.
+     * @param childError The children's largest error.
+     * @param sourceCluster Each merged triangle's source cluster.
+     * @param sourceTriangle Each merged triangle's index in its cluster.
+     * @return Each child's triangles' kinds, by child id; a triangle split in welding takes the
+     *     kind of its most volume-like piece.
+     */
+    private Map<Integer, byte[]> volumeKinds(
+            int @NonNull [] children,
+            @NonNull LodMesh merged,
+            double childError,
+            @NonNull IntArrayList sourceCluster,
+            @NonNull IntArrayList sourceTriangle) {
+        final boolean[] macro =
+                MacroSurfaces.classify(merged, medianError(children) * VOLUME_RESOLUTION_STEP);
+        final Map<Integer, byte[]> out = new HashMap<>();
+        for (int id : children) {
+            out.put(id, new byte[dag.clusters().get(id).triangleCount()]);
+        }
+        for (int f = 0; f < merged.getTriangleCount(); ++f) {
+            final int id = sourceCluster.getInt(f);
+            final int t = sourceTriangle.getInt(f);
+            final LodDag.Cluster cluster = dag.clusters().get(id);
+            byte kind = LodDag.VOLUME_NONE;
+            if (options.isCutOut(cluster.materials()[t]) && childError >= repeatOf(cluster, t)) {
+                kind = LodDag.VOLUME_CUT_OUT;
+            } else if (!macro[f]) {
+                kind = LodDag.VOLUME_GEOMETRY;
+            }
+            final byte[] kinds = out.get(id);
+            kinds[t] = (byte) Math.max(kinds[t], kind);
+        }
+        return out;
+    }
+
+    /**
+     * The error of a group's middle triangle: its children's errors, each standing for its
+     * triangles.
+     *
+     * @param children The children.
+     * @return The error.
+     */
+    private double medianError(int @NonNull [] children) {
+        final double[][] errors = new double[children.length][];
+        int total = 0;
+        for (int i = 0; i < children.length; ++i) {
+            final LodDag.Cluster cluster = dag.clusters().get(children[i]);
+            errors[i] = new double[] {cluster.error(), cluster.triangleCount()};
+            total += cluster.triangleCount();
+        }
+        Arrays.sort(errors, (a, b) -> Double.compare(a[0], b[0]));
+        double seen = 0;
+        for (double[] error : errors) {
+            seen += error[1];
+            if (seen * 2 >= total) {
+                return error[0];
+            }
+        }
+        return 0;
+    }
+
+    /**
      * Whether any of a group's children has a triangle of a cut out material.
      *
      * @param children The children.
@@ -2470,6 +2556,9 @@ public final class DagBuilder {
             next.addInt(outputs[i]);
             if (i < built.bakes().size()) {
                 dag.setBake(outputs[i], built.bakes().get(i));
+            }
+            if (i == 0) {
+                built.volumeKinds().forEach(dag::setVolumeKinds);
             }
             if (dag.getLineage() != null) {
                 dag.getLineage().addCluster(built.faces().get(i));

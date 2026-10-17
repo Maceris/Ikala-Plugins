@@ -35,6 +35,7 @@ public final class LodStats {
      * @param groups Groups made from this level's clusters.
      * @param halving The next level's triangles over this level's, ideally 0.5.
      * @param maxError The largest saturated error of this level's clusters.
+     * @param medianError The saturated error of this level's median triangle.
      * @param maxQuadricError The largest quadric estimate of the groups that made this level.
      * @param groupClusters Clusters per group: min, median, max.
      * @param groupTriangles Triangles per group: min, median, max.
@@ -45,6 +46,10 @@ public final class LodStats {
      * @param rejectedLinks Collapses rejected by the link condition in this level's groups.
      * @param bakedClusters Clusters this level's groups baked.
      * @param bakedTexels Texels in their bake tiles.
+     * @param volumeGeometry This level's triangles the groups consuming them find finer than their
+     *     resolution, see {@link MacroSurfaces}.
+     * @param volumeCutOut This level's cut out triangles past their texture's detail in the groups
+     *     consuming them.
      */
     public record Level(
             int level,
@@ -53,6 +58,7 @@ public final class LodStats {
             int groups,
             double halving,
             double maxError,
+            double medianError,
             double maxQuadricError,
             int @NonNull [] groupClusters,
             int @NonNull [] groupTriangles,
@@ -62,7 +68,9 @@ public final class LodStats {
             int rejectedFlips,
             int rejectedLinks,
             int bakedClusters,
-            long bakedTexels) {}
+            long bakedTexels,
+            int volumeGeometry,
+            int volumeCutOut) {}
 
     /**
      * What an edit would rebuild.
@@ -96,6 +104,25 @@ public final class LodStats {
     }
 
     /**
+     * The value at the middle triangle, each value standing for some triangles.
+     *
+     * @param values Each value and how many triangles it stands for.
+     * @param total The triangles in all.
+     * @return The value, or 0 if there are none.
+     */
+    private static double median(@NonNull List<double[]> values, int total) {
+        values.sort((a, b) -> Double.compare(a[0], b[0]));
+        double seen = 0;
+        for (double[] value : values) {
+            seen += value[1];
+            if (seen * 2 >= total) {
+                return value[0];
+            }
+        }
+        return 0;
+    }
+
+    /**
      * Measure every level.
      *
      * @param dag The DAG.
@@ -108,8 +135,10 @@ public final class LodStats {
             int clusters = 0;
             double maxError = 0;
             double maxQuadricError = 0;
+            final List<double[]> errors = new ArrayList<>();
             for (LodDag.Cluster cluster : dag.clusters()) {
                 if (cluster.level() == level) {
+                    errors.add(new double[] {cluster.error(), cluster.triangleCount()});
                     triangles += cluster.triangleCount();
                     ++clusters;
                     maxError = Math.max(maxError, cluster.error());
@@ -132,6 +161,19 @@ public final class LodStats {
             int links = 0;
             int baked = 0;
             long texels = 0;
+            int volumeGeometry = 0;
+            int volumeCutOut = 0;
+            for (LodDag.Cluster cluster : dag.clusters()) {
+                final byte[] kinds =
+                        cluster.level() == level ? dag.volumeKindsOf(cluster.id()) : null;
+                if (kinds == null) {
+                    continue;
+                }
+                for (byte kind : kinds) {
+                    volumeGeometry += kind == LodDag.VOLUME_GEOMETRY ? 1 : 0;
+                    volumeCutOut += kind == LodDag.VOLUME_CUT_OUT ? 1 : 0;
+                }
+            }
             for (LodDag.Group group : dag.groups()) {
                 if (group.level() != level) {
                     continue;
@@ -157,6 +199,7 @@ public final class LodStats {
                                     ? Double.NaN
                                     : (double) next / triangles,
                             maxError,
+                            median(errors, triangles),
                             maxQuadricError,
                             spread(sizes),
                             spread(groupTriangles),
@@ -166,7 +209,9 @@ public final class LodStats {
                             flips,
                             links,
                             baked,
-                            texels));
+                            texels,
+                            volumeGeometry,
+                            volumeCutOut));
         }
         return out;
     }
@@ -285,13 +330,15 @@ public final class LodStats {
         out.append('\n');
         out.append(
                 String.format(
-                        "%5s %9s %8s %6s %7s %9s %9s %14s %16s %7s %26s %8s %6s %6s %6s %9s%n",
+                        "%5s %9s %8s %6s %7s %9s %9s %9s %14s %16s %7s %26s %8s %6s %6s %6s %9s %8s"
+                                + " %8s%n",
                         "level",
                         "tris",
                         "clusters",
                         "groups",
                         "halving",
                         "error",
+                        "err p50",
                         "quadric",
                         "group clusters",
                         "group tris",
@@ -301,18 +348,22 @@ public final class LodStats {
                         "flips",
                         "links",
                         "baked",
-                        "bake MiB"));
+                        "bake MiB",
+                        "vol geo",
+                        "vol cut"));
         for (Level l : levels(dag)) {
             out.append(
                     String.format(
-                            "%5d %9d %8d %6d %7.3f %9.4f %9.4f %14s %16s %6.1f%% %26s %8d %6d %6d"
-                                    + " %6d %9.1f%n",
+                            "%5d %9d %8d %6d %7.3f %9.4f %9.4f %9.4f %14s %16s %6.1f%% %26s %8d %6d"
+                                    + " %6d"
+                                    + " %6d %9.1f %7.1f%% %7.1f%%%n",
                             l.level(),
                             l.triangles(),
                             l.clusters(),
                             l.groups(),
                             l.halving(),
                             l.maxError(),
+                            l.medianError(),
                             l.maxQuadricError(),
                             l.groupClusters()[0]
                                     + "/"
@@ -335,7 +386,9 @@ public final class LodStats {
                             l.rejectedFlips(),
                             l.rejectedLinks(),
                             l.bakedClusters(),
-                            l.bakedTexels() * BAKE_BYTES_PER_TEXEL / BYTES_PER_MIB));
+                            l.bakedTexels() * BAKE_BYTES_PER_TEXEL / BYTES_PER_MIB,
+                            100.0 * l.volumeGeometry() / Math.max(1, l.triangles()),
+                            100.0 * l.volumeCutOut() / Math.max(1, l.triangles())));
         }
         for (Footprint f : footprints) {
             out.append(

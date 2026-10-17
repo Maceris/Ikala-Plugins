@@ -220,6 +220,18 @@ public final class LodDag {
     /** What each baked cluster's tile texels stand for, by cluster id. */
     private final Map<Integer, BakeTexels> bakes = new HashMap<>();
 
+    /** A triangle its consumer keeps as a surface. */
+    public static final byte VOLUME_NONE = 0;
+
+    /** A triangle its consumer finds finer than its resolution, see {@link MacroSurfaces}. */
+    public static final byte VOLUME_GEOMETRY = 1;
+
+    /** A cut out triangle whose texture's detail its consumer's error is past. */
+    public static final byte VOLUME_CUT_OUT = 2;
+
+    /** Whether each consumed cluster's triangles would go to a volume, by cluster id. */
+    private final Map<Integer, byte[]> volumeKinds = new HashMap<>();
+
     /**
      * Start an empty DAG.
      *
@@ -280,6 +292,27 @@ public final class LodDag {
      */
     void setBake(int cluster, @NonNull BakeTexels texels) {
         bakes.put(cluster, texels);
+    }
+
+    /**
+     * Keep whether a consumed cluster's triangles would go to a volume in its consumer.
+     *
+     * @param cluster The cluster's id.
+     * @param kinds Each triangle's {@link #VOLUME_NONE}, {@link #VOLUME_GEOMETRY} or {@link
+     *     #VOLUME_CUT_OUT}.
+     */
+    void setVolumeKinds(int cluster, byte @NonNull [] kinds) {
+        volumeKinds.put(cluster, kinds);
+    }
+
+    /**
+     * Whether a cluster's triangles would go to a volume in the group that consumes it.
+     *
+     * @param cluster The cluster's id.
+     * @return Each triangle's kind, or null if it wasn't consumed or not worked out.
+     */
+    public byte[] volumeKindsOf(int cluster) {
+        return volumeKinds.get(cluster);
     }
 
     /**

@@ -48,7 +48,7 @@ public final class LodPanel implements AutoCloseable {
 
     /** The coloring choices, in combo order. */
     private static final String[] MODES = {
-        "Materials", "Clusters", "Groups", "Levels", "Mismatch", "Visibility", "Baked"
+        "Materials", "Clusters", "Groups", "Levels", "Mismatch", "Visibility", "Baked", "Volume"
     };
 
     /** Coordinates in a position. */
@@ -334,6 +334,12 @@ public final class LodPanel implements AutoCloseable {
             IkGui.textWrapped(
                     "Gray: its own material. Blue: blended to its materials' average. Orange: baked"
                             + " into its cluster's tile.");
+        }
+        if (LodView.Mode.values()[mode.get()] == LodView.Mode.VOLUME) {
+            IkGui.textWrapped(
+                    "What the group above does with a triangle. Gray: keeps it. Green: a volume,"
+                            + " finer than the group's resolution. Yellow: a volume, cut out past"
+                            + " its texture's detail.");
         }
         IkGui.sliderInt("Draw level", fixedLevel, -1, topLevel, fixedLevel[0] < 0 ? "cut" : "%d");
         IkGui.sliderInt(

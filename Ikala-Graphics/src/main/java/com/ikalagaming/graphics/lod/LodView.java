@@ -67,7 +67,13 @@ public final class LodView implements AutoCloseable {
          * How a triangle keeps its look: gray with its own material, blue blended to its materials'
          * average, orange baked into its cluster's tile.
          */
-        BAKED
+        BAKED,
+        /**
+         * What the group consuming a triangle would do with it: gray keep it a triangle, green put
+         * it in a volume for being finer than the group's resolution, yellow put it in a volume for
+         * being cut out past its texture's detail.
+         */
+        VOLUME
     }
 
     /**
@@ -107,6 +113,11 @@ public final class LodView implements AutoCloseable {
     /** The baked colors, by key: its own material, blended to the average, baked. */
     private static final float[][] BAKED_RGB = {
         {0.6f, 0.6f, 0.6f}, {0.2f, 0.45f, 0.95f}, {0.95f, 0.55f, 0.1f}
+    };
+
+    /** The volume colors, by {@link LodDag#VOLUME_NONE} and the other kinds. */
+    private static final float[][] VOLUME_RGB = {
+        {0.6f, 0.6f, 0.6f}, {0.2f, 0.8f, 0.3f}, {0.95f, 0.85f, 0.15f}
     };
 
     /** The baked color key of a triangle keeping its own material. */
@@ -233,6 +244,9 @@ public final class LodView implements AutoCloseable {
     /** The baked color materials, by key. */
     private final Material[] bakedPalette = new Material[BAKED_RGB.length];
 
+    /** The volume color materials, by kind. */
+    private final Material[] volumePalette = new Material[VOLUME_RGB.length];
+
     /** The DAG's fidelity, for the mismatch colors, or null. */
     private volatile Fidelity fidelity;
 
@@ -346,6 +360,10 @@ public final class LodView implements AutoCloseable {
         for (int i = 0; i < BAKED_RGB.length; ++i) {
             bakedPalette[i] =
                     debugMaterial(cache, BAKED_RGB[i][0], BAKED_RGB[i][1], BAKED_RGB[i][2]);
+        }
+        for (int i = 0; i < VOLUME_RGB.length; ++i) {
+            volumePalette[i] =
+                    debugMaterial(cache, VOLUME_RGB[i][0], VOLUME_RGB[i][1], VOLUME_RGB[i][2]);
         }
         cache.setDirty(true);
         worker.execute(
@@ -572,6 +590,10 @@ public final class LodView implements AutoCloseable {
             case VISIBILITY ->
                     Math.round((1 - cluster.visibility()[triangle]) * (MISMATCH_STEPS - 1));
             case BAKED -> bakedKey(dag, cluster, triangle);
+            case VOLUME -> {
+                final byte[] kinds = dag.volumeKindsOf(cluster.id());
+                yield kinds == null ? LodDag.VOLUME_NONE : kinds[triangle];
+            }
         };
     }
 
@@ -802,6 +824,7 @@ public final class LodView implements AutoCloseable {
                         case MATERIALS -> material(cache, key);
                         case MISMATCH, VISIBILITY -> mismatchPalette[key];
                         case BAKED -> bakedPalette[key];
+                        case VOLUME -> volumePalette[key];
                         default -> palette[key];
                     });
             graphics.meshes().register(mesh);
