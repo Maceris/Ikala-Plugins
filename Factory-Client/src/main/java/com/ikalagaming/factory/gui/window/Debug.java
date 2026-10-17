@@ -27,8 +27,7 @@ public class Debug extends GuiWindow {
 
     @Override
     public void draw(final int width, final int height) {
-        IkGui.setNextWindowViewport(IkGui.getMainViewport().id);
-        IkGui.setNextWindowPos(
+        setNextWindowPosInMainWindow(
                 getActualDisplaceX() * width, getActualDisplaceY() * height, Condition.ONCE);
         IkGui.setNextWindowSize(
                 getActualWidth() * width, getActualHeight() * height, Condition.ONCE);

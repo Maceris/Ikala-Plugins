@@ -22,6 +22,7 @@ import com.ikalagaming.graphics.gui.component.GuiWindow;
 import com.ikalagaming.graphics.gui.component.Slider;
 import com.ikalagaming.graphics.gui.data.IkBoolean;
 import com.ikalagaming.graphics.gui.data.IkInt;
+import com.ikalagaming.graphics.gui.data.Viewport;
 import com.ikalagaming.graphics.gui.enums.Condition;
 import com.ikalagaming.graphics.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.gui.util.Alignment;
@@ -35,6 +36,7 @@ import com.ikalagaming.graphics.vulkan.FilterView;
 import com.ikalagaming.graphics.vulkan.FrameTimings;
 import com.ikalagaming.graphics.vulkan.InstanceRegistry;
 import com.ikalagaming.graphics.vulkan.PointShadows;
+import com.ikalagaming.graphics.vulkan.Presentation;
 import com.ikalagaming.graphics.vulkan.ShaderBindings;
 import com.ikalagaming.graphics.vulkan.VoxelOitMath;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
@@ -271,8 +273,7 @@ public class GraphicsDebug extends GuiWindow {
 
     @Override
     public void draw(int width, int height) {
-        IkGui.setNextWindowViewport(IkGui.getMainViewport().id);
-        IkGui.setNextWindowPos(
+        setNextWindowPosInMainWindow(
                 getActualDisplaceX() * width, getActualDisplaceY() * height, Condition.ONCE);
         IkGui.setNextWindowSize(
                 getActualWidth() * width, getActualHeight() * height, Condition.ONCE);
@@ -375,6 +376,10 @@ public class GraphicsDebug extends GuiWindow {
 
             if (IkGui.collapsingHeader("Frame timing")) {
                 drawTimings();
+            }
+
+            if (IkGui.collapsingHeader("Windows")) {
+                drawWindows();
             }
 
             if (IkGui.collapsingHeader("Lights")) {
@@ -680,6 +685,44 @@ public class GraphicsDebug extends GuiWindow {
                         : "There is no level of detail to color yet.");
         if (!any) {
             IkGui.endDisabled();
+        }
+    }
+
+    /**
+     * Show every IkGui viewport and the window it is drawn in, and every window's swapchain, for
+     * finding out why a window shows nothing.
+     */
+    private static void drawWindows() {
+        IkGui.text("IkGui viewports:");
+        for (Viewport viewport : IkGui.getPlatformIO().viewports) {
+            final String window =
+                    viewport.platformHandle instanceof Window owner ? owner.getTitle() : "none";
+            IkGui.text(
+                    String.format(
+                            "  %08X at %.0f, %.0f, %.0f x %.0f, in %s%s",
+                            viewport.id,
+                            viewport.position.x,
+                            viewport.position.y,
+                            viewport.size.x,
+                            viewport.size.y,
+                            window,
+                            viewport == IkGui.getMainViewport() ? " (main)" : ""));
+        }
+        final VulkanInstance renderer = GraphicsManager.getRenderInstance();
+        if (renderer == null) {
+            return;
+        }
+        IkGui.text("Swapchains:");
+        for (Presentation presentation : renderer.getState().presentations.values()) {
+            final Window window = presentation.getWindow();
+            IkGui.text(
+                    String.format(
+                            "  %s: %d x %d%s%s",
+                            window.getTitle(),
+                            presentation.swapchainWidth,
+                            presentation.swapchainHeight,
+                            window == GraphicsManager.getSceneWindow() ? ", scene" : "",
+                            presentation.updateSwapchain ? ", waiting to be remade" : ""));
         }
     }
 

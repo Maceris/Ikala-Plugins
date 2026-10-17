@@ -37,7 +37,13 @@ public class GraphicsSettings {
      * Whether GUI windows can be dragged out of the main window into windows of their own, using
      * IkGui viewports. Read when graphics start.
      */
-    public boolean guiViewports = false;
+    public boolean guiViewports = true;
+
+    /**
+     * Where IkGui saves window positions, sizes and docking between runs, or null to not save them.
+     * Read when graphics start.
+     */
+    public String guiLayoutFile = null;
 
     /**
      * The target frames per second. If zero (or negative), this will be interpreted as requesting

@@ -305,8 +305,7 @@ public final class LodPrototype {
 
         @Override
         public void draw(final int width, final int height) {
-            IkGui.setNextWindowViewport(IkGui.getMainViewport().id);
-            IkGui.setNextWindowPos(MARGIN, TOP, Condition.ONCE);
+            setNextWindowPosInMainWindow(MARGIN, TOP, Condition.ONCE);
             IkGui.begin(title, windowOpen, windowFlags);
             final boolean back = IkGui.button("Back to the menu") || !windowOpen.get();
             IkGui.text(CameraManager.CONTROLS);

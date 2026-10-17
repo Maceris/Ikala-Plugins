@@ -2,6 +2,8 @@ package com.ikalagaming.graphics;
 
 import com.ikalagaming.event.Listener;
 import com.ikalagaming.launcher.Launcher;
+import com.ikalagaming.launcher.PluginFolder;
+import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 import com.ikalagaming.plugins.PluginManager;
@@ -42,6 +44,15 @@ public class GraphicsPlugin extends Plugin {
 
     /** The config value turning IkGui viewports on, so GUI windows can leave the main window. */
     private static final String GUI_VIEWPORTS = "gui-viewports";
+
+    /**
+     * The config value naming the file IkGui saves window layouts in, in the plugin's config
+     * folder. Empty to not save them.
+     */
+    private static final String GUI_LAYOUT_FILE = "gui-layout-file";
+
+    /** The layout file used when the config doesn't name one. */
+    private static final String DEFAULT_GUI_LAYOUT_FILE = "gui.ini";
 
     /** Bytes in a mebibyte. */
     private static final long BYTES_PER_MIB = 1024L * 1024L;
@@ -93,6 +104,15 @@ public class GraphicsPlugin extends Plugin {
         if (config.isPresent(GUI_VIEWPORTS)) {
             settings.guiViewports = config.getBoolean(GUI_VIEWPORTS);
         }
+        final String layoutFile =
+                config.isPresent(GUI_LAYOUT_FILE)
+                        ? config.getString(GUI_LAYOUT_FILE)
+                        : DEFAULT_GUI_LAYOUT_FILE;
+        settings.guiLayoutFile =
+                layoutFile == null || layoutFile.isBlank()
+                        ? null
+                        : PluginFolder.getResource(PLUGIN_NAME, ResourceType.CONFIG, layoutFile)
+                                .getAbsolutePath();
 
         if (!GraphicsManager.initialize()) {
             return false;

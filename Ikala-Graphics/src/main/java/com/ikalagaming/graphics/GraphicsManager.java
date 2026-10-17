@@ -251,9 +251,12 @@ public class GraphicsManager {
         IkGui.createContext();
 
         IkIO ikIO = IkGui.getIO();
-        ikIO.iniFilename = null;
+        // Window positions, sizes and docking are kept between runs
+        ikIO.iniFilename = settings.guiLayoutFile;
         // Tab, arrow keys and gamepads move between items, so menus work without a mouse
         ikIO.configFlags |= ConfigFlags.NAV_ENABLE_KEYBOARD | ConfigFlags.NAV_ENABLE_GAMEPAD;
+        // GUI windows can be docked into each other, as tabs or side by side
+        ikIO.configFlags |= ConfigFlags.DOCKING_ENABLE;
         if (settings.guiViewports) {
             // GUI windows can be dragged out of the main window into windows of their own
             ikIO.configFlags |= ConfigFlags.VIEWPORTS_ENABLE;

@@ -1,6 +1,8 @@
 package com.ikalagaming.graphics.ui.automation;
 
+import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.InputTextState;
+import com.ikalagaming.graphics.gui.data.Viewport;
 import com.ikalagaming.graphics.gui.data.Window;
 import com.ikalagaming.graphics.gui.enums.Key;
 import com.ikalagaming.graphics.gui.enums.MouseButton;
@@ -687,14 +689,16 @@ public final class Steps {
     }
 
     /**
-     * Send the mouse to a point.
+     * Send the mouse to a point in the main window. With IkGui viewports on, mouse positions are on
+     * the desktop, so the point is offset by where the main window is.
      *
      * @param run The run.
-     * @param x Pixels from the left.
-     * @param y Pixels from the top.
+     * @param x Pixels from the left of the main window.
+     * @param y Pixels from the top of the main window.
      */
     private static void move(Run run, float x, float y) {
-        run.io().addMousePosEvent(x, y);
+        final Viewport mainViewport = IkGui.getMainViewport();
+        run.io().addMousePosEvent(mainViewport.position.x + x, mainViewport.position.y + y);
     }
 
     /**

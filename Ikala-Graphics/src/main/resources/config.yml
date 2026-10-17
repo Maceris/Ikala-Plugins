@@ -7,4 +7,7 @@ lod-cache-folder: 'cache/lod'
 # The most the cache keeps, in mebibytes; the least recently used cells go first
 lod-cache-max-mb: 2048
 # Whether GUI windows can be dragged out of the main window into windows of their own
-gui-viewports: false
+gui-viewports: true
+# Where window positions, sizes and docking are saved between runs, in this config folder; empty
+# to not save them
+gui-layout-file: 'gui.ini'

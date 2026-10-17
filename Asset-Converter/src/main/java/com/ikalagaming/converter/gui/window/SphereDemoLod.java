@@ -398,8 +398,7 @@ final class SphereDemoLod {
         @Override
         public void draw(final int width, final int height) {
             update();
-            IkGui.setNextWindowViewport(IkGui.getMainViewport().id);
-            IkGui.setNextWindowPos(MARGIN, MARGIN, Condition.ONCE);
+            setNextWindowPosInMainWindow(MARGIN, MARGIN, Condition.ONCE);
             IkGui.begin(title, windowOpen, windowFlags);
             final boolean leave = IkGui.button("Back to the menu") || !windowOpen.get();
             IkGui.checkbox("Level of detail", useLod);

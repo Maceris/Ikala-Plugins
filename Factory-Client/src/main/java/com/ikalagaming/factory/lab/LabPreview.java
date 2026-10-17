@@ -604,8 +604,7 @@ final class LabPreview implements AutoCloseable {
 
         @Override
         public void draw(final int width, final int height) {
-            IkGui.setNextWindowViewport(IkGui.getMainViewport().id);
-            IkGui.setNextWindowPos(LOOK_MARGIN, LOOK_TOP, Condition.ONCE);
+            setNextWindowPosInMainWindow(LOOK_MARGIN, LOOK_TOP, Condition.ONCE);
             IkGui.begin(title, windowOpen, windowFlags);
             IkGui.text(status);
             IkGui.text(CameraManager.CONTROLS);

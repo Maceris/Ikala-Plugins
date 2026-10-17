@@ -23,14 +23,18 @@ import java.util.List;
  * when the plugin that made them unloads.
  */
 public class Surface {
-    /** Window flags every surface uses. */
+    /**
+     * Window flags every surface uses. Surfaces are laid out in the main window, so they don't dock
+     * or take part in docking.
+     */
     private static final int BASE_FLAGS =
             WindowFlags.NO_TITLE_BAR
                     | WindowFlags.NO_RESIZE
                     | WindowFlags.NO_COLLAPSE
                     | WindowFlags.NO_SAVED_SETTINGS
                     | WindowFlags.NO_SCROLLBAR
-                    | WindowFlags.NO_SCROLL_WITH_MOUSE;
+                    | WindowFlags.NO_SCROLL_WITH_MOUSE
+                    | WindowFlags.NO_DOCKING;
 
     /**
      * The ID, unique among all surfaces. -- GETTER -- The ID.
@@ -327,6 +331,8 @@ public class Surface {
                                 padding.top().resolve(0, layoutContext.scale(), fontPixels));
         final RectFloat window = place(viewport, layoutContext, windowPadding);
         final Condition condition = movable ? Condition.ONCE : Condition.ALWAYS;
+        // Laid out in the main window, so kept there even when dragged past its edge
+        IkGui.setNextWindowViewport(IkGui.getMainViewport().id);
         IkGui.setNextWindowPos(window.getLeft(), window.getTop(), condition);
         IkGui.setNextWindowSize(window.getWidth(), window.getHeight(), condition);
         // The window reads its colors, borders and padding when it begins
