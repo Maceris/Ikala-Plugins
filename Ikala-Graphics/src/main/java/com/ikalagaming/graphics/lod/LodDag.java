@@ -233,6 +233,11 @@ public final class LodDag {
     private final Map<Integer, byte[]> volumeKinds = new HashMap<>();
 
     /**
+     * The coverage volume of each volume cluster, by cluster id; such a cluster has no triangles.
+     */
+    private final Map<Integer, CoverageVolume> volumes = new HashMap<>();
+
+    /**
      * Start an empty DAG.
      *
      * @param origin Where positions are measured from.
@@ -303,6 +308,26 @@ public final class LodDag {
      */
     void setVolumeKinds(int cluster, byte @NonNull [] kinds) {
         volumeKinds.put(cluster, kinds);
+    }
+
+    /**
+     * Keep a volume cluster's coverage volume.
+     *
+     * @param cluster The cluster's id.
+     * @param volume The volume.
+     */
+    void setVolume(int cluster, @NonNull CoverageVolume volume) {
+        volumes.put(cluster, volume);
+    }
+
+    /**
+     * The coverage volume a cluster stands for its part of the input with, instead of triangles.
+     *
+     * @param cluster The cluster's id.
+     * @return The volume, or null if the cluster isn't a volume.
+     */
+    public CoverageVolume volumeOf(int cluster) {
+        return volumes.get(cluster);
     }
 
     /**

@@ -88,6 +88,9 @@ final class LodSection {
     /** Whether cut out meshes, like leaves, go in too, drawn with an alpha test. */
     private final IkBoolean cutOut = new IkBoolean(true);
 
+    /** Whether what is finer than far groups' resolution becomes coverage volumes. */
+    private final IkBoolean volumes = new IkBoolean(false);
+
     /**
      * Whether far groups bake their appearance into texture tiles and simplify their geometry
      * alone, rather than keep their materials and texture seams (see {@code LodBakes}).
@@ -180,6 +183,7 @@ final class LodSection {
         IkGui.checkbox("Join separate pieces (slow, needs a lot of memory)", virtualEdges);
         IkGui.checkbox("Keep normals and texture coordinates", keepAttributes);
         IkGui.checkbox("Include cut out meshes", cutOut);
+        IkGui.checkbox("Far fine parts as volumes (not drawn yet)", volumes);
         IkGui.checkbox("Bake far textures", bake);
         if (bake.get()) {
             IkGui.sliderInt("Bake texels per error", bakeDensity, 1, MAX_BAKE_DENSITY, "%d");
@@ -255,7 +259,8 @@ final class LodSection {
                         },
                         material -> names.getOrDefault(material, "material " + material),
                         options(averages(indices))
-                                .withCutOut(withCutOut ? cutOutMaterials(indices) : null));
+                                .withCutOut(withCutOut ? cutOutMaterials(indices) : null)
+                                .withVolumes(volumes.get()));
     }
 
     /**
@@ -288,12 +293,17 @@ final class LodSection {
      */
     private MaterialAverages averages(@NonNull Map<Material, Integer> indices) {
         final Map<Integer, float[]> known = new HashMap<>();
+        final Map<Integer, Float> covered = new HashMap<>();
         for (Map.Entry<Material, Integer> entry : indices.entrySet()) {
             final Material material = entry.getKey();
             final float[] out = new float[MaterialAverages.VALUES];
             final float[] texture = graphics.textures().average(material.getTexture());
             if (texture != null) {
                 System.arraycopy(texture, 0, out, MaterialAverages.RED, COLORS);
+                if (texture.length > COLORS
+                        && material.getTransparency() == Material.Transparency.CUTOUT) {
+                    covered.put(entry.getValue(), texture[COLORS]);
+                }
             } else {
                 out[MaterialAverages.RED] = ToneMapMath.decode(material.getBaseColor().x);
                 out[MaterialAverages.RED + 1] = ToneMapMath.decode(material.getBaseColor().y);
@@ -304,7 +314,17 @@ final class LodSection {
             out[MaterialAverages.SPECULAR] = material.getSpecular();
             known.put(entry.getValue(), out);
         }
-        return known::get;
+        return new MaterialAverages() {
+            @Override
+            public float[] average(int material) {
+                return known.get(material);
+            }
+
+            @Override
+            public float coverage(int material) {
+                return covered.getOrDefault(material, 1f);
+            }
+        };
     }
 
     /**

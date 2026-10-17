@@ -202,6 +202,7 @@ public final class LodView implements AutoCloseable {
             List<DebugShape> shapes,
             int clusters,
             int triangles,
+            long voxels,
             boolean[] drawn,
             double millis,
             Mode mode,
@@ -287,6 +288,9 @@ public final class LodView implements AutoCloseable {
      * @return The count.
      */
     @Getter private int drawnTriangles;
+
+    /** How many voxels the drawn cut's volumes have, which aren't drawn yet. */
+    @Getter private long drawnVoxels;
 
     /**
      * How long the last mesh build took.
@@ -523,6 +527,7 @@ public final class LodView implements AutoCloseable {
         Map<Integer, List<float[]>> buckets = new TreeMap<>();
         int clusters = 0;
         int triangles = 0;
+        long voxels = 0;
         for (int i = 0; i < chosen.length; ++i) {
             if (!chosen[i]) {
                 continue;
@@ -530,6 +535,8 @@ public final class LodView implements AutoCloseable {
             final LodDag.Cluster cluster = dag.clusters().get(i);
             ++clusters;
             triangles += cluster.triangleCount();
+            final CoverageVolume volume = dag.volumeOf(i);
+            voxels += volume == null ? 0 : volume.size();
             if (textured) {
                 continue;
             }
@@ -556,6 +563,7 @@ public final class LodView implements AutoCloseable {
                 overlay,
                 clusters,
                 triangles,
+                voxels,
                 chosen,
                 (System.nanoTime() - start) / NANOS_PER_MILLI,
                 settings.mode(),
@@ -864,6 +872,7 @@ public final class LodView implements AutoCloseable {
         drawn = built.drawn();
         drawnClusters = built.clusters();
         drawnTriangles = built.triangles();
+        drawnVoxels = built.voxels();
         buildMillis = built.millis();
     }
 

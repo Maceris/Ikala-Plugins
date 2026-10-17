@@ -50,6 +50,7 @@ public final class LodStats {
      *     resolution, see {@link MacroSurfaces}.
      * @param volumeCutOut This level's cut out triangles past their texture's detail in the groups
      *     consuming them.
+     * @param voxels Voxels in this level's coverage volumes.
      */
     public record Level(
             int level,
@@ -70,7 +71,8 @@ public final class LodStats {
             int bakedClusters,
             long bakedTexels,
             int volumeGeometry,
-            int volumeCutOut) {}
+            int volumeCutOut,
+            long voxels) {}
 
     /**
      * What an edit would rebuild.
@@ -163,7 +165,13 @@ public final class LodStats {
             long texels = 0;
             int volumeGeometry = 0;
             int volumeCutOut = 0;
+            long voxels = 0;
             for (LodDag.Cluster cluster : dag.clusters()) {
+                final CoverageVolume volume =
+                        cluster.level() == level ? dag.volumeOf(cluster.id()) : null;
+                if (volume != null) {
+                    voxels += volume.size();
+                }
                 final byte[] kinds =
                         cluster.level() == level ? dag.volumeKindsOf(cluster.id()) : null;
                 if (kinds == null) {
@@ -211,7 +219,8 @@ public final class LodStats {
                             baked,
                             texels,
                             volumeGeometry,
-                            volumeCutOut));
+                            volumeCutOut,
+                            voxels));
         }
         return out;
     }
@@ -331,7 +340,7 @@ public final class LodStats {
         out.append(
                 String.format(
                         "%5s %9s %8s %6s %7s %9s %9s %9s %14s %16s %7s %26s %8s %6s %6s %6s %9s %8s"
-                                + " %8s%n",
+                                + " %8s %9s%n",
                         "level",
                         "tris",
                         "clusters",
@@ -350,13 +359,14 @@ public final class LodStats {
                         "baked",
                         "bake MiB",
                         "vol geo",
-                        "vol cut"));
+                        "vol cut",
+                        "voxels"));
         for (Level l : levels(dag)) {
             out.append(
                     String.format(
                             "%5d %9d %8d %6d %7.3f %9.4f %9.4f %9.4f %14s %16s %6.1f%% %26s %8d %6d"
                                     + " %6d"
-                                    + " %6d %9.1f %7.1f%% %7.1f%%%n",
+                                    + " %6d %9.1f %7.1f%% %7.1f%% %9d%n",
                             l.level(),
                             l.triangles(),
                             l.clusters(),
@@ -388,7 +398,8 @@ public final class LodStats {
                             l.bakedClusters(),
                             l.bakedTexels() * BAKE_BYTES_PER_TEXEL / BYTES_PER_MIB,
                             100.0 * l.volumeGeometry() / Math.max(1, l.triangles()),
-                            100.0 * l.volumeCutOut() / Math.max(1, l.triangles())));
+                            100.0 * l.volumeCutOut() / Math.max(1, l.triangles()),
+                            l.voxels()));
         }
         for (Footprint f : footprints) {
             out.append(

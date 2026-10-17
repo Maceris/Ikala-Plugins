@@ -30,4 +30,15 @@ public interface MaterialAverages {
      * @return Its {@link #VALUES} values, or null if it isn't known.
      */
     float[] average(int material);
+
+    /**
+     * How much of a material's surface its texture covers, for cut out materials whose holes let
+     * light through: its texture's average alpha. Volumes standing for it stop that share of light.
+     *
+     * @param material The material's index.
+     * @return The share covered, 0 to 1; all of it unless said otherwise.
+     */
+    default float coverage(int material) {
+        return 1;
+    }
 }

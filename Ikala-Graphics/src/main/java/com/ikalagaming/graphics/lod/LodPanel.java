@@ -375,9 +375,11 @@ public final class LodPanel implements AutoCloseable {
         }
         IkGui.text(
                 String.format(
-                        "Drawing %,d triangles in %,d clusters (cut in %.1f ms). Built in %.0f ms.",
+                        "Drawing %,d triangles in %,d clusters, %,d voxels (cut in %.1f ms). Built"
+                                + " in %.0f ms.",
                         view.getDrawnTriangles(),
                         view.getDrawnClusters(),
+                        view.getDrawnVoxels(),
                         view.getBuildMillis(),
                         buildMillis));
         if (view.isTexturedShown()) {

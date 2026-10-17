@@ -78,6 +78,19 @@ public final class DagBuilder {
     private static final double VOLUME_RESOLUTION_STEP = 2;
 
     /**
+     * How wide a group's volume's voxels are, as a multiple of its middle child's error. Its error
+     * is a voxel, and the group's outputs share their error, so wider voxels would keep its
+     * surfaces finer for longer.
+     */
+    private static final double VOXEL_STEP = 1;
+
+    /**
+     * About how many voxels a surface takes per its area over a voxel's face: those it passes
+     * through, and as many again that the blurred rays reach it from.
+     */
+    private static final double VOXELS_PER_FACE_AREA = 2;
+
+    /**
      * How to build.
      *
      * @param virtualEdgeFactor r for virtual edges as a multiple of each group's average edge
@@ -107,6 +120,9 @@ public final class DagBuilder {
      * @param cutOut Which materials have holes cut out by their textures, like leaves, or null for
      *     none. A group holding such triangles neither blends its look per vertex nor bakes, either
      *     of which would fill the holes, so it keeps its textures and their seams.
+     * @param volumes Whether groups turn what is finer than their resolution into coverage volumes
+     *     (see {@link MacroSurfaces} and {@link CoverageVoxelizer}) where the voxels cost less than
+     *     the triangles they stand for.
      */
     public record Options(
             double virtualEdgeFactor,
@@ -118,7 +134,8 @@ public final class DagBuilder {
             MaterialAverages averages,
             int bakeTile,
             double bakeDensity,
-            IntPredicate cutOut) {
+            IntPredicate cutOut,
+            boolean volumes) {
 
         /** Texels across a baked cluster's error, unless asked otherwise. */
         public static final double DEFAULT_BAKE_DENSITY = 2;
@@ -157,7 +174,8 @@ public final class DagBuilder {
                     averages,
                     bakeTile,
                     bakeDensity,
-                    null);
+                    null,
+                    false);
         }
 
         /**
@@ -286,7 +304,8 @@ public final class DagBuilder {
                     averages,
                     bakeTile,
                     bakeDensity,
-                    cutOut);
+                    cutOut,
+                    volumes);
         }
 
         /**
@@ -306,7 +325,8 @@ public final class DagBuilder {
                     materialAverages,
                     bakeTile,
                     bakeDensity,
-                    cutOut);
+                    cutOut,
+                    volumes);
         }
 
         /**
@@ -326,7 +346,8 @@ public final class DagBuilder {
                     averages,
                     bakeTile,
                     bakeDensity,
-                    cutOut);
+                    cutOut,
+                    volumes);
         }
 
         /**
@@ -346,7 +367,8 @@ public final class DagBuilder {
                     averages,
                     tile,
                     bakeDensity,
-                    cutOut);
+                    cutOut,
+                    volumes);
         }
 
         /**
@@ -366,7 +388,70 @@ public final class DagBuilder {
                     averages,
                     bakeTile,
                     density,
-                    cutOut);
+                    cutOut,
+                    volumes);
+        }
+
+        /**
+         * Options with no volumes.
+         *
+         * @param virtualEdgeFactor r for virtual edges, as a multiple of the average edge length.
+         * @param lockOpenBorder Whether the input's open border is locked at every level.
+         * @param threads Worker threads.
+         * @param keepLineage Whether to keep where every triangle came from.
+         * @param visibilityReach How far a leaf triangle's rays must get to count as seen.
+         * @param mergePlanar Whether to merge each input's coplanar triangles first.
+         * @param averages What each material looks like averaged, or null.
+         * @param bakeTile The side of the tile a baked cluster is expected to need, 0 never to
+         *     bake.
+         * @param bakeDensity Texels across a baked cluster's error.
+         * @param cutOut Which materials are cut out, or null for none.
+         */
+        public Options(
+                double virtualEdgeFactor,
+                boolean lockOpenBorder,
+                int threads,
+                boolean keepLineage,
+                double visibilityReach,
+                boolean mergePlanar,
+                MaterialAverages averages,
+                int bakeTile,
+                double bakeDensity,
+                IntPredicate cutOut) {
+            this(
+                    virtualEdgeFactor,
+                    lockOpenBorder,
+                    threads,
+                    keepLineage,
+                    visibilityReach,
+                    mergePlanar,
+                    averages,
+                    bakeTile,
+                    bakeDensity,
+                    cutOut,
+                    false);
+        }
+
+        /**
+         * The same options, turning what is finer than each group's resolution into volumes, or
+         * not.
+         *
+         * @param turn Whether to.
+         * @return The options.
+         */
+        public Options withVolumes(boolean turn) {
+            return new Options(
+                    virtualEdgeFactor,
+                    lockOpenBorder,
+                    threads,
+                    keepLineage,
+                    visibilityReach,
+                    mergePlanar,
+                    averages,
+                    bakeTile,
+                    bakeDensity,
+                    cutOut,
+                    turn);
         }
 
         /**
@@ -386,7 +471,8 @@ public final class DagBuilder {
                     averages,
                     bakeTile,
                     bakeDensity,
-                    materials);
+                    materials,
+                    volumes);
         }
 
         /**
@@ -444,6 +530,7 @@ public final class DagBuilder {
      * @param bakeTiles Each output cluster's tile, packed by {@link LodDag#packTile}, if it bakes.
      * @param bakes Each output cluster's tile mapping, if it bakes.
      * @param volumeKinds Whether each child's triangles would go to a volume, by child id.
+     * @param volume The volume of its last output, or null if it made none.
      */
     private record Built(
             int[] children,
@@ -470,7 +557,8 @@ public final class DagBuilder {
             List<long[]> bases,
             int[] bakeTiles,
             List<BakeTexels> bakes,
-            Map<Integer, byte[]> volumeKinds) {}
+            Map<Integer, byte[]> volumeKinds,
+            CoverageVolume volume) {}
 
     /** The options. */
     private final Options options;
@@ -1635,6 +1723,15 @@ public final class DagBuilder {
                 childError > 0
                         ? volumeKinds(children, merged, childError, sourceCluster, sourceTriangle)
                         : Map.of();
+        // Far enough out, what is finer than the group's resolution leaves its triangles for a
+        // coverage volume, where the voxels cost less than the triangles they stand for
+        final VolumePart volumePart =
+                options.volumes() && childError > 0
+                        ? volumePart(children, merged, volumeKinds, sourceCluster, sourceTriangle)
+                        : null;
+        if (volumePart != null) {
+            merged = dropFaces(merged, volumePart.faces(), sourceCluster, sourceTriangle);
+        }
         // Far enough out, small parts standing free of the group's borders go: their look stays in
         // the blend around them, and the measured error counts what is missing
         if (averaging && childError > 0) {
@@ -1683,6 +1780,9 @@ public final class DagBuilder {
         List<int[]> outFaces = options.keepLineage() || baking ? new ArrayList<>() : null;
         final float[] noOffset = new float[AXES];
         for (int[] triangles : Clusters.split(result.mesh(), Clusters.MAX_TRIANGLES)) {
+            if (triangles.length == 0) {
+                continue;
+            }
             final float[] corners = Clusters.corners(result.mesh(), triangles, noOffset);
             final int[] materials = new int[triangles.length];
             final float[] visibility = new float[triangles.length];
@@ -1744,7 +1844,22 @@ public final class DagBuilder {
         // own error, which is 0 for leaves: by the triangle inequality that bounds how far the
         // output is from the leaves, without adding up every level's step on the way. Never under
         // a child's, so a cluster's error doesn't fall going up.
-        final long[] bases = basisOf(children);
+        final long[] allBases = basisOf(children);
+        // With a volume, the base triangles under it are its own, and the rest's are measured
+        long[] bases = allBases;
+        long[] volumeBases = new long[0];
+        CoverageVolume volume = null;
+        if (volumePart != null) {
+            final long[][] split = splitBases(children, allBases, volumePart);
+            volume = voxelize(split[1], volumePart.voxelSize(), children);
+            if (volume.size() > 0) {
+                bases = split[0];
+                volumeBases = split[1];
+            } else {
+                // Nothing in it stops light: it is simply gone, and measured as such
+                volume = null;
+            }
+        }
         double baseError = 0;
         LodMesh.Builder baseBuilder = LodMesh.builder(dag.getOrigin());
         for (long packed : bases) {
@@ -1759,11 +1874,18 @@ public final class DagBuilder {
             }
             baseBuilder.triangle(v[0], v[1], v[2], base.materials()[t], base.visibility()[t]);
         }
+        final LodMesh baseMesh = baseBuilder.build();
         final double simplifyError =
-                Hausdorff.between(
-                        result.mesh(), baseBuilder.build(), MEASURE_SPACING * edge * EDGE_GROWTH);
-        final double error = Math.max(childError, baseError + simplifyError);
-        final int[] bakeTiles = baking ? new int[outCorners.size()] : new int[0];
+                result.mesh().getTriangleCount() == 0 || baseMesh.getTriangleCount() == 0
+                        ? 0
+                        : Hausdorff.between(
+                                result.mesh(), baseMesh, MEASURE_SPACING * edge * EDGE_GROWTH);
+        // A volume stands for what is in it no closer than a voxel
+        final double error =
+                Math.max(
+                        Math.max(childError, baseError + simplifyError),
+                        volume == null ? 0 : volume.voxelSize());
+        int[] bakeTiles = baking ? new int[outCorners.size()] : new int[0];
         final List<BakeTexels> bakes = new ArrayList<>();
         final Correspondence map = baking ? new Correspondence(merged, result.history()) : null;
         final List<BakeLayout> layouts = new ArrayList<>();
@@ -1787,7 +1909,26 @@ public final class DagBuilder {
         }
         // What no texel samples, laid onto the texels it stands over
         BakeTexels.splat(bakes, outCorners, layouts, merged, source, dag);
-        final List<long[]> outBases = shareOut(bases, outCorners);
+        final List<long[]> outBases =
+                outCorners.isEmpty() ? new ArrayList<>() : shareOut(bases, outCorners);
+        if (volume != null) {
+            // The volume, as a cluster of no triangles after the rest
+            outCorners.add(new float[0]);
+            outMaterials.add(new int[0]);
+            outVisibility.add(new float[0]);
+            outAttributes.add(Attributes.NONE);
+            final double[] tight = sphereOf(volume);
+            outTight.add(tight);
+            spheres.add(tight);
+            if (outFaces != null) {
+                outFaces.add(new int[0]);
+            }
+            outBases.add(volumeBases);
+            if (baking) {
+                // Nothing of it bakes
+                bakeTiles = Arrays.copyOf(bakeTiles, bakeTiles.length + 1);
+            }
+        }
         final double[] bound = Clusters.enclose(spheres);
         final int[] edgeCounts = countEdges(merged);
         return new Built(
@@ -1820,7 +1961,8 @@ public final class DagBuilder {
                 outBases,
                 bakeTiles,
                 bakes,
-                volumeKinds);
+                volumeKinds,
+                volume);
     }
 
     /**
@@ -2071,6 +2213,28 @@ public final class DagBuilder {
         if (!any) {
             return merged;
         }
+        final boolean[] drop = new boolean[merged.getTriangleCount()];
+        for (int t = 0; t < drop.length; ++t) {
+            drop[t] = fold[part[merged.corner(t, 0)]];
+        }
+        return dropFaces(merged, drop, sourceCluster, sourceTriangle);
+    }
+
+    /**
+     * A merged group without some of its triangles, with the same vertices and locks.
+     *
+     * @param merged The merged group.
+     * @param drop Which triangles to leave out.
+     * @param sourceCluster Each merged triangle's source cluster, filtered in place.
+     * @param sourceTriangle Each merged triangle's index in its cluster, filtered in place.
+     * @return The mesh without them.
+     */
+    private static LodMesh dropFaces(
+            @NonNull LodMesh merged,
+            boolean @NonNull [] drop,
+            @NonNull IntArrayList sourceCluster,
+            @NonNull IntArrayList sourceTriangle) {
+        final int vertices = merged.getVertexCount();
         final LodMesh.Builder kept =
                 LodMesh.builder(merged.getOrigin()).leafError(merged.getLeafError());
         for (int v = 0; v < vertices; ++v) {
@@ -2091,7 +2255,7 @@ public final class DagBuilder {
         sourceCluster.clear();
         sourceTriangle.clear();
         for (int t = 0; t < merged.getTriangleCount(); ++t) {
-            if (fold[part[merged.corner(t, 0)]]) {
+            if (drop[t]) {
                 continue;
             }
             if (kept.triangle(
@@ -2234,6 +2398,190 @@ public final class DagBuilder {
             kinds[t] = (byte) Math.max(kinds[t], kind);
         }
         return out;
+    }
+
+    /**
+     * What of a group goes to a volume.
+     *
+     * @param faces Which merged triangles do.
+     * @param corners Every merged triangle's corners, before any left, 9 floats each.
+     * @param voxelSize How wide the volume's voxels are.
+     */
+    private record VolumePart(boolean[] faces, float[] corners, double voxelSize) {}
+
+    /**
+     * What of a group goes to a volume, if anything is worth it: its triangles finer than its
+     * resolution or cut out past their texture's detail ({@link #volumeKinds}), where the voxels
+     * they would take are fewer than they are, or all of it its children's volumes stand for. A
+     * volume's voxels are {@link #VOXEL_STEP} times its middle child's error wide, and no finer
+     * than its children's volumes', or it would take more voxels than they did. Its error is a
+     * voxel, which then raises the group's little past what its children already reach.
+     *
+     * @param children The group's children.
+     * @param merged The merged triangles.
+     * @param kinds Each child's triangles' kinds.
+     * @param sourceCluster Each merged triangle's source cluster.
+     * @param sourceTriangle Each merged triangle's index in its cluster.
+     * @return What goes, or null for nothing.
+     */
+    private VolumePart volumePart(
+            int @NonNull [] children,
+            @NonNull LodMesh merged,
+            @NonNull Map<Integer, byte[]> kinds,
+            @NonNull IntArrayList sourceCluster,
+            @NonNull IntArrayList sourceTriangle) {
+        double voxel = medianError(children) * VOXEL_STEP;
+        boolean fromChildren = false;
+        for (int id : children) {
+            final CoverageVolume own = dag.volumeOf(id);
+            if (own != null) {
+                fromChildren = true;
+                voxel = Math.max(voxel, own.voxelSize());
+            }
+        }
+        if (voxel <= 0) {
+            return null;
+        }
+        final int n = merged.getTriangleCount();
+        final boolean[] faces = new boolean[n];
+        int count = 0;
+        double area = 0;
+        for (int f = 0; f < n; ++f) {
+            final byte[] own = kinds.get(sourceCluster.getInt(f));
+            if (own != null && own[sourceTriangle.getInt(f)] != LodDag.VOLUME_NONE) {
+                faces[f] = true;
+                ++count;
+                area += Geometry.triangleArea(merged, f);
+            }
+        }
+        if (count == 0 && !fromChildren) {
+            return null;
+        }
+        // A surface passes through about its area over a voxel's face of voxels, and the blur
+        // reaches as many again
+        if (!fromChildren && VOXELS_PER_FACE_AREA * area / (voxel * voxel) > count) {
+            return null;
+        }
+        final float[] corners = new float[n * TRIANGLE_VALUES];
+        final double[] a = new double[AXES];
+        final double[] b = new double[AXES];
+        final double[] c = new double[AXES];
+        for (int f = 0; f < n; ++f) {
+            Geometry.corners(merged, f, a, b, c);
+            for (int axis = 0; axis < AXES; ++axis) {
+                corners[f * TRIANGLE_VALUES + axis] = (float) a[axis];
+                corners[f * TRIANGLE_VALUES + AXES + axis] = (float) b[axis];
+                corners[f * TRIANGLE_VALUES + 2 * AXES + axis] = (float) c[axis];
+            }
+        }
+        return new VolumePart(faces, corners, voxel);
+    }
+
+    /**
+     * Split a group's base triangles between its volume and the rest: all of its volume children's
+     * go to the volume, and each other one to whichever its nearest merged triangle went to.
+     *
+     * @param children The group's children.
+     * @param bases The group's packed base triangles, its children's in order.
+     * @param part What goes to the volume.
+     * @return The rest's base triangles, then the volume's.
+     */
+    private long[][] splitBases(
+            int @NonNull [] children, long @NonNull [] bases, @NonNull VolumePart part) {
+        final IntArrayList rest = new IntArrayList();
+        final IntArrayList inVolume = new IntArrayList();
+        final TriangleBvh tree = part.faces().length == 0 ? null : new TriangleBvh(part.corners());
+        final TriangleBvh.Scratch scratch = new TriangleBvh.Scratch();
+        final double[] middle = new double[AXES];
+        int at = 0;
+        for (int id : children) {
+            final int own = basis.get(id).length;
+            final boolean volumeChild = dag.volumeOf(id) != null;
+            for (int b = at; b < at + own; ++b) {
+                boolean toVolume = volumeChild;
+                if (!toVolume && tree != null) {
+                    final float[] corners = dag.clusters().get(baseCluster(bases[b])).corners();
+                    final int t = baseTriangle(bases[b]) * TRIANGLE_VALUES;
+                    for (int axis = 0; axis < AXES; ++axis) {
+                        middle[axis] =
+                                (corners[t + axis]
+                                                + corners[t + AXES + axis]
+                                                + corners[t + 2 * AXES + axis])
+                                        / AXES;
+                    }
+                    tree.nearest(middle, Double.POSITIVE_INFINITY, scratch);
+                    toVolume = scratch.triangle >= 0 && part.faces()[scratch.triangle];
+                }
+                (toVolume ? inVolume : rest).addInt(b);
+            }
+            at += own;
+        }
+        final long[] restBases = new long[rest.size()];
+        for (int i = 0; i < restBases.length; ++i) {
+            restBases[i] = bases[rest.getInt(i)];
+        }
+        final long[] volumeBases = new long[inVolume.size()];
+        for (int i = 0; i < volumeBases.length; ++i) {
+            volumeBases[i] = bases[inVolume.getInt(i)];
+        }
+        return new long[][] {restBases, volumeBases};
+    }
+
+    /**
+     * Voxelize base triangles into a group's volume.
+     *
+     * @param bases The packed base triangles.
+     * @param voxelSize How wide the voxels are.
+     * @param children The group's children, whose ids seed the rays, so a build is repeatable.
+     * @return The volume.
+     */
+    private CoverageVolume voxelize(
+            long @NonNull [] bases, double voxelSize, int @NonNull [] children) {
+        final float[] corners = new float[bases.length * TRIANGLE_VALUES];
+        final int[] materials = new int[bases.length];
+        for (int b = 0; b < bases.length; ++b) {
+            final LodDag.Cluster base = dag.clusters().get(baseCluster(bases[b]));
+            final int t = baseTriangle(bases[b]);
+            System.arraycopy(
+                    base.corners(),
+                    t * TRIANGLE_VALUES,
+                    corners,
+                    b * TRIANGLE_VALUES,
+                    TRIANGLE_VALUES);
+            materials[b] = base.materials()[t];
+        }
+        return CoverageVoxelizer.voxelize(
+                corners, materials, options.averages(), voxelSize, Arrays.hashCode(children));
+    }
+
+    /**
+     * A sphere around a volume's voxels.
+     *
+     * @param volume The volume.
+     * @return x, y, z, radius.
+     */
+    private static double[] sphereOf(@NonNull CoverageVolume volume) {
+        final double[] low = {Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE};
+        final double[] high = {-Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE};
+        final double[] origin = volume.origin();
+        for (int v = 0; v < volume.size(); ++v) {
+            for (int axis = 0; axis < AXES; ++axis) {
+                final double at =
+                        origin[axis]
+                                + CoverageVolume.coordinate(volume.keyOf(v), axis)
+                                        * volume.voxelSize();
+                low[axis] = Math.min(low[axis], at);
+                high[axis] = Math.max(high[axis], at + volume.voxelSize());
+            }
+        }
+        double radius = 0;
+        final double[] center = new double[AXES + 1];
+        for (int axis = 0; axis < AXES; ++axis) {
+            center[axis] = (low[axis] + high[axis]) / 2;
+            radius += (high[axis] - low[axis]) * (high[axis] - low[axis]);
+        }
+        center[AXES] = Math.sqrt(radius) / 2;
+        return center;
     }
 
     /**
@@ -2559,6 +2907,9 @@ public final class DagBuilder {
             }
             if (i == 0) {
                 built.volumeKinds().forEach(dag::setVolumeKinds);
+            }
+            if (built.volume() != null && i == outputs.length - 1) {
+                dag.setVolume(outputs[i], built.volume());
             }
             if (dag.getLineage() != null) {
                 dag.getLineage().addCluster(built.faces().get(i));

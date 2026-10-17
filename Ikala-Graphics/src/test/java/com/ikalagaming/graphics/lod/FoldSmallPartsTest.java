@@ -49,7 +49,7 @@ class FoldSmallPartsTest {
     private static final double PARTS_ERROR = 5;
 
     /** What stands on the field. */
-    private enum Shape {
+    enum Shape {
         /** Nothing. */
         NONE,
         /** Small cubes. */
@@ -73,7 +73,7 @@ class FoldSmallPartsTest {
      * @param shape What the parts are.
      * @return The sections.
      */
-    private static List<LodMesh> field(Shape shape) {
+    static List<LodMesh> field(Shape shape) {
         final List<LodMesh> meshes = new ArrayList<>();
         for (int sx = 0; sx < COLUMNS; ++sx) {
             for (int sz = 0; sz < COLUMNS; ++sz) {

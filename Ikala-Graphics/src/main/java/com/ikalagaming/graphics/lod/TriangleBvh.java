@@ -241,6 +241,52 @@ final class TriangleBvh {
         return false;
     }
 
+    /**
+     * The first triangle a segment hits.
+     *
+     * @param origin Where the segment starts.
+     * @param direction Where it goes, its length the segment's length.
+     * @param stack Scratch for the query, at least {@link #STACK_SIZE} long.
+     * @param along Receives the hit's share of the way along, in its first element.
+     * @return The triangle's index in the input, or -1 if it hits none.
+     */
+    int firstHit(
+            double @NonNull [] origin,
+            double @NonNull [] direction,
+            int @NonNull [] stack,
+            double @NonNull [] along) {
+        final double inverseX = 1 / direction[0];
+        final double inverseY = 1 / direction[1];
+        final double inverseZ = 1 / direction[2];
+        int best = -1;
+        double bestAlong = Double.MAX_VALUE;
+        int top = 0;
+        stack[top++] = 0;
+        while (top > 0) {
+            final int node = stack[--top];
+            if (!crossesBox(node, origin, inverseX, inverseY, inverseZ)) {
+                continue;
+            }
+            if (count[node] == 0) {
+                if (top + 2 > stack.length) {
+                    throw new IllegalStateException("The tree is too deep to search");
+                }
+                stack[top++] = first[node];
+                stack[top++] = first[node] + 1;
+                continue;
+            }
+            for (int t = first[node]; t < first[node] + count[node]; ++t) {
+                final double hit = hitAlong(t * TRIANGLE_VALUES, origin, direction);
+                if (hit >= 0 && hit < bestAlong) {
+                    bestAlong = hit;
+                    best = t;
+                }
+            }
+        }
+        along[0] = bestAlong;
+        return best < 0 ? -1 : original[best];
+    }
+
     /** What a nearest-triangle query works in, so it allocates nothing. One per thread. */
     static final class Scratch {
         /** Nodes still to visit. */
@@ -501,6 +547,18 @@ final class TriangleBvh {
      */
     private boolean crossesTriangle(
             int base, double @NonNull [] origin, double @NonNull [] direction) {
+        return hitAlong(base, origin, direction) >= 0;
+    }
+
+    /**
+     * Where along a segment it hits a triangle.
+     *
+     * @param base Where the triangle's corners start.
+     * @param origin Where the segment starts.
+     * @param direction Where it goes, its length the segment's length.
+     * @return The hit's share of the way along, or -1 for none.
+     */
+    private double hitAlong(int base, double @NonNull [] origin, double @NonNull [] direction) {
         final double ax = corners[base];
         final double ay = corners[base + 1];
         final double az = corners[base + 2];
@@ -515,7 +573,7 @@ final class TriangleBvh {
         final double pz = direction[0] * e2y - direction[1] * e2x;
         final double det = e1x * px + e1y * py + e1z * pz;
         if (Math.abs(det) < PARALLEL) {
-            return false;
+            return -1;
         }
         final double inverse = 1 / det;
         final double sx = origin[0] - ax;
@@ -523,16 +581,16 @@ final class TriangleBvh {
         final double sz = origin[2] - az;
         final double u = (sx * px + sy * py + sz * pz) * inverse;
         if (u < 0 || u > 1) {
-            return false;
+            return -1;
         }
         final double qx = sy * e1z - sz * e1y;
         final double qy = sz * e1x - sx * e1z;
         final double qz = sx * e1y - sy * e1x;
         final double v = (direction[0] * qx + direction[1] * qy + direction[2] * qz) * inverse;
         if (v < 0 || u + v > 1) {
-            return false;
+            return -1;
         }
         final double t = (e2x * qx + e2y * qy + e2z * qz) * inverse;
-        return t > MIN_T && t <= 1;
+        return t > MIN_T && t <= 1 ? t : -1;
     }
 }
