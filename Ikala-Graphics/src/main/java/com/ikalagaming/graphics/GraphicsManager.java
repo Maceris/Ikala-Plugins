@@ -8,6 +8,7 @@ import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.WindowManager;
 import com.ikalagaming.graphics.gui.data.DrawData;
 import com.ikalagaming.graphics.gui.data.IkIO;
+import com.ikalagaming.graphics.gui.data.Viewport;
 import com.ikalagaming.graphics.gui.enums.MouseButton;
 import com.ikalagaming.graphics.gui.flags.ConfigFlags;
 import com.ikalagaming.graphics.scene.ModelLoader;
@@ -31,6 +32,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -405,13 +407,13 @@ public class GraphicsManager {
     /** Render to the screen. */
     private static void render() {
         // The GUI is built before rendering starts, since it can create and close windows
-        DrawData guiDrawData = null;
+        Map<Window, DrawData> gui = Map.of();
         if (RenderConfig.hasGuiStage(renderInstance.getPipelineConfig())) {
             final IkIO io = IkGui.getIO();
             windowManager.drawGui((int) io.displaySize.x, (int) io.displaySize.y);
-            guiDrawData = IkGui.getDrawData();
+            gui = guiDrawData();
         }
-        renderInstance.render(scene, sceneWindow, mainWindow, guiDrawData);
+        renderInstance.render(scene, sceneWindow, gui);
 
         ++framesSinceLastCalculation;
 
@@ -421,6 +423,29 @@ public class GraphicsManager {
             framesSinceLastCalculation = 0;
             lastFPSTime = currentTime;
         }
+    }
+
+    /**
+     * The GUI draw data for each window, from IkGui's viewports: the main viewport is drawn in the
+     * main window, and any other viewport in the window whose platform handle it holds.
+     *
+     * @return The draw data by window, only for windows that are still open.
+     */
+    private static Map<Window, DrawData> guiDrawData() {
+        Map<Window, DrawData> gui = new HashMap<>();
+        final DrawData main = IkGui.getDrawData();
+        if (main != null) {
+            gui.put(mainWindow, main);
+        }
+        for (Viewport viewport : IkGui.getPlatformIO().viewports) {
+            if (viewport.platformHandle instanceof Window window
+                    && window != mainWindow
+                    && extraWindows.contains(window)
+                    && viewport.drawData.valid) {
+                gui.put(window, viewport.drawData);
+            }
+        }
+        return gui;
     }
 
     /**

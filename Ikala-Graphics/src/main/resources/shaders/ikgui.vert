@@ -4,13 +4,20 @@ layout(location=0) in vec2 inPos;
 
 layout(location = 0) flat out int quadID;
 
-layout(set = 0, binding = 0) uniform Uniforms {
-    // Used to convert from pixel coordinates to Normalized Device Coordinates of (-1, 1)
+// Every draw list of every window is packed into the same buffers, so these are where the
+// current draw list starts, and how the window it is drawn in is placed. Must match ikgui.frag
+// and ShaderBindings.GUI.
+layout(push_constant) uniform DrawListInfo {
+    int commandOffset;
+    int pointOffset;
+    int detailOffset;
+    // Used to convert from display coordinates to Normalized Device Coordinates of (-1, 1)
     vec2 scale;
-    int fontTexture;
     // The top left of the viewport being rendered, since positions are absolute (desktop
     // coordinates when using multiple viewports)
     vec2 displayPosition;
+    // Framebuffer pixels per display unit
+    vec2 framebufferScale;
 };
 
 void main()

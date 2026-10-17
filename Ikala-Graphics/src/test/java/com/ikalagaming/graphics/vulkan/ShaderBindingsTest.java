@@ -176,10 +176,21 @@ class ShaderBindingsTest {
 
     @Test
     void testGuiUniformOffsets() {
-        // vec2 scale; int fontTexture; vec2 displayPosition;
-        assertEquals(0, ShaderBindings.GUI.UNIFORM_BUFFER_SCALE_OFFSET);
-        assertEquals(8, ShaderBindings.GUI.UNIFORM_BUFFER_FONT_TEXTURE_OFFSET);
-        assertEquals(16, ShaderBindings.GUI.UNIFORM_BUFFER_DISPLAY_POSITION_OFFSET);
-        assertEquals(24, ShaderBindings.GUI.UNIFORMS_BUFFER_SIZE);
+        // int fontTexture;
+        assertEquals(0, ShaderBindings.GUI.UNIFORM_BUFFER_FONT_TEXTURE_OFFSET);
+        assertEquals(16, ShaderBindings.GUI.UNIFORMS_BUFFER_SIZE);
+    }
+
+    @Test
+    void testGuiPushConstantOffsets() {
+        // int commandOffset; int pointOffset; int detailOffset; vec2 scale; vec2 displayPosition;
+        // vec2 framebufferScale;
+        assertEquals(0, ShaderBindings.GUI.PUSH_CONSTANT_COMMAND_OFFSET);
+        assertEquals(4, ShaderBindings.GUI.PUSH_CONSTANT_POINT_OFFSET);
+        assertEquals(8, ShaderBindings.GUI.PUSH_CONSTANT_DETAIL_OFFSET);
+        assertEquals(16, ShaderBindings.GUI.PUSH_CONSTANT_SCALE_OFFSET);
+        assertEquals(24, ShaderBindings.GUI.PUSH_CONSTANT_DISPLAY_POSITION_OFFSET);
+        assertEquals(32, ShaderBindings.GUI.PUSH_CONSTANT_FRAMEBUFFER_SCALE_OFFSET);
+        assertEquals(40, ShaderBindings.GUI.PUSH_CONSTANTS_SIZE);
     }
 }

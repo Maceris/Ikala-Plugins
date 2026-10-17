@@ -63,11 +63,7 @@ layout(location = 0) flat in int quadID;
 layout(location = 0) out vec4 outColor;
 
 layout(set = 0, binding = 0) uniform Uniforms {
-    // Used to convert from pixel coordinates to Normalized Device Coordinates of (-1, 1)
-    vec2 scale;
     int fontTexture;
-    // The top left of the viewport being rendered, since points are in absolute coordinates
-    vec2 displayPosition;
 };
 
 layout(std430, set = 0, binding = 1) buffer Commands {
@@ -89,11 +85,20 @@ layout(std430, set = 0, binding = 4) readonly buffer TextureIndices {
 
 layout(set = 1, binding = 0) uniform sampler2D bindlessTextures[];
 
-// Every draw list is packed into the same buffers, so these are where the current one starts
-layout(push_constant) uniform DrawListOffsets {
+// Every draw list of every window is packed into the same buffers, so these are where the
+// current draw list starts, and how the window it is drawn in is placed. Must match ikgui.vert
+// and ShaderBindings.GUI.
+layout(push_constant) uniform DrawListInfo {
     int commandOffset;
     int pointOffset;
     int detailOffset;
+    // Used to convert from display coordinates to Normalized Device Coordinates of (-1, 1)
+    vec2 scale;
+    // The top left of the viewport being rendered, since positions are absolute (desktop
+    // coordinates when using multiple viewports)
+    vec2 displayPosition;
+    // Framebuffer pixels per display unit
+    vec2 framebufferScale;
 };
 
 // Set in a texture index for a texture read as sRGB, which samples in linear light, so it is
@@ -832,9 +837,9 @@ void main() {
     command.pointIndex += pointOffset;
     command.detailIndex += detailOffset;
 
-    // Fragment position in pixels, offset by the viewport position since points are in absolute
-    // coordinates. Vulkan already puts 0 at the top left like our points expect.
-    vec2 fragPos = gl_FragCoord.xy + displayPosition;
+    // Fragment position in display coordinates, offset by the viewport position since points are
+    // in absolute coordinates. Vulkan already puts 0 at the top left like our points expect.
+    vec2 fragPos = gl_FragCoord.xy / framebufferScale + displayPosition;
 
     switch (command.type) {
         case ELEMENT_TYPE_CIRCLE:

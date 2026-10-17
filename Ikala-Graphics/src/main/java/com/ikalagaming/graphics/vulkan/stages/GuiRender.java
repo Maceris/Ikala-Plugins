@@ -10,7 +10,6 @@ import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.DrawData;
 import com.ikalagaming.graphics.gui.data.FontAtlas;
-import com.ikalagaming.graphics.gui.data.IkIO;
 import com.ikalagaming.graphics.vulkan.*;
 
 import lombok.NonNull;
@@ -23,6 +22,7 @@ import org.lwjgl.vulkan.*;
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -37,8 +37,11 @@ public class GuiRender {
     /** The number of descriptors in the set for each frame. */
     private static final int DESCRIPTOR_COUNT = 5;
 
-    /** Where a draw list starts in each of the packed buffers. */
-    private record DrawListOffsets(long vertexBytes, int commands, int points, int details) {}
+    /**
+     * Both shaders read the push constants: the vertex shader places, the fragment shader draws.
+     */
+    private static final int PUSH_CONSTANT_STAGES =
+            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
     /** The shader to use for rendering. */
     @NonNull @Setter private ShaderVulkan shader;
@@ -61,11 +64,8 @@ public class GuiRender {
     /** The VkDescriptorSet for each frame in flight, VK_NULL_HANDLE if not set up. */
     private final long[] descriptorSets;
 
-    /** The draw data uploaded by {@link #prepare}, or null if there is none this frame. */
-    private DrawData preparedDrawData;
-
-    /** Where each prepared draw list starts in the packed buffers. */
-    private DrawListOffsets[] preparedOffsets = new DrawListOffsets[0];
+    /** Where the draw data uploaded by {@link #prepare} went in the packed buffers. */
+    private GuiLayout prepared = GuiLayout.EMPTY;
 
     /**
      * Set up the GUI render stage.
@@ -114,29 +114,28 @@ public class GuiRender {
     }
 
     /**
-     * Upload the glyphs added to the font atlas and this frame's draw lists. Call once a frame,
-     * before any window's pass and outside of rendering, since it records transfers.
+     * Upload the glyphs added to the font atlas and the draw lists of every window that shows GUI
+     * this frame, all packed into the same buffers. Call once a frame, before any window's pass and
+     * outside of rendering, since it records transfers.
      *
      * @param commandBuffer The frame's command buffer.
      * @param vulkanState The Vulkan state.
-     * @param drawData The draw data to show, or null to draw no GUI this frame.
+     * @param drawData The draw data of each window that shows GUI, which can be empty.
      */
     public void prepare(
             @NonNull VkCommandBuffer commandBuffer,
             @NonNull VulkanState vulkanState,
-            DrawData drawData) {
+            @NonNull Collection<DrawData> drawData) {
         final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
 
         uploadFontGlyphs(commandBuffer, vulkanState, frameData);
+        updateUniforms(frameData);
 
-        preparedDrawData = drawData;
-        preparedOffsets = new DrawListOffsets[0];
-        if (drawData != null) {
-            final IkIO io = IkGui.getIO();
-            updateUniforms((int) io.displaySize.x, (int) io.displaySize.y, drawData, frameData);
-            preparedOffsets = uploadDrawLists(drawData, vulkanState, frameData);
-        } else {
+        prepared = GuiLayout.of(drawData);
+        if (prepared.drawData().isEmpty()) {
             ensureBuffersExist(vulkanState, frameData);
+        } else {
+            uploadDrawLists(prepared, vulkanState, frameData);
         }
         updateBindings(vulkanState, frameData);
     }
@@ -150,14 +149,15 @@ public class GuiRender {
      * @param presentation The window, with its swapchain image acquired.
      * @param sceneCopied Whether the scene was copied into the image, which is kept. Otherwise it
      *     starts out cleared.
-     * @param drawGui Whether to draw the prepared GUI in this window.
+     * @param drawData The window's draw data, which must have been prepared this frame, or null to
+     *     draw no GUI in it.
      */
     public void recordWindow(
             @NonNull VkCommandBuffer commandBuffer,
             @NonNull VulkanState vulkanState,
             @NonNull Presentation presentation,
             boolean sceneCopied,
-            boolean drawGui) {
+            DrawData drawData) {
         final long image = presentation.swapchainImages[presentation.currentSwapchainIndex];
         final long view = presentation.swapchainImageViews[presentation.currentSwapchainIndex];
         final int imageWidth = presentation.swapchainWidth;
@@ -185,20 +185,12 @@ public class GuiRender {
                             .pColorAttachments(colorAttachments);
             vkCmdBeginRendering(commandBuffer, renderingInfo);
 
-            if (drawGui && preparedDrawData != null && preparedOffsets.length > 0) {
-                final IkIO io = IkGui.getIO();
-                // The swapchain can briefly disagree with the display size while resizing
-                final int width = Math.min((int) io.displaySize.x, imageWidth);
-                final int height = Math.min((int) io.displaySize.y, imageHeight);
-                if (width > 0 && height > 0) {
-                    drawLists(
-                            commandBuffer,
-                            vulkanState,
-                            preparedDrawData,
-                            preparedOffsets,
-                            width,
-                            height);
-                }
+            final GuiLayout.DrawListOffsets[] offsets =
+                    drawData == null ? null : prepared.offsetsOf(drawData);
+            if (offsets != null && offsets.length > 0) {
+                drawLists(commandBuffer, vulkanState, drawData, offsets, imageWidth, imageHeight);
+            } else if (drawData != null) {
+                log.warn("GUI draw data for {} wasn't prepared this frame", presentation);
             }
 
             vkCmdEndRendering(commandBuffer);
@@ -380,28 +372,14 @@ public class GuiRender {
      * Write the uniforms for the current frame. The buffer is host coherent and this frame's buffer
      * isn't in use by the GPU, so we can write it directly.
      *
-     * @param width The width of the display in pixels.
-     * @param height The height of the display in pixels.
-     * @param drawData The draw data for the frame.
      * @param frameData The data for the current frame.
      */
-    private void updateUniforms(
-            int width, int height, @NonNull DrawData drawData, @NonNull PerFrameData frameData) {
+    private void updateUniforms(@NonNull PerFrameData frameData) {
         ByteBuffer uniformData =
                 MemoryUtil.memByteBuffer(
                         frameData.guiUniforms.allocationInfo.pMappedData(),
                         ShaderBindings.GUI.UNIFORMS_BUFFER_SIZE);
-        // Vulkan NDC has y pointing down like our pixel coordinates, unlike OpenGL
-        uniformData.putFloat(ShaderBindings.GUI.UNIFORM_BUFFER_SCALE_OFFSET, 2.0f / width);
-        uniformData.putFloat(
-                ShaderBindings.GUI.UNIFORM_BUFFER_SCALE_OFFSET + Float.BYTES, 2.0f / height);
         uniformData.putInt(ShaderBindings.GUI.UNIFORM_BUFFER_FONT_TEXTURE_OFFSET, fontAtlas.slot());
-        uniformData.putFloat(
-                ShaderBindings.GUI.UNIFORM_BUFFER_DISPLAY_POSITION_OFFSET,
-                drawData.displayPosition.x);
-        uniformData.putFloat(
-                ShaderBindings.GUI.UNIFORM_BUFFER_DISPLAY_POSITION_OFFSET + Float.BYTES,
-                drawData.displayPosition.y);
     }
 
     /**
@@ -419,64 +397,49 @@ public class GuiRender {
     }
 
     /**
-     * Copy every draw list into the packed buffers, along with the texture slot mapping.
+     * Copy every draw list into the packed buffers where the layout puts it, along with the texture
+     * slot mapping.
      *
-     * @param drawData The draw data for the frame.
+     * @param layout Where each draw list goes, with at least one draw data in it.
      * @param state The Vulkan state.
      * @param frameData The data for the current frame.
-     * @return Where each draw list starts in the buffers.
      */
-    private DrawListOffsets[] uploadDrawLists(
-            @NonNull DrawData drawData,
+    private void uploadDrawLists(
+            @NonNull GuiLayout layout,
             @NonNull VulkanState state,
             @NonNull PerFrameData frameData) {
-        final int drawListCount = drawData.getDrawListCount();
-
-        long vertexBytes = 0;
-        long commandBytes = 0;
-        long pointBytes = 0;
-        long detailBytes = 0;
-        for (int i = 0; i < drawListCount; ++i) {
-            vertexBytes += remaining(drawData.getDrawListVertexBuffer(i));
-            commandBytes += remaining(drawData.getDrawListCommandBuffer(i));
-            pointBytes += remaining(drawData.getDrawListPointBuffer(i));
-            detailBytes += remaining(drawData.getDrawListPointDetailBuffer(i));
-        }
+        // Every viewport's draw data shares one texture list
+        final List<TextureHandle> textures = layout.drawData().getFirst().textures;
         // Always map at least one texture, the font atlas is the fallback like in OpenGL
-        final int textureCount = Math.max(1, drawData.textures.size());
+        final int textureCount = Math.max(1, textures.size());
 
-        frameData.guiVertices.ensureCapacity(vertexBytes, state);
-        frameData.guiCommands.ensureCapacity(commandBytes, state);
-        frameData.guiPoints.ensureCapacity(pointBytes, state);
-        frameData.guiPointDetails.ensureCapacity(detailBytes, state);
+        frameData.guiVertices.ensureCapacity(layout.vertexBytes, state);
+        frameData.guiCommands.ensureCapacity(layout.commandBytes, state);
+        frameData.guiPoints.ensureCapacity(layout.pointBytes, state);
+        frameData.guiPointDetails.ensureCapacity(layout.detailBytes, state);
         frameData.guiTextureIndices.ensureCapacity((long) textureCount * Integer.BYTES, state);
 
-        DrawListOffsets[] offsets = new DrawListOffsets[drawListCount];
-        long vertexOffset = 0;
-        long commandOffset = 0;
-        long pointOffset = 0;
-        long detailOffset = 0;
-        for (int i = 0; i < drawListCount; ++i) {
-            offsets[i] =
-                    new DrawListOffsets(
-                            vertexOffset,
-                            (int) (commandOffset / DrawData.SIZE_OF_DRAW_COMMAND),
-                            (int) (pointOffset / DrawData.SIZE_OF_POINT),
-                            (int) (detailOffset / DrawData.SIZE_OF_POINT_DETAIL));
-            vertexOffset +=
-                    copy(drawData.getDrawListVertexBuffer(i), frameData.guiVertices, vertexOffset);
-            commandOffset +=
-                    copy(
-                            drawData.getDrawListCommandBuffer(i),
-                            frameData.guiCommands,
-                            commandOffset);
-            pointOffset +=
-                    copy(drawData.getDrawListPointBuffer(i), frameData.guiPoints, pointOffset);
-            detailOffset +=
-                    copy(
-                            drawData.getDrawListPointDetailBuffer(i),
-                            frameData.guiPointDetails,
-                            detailOffset);
+        for (DrawData drawData : layout.drawData()) {
+            final GuiLayout.DrawListOffsets[] offsets = layout.offsetsOf(drawData);
+            for (int i = 0; i < offsets.length; ++i) {
+                final GuiLayout.DrawListOffsets start = offsets[i];
+                copy(
+                        drawData.getDrawListVertexBuffer(i),
+                        frameData.guiVertices,
+                        start.vertexBytes());
+                copy(
+                        drawData.getDrawListCommandBuffer(i),
+                        frameData.guiCommands,
+                        (long) start.commands() * DrawData.SIZE_OF_DRAW_COMMAND);
+                copy(
+                        drawData.getDrawListPointBuffer(i),
+                        frameData.guiPoints,
+                        (long) start.points() * DrawData.SIZE_OF_POINT);
+                copy(
+                        drawData.getDrawListPointDetailBuffer(i),
+                        frameData.guiPointDetails,
+                        (long) start.details() * DrawData.SIZE_OF_POINT_DETAIL);
+            }
         }
 
         final int fallback = fontAtlas.slot();
@@ -485,22 +448,9 @@ public class GuiRender {
                         frameData.guiTextureIndices.allocationInfo.pMappedData(),
                         textureCount * Integer.BYTES);
         textureIndices.putInt(0, fallback);
-        for (int i = 0; i < drawData.textures.size(); ++i) {
-            textureIndices.putInt(
-                    i * Integer.BYTES, getBindlessIndex(state, drawData.textures.get(i)));
+        for (int i = 0; i < textures.size(); ++i) {
+            textureIndices.putInt(i * Integer.BYTES, getBindlessIndex(state, textures.get(i)));
         }
-
-        return offsets;
-    }
-
-    /**
-     * The number of bytes left in a buffer, treating null as empty.
-     *
-     * @param buffer The buffer, which may be null.
-     * @return The number of bytes remaining.
-     */
-    private static int remaining(ByteBuffer buffer) {
-        return buffer == null ? 0 : buffer.remaining();
     }
 
     /**
@@ -512,7 +462,7 @@ public class GuiRender {
      * @return The number of bytes copied.
      */
     private static int copy(ByteBuffer source, @NonNull SharedBuffer destination, long offset) {
-        final int size = remaining(source);
+        final int size = GuiLayout.remaining(source);
         if (size > 0) {
             MemoryUtil.memCopy(
                     MemoryUtil.memAddress(source),
@@ -551,30 +501,51 @@ public class GuiRender {
     }
 
     /**
-     * Record the draws for each draw list.
+     * Record the draws for each of a window's draw lists, placed by its draw data: drawn at its
+     * display size, at one framebuffer pixel per display unit times its framebuffer scale.
      *
      * @param commandBuffer The command buffer to record into.
      * @param state The Vulkan state.
-     * @param drawData The draw data for the frame.
-     * @param offsets Where each draw list starts in the buffers.
-     * @param width The width to render in pixels.
-     * @param height The height to render in pixels.
+     * @param drawData The window's draw data.
+     * @param offsets Where each of its draw lists starts in the buffers.
+     * @param imageWidth The width of the image drawn into, in pixels.
+     * @param imageHeight The height of the image drawn into, in pixels.
      */
     private void drawLists(
             @NonNull VkCommandBuffer commandBuffer,
             @NonNull VulkanState state,
             @NonNull DrawData drawData,
-            @NonNull DrawListOffsets[] offsets,
-            int width,
-            int height) {
+            GuiLayout.DrawListOffsets @NonNull [] offsets,
+            int imageWidth,
+            int imageHeight) {
+        final float displayWidth = drawData.displaySize.x;
+        final float displayHeight = drawData.displaySize.y;
+        final float scaleX = drawData.framebufferScale.x > 0 ? drawData.framebufferScale.x : 1;
+        final float scaleY = drawData.framebufferScale.y > 0 ? drawData.framebufferScale.y : 1;
+        if (displayWidth <= 0 || displayHeight <= 0) {
+            // Minimized
+            return;
+        }
+        // The swapchain can briefly disagree with the display size while resizing, which draws
+        // the GUI at its usual size and cuts off what doesn't fit
+        final float viewportWidth = displayWidth * scaleX;
+        final float viewportHeight = displayHeight * scaleY;
+        final int scissorWidth = Math.min((int) viewportWidth, imageWidth);
+        final int scissorHeight = Math.min((int) viewportHeight, imageHeight);
+
         try (MemoryStack stack = MemoryStack.stackPush()) {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
             VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
-            viewports.get(0).width(width).height(height).minDepth(0.0f).maxDepth(1.0f);
+            viewports
+                    .get(0)
+                    .width(viewportWidth)
+                    .height(viewportHeight)
+                    .minDepth(0.0f)
+                    .maxDepth(1.0f);
             vkCmdSetViewport(commandBuffer, 0, viewports);
             VkRect2D.Buffer scissors = VkRect2D.calloc(1, stack);
-            scissors.get(0).extent().set(width, height);
+            scissors.get(0).extent().set(scissorWidth, scissorHeight);
             vkCmdSetScissor(commandBuffer, 0, scissors);
 
             // Sets 0 and 1 are consecutive, so bind both at once
@@ -592,6 +563,23 @@ public class GuiRender {
                     stack.longs(state.perFrameData[state.frameIndex].guiVertices.buffer);
             LongBuffer vertexOffsets = stack.callocLong(1);
             ByteBuffer pushConstants = stack.calloc(ShaderBindings.GUI.PUSH_CONSTANTS_SIZE);
+            // Vulkan NDC has y pointing down like our display coordinates, unlike OpenGL
+            pushConstants.putFloat(
+                    ShaderBindings.GUI.PUSH_CONSTANT_SCALE_OFFSET, 2.0f / displayWidth);
+            pushConstants.putFloat(
+                    ShaderBindings.GUI.PUSH_CONSTANT_SCALE_OFFSET + Float.BYTES,
+                    2.0f / displayHeight);
+            pushConstants.putFloat(
+                    ShaderBindings.GUI.PUSH_CONSTANT_DISPLAY_POSITION_OFFSET,
+                    drawData.displayPosition.x);
+            pushConstants.putFloat(
+                    ShaderBindings.GUI.PUSH_CONSTANT_DISPLAY_POSITION_OFFSET + Float.BYTES,
+                    drawData.displayPosition.y);
+            pushConstants.putFloat(
+                    ShaderBindings.GUI.PUSH_CONSTANT_FRAMEBUFFER_SCALE_OFFSET, scaleX);
+            pushConstants.putFloat(
+                    ShaderBindings.GUI.PUSH_CONSTANT_FRAMEBUFFER_SCALE_OFFSET + Float.BYTES,
+                    scaleY);
 
             for (int i = 0; i < offsets.length; ++i) {
                 final int vertexCount = drawData.getDrawListVertexCount(i);
@@ -605,11 +593,7 @@ public class GuiRender {
                 pushConstants.putInt(
                         ShaderBindings.GUI.PUSH_CONSTANT_DETAIL_OFFSET, offsets[i].details());
                 vkCmdPushConstants(
-                        commandBuffer,
-                        pipelineLayout,
-                        VK_SHADER_STAGE_FRAGMENT_BIT,
-                        0,
-                        pushConstants);
+                        commandBuffer, pipelineLayout, PUSH_CONSTANT_STAGES, 0, pushConstants);
 
                 // The vertex shader works out the command from the vertex index, so start at 0
                 vertexOffsets.put(0, offsets[i].vertexBytes());
@@ -626,7 +610,7 @@ public class GuiRender {
             VkPushConstantRange.Buffer pushConstantRanges = VkPushConstantRange.calloc(1, stack);
             pushConstantRanges
                     .get(0)
-                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT)
+                    .stageFlags(PUSH_CONSTANT_STAGES)
                     .offset(0)
                     .size(ShaderBindings.GUI.PUSH_CONSTANTS_SIZE);
 

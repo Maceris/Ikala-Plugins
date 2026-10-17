@@ -651,30 +651,33 @@ public class ShaderBindings {
         /** Offset in the push constants of the first point detail of the draw list being drawn. */
         public static final int PUSH_CONSTANT_DETAIL_OFFSET = 2 * Integer.BYTES;
 
+        /**
+         * Offset in the push constants of the scaling of the window's UI, which converts from
+         * display coordinates to Normalized Device Coordinates of (-1, 1). Aligned to 8 bytes after
+         * the three offsets, as a vec2 is.
+         */
+        public static final int PUSH_CONSTANT_SCALE_OFFSET = 4 * Integer.BYTES;
+
+        /**
+         * Offset in the push constants of the top left of the viewport being rendered, which is
+         * subtracted from the absolute positions in the draw lists.
+         */
+        public static final int PUSH_CONSTANT_DISPLAY_POSITION_OFFSET = 6 * Integer.BYTES;
+
+        /** Offset in the push constants of the framebuffer pixels per display unit. */
+        public static final int PUSH_CONSTANT_FRAMEBUFFER_SCALE_OFFSET = 8 * Integer.BYTES;
+
         /** The size of the push constants in bytes. */
-        public static final int PUSH_CONSTANTS_SIZE = 3 * Integer.BYTES;
+        public static final int PUSH_CONSTANTS_SIZE = 10 * Integer.BYTES;
 
         /** Binding point for the uniform buffer. */
         public static final int UNIFORMS_BINDING = 0;
 
         /** The offset in the uniform buffer for the font texture. */
-        public static final int UNIFORM_BUFFER_FONT_TEXTURE_OFFSET = 2 * Float.BYTES;
+        public static final int UNIFORM_BUFFER_FONT_TEXTURE_OFFSET = 0;
 
-        /**
-         * The offset in the uniform buffer for the scaling of the UI. Used to convert from pixel
-         * coordinates to Normalized Device Coordinates of (-1, 1).
-         */
-        public static final int UNIFORM_BUFFER_SCALE_OFFSET = 0;
-
-        /**
-         * The offset in the uniform buffer for the top left of the viewport being rendered, which
-         * is subtracted from the absolute positions in the draw lists. Aligned to 8 bytes after the
-         * font texture, following std140 rules for a vec2.
-         */
-        public static final int UNIFORM_BUFFER_DISPLAY_POSITION_OFFSET = 4 * Float.BYTES;
-
-        /** The size of the uniforms buffer. */
-        public static final int UNIFORMS_BUFFER_SIZE = 6 * Float.BYTES;
+        /** The size of the uniforms buffer, a single int padded out to a std140 vec4. */
+        public static final int UNIFORMS_BUFFER_SIZE = 4 * Integer.BYTES;
 
         /** Private constructor so this class is not instantiated. */
         private GUI() {

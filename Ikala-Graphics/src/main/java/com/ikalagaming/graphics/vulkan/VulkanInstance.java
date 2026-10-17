@@ -1595,20 +1595,16 @@ public class VulkanInstance {
     }
 
     /**
-     * Render a frame to every window: the scene in the scene window, then the GUI over it in the
-     * GUI window, and the other windows cleared. Windows that are minimized or resizing are
-     * skipped, and the scene is only drawn when its window has an image to draw into.
+     * Render a frame to every window: the scene in the scene window, then each window's GUI over
+     * it, and windows without either cleared. Windows that are minimized or resizing are skipped,
+     * and the scene is only drawn when its window has an image to draw into.
      *
      * @param scene The scene to render.
      * @param sceneWindow The window the scene is drawn in.
-     * @param guiWindow The window the GUI is drawn in.
-     * @param guiDrawData What the GUI drew this frame, or null to draw no GUI.
+     * @param gui The GUI draw data of each window that shows GUI this frame.
      */
     public void render(
-            @NonNull Scene scene,
-            @NonNull Window sceneWindow,
-            @NonNull Window guiWindow,
-            DrawData guiDrawData) {
+            @NonNull Scene scene, @NonNull Window sceneWindow, @NonNull Map<Window, DrawData> gui) {
         if (pipeline == PipelineManagerVulkan.ERROR_PIPELINE) {
             return;
         }
@@ -1664,16 +1660,16 @@ public class VulkanInstance {
         }
         final boolean sceneCopied =
                 drawScene && PipelineManagerVulkan.drawsFinalImage(renderConfig);
-        final GuiRender gui = pipelineManager.getGuiRender();
-        gui.prepare(commandBuffer, state, guiDrawData);
+        final GuiRender guiRender = pipelineManager.getGuiRender();
+        guiRender.prepare(commandBuffer, state, gui.values());
         for (Presentation presentation : acquired) {
             // Readies every image to present, even in windows with nothing drawn yet
-            gui.recordWindow(
+            guiRender.recordWindow(
                     commandBuffer,
                     state,
                     presentation,
                     sceneCopied && presentation == sceneTarget,
-                    guiDrawData != null && presentation.getWindow() == guiWindow);
+                    gui.get(presentation.getWindow()));
         }
         if (drawScene) {
             state.frameTimings.mark(commandBuffer, state.frameIndex, "GuiRender");
