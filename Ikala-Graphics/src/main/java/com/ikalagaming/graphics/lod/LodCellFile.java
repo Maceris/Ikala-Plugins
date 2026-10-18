@@ -48,6 +48,9 @@ public final class LodCellFile {
     /** The group section. */
     public static final int LGRP = SectionTag.of("LGRP");
 
+    /** The coverage volume section, only in cells with volumes. */
+    public static final int LVOL = SectionTag.of("LVOL");
+
     /** The version of every section but the clusters. */
     public static final int VERSION = 1;
 
@@ -95,7 +98,8 @@ public final class LodCellFile {
         return KnownSections.graphics()
                 .with(LCEL, VERSION)
                 .with(LCLU, CLUSTERS_VERSION)
-                .with(LGRP, VERSION);
+                .with(LGRP, VERSION)
+                .with(LVOL, VERSION);
     }
 
     /**
@@ -112,13 +116,16 @@ public final class LodCellFile {
             int builderVersion,
             LodStore.@NonNull CellKey key,
             LodStore.@NonNull Cell cell) {
-        return new AssetWriter()
-                .metadata(
-                        AssetMetadata.of(EXPORTER, String.valueOf(builderVersion))
-                                .with(KEY, cacheKey))
-                .section(LCEL, VERSION, true, encodeCell(key, cell))
-                .section(LCLU, CLUSTERS_VERSION, true, encodeClusters(cell.dag()))
-                .section(LGRP, VERSION, true, encodeGroups(cell.dag()));
+        final AssetWriter writer =
+                new AssetWriter()
+                        .metadata(
+                                AssetMetadata.of(EXPORTER, String.valueOf(builderVersion))
+                                        .with(KEY, cacheKey))
+                        .section(LCEL, VERSION, true, encodeCell(key, cell))
+                        .section(LCLU, CLUSTERS_VERSION, true, encodeClusters(cell.dag()))
+                        .section(LGRP, VERSION, true, encodeGroups(cell.dag()));
+        final ByteBuffer volumes = encodeVolumes(cell.dag());
+        return volumes == null ? writer : writer.section(LVOL, VERSION, true, volumes);
     }
 
     /**
@@ -188,6 +195,10 @@ public final class LodCellFile {
         final int groups = count(groupData.getInt());
         for (int i = 0; i < groups; ++i) {
             dag.add(decodeGroup(groupData, clusters));
+        }
+        final ByteBuffer volumeData = file.section(LVOL).map(Section::data).orElse(null);
+        if (volumeData != null) {
+            decodeVolumes(volumeData, dag, clusters);
         }
         dag.setLeafEdge(dagLeafEdge);
         dag.setStopReason(new String(reason, StandardCharsets.UTF_8));
@@ -527,6 +538,132 @@ public final class LodCellFile {
             }
         }
         return out.flip();
+    }
+
+    /**
+     * Encode the coverage volumes: how many, then each one's cluster, grid origin, voxel size and
+     * voxel count, and its voxels' keys, densities, SGGX matrices, colors, roughness and metalness.
+     *
+     * @param dag The DAG.
+     * @return The data, or null if it has no volumes.
+     */
+    private static ByteBuffer encodeVolumes(@NonNull LodDag dag) {
+        int count = 0;
+        int size = Integer.BYTES;
+        for (int id = 0; id < dag.clusters().size(); ++id) {
+            final CoverageVolume volume = dag.volumeOf(id);
+            if (volume != null) {
+                ++count;
+                size += volumeSize(volume);
+            }
+        }
+        if (count == 0) {
+            return null;
+        }
+        final ByteBuffer out = ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN);
+        out.putInt(count);
+        for (int id = 0; id < dag.clusters().size(); ++id) {
+            final CoverageVolume volume = dag.volumeOf(id);
+            if (volume == null) {
+                continue;
+            }
+            out.putInt(id);
+            for (double value : volume.origin()) {
+                out.putDouble(value);
+            }
+            out.putDouble(volume.voxelSize());
+            final int n = volume.size();
+            out.putInt(n);
+            for (int v = 0; v < n; ++v) {
+                out.putLong(volume.keyOf(v));
+            }
+            for (int v = 0; v < n; ++v) {
+                out.putFloat(volume.density(v));
+            }
+            for (int v = 0; v < n; ++v) {
+                for (int k = 0; k < CoverageVolume.SGGX_VALUES; ++k) {
+                    out.putFloat(volume.sggx(v, k));
+                }
+            }
+            for (int v = 0; v < n; ++v) {
+                for (int c = 0; c < CoverageVolume.COLOR_VALUES; ++c) {
+                    out.putFloat(volume.color(v, c));
+                }
+            }
+            for (int v = 0; v < n; ++v) {
+                out.putFloat(volume.roughness(v));
+            }
+            for (int v = 0; v < n; ++v) {
+                out.putFloat(volume.metallic(v));
+            }
+        }
+        return out.flip();
+    }
+
+    /**
+     * The size of a coverage volume's record.
+     *
+     * @param volume The volume.
+     * @return The bytes.
+     */
+    private static int volumeSize(@NonNull CoverageVolume volume) {
+        return Integer.BYTES * 2
+                + Double.BYTES * (AXES + 1)
+                + volume.size()
+                        * (Long.BYTES
+                                + Float.BYTES
+                                        * (1
+                                                + CoverageVolume.SGGX_VALUES
+                                                + CoverageVolume.COLOR_VALUES
+                                                + 2));
+    }
+
+    /**
+     * Decode the coverage volumes into a DAG.
+     *
+     * @param in The data.
+     * @param dag The DAG, its clusters already in.
+     * @param clusters How many clusters it has.
+     */
+    private static void decodeVolumes(@NonNull ByteBuffer in, @NonNull LodDag dag, int clusters) {
+        final int count = count(in.getInt());
+        for (int i = 0; i < count; ++i) {
+            final int id = clusterId(in.getInt(), clusters);
+            final double[] origin = new double[AXES];
+            for (int axis = 0; axis < AXES; ++axis) {
+                origin[axis] = in.getDouble();
+            }
+            final double voxelSize = in.getDouble();
+            final int n = count(in.getInt());
+            final long[] keys = new long[n];
+            final float[] density = new float[n];
+            final float[] sggx = new float[n * CoverageVolume.SGGX_VALUES];
+            final float[] color = new float[n * CoverageVolume.COLOR_VALUES];
+            final float[] roughness = new float[n];
+            final float[] metallic = new float[n];
+            for (int v = 0; v < n; ++v) {
+                keys[v] = in.getLong();
+            }
+            for (int v = 0; v < n; ++v) {
+                density[v] = in.getFloat();
+            }
+            for (int k = 0; k < sggx.length; ++k) {
+                sggx[k] = in.getFloat();
+            }
+            for (int k = 0; k < color.length; ++k) {
+                color[k] = in.getFloat();
+            }
+            for (int v = 0; v < n; ++v) {
+                roughness[v] = in.getFloat();
+            }
+            for (int v = 0; v < n; ++v) {
+                metallic[v] = in.getFloat();
+            }
+            dag.setVolume(
+                    id,
+                    new CoverageVolume(
+                            origin, voxelSize, keys, density, sggx, color, roughness, metallic));
+        }
     }
 
     /**

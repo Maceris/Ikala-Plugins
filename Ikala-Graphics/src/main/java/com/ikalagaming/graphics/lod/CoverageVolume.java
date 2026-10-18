@@ -2,6 +2,8 @@ package com.ikalagaming.graphics.lod;
 
 import lombok.NonNull;
 
+import java.util.Arrays;
+
 /**
  * A sparse volume standing for geometry finer than a level of detail's resolution, like foliage,
  * twigs and wires, see {@link CoverageVoxelizer}: a microflake medium after Heitz et al., <i>The
@@ -196,6 +198,23 @@ public final class CoverageVolume {
      */
     public float metallic(int voxel) {
         return metallic[voxel];
+    }
+
+    /**
+     * The voxel a point is in.
+     *
+     * @param point The point, in the volume's frame.
+     * @return The voxel, or -1 if no voxel there stops light.
+     */
+    public int indexAt(double @NonNull [] point) {
+        final long x = (long) Math.floor((point[0] - origin[0]) / voxelSize);
+        final long y = (long) Math.floor((point[1] - origin[1]) / voxelSize);
+        final long z = (long) Math.floor((point[2] - origin[2]) / voxelSize);
+        if (x < 0 || y < 0 || z < 0 || x > KEY_MASK || y > KEY_MASK || z > KEY_MASK) {
+            return -1;
+        }
+        final int at = Arrays.binarySearch(keys, key(x, y, z));
+        return at < 0 ? -1 : at;
     }
 
     /**

@@ -63,7 +63,7 @@ class FoldSmallPartsTest {
      * @param z The z.
      * @return The height.
      */
-    private static double height(double x, double z) {
+    static double height(double x, double z) {
         return HEIGHT * Math.sin(x * 0.31) * Math.cos(z * 0.23);
     }
 

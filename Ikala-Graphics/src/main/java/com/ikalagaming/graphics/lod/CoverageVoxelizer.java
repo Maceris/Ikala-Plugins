@@ -3,6 +3,8 @@ package com.ikalagaming.graphics.lod;
 import lombok.NonNull;
 
 import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
 import java.util.SplittableRandom;
 import java.util.TreeSet;
 
@@ -58,6 +60,9 @@ public final class CoverageVoxelizer {
      */
     private static final double SELF_SHADOW_REACH = 1.5;
 
+    /** How far apart samples of source volumes along a ray are, in their finest voxels. */
+    private static final double SOURCE_STEP = 0.5;
+
     /** How far off its surface a hit's shadow ray starts, in voxels, so it misses that surface. */
     private static final double SHADOW_START = 1e-4;
 
@@ -93,26 +98,58 @@ public final class CoverageVoxelizer {
             MaterialAverages averages,
             double voxelSize,
             long seed) {
+        return voxelize(triangles, materials, averages, List.of(), voxelSize, seed);
+    }
+
+    /**
+     * Voxelize triangles together with finer volumes, as a parent region cell does with the volumes
+     * its children made from leaves it doesn't have. A ray crossing a source volume is stopped in
+     * it with the chance its optical depth there gives, before any triangle behind, and then takes
+     * on the source voxel's microflakes and look. Sources' colors already carry their own
+     * self-shadowing, so a hit in one only adds what lies past their reach.
+     *
+     * @param triangles Their corners, 9 floats each, in the DAG's frame.
+     * @param materials Each triangle's material.
+     * @param averages What each material looks like, and how much of it its texture covers; null
+     *     for mid gray, fully covered.
+     * @param sources The finer volumes, in the same frame, with voxels no wider than these.
+     * @param voxelSize How wide a voxel is.
+     * @param seed Where the rays' random numbers start, so the same input gives the same volume.
+     * @return The volume, with no voxels if nothing stops a ray.
+     */
+    public static @NonNull CoverageVolume voxelize(
+            float @NonNull [] triangles,
+            int @NonNull [] materials,
+            MaterialAverages averages,
+            @NonNull List<CoverageVolume> sources,
+            double voxelSize,
+            long seed) {
         final int n = triangles.length / TRIANGLE_VALUES;
+        final Sources medium = new Sources(sources);
         final double[] origin = new double[AXES];
         Arrays.fill(origin, Double.POSITIVE_INFINITY);
         for (int i = 0; i < triangles.length; ++i) {
             origin[i % AXES] = Math.min(origin[i % AXES], triangles[i]);
         }
+        medium.lowest(origin);
+        final boolean empty = n == 0 && medium.isEmpty();
         for (int axis = 0; axis < AXES; ++axis) {
             // A voxel of room below, for the blur to reach into
-            origin[axis] = n == 0 ? 0 : (Math.floor(origin[axis] / voxelSize) - 1) * voxelSize;
+            origin[axis] = empty ? 0 : (Math.floor(origin[axis] / voxelSize) - 1) * voxelSize;
         }
-        final long[] candidates = candidates(triangles, origin, voxelSize);
-        final TriangleBvh bvh = new TriangleBvh(triangles);
+        final TreeSet<Long> reached = new TreeSet<>();
+        candidates(triangles, origin, voxelSize, reached);
+        medium.candidates(origin, voxelSize, reached);
+        final long[] candidates = reached.stream().mapToLong(Long::longValue).toArray();
+        final TriangleBvh bvh = n == 0 ? null : new TriangleBvh(triangles);
+        final Shadows shadows = new Shadows(bvh, triangles, medium);
         final int[] stack = new int[TriangleBvh.STACK_SIZE];
         final double[] start = new double[AXES];
         final double[] ray = new double[AXES];
         final double[] along = new double[1];
         final double[] normal = new double[AXES];
-        final double[] hitPoint = new double[AXES];
-        final double[] shadowRay = new double[AXES];
-        final double[] shadowAlong = new double[1];
+        final double[] point = new double[AXES];
+        final int[] stoppedIn = new int[2];
         final int count = candidates.length;
         final long[] keys = new long[count];
         final float[] density = new float[count];
@@ -129,6 +166,8 @@ public final class CoverageVoxelizer {
             lookOf[t] = average == null ? DEFAULT_LOOK : average;
             coverageOf[t] = averages == null ? 1 : averages.coverage(materials[t]);
         }
+        shadows.coverageOf = coverageOf;
+        final double reach = SELF_SHADOW_REACH * voxelSize;
         int kept = 0;
         for (long key : candidates) {
             final SplittableRandom random = new SplittableRandom(seed ^ key * 0x9E3779B97F4A7C15L);
@@ -149,28 +188,52 @@ public final class CoverageVoxelizer {
                 for (int axis = 0; axis < AXES; ++axis) {
                     ray[axis] *= voxelSize;
                 }
-                final int t = bvh.firstHit(start, ray, stack, along);
+                final int t = bvh == null ? -1 : bvh.firstHit(start, ray, stack, along);
+                final double share = t < 0 ? 1 : along[0];
+                // The sources' medium in front of the triangle stops the ray first, with the
+                // chance its optical depth there gives
+                if (!medium.isEmpty()) {
+                    final double threshold = -Math.log(1 - random.nextDouble());
+                    final double stop = medium.stop(start, ray, share, threshold, stoppedIn);
+                    if (stop >= 0) {
+                        ++hits;
+                        final CoverageVolume source = sources.get(stoppedIn[0]);
+                        final int voxel = stoppedIn[1];
+                        for (int k = 0; k < CoverageVolume.SGGX_VALUES; ++k) {
+                            matrix[k] += source.sggx(voxel, k);
+                        }
+                        for (int c = 0; c < CoverageVolume.COLOR_VALUES; ++c) {
+                            look[MaterialAverages.RED + c] += source.color(voxel, c);
+                        }
+                        look[MaterialAverages.ROUGHNESS] += source.roughness(voxel);
+                        look[MaterialAverages.METALLIC] += source.metallic(voxel);
+                        look[MaterialAverages.SPECULAR] += DEFAULT_LOOK[MaterialAverages.SPECULAR];
+                        for (int axis = 0; axis < AXES; ++axis) {
+                            point[axis] = start[axis] + ray[axis] * stop;
+                        }
+                        // Only what lies past the source's own self-shadowing
+                        lit +=
+                                shadows.escapes(
+                                                point,
+                                                null,
+                                                SELF_SHADOW_REACH * source.voxelSize(),
+                                                reach,
+                                                voxelSize,
+                                                random)
+                                        ? 1
+                                        : 0;
+                        continue;
+                    }
+                }
                 if (t < 0 || random.nextDouble() >= coverageOf[t]) {
                     continue;
                 }
                 ++hits;
                 faceNormal(triangles, t, normal);
-                lit +=
-                        escapes(
-                                        bvh,
-                                        stack,
-                                        start,
-                                        ray,
-                                        along[0],
-                                        normal,
-                                        voxelSize,
-                                        random,
-                                        coverageOf,
-                                        hitPoint,
-                                        shadowRay,
-                                        shadowAlong)
-                                ? 1
-                                : 0;
+                for (int axis = 0; axis < AXES; ++axis) {
+                    point[axis] = start[axis] + ray[axis] * share;
+                }
+                lit += shadows.escapes(point, normal, 0, reach, voxelSize, random) ? 1 : 0;
                 final float[] average = lookOf[t];
                 final double alpha =
                         average[MaterialAverages.ROUGHNESS] * average[MaterialAverages.ROUGHNESS];
@@ -214,17 +277,291 @@ public final class CoverageVoxelizer {
                 Arrays.copyOf(metallic, kept));
     }
 
+    /** Finer volumes a voxelization takes in, sampled along rays at half their finest voxel. */
+    private static final class Sources {
+        /** The volumes. */
+        private final List<CoverageVolume> volumes;
+
+        /** How far apart samples along a ray are. */
+        private final double step;
+
+        /** Scratch for a sample's position. */
+        private final double[] at = new double[AXES];
+
+        /** Scratch for a ray's unit direction. */
+        private final double[] unit = new double[AXES];
+
+        /**
+         * Keep the volumes.
+         *
+         * @param volumes The volumes.
+         */
+        Sources(@NonNull List<CoverageVolume> volumes) {
+            this.volumes = volumes;
+            double finest = Double.POSITIVE_INFINITY;
+            for (CoverageVolume volume : volumes) {
+                finest = Math.min(finest, volume.voxelSize());
+            }
+            step = finest * SOURCE_STEP;
+        }
+
+        /**
+         * Whether there are none.
+         *
+         * @return True if there are no voxels to sample.
+         */
+        boolean isEmpty() {
+            for (CoverageVolume volume : volumes) {
+                if (volume.size() > 0) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /**
+         * Lower a corner to below every source voxel.
+         *
+         * @param low The corner, lowered in place.
+         */
+        void lowest(double @NonNull [] low) {
+            for (CoverageVolume volume : volumes) {
+                for (int v = 0; v < volume.size(); ++v) {
+                    for (int axis = 0; axis < AXES; ++axis) {
+                        low[axis] =
+                                Math.min(
+                                        low[axis],
+                                        volume.origin()[axis]
+                                                + CoverageVolume.coordinate(volume.keyOf(v), axis)
+                                                        * volume.voxelSize());
+                    }
+                }
+            }
+        }
+
+        /**
+         * Add the voxels of a grid that the source voxels reach, and those next to them.
+         *
+         * @param origin Where the grid starts.
+         * @param voxelSize How wide its voxels are.
+         * @param out Receives their keys.
+         */
+        void candidates(double @NonNull [] origin, double voxelSize, @NonNull Set<Long> out) {
+            final long[] lo = new long[AXES];
+            final long[] hi = new long[AXES];
+            for (CoverageVolume volume : volumes) {
+                final double size = volume.voxelSize();
+                for (int v = 0; v < volume.size(); ++v) {
+                    for (int axis = 0; axis < AXES; ++axis) {
+                        final double min =
+                                volume.origin()[axis]
+                                        + CoverageVolume.coordinate(volume.keyOf(v), axis) * size;
+                        lo[axis] =
+                                Math.max(
+                                        0, (long) Math.floor((min - origin[axis]) / voxelSize) - 1);
+                        hi[axis] = (long) Math.floor((min + size - origin[axis]) / voxelSize) + 1;
+                    }
+                    for (long x = lo[0]; x <= hi[0]; ++x) {
+                        for (long y = lo[1]; y <= hi[1]; ++y) {
+                            for (long z = lo[2]; z <= hi[2]; ++z) {
+                                out.add(CoverageVolume.key(x, y, z));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        /**
+         * Walk a ray through the sources, up to a share of it, to where its optical depth reaches a
+         * threshold.
+         *
+         * @param start Where it starts.
+         * @param ray Where it goes, its length its reach.
+         * @param upTo The share of it walked.
+         * @param threshold The optical depth it stops at.
+         * @param stoppedIn Receives the source and voxel it stops in.
+         * @return The share of the ray it stops at, or -1 if it gets through.
+         */
+        double stop(
+                double @NonNull [] start,
+                double @NonNull [] ray,
+                double upTo,
+                double threshold,
+                int @NonNull [] stoppedIn) {
+            final double length = toUnit(ray);
+            double depth = 0;
+            for (double d = step / 2; d < upTo * length; d += step) {
+                for (int axis = 0; axis < AXES; ++axis) {
+                    at[axis] = start[axis] + unit[axis] * d;
+                }
+                for (int s = 0; s < volumes.size(); ++s) {
+                    final CoverageVolume volume = volumes.get(s);
+                    final int v = volume.indexAt(at);
+                    if (v < 0) {
+                        continue;
+                    }
+                    depth += volume.density(v) * volume.projectedArea(v, unit) * step;
+                    if (depth >= threshold) {
+                        stoppedIn[0] = s;
+                        stoppedIn[1] = v;
+                        return d / length;
+                    }
+                }
+            }
+            return -1;
+        }
+
+        /**
+         * The optical depth along a ray between two distances.
+         *
+         * @param start Where it starts.
+         * @param direction Its unit direction.
+         * @param from Where the stretch starts, as a distance.
+         * @param to Where it ends.
+         * @return The optical depth.
+         */
+        double depth(
+                double @NonNull [] start, double @NonNull [] direction, double from, double to) {
+            double depth = 0;
+            for (double d = from + step / 2; d < to; d += step) {
+                for (int axis = 0; axis < AXES; ++axis) {
+                    at[axis] = start[axis] + direction[axis] * d;
+                }
+                for (CoverageVolume volume : volumes) {
+                    final int v = volume.indexAt(at);
+                    if (v >= 0) {
+                        depth += volume.density(v) * volume.projectedArea(v, direction) * step;
+                    }
+                }
+            }
+            return depth;
+        }
+
+        /**
+         * Put a ray's unit direction in {@link #unit}.
+         *
+         * @param ray The ray.
+         * @return Its length.
+         */
+        private double toUnit(double @NonNull [] ray) {
+            final double length = Math.sqrt(ray[0] * ray[0] + ray[1] * ray[1] + ray[2] * ray[2]);
+            for (int axis = 0; axis < AXES; ++axis) {
+                unit[axis] = ray[axis] / length;
+            }
+            return length;
+        }
+    }
+
+    /** Shadow rays from hits, through the triangles and the sources' medium. */
+    private static final class Shadows {
+        /** The triangles, or null for none. */
+        private final TriangleBvh bvh;
+
+        /** Their corners. */
+        private final float[] triangles;
+
+        /** The sources' medium. */
+        private final Sources medium;
+
+        /** Each triangle's coverage, set before any ray is cast. */
+        private float[] coverageOf;
+
+        /** Scratch for queries. */
+        private final int[] stack = new int[TriangleBvh.STACK_SIZE];
+
+        /** Scratch for a ray's direction. */
+        private final double[] direction = new double[AXES];
+
+        /** Scratch for where a ray starts. */
+        private final double[] from = new double[AXES];
+
+        /** Scratch for a ray's reach. */
+        private final double[] segment = new double[AXES];
+
+        /** Scratch for a hit's share. */
+        private final double[] along = new double[1];
+
+        /**
+         * Keep what shadows.
+         *
+         * @param bvh The triangles, or null for none.
+         * @param triangles Their corners.
+         * @param medium The sources' medium.
+         */
+        Shadows(TriangleBvh bvh, float @NonNull [] triangles, @NonNull Sources medium) {
+            this.bvh = bvh;
+            this.triangles = triangles;
+            this.medium = medium;
+        }
+
+        /**
+         * Whether light gets from a hit to a reach in a random direction, past the triangles, a cut
+         * out triangle in the way letting it by with the chance of its coverage, and through the
+         * sources' medium with the chance its optical depth gives.
+         *
+         * @param point The hit.
+         * @param normal The hit triangle's unit normal, or null for a hit in a source.
+         * @param skip How far along the ray nothing counts, already shaded for.
+         * @param reach How far the ray goes.
+         * @param voxelSize How wide a voxel is.
+         * @param random The random numbers.
+         * @return True if the light gets out.
+         */
+        boolean escapes(
+                double @NonNull [] point,
+                double[] normal,
+                double skip,
+                double reach,
+                double voxelSize,
+                @NonNull SplittableRandom random) {
+            if (skip >= reach) {
+                return true;
+            }
+            randomDirection(random, direction);
+            final double side =
+                    normal == null
+                            ? 0
+                            : Math.signum(
+                                    direction[0] * normal[0]
+                                            + direction[1] * normal[1]
+                                            + direction[2] * normal[2]);
+            for (int axis = 0; axis < AXES; ++axis) {
+                // Off the surface on the side the ray leaves by
+                from[axis] =
+                        point[axis]
+                                + direction[axis] * skip
+                                + (normal == null ? 0 : side * normal[axis])
+                                        * SHADOW_START
+                                        * voxelSize;
+                segment[axis] = direction[axis] * (reach - skip);
+            }
+            if (bvh != null) {
+                final int blocker = bvh.firstHit(from, segment, stack, along);
+                if (blocker >= 0 && random.nextDouble() < coverageOf[blocker]) {
+                    return false;
+                }
+            }
+            if (medium.isEmpty()) {
+                return true;
+            }
+            return random.nextDouble() < Math.exp(-medium.depth(point, direction, skip, reach));
+        }
+    }
+
     /**
      * The voxels triangles reach, and those next to them, which blurred rays can hit them from.
      *
      * @param triangles The triangles' corners.
      * @param origin Where the grid starts.
      * @param voxelSize How wide a voxel is.
-     * @return Their keys, in increasing order.
+     * @param reached Receives their keys.
      */
-    private static long[] candidates(
-            float @NonNull [] triangles, double @NonNull [] origin, double voxelSize) {
-        final TreeSet<Long> reached = new TreeSet<>();
+    private static void candidates(
+            float @NonNull [] triangles,
+            double @NonNull [] origin,
+            double voxelSize,
+            @NonNull Set<Long> reached) {
         final double[] a = new double[AXES];
         final double[] b = new double[AXES];
         final double[] c = new double[AXES];
@@ -257,59 +594,6 @@ public final class CoverageVoxelizer {
                         }
                     });
         }
-        final long[] out = new long[reached.size()];
-        int i = 0;
-        for (long key : reached) {
-            out[i++] = key;
-        }
-        return out;
-    }
-
-    /**
-     * Whether light gets from a hit {@link #SELF_SHADOW_REACH} voxels in a random direction past
-     * the triangles around it, a cut out triangle in the way letting it by with the chance of its
-     * coverage.
-     *
-     * @param bvh The triangles.
-     * @param stack Scratch for queries.
-     * @param start Where the ray that hit started.
-     * @param ray The ray that hit, its length its reach.
-     * @param share How far along it the hit was.
-     * @param normal The hit triangle's unit normal.
-     * @param voxelSize How wide a voxel is.
-     * @param random The random numbers.
-     * @param coverageOf Each triangle's coverage.
-     * @param point Scratch for the hit.
-     * @param shadow Scratch for the shadow ray.
-     * @param along Scratch for the shadow ray's hit.
-     * @return True if the light gets out.
-     */
-    private static boolean escapes(
-            @NonNull TriangleBvh bvh,
-            int @NonNull [] stack,
-            double @NonNull [] start,
-            double @NonNull [] ray,
-            double share,
-            double @NonNull [] normal,
-            double voxelSize,
-            @NonNull SplittableRandom random,
-            float @NonNull [] coverageOf,
-            double @NonNull [] point,
-            double @NonNull [] shadow,
-            double @NonNull [] along) {
-        randomDirection(random, shadow);
-        final double side =
-                Math.signum(shadow[0] * normal[0] + shadow[1] * normal[1] + shadow[2] * normal[2]);
-        for (int axis = 0; axis < AXES; ++axis) {
-            // Off the surface on the side the ray leaves by
-            point[axis] =
-                    start[axis]
-                            + ray[axis] * share
-                            + side * normal[axis] * SHADOW_START * voxelSize;
-            shadow[axis] *= SELF_SHADOW_REACH * voxelSize;
-        }
-        final int blocker = bvh.firstHit(point, shadow, stack, along);
-        return blocker < 0 || random.nextDouble() >= coverageOf[blocker];
     }
 
     /**

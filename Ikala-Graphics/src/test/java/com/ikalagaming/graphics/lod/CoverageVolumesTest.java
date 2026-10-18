@@ -57,7 +57,7 @@ class CoverageVolumesTest {
      * @param y Its lowest y.
      * @param z Its lowest z.
      */
-    private static void bush(LodMesh.Builder builder, float x, float y, float z) {
+    static void bush(LodMesh.Builder builder, float x, float y, float z) {
         for (int axis = 0; axis < 3; ++axis) {
             for (int side = 0; side < 2; ++side) {
                 final int u = (axis + 1) % 3;

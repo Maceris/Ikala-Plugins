@@ -112,6 +112,14 @@ public class GraphicsSettings {
     public boolean volumeShadows = true;
 
     /**
+     * Whether live worlds' level of detail turns parts finer than a group's resolution into
+     * coverage volumes, as the asset workbench can, instead of keeping them as triangles that stop
+     * the DAG halving. Read when a plugin's live world starts. Sparse volumes fill their bricks
+     * thinly, so worlds with few fine parts pay GPU memory for little.
+     */
+    public boolean lodVolumes = true;
+
+    /**
      * Whether ambient light is dimmed where something stands above a point, from the sky occlusion
      * map, so caves and rooms aren't lit like open ground.
      */

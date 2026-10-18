@@ -58,7 +58,7 @@ public final class LodStore {
      * builder, the simplifier or anything else changes the cells built from the same input, so
      * cached cells from before are rebuilt.
      */
-    public static final int BUILDER_VERSION = 9;
+    public static final int BUILDER_VERSION = 10;
 
     /** How many child cells a parent spans along each axis. */
     private static final int BRANCHING = 2;
@@ -328,6 +328,7 @@ public final class LodStore {
      * @param parentCell The cell holding that group, or null if none has.
      * @param parentGroup That group's id in its cell's DAG, or -1 if none has.
      * @param section The section a leaf came from, or null above level 0.
+     * @param volume The coverage volume it is, or null if it is triangles.
      */
     public record PieceCluster(
             int local,
@@ -336,7 +337,8 @@ public final class LodStore {
             double @NonNull [] parentBound,
             CellKey parentCell,
             int parentGroup,
-            SectionPos section) {}
+            SectionPos section,
+            CoverageVolume volume) {}
 
     /**
      * Start an empty store.
@@ -385,13 +387,14 @@ public final class LodStore {
         cellsAtOnce = Math.max(1, options.threads() / THREADS_PER_CELL_AT_ONCE);
         this.options =
                 new DagBuilder.Options(
-                        options.virtualEdgeFactor(),
-                        options.lockOpenBorder(),
-                        options.threads(),
-                        false,
-                        options.visibilityReach(),
-                        options.mergePlanar(),
-                        options.averages());
+                                options.virtualEdgeFactor(),
+                                options.lockOpenBorder(),
+                                options.threads(),
+                                false,
+                                options.visibilityReach(),
+                                options.mergePlanar(),
+                                options.averages())
+                        .withVolumes(options.volumes());
     }
 
     /**
@@ -750,6 +753,7 @@ public final class LodStore {
      */
     private PieceCluster pieceCluster(@NonNull CellKey key, @NonNull Cell cell, int local) {
         final LodDag.Cluster cluster = cell.dag().clusters().get(local);
+        final CoverageVolume volume = cell.dag().volumeOf(local);
         final SectionPos section =
                 key.level() == 0 && cluster.section() >= 0
                         ? cell.sections().get(cluster.section())
@@ -762,7 +766,8 @@ public final class LodStore {
             final int group = atCell.dag().consumer(atLocal);
             if (group >= 0) {
                 final LodDag.Group g = atCell.dag().groups().get(group);
-                return new PieceCluster(local, cluster, g.error(), g.bound(), at, group, section);
+                return new PieceCluster(
+                        local, cluster, g.error(), g.bound(), at, group, section, volume);
             }
             final CellKey up = at.parent();
             final Cell upCell = cells.get(up);
@@ -776,7 +781,8 @@ public final class LodStore {
                         cluster.bound(),
                         null,
                         -1,
-                        section);
+                        section,
+                        volume);
             }
             at = up;
             atCell = upCell;
@@ -813,6 +819,7 @@ public final class LodStore {
     private record ParentJob(
             @NonNull CellKey key,
             @NonNull List<LodDag.Cluster> tops,
+            @NonNull List<CoverageVolume> volumes,
             @NonNull List<Input> inputs,
             double leafEdge,
             String cacheKey,
@@ -900,6 +907,7 @@ public final class LodStore {
             keys.put(key, cacheKey);
         }
         final List<LodDag.Cluster> tops = new ArrayList<>();
+        final List<CoverageVolume> volumes = new ArrayList<>();
         final List<Input> inputs = new ArrayList<>();
         double edges = 0;
         int children = 0;
@@ -911,12 +919,13 @@ public final class LodStore {
             final Cell cell = entry.getValue();
             for (int id : cell.tops()) {
                 tops.add(cell.dag().clusters().get(id));
+                volumes.add(cell.dag().volumeOf(id));
                 inputs.add(new Input(child, id));
             }
             edges += cell.leafEdge();
             ++children;
         }
-        return new ParentJob(key, tops, inputs, edges / children, cacheKey, box(key));
+        return new ParentJob(key, tops, volumes, inputs, edges / children, cacheKey, box(key));
     }
 
     /**
@@ -934,6 +943,7 @@ public final class LodStore {
         final LodDag dag =
                 DagBuilder.buildParent(
                         job.tops(),
+                        job.volumes(),
                         job.leafEdge(),
                         origin,
                         job.box()[0],
@@ -1104,6 +1114,7 @@ public final class LodStore {
         hash.putInt(options.lockOpenBorder() ? 1 : 0);
         hash.putDouble(options.visibilityReach());
         hash.putInt(options.mergePlanar() ? 1 : 0);
+        hash.putInt(options.volumes() ? 1 : 0);
         hash.putDouble(sectionSize).putInt(cellSections).putInt(stopAt);
         for (double value : origin) {
             hash.putDouble(value);

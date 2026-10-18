@@ -1435,7 +1435,8 @@ public class SectionManager {
                                     .withAverages(
                                             GraphicsManager.getSettings().lodAverageMaterials
                                                     ? materialAverages(state)
-                                                    : null),
+                                                    : null)
+                                    .withVolumes(GraphicsManager.getSettings().lodVolumes),
                             batch -> state.lods.publish(state, id[0], batch),
                             LodCache.fromSettings());
             id[0] = state.lods.addLive(owner, origin, lod::cellOf, thresholdPixels);

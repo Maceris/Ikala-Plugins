@@ -583,12 +583,6 @@ public class LodRenderer {
         /** Its baked clusters, or null if it has none. */
         final LodBakes.Plan bakes;
 
-        /** Its coverage volumes, by cluster id, and their bricks, set when it is added. */
-        final Map<Integer, CoverageVolume> volumes = new HashMap<>();
-
-        /** Each coverage volume's bricks, by cluster id. */
-        final Map<Integer, List<CoverageBricks.Brick>> volumeBricks = new HashMap<>();
-
         /** Where its positions are measured from, in the world. */
         final double[] origin;
 
@@ -843,15 +837,6 @@ public class LodRenderer {
             LodBakes.Plan bakes,
             boolean model) {
         final long id = newWorld(owner, dag.getOrigin(), null, thresholdPixels, bakes);
-        // Coverage volumes draw as the boxes of their bricks, laid out now
-        final World added = world(id);
-        for (int i = 0; i < dag.clusters().size(); ++i) {
-            final CoverageVolume volume = dag.volumeOf(i);
-            if (volume != null) {
-                added.volumes.put(i, volume);
-                added.volumeBricks.put(i, CoverageBricks.of(volume));
-            }
-        }
         if (model) {
             final World world = world(id);
             world.visible = false;
@@ -869,7 +854,8 @@ public class LodRenderer {
                             dag.parentBound(i),
                             consumed ? WHOLE : null,
                             dag.consumer(i),
-                            null));
+                            null,
+                            dag.volumeOf(i)));
         }
         publish(
                 state,
@@ -1381,8 +1367,7 @@ public class LodRenderer {
             }
             final ClusterMeshes.Mesh mesh = pieceMeshes.get(uploading.cluster);
             // Only what the observer wants now; the rest streams in once the batch is applied
-            if ((mesh.triangleCount() > 0
-                            || isVolume(world, piece.clusters().get(uploading.cluster)))
+            if ((mesh.triangleCount() > 0 || isVolume(piece.clusters().get(uploading.cluster)))
                     && isWanted(world, piece.clusters().get(uploading.cluster))) {
                 uploading.meshes[uploading.piece][uploading.cluster] =
                         registerDrawn(state, world, piece.clusters().get(uploading.cluster), mesh);
@@ -1446,12 +1431,12 @@ public class LodRenderer {
             @NonNull World world,
             LodStore.@NonNull PieceCluster cluster,
             ClusterMeshes.@NonNull Mesh mesh) {
-        final int id = cluster.cluster().id();
-        final CoverageVolume volume = world.volumes.get(id);
+        final CoverageVolume volume = cluster.volume();
         if (volume == null) {
             return register(state, world.owner, drawn(world, cluster, mesh));
         }
-        final List<CoverageBricks.Brick> list = world.volumeBricks.get(id);
+        // Coverage volumes draw as the boxes of their bricks
+        final List<CoverageBricks.Brick> list = CoverageBricks.of(volume);
         final int[] slots = new int[list.size()];
         for (int b = 0; b < slots.length; ++b) {
             slots[b] = brickSlots.take();
@@ -1466,12 +1451,11 @@ public class LodRenderer {
     /**
      * Whether a cluster is a coverage volume.
      *
-     * @param world The world.
      * @param cluster The cluster.
      * @return True if it is.
      */
-    private static boolean isVolume(@NonNull World world, LodStore.@NonNull PieceCluster cluster) {
-        return world.volumes.containsKey(cluster.cluster().id());
+    private static boolean isVolume(LodStore.@NonNull PieceCluster cluster) {
+        return cluster.volume() != null;
     }
 
     /**
@@ -1992,8 +1976,7 @@ public class LodRenderer {
                 final Piece piece = member.piece();
                 final ClusterMeshes.Mesh mesh = piece.meshData.get(member.index());
                 if (piece.meshes[member.index()] == null
-                        && (mesh.triangleCount() > 0
-                                || isVolume(world, piece.clusters[member.index()]))) {
+                        && (mesh.triangleCount() > 0 || isVolume(piece.clusters[member.index()]))) {
                     piece.meshes[member.index()] =
                             registerDrawn(state, world, piece.clusters[member.index()], mesh);
                     writeEntry(world, piece, member.index());
@@ -2340,9 +2323,7 @@ public class LodRenderer {
                         // Counted from the finest: the cell's own level plus the level within it
                         piece.key.level() + cluster.cluster().level()),
                 (cutOut(cluster.cluster()) ? LodCullMath.FLAG_CUT_OUT : 0)
-                        | (world.volumes.containsKey(cluster.cluster().id())
-                                ? LodCullMath.FLAG_VOLUME
-                                : 0));
+                        | (cluster.volume() != null ? LodCullMath.FLAG_VOLUME : 0));
     }
 
     /**

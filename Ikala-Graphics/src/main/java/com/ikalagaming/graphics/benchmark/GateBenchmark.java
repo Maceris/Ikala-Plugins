@@ -825,6 +825,12 @@ public final class GateBenchmark {
                     GraphicsManager.getSettings().lodAverageMaterials =
                             Boolean.parseBoolean(average.trim());
                 }
+                // On, far parts finer than their group's resolution become coverage volumes; before
+                // starting, which makes the live world
+                final String lodVolumes = System.getProperty(PROPERTY + ".volumes");
+                if (lodVolumes != null) {
+                    GraphicsManager.getSettings().lodVolumes = Boolean.parseBoolean(lodVolumes);
+                }
                 start(
                         SyntheticTerrain.Recipe.valueOf(recipe.trim().toUpperCase()),
                         Integer.getInteger(PROPERTY + ".radius", 12),

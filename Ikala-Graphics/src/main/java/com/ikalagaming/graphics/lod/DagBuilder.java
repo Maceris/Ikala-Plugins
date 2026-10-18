@@ -678,6 +678,8 @@ public final class DagBuilder {
      * locked, so the planes between its children simplify from here on.
      *
      * @param tops The children's top clusters, relative to the origin; their ids are ignored.
+     * @param volumes The coverage volume each top is, or null where it is triangles; empty if none
+     *     is.
      * @param leafEdge The leaves' average edge length, which scales virtual edges and sampling.
      * @param origin Where the DAG's positions are measured from.
      * @param cellMin The cell's minimum corner, relative to the origin.
@@ -689,6 +691,7 @@ public final class DagBuilder {
      */
     public static LodDag buildParent(
             @NonNull List<LodDag.Cluster> tops,
+            @NonNull List<CoverageVolume> volumes,
             double leafEdge,
             double @NonNull [] origin,
             double @NonNull [] cellMin,
@@ -718,6 +721,11 @@ public final class DagBuilder {
                             top.tight(),
                             -1,
                             -1));
+            final int added = builder.dag.clusters().size() - 1;
+            if (added < volumes.size() && volumes.get(added) != null) {
+                // A volume stands for leaves this cell doesn't have: groups take it in as it is
+                builder.dag.setVolume(added, volumes.get(added));
+            }
             if (builder.dag.getLineage() != null) {
                 builder.dag.getLineage().addCluster(null);
             }
@@ -2573,8 +2581,23 @@ public final class DagBuilder {
                     TRIANGLE_VALUES);
             materials[b] = base.materials()[t];
         }
+        // Children's volumes with no base triangles, as a parent cell's inputs are, stand for
+        // leaves
+        // only they had: they go in as finer volumes
+        final List<CoverageVolume> sources = new ArrayList<>();
+        for (int id : children) {
+            final CoverageVolume own = dag.volumeOf(id);
+            if (own != null && basis.get(id).length == 0) {
+                sources.add(own);
+            }
+        }
         return CoverageVoxelizer.voxelize(
-                corners, materials, options.averages(), voxelSize, Arrays.hashCode(children));
+                corners,
+                materials,
+                options.averages(),
+                sources,
+                voxelSize,
+                Arrays.hashCode(children));
     }
 
     /**
