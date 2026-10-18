@@ -13,6 +13,9 @@
 // coordinates, their own look blended from the surface they stand for (see Attributes.averaged).
 // outViewPosition.w is 2 to say so, outNormal is the normal, outTangent the color in sRGB as a
 // texture's would be, outTextCoord the roughness and metallic, and outBitangent.x the specular.
+// A coverage volume shell's (FLAG_SHELL) are averaged too, with their coverage in outBitangent.y
+// and 1 in its z; a model's (FLAG_NAMED) have 2 there, and only their shade, in outTangent.x,
+// against their material's average look.
 //
 // A projected triangle's have none: scene.frag, with TRIPLANAR on, works out each flat triangle's
 // normal from how its position changes across the screen, and projects the material's texture
@@ -135,6 +138,7 @@ const uint FLAG_FLIPPED_BITANGENT = 1;
 const uint FLAG_TEXTURED = 2;
 const uint FLAG_AVERAGED = 4;
 const uint FLAG_SHELL = 16;
+const uint FLAG_NAMED = 32;
 // The specular a coverage volume shell's corners get, whose specular byte holds their coverage
 const float SHELL_SPECULAR = 0.5;
 
@@ -195,9 +199,10 @@ void main()
             outTangent = look.rgb;
             outTextCoord = vec2(look.a, more.z);
             // A coverage volume shell's corner: its coverage in place of the specular, see
-            // Attributes.shell, for scene.frag's hashed alpha test
+            // Attributes.shell, for scene.frag's hashed alpha test; z is 2 for a model's, which
+            // names its material and carries only its shade, in the color's red
             outBitangent = (materialFlags.y & FLAG_SHELL) != 0
-                ? vec3(SHELL_SPECULAR, more.w, 1.0)
+                ? vec3(SHELL_SPECULAR, more.w, (materialFlags.y & FLAG_NAMED) != 0 ? 2.0 : 1.0)
                 : vec3(more.w, 0.0, 0.0);
             outViewPosition = vec4(0.0, 0.0, 0.0, 2.0);
         } else {

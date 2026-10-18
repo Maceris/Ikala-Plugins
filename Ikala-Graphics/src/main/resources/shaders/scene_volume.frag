@@ -55,6 +55,8 @@ layout(std430, set = 0, binding = 2) readonly buffer Materials {
 
 layout(set = 1, binding = 0) uniform sampler2D bindlessTextures[];
 
+#include "material_average.glsl"
+
 layout(push_constant) uniform SceneConstants {
     layout(offset = 24) uint frame;
     uint debugSources;
@@ -138,13 +140,6 @@ vec3 sampleVisibleNormal(vec3 wi, mat3 S, float u1, float u2)
     float w = sqrt(max(0.0, 1.0 - u * u - v * v));
     vec3 m = normalize(u * mk + v * mj + w * mi);
     return normalize(m.x * wk + m.y * wj + m.z * wi);
-}
-
-// A texture's average, its smallest mip
-vec4 averageTexel(int index)
-{
-    int levels = textureQueryLevels(bindlessTextures[nonuniformEXT(index)]);
-    return textureLod(bindlessTextures[nonuniformEXT(index)], vec2(0.5), float(levels - 1));
 }
 
 void main()
@@ -233,18 +228,8 @@ void main()
                             material = outRemapTo[r];
                         }
                     }
-                    Material look = materials[material];
-                    vec3 linear = sRGBToLinear(look.baseColor.rgb);
-                    if (look.textureIndex > 0) {
-                        linear = averageTexel(look.textureIndex).rgb;
-                    }
-                    roughness = look.roughness;
-                    metallic = look.metallic;
-                    if (look.occlusionRoughnessMetalIndex > 0) {
-                        vec3 packedValues = averageTexel(look.occlusionRoughnessMetalIndex).rgb;
-                        roughness = packedValues.g;
-                        metallic = packedValues.b;
-                    }
+                    vec3 linear;
+                    averageLook(materials[material], linear, roughness, metallic);
                     float shade = float((data.y >> 16) & 0xFFu) / 255.0;
                     color = linearToSRGB(linear * shade);
                 }

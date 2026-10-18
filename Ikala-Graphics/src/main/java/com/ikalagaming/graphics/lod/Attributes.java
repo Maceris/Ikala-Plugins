@@ -32,6 +32,13 @@ public final class Attributes {
      */
     public static final int SHELL_UV = 0x7E01;
 
+    /**
+     * What a model's coverage volume shell's corner holds in place of texture coordinates, a third
+     * NaN: its triangle names a material, and it carries its shade against that material's average
+     * rather than a color, see {@link #namedShell}.
+     */
+    public static final int NAMED_SHELL_UV = 0x7E02;
+
     /** The most a byte holds, for values from 0 to 1. */
     private static final int BYTE_MAX = 0xFF;
 
@@ -184,14 +191,45 @@ public final class Attributes {
     }
 
     /**
-     * Whether a corner is a coverage volume shell's.
+     * Set a model's coverage volume shell's corner: its normal, then in place of a tangent its
+     * shade against its triangle's material's average, a byte; in place of texture coordinates
+     * {@link #NAMED_SHELL_UV}, then how much of the light it stops in the specular's byte. The
+     * material's own roughness and metalness stand.
+     *
+     * @param normal The normal; it needn't be unit length, but mustn't be zero.
+     * @param shade Its shade, 0 to 1.
+     * @param coverage How much of the light it stops, 0 to 1.
+     * @param out Where the corner goes.
+     * @param at Where in it.
+     */
+    public static void namedShell(
+            float @NonNull [] normal, float shade, float coverage, int @NonNull [] out, int at) {
+        out[at + NORMAL] = encodeDirection(normal);
+        out[at + TANGENT] = toByte(shade);
+        out[at + UV] = NAMED_SHELL_UV | toByte(coverage) << (SHORT_BITS + BYTE_BITS);
+    }
+
+    /**
+     * Whether a corner is a coverage volume shell's, named or not.
      *
      * @param attributes Corners' ints.
      * @param at Where the corner starts.
      * @return True if it is.
      */
     public static boolean isShell(int @NonNull [] attributes, int at) {
-        return (attributes[at + UV] & SHORT_MASK) == SHELL_UV;
+        final int uv = attributes[at + UV] & SHORT_MASK;
+        return uv == SHELL_UV || uv == NAMED_SHELL_UV;
+    }
+
+    /**
+     * Whether a corner is a model's coverage volume shell's, which names its material.
+     *
+     * @param attributes Corners' ints.
+     * @param at Where the corner starts.
+     * @return True if it is.
+     */
+    public static boolean isNamedShell(int @NonNull [] attributes, int at) {
+        return (attributes[at + UV] & SHORT_MASK) == NAMED_SHELL_UV;
     }
 
     /**

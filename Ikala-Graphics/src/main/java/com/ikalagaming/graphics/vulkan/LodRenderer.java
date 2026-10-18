@@ -1465,11 +1465,9 @@ public class LodRenderer {
             at += list.get(b).words();
         }
         ClusterMeshes.Mesh drawn = CoverageBricks.mesh(volume, list, offsets);
-        if (world.modelClusters < 0) {
-            // Then its shell, drawn in place of the boxes once it is small on screen; a model's
-            // instances may draw it with other materials, which a shell's colors can't follow
-            drawn = withShell(drawn, CoverageShells.of(volume));
-        }
+        // Then its shell, drawn in place of the boxes once it is small on screen; a model's names
+        // its materials too, so its instances' remaps reach it
+        drawn = withShell(drawn, CoverageShells.of(volume, world.modelClusters >= 0));
         final MeshHandle handle = register(state, world.owner, drawn);
         brickRangeOf.put(handle, new int[] {first, words});
         return handle;
@@ -1494,7 +1492,7 @@ public class LodRenderer {
                                 -1,
                                 0,
                                 shell.corners(),
-                                new int[triangles],
+                                shell.materials(),
                                 new float[triangles],
                                 shell.attributes(),
                                 0,
@@ -2397,22 +2395,18 @@ public class LodRenderer {
                         // Counted from the finest: the cell's own level plus the level within it
                         piece.key.level() + cluster.cluster().level()),
                 (cutOut(cluster.cluster()) ? LodCullMath.FLAG_CUT_OUT : 0)
-                        | (cluster.volume() != null ? volumeFlags(world, cluster.volume()) : 0));
+                        | (cluster.volume() != null ? volumeFlags(cluster.volume()) : 0));
     }
 
     /**
      * A coverage volume cluster's flags: that it is one, and, if it has a shell after its boxes,
      * how many of its mesh's indices the boxes take, see {@link LodCullMath#SHELL_SHIFT}.
      *
-     * @param world Its world.
      * @param volume The volume.
      * @return The flags.
      */
-    private static int volumeFlags(@NonNull World world, @NonNull CoverageVolume volume) {
-        final int boxes =
-                world.modelClusters < 0
-                        ? CoverageBricks.count(volume) * CoverageBricks.BOX_INDICES
-                        : 0;
+    private static int volumeFlags(@NonNull CoverageVolume volume) {
+        final int boxes = CoverageBricks.count(volume) * CoverageBricks.BOX_INDICES;
         return LodCullMath.FLAG_VOLUME | boxes << LodCullMath.SHELL_SHIFT;
     }
 

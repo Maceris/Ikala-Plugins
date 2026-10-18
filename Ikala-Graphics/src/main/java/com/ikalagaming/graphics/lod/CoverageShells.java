@@ -25,6 +25,10 @@ import java.util.SplittableRandom;
  * integer arithmetic. Each hull corner looks into the volume along a few rays around its inward
  * normal: the share of the light they lose is its coverage, and what they meet, weighted by how
  * much of it they see, its color, roughness and metalness.
+ *
+ * <p>A model's instances may draw it with other materials, so a model's shell names materials
+ * instead: each triangle the material its corners see most of, and each corner its shade against
+ * that material's average, as the model's voxels do.
  */
 public final class CoverageShells {
 
@@ -66,9 +70,12 @@ public final class CoverageShells {
      *
      * @param corners Its triangles' corners, 9 floats each, in the volume's frame.
      * @param attributes Its triangles' corners' averaged attributes, {@link
-     *     Attributes#PER_TRIANGLE} ints a triangle, see {@link Attributes#shell}.
+     *     Attributes#PER_TRIANGLE} ints a triangle, see {@link Attributes#shell} and {@link
+     *     Attributes#namedShell}.
+     * @param materials Each triangle's material, for a named shell; 0 for others.
      */
-    public record Shell(float @NonNull [] corners, int @NonNull [] attributes) {
+    public record Shell(
+            float @NonNull [] corners, int @NonNull [] attributes, int @NonNull [] materials) {
         /**
          * How many triangles it has.
          *
@@ -80,14 +87,28 @@ public final class CoverageShells {
     }
 
     /**
+     * What a hull corner sees looking into the volume.
+     *
+     * @param look Linear red, green and blue, roughness and metalness, and in the specular's place
+     *     its coverage, see {@link #lookInto}.
+     * @param shade For a named shell, the mean shade of what it sees.
+     * @param materials For a named shell, how much of each material it sees; empty for others.
+     */
+    private record Seen(
+            float @NonNull [] look, float shade, @NonNull Map<Integer, Double> materials) {}
+
+    /**
      * Wrap a volume in shells.
      *
      * @param volume The volume.
+     * @param named Whether its corners name materials, for a model's volume, rather than carry
+     *     colors.
      * @return Its shell, a hull for each group of touching voxels.
      */
-    public static @NonNull Shell of(@NonNull CoverageVolume volume) {
+    public static @NonNull Shell of(@NonNull CoverageVolume volume, boolean named) {
         final List<float[]> corners = new ArrayList<>();
         final List<int[]> attributes = new ArrayList<>();
+        final List<Integer> materials = new ArrayList<>();
         final double[] share = new double[volume.size()];
         for (int[] component : components(volume)) {
             // A hull for each brick's share of the group, so the shell follows its outline,
@@ -104,7 +125,7 @@ public final class CoverageShells {
                 for (int v : wrapped) {
                     share[v] = shareOf(volume.keyOf(v), brick, bricks);
                 }
-                hull(volume, wrapped, share, corners, attributes);
+                hull(volume, named, wrapped, share, corners, attributes, materials);
                 for (int v : wrapped) {
                     share[v] = 0;
                 }
@@ -121,7 +142,11 @@ public final class CoverageShells {
                     t * Attributes.PER_TRIANGLE,
                     Attributes.PER_TRIANGLE);
         }
-        return new Shell(allCorners, allAttributes);
+        final int[] allMaterials = new int[materials.size()];
+        for (int t = 0; t < allMaterials.length; ++t) {
+            allMaterials[t] = materials.get(t);
+        }
+        return new Shell(allCorners, allAttributes, allMaterials);
     }
 
     /**
@@ -301,17 +326,21 @@ public final class CoverageShells {
      * Add one group's hull.
      *
      * @param volume The volume.
+     * @param named Whether its corners name materials.
      * @param group The piece's voxels.
      * @param share How much of each voxel of the volume the piece's hull takes.
      * @param corners Receives its triangles' corners.
      * @param attributes Receives its triangles' attributes.
+     * @param materials Receives its triangles' materials.
      */
     private static void hull(
             @NonNull CoverageVolume volume,
+            boolean named,
             int @NonNull [] group,
             double @NonNull [] share,
             @NonNull List<float[]> corners,
-            @NonNull List<int[]> attributes) {
+            @NonNull List<int[]> attributes,
+            @NonNull List<Integer> materials) {
         final long[][] points = hullPoints(volume, group);
         final List<int[]> faces = ConvexHull.of(points, SEED);
         if (faces.isEmpty()) {
@@ -345,6 +374,7 @@ public final class CoverageShells {
         final double size = volume.voxelSize();
         final double reach = reachVoxels * size;
         final Map<Integer, int[]> cornerAttributes = new HashMap<>();
+        final Map<Integer, Seen> cornerSeen = new HashMap<>();
         for (int[] face : split) {
             for (int corner : face) {
                 if (cornerAttributes.containsKey(corner)) {
@@ -355,15 +385,17 @@ public final class CoverageShells {
                 final double[] position = {
                     origin[0] + p[0] * size, origin[1] + p[1] * size, origin[2] + p[2] * size
                 };
-                final float[] look = lookInto(volume, share, position, n, reach);
+                final Seen seen = lookInto(volume, named, share, position, n, reach);
+                final float[] normal = {(float) n[0], (float) n[1], (float) n[2]};
+                final float coverage = seen.look()[MaterialAverages.SPECULAR];
                 final int[] out = new int[Attributes.VALUES];
-                Attributes.shell(
-                        new float[] {(float) n[0], (float) n[1], (float) n[2]},
-                        look,
-                        look[MaterialAverages.SPECULAR],
-                        out,
-                        0);
+                if (named) {
+                    Attributes.namedShell(normal, seen.shade(), coverage, out, 0);
+                } else {
+                    Attributes.shell(normal, seen.look(), coverage, out, 0);
+                }
                 cornerAttributes.put(corner, out);
+                cornerSeen.put(corner, seen);
             }
         }
         for (int[] face : split) {
@@ -383,7 +415,31 @@ public final class CoverageShells {
             }
             corners.add(triangle);
             attributes.add(own);
+            materials.add(named ? mainMaterial(cornerSeen, face) : 0);
         }
+    }
+
+    /**
+     * The material a triangle's corners see most of.
+     *
+     * @param seen What each corner sees.
+     * @param face The triangle's corners.
+     * @return The material, or 0 if they see none.
+     */
+    private static int mainMaterial(@NonNull Map<Integer, Seen> seen, int @NonNull [] face) {
+        final Map<Integer, Double> total = new HashMap<>();
+        for (int corner : face) {
+            seen.get(corner).materials().forEach((m, w) -> total.merge(m, w, Double::sum));
+        }
+        int best = 0;
+        double most = -1;
+        for (Map.Entry<Integer, Double> e : total.entrySet()) {
+            if (e.getValue() > most || e.getValue() == most && e.getKey() < best) {
+                most = e.getValue();
+                best = e.getKey();
+            }
+        }
+        return best;
     }
 
     /**
@@ -536,15 +592,18 @@ public final class CoverageShells {
      * through several pieces crosses each one's shell and is stopped by each in turn.
      *
      * @param volume The volume.
+     * @param named Whether to tally the materials and shades it sees too.
      * @param share How much of each voxel the piece's hull takes.
      * @param position The corner.
      * @param normal Its outward unit normal.
      * @param reach How far the rays go.
      * @return Linear red, green and blue, roughness and metalness, each weighted by how much of it
-     *     the rays see, and in the specular's place the share of the light they lose.
+     *     the rays see, and in the specular's place the share of the light they lose; with, if
+     *     named, the materials and mean shade they see, weighted alike.
      */
-    private static float[] lookInto(
+    private static Seen lookInto(
             @NonNull CoverageVolume volume,
+            boolean named,
             double @NonNull [] share,
             double @NonNull [] position,
             double @NonNull [] normal,
@@ -556,6 +615,8 @@ public final class CoverageShells {
         final double[] look = new double[MaterialAverages.VALUES];
         double seen = 0;
         double lost = 0;
+        double shade = 0;
+        final Map<Integer, Double> materials = new HashMap<>();
         final double[] point = new double[AXES];
         for (int r = 0; r < RAYS; ++r) {
             final double[] direction = inward.clone();
@@ -591,6 +652,10 @@ public final class CoverageShells {
                 look[MaterialAverages.ROUGHNESS] += seenHere * volume.roughness(v);
                 look[MaterialAverages.METALLIC] += seenHere * volume.metallic(v);
                 seen += seenHere;
+                if (named && volume.material(v) >= 0) {
+                    materials.merge(volume.material(v), seenHere, Double::sum);
+                    shade += seenHere * volume.shade(v);
+                }
                 through *= kept;
             }
             lost += 1 - through;
@@ -602,7 +667,11 @@ public final class CoverageShells {
         // Nearly covering is covering, so the shells behind lose to the depth test
         final double coverage = lost / RAYS;
         out[MaterialAverages.SPECULAR] = (float) (coverage >= OPAQUE_ENOUGH ? 1 : coverage);
-        return out;
+        double tallied = 0;
+        for (double w : materials.values()) {
+            tallied += w;
+        }
+        return new Seen(out, tallied > 0 ? (float) (shade / tallied) : 1, materials);
     }
 
     /** The x axis. */

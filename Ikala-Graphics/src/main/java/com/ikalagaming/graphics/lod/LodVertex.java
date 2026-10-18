@@ -88,6 +88,12 @@ public final class LodVertex {
      */
     public static final int FLAG_SHELL = 1 << 4;
 
+    /**
+     * Set with {@link #FLAG_SHELL} for a model's shell's corner ({@link Attributes#namedShell}),
+     * which carries a shade against its material's look rather than a color.
+     */
+    public static final int FLAG_NAMED = 1 << 5;
+
     /** The largest material index that fits. */
     public static final int MAX_MATERIAL = 0xFFFF;
 
@@ -154,6 +160,9 @@ public final class LodVertex {
                 flags |= FLAG_AVERAGED;
                 if (Attributes.isShell(attributes, at)) {
                     flags |= FLAG_SHELL;
+                }
+                if (Attributes.isNamedShell(attributes, at)) {
+                    flags |= FLAG_NAMED;
                 }
             } else {
                 out.putInt(base + TANGENT_OFFSET, Attributes.tangentBits(attributes[at + 1]));

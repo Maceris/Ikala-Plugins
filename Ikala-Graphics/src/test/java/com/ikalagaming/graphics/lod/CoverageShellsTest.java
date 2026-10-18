@@ -106,7 +106,7 @@ class CoverageShellsTest {
         final CoverageVolume volume =
                 CoverageVoxelizer.voxelize(two, new int[two.length / 9], null, VOXEL, SEED);
         assertEquals(2, CoverageShells.components(volume).size());
-        final CoverageShells.Shell shell = CoverageShells.of(volume);
+        final CoverageShells.Shell shell = CoverageShells.of(volume, false);
         assertTrue(shell.triangles() >= 24, shell.triangles() + " triangles");
         double dense = 0;
         double most = 0;
@@ -135,7 +135,7 @@ class CoverageShellsTest {
                         },
                         VOXEL,
                         SEED);
-        final CoverageShells.Shell thin = CoverageShells.of(sparse);
+        final CoverageShells.Shell thin = CoverageShells.of(sparse, false);
         double light = 0;
         for (int at = 0; at < thin.attributes().length; at += Attributes.VALUES) {
             light += coverage(thin.attributes(), at);
@@ -145,6 +145,43 @@ class CoverageShellsTest {
         // margin see only its share of its neighbors' voxels, so cover less
         assertTrue(most > 0.8, "Closed boxes' shells cover at most " + most);
         assertTrue(light < dense, "Boxes with holes cover " + light + " against " + dense);
+    }
+
+    /**
+     * A model's shell names materials: each triangle the one its corners see, and each corner a
+     * shade rather than a color.
+     */
+    @Test
+    void testNamedShellsKeepTheirMaterials() {
+        final float[] two = join(box(0, 0, 0, 2), box(10, 0, 0, 2));
+        final int[] materials = new int[two.length / 9];
+        for (int t = materials.length / 2; t < materials.length; ++t) {
+            materials[t] = 7;
+        }
+        for (int t = 0; t < materials.length / 2; ++t) {
+            materials[t] = 3;
+        }
+        final CoverageVolume volume = CoverageVoxelizer.voxelize(two, materials, null, VOXEL, SEED);
+        final CoverageShells.Shell shell = CoverageShells.of(volume, true);
+        assertTrue(shell.triangles() >= 24, shell.triangles() + " triangles");
+        assertEquals(shell.triangles(), shell.materials().length);
+        for (int t = 0; t < shell.triangles(); ++t) {
+            final int expected = shell.corners()[t * 9] < 5 ? 3 : 7;
+            assertEquals(expected, shell.materials()[t], "Triangle " + t + "'s material");
+        }
+        for (int at = 0; at < shell.attributes().length; at += Attributes.VALUES) {
+            assertTrue(Attributes.isShell(shell.attributes(), at));
+            assertTrue(Attributes.isNamedShell(shell.attributes(), at));
+            assertTrue(Attributes.isAveraged(shell.attributes(), at));
+            final double shade = (shell.attributes()[at + 1] & 0xFF) / 255.0;
+            assertTrue(shade > 0, "A corner's shade is " + shade);
+        }
+        // A world's shell carries colors, its triangles no material
+        final CoverageShells.Shell plain = CoverageShells.of(volume, false);
+        for (int t = 0; t < plain.triangles(); ++t) {
+            assertEquals(0, plain.materials()[t]);
+        }
+        assertTrue(!Attributes.isNamedShell(plain.attributes(), 0));
     }
 
     @Test

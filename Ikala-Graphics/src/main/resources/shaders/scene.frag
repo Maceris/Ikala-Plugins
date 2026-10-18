@@ -59,6 +59,8 @@ layout(std430, set = 0, binding = 2) readonly buffer Materials {
     Material materials[];
 };
 
+#include "material_average.glsl"
+
 // Whether this pixel's texture is projected, on a level of detail cluster's projected triangle
 bool projected;
 
@@ -135,8 +137,17 @@ void main() {
     textCoordDy = dFdy(textCoord);
 
     vec4 baseColor = material.baseColor;
+    // An averaged triangle's specular, roughness and metallic
+    vec3 averagedLook = vec3(outBitangent.x, outTextCoord);
     if (averaged) {
         baseColor = vec4(outTangent, 1.0);
+        if (outBitangent.z > 1.5) {
+            // A model's coverage volume shell names its material, perhaps remapped by the
+            // instance, and carries its shade against the material's average look
+            vec3 linear;
+            averageLook(material, linear, averagedLook.y, averagedLook.z);
+            baseColor = vec4(linearToSRGB(linear * outTangent.x), 1.0);
+        }
         surfaceNormal = normalize(outNormal);
         // Any direction at right angles will do for the tangent
         vec3 across = abs(surfaceNormal.x) < 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
@@ -217,9 +228,9 @@ void main() {
     }
     if (averaged && debugHue < 0.0) {
         // The look it carries, in place of the material's: roughness, metallic and specular
-        buffBaseColor = vec4(baseColor.rgb, outBitangent.x);
-        buffNormal = vec4(normal, outTextCoord.x);
-        buffTangent = vec4(normalize(tangent), outTextCoord.y);
+        buffBaseColor = vec4(baseColor.rgb, averagedLook.x);
+        buffNormal = vec4(normal, averagedLook.y);
+        buffTangent = vec4(normalize(tangent), averagedLook.z);
     } else if (packedLook && debugHue < 0.0) {
         // The packed texture's roughness and metalness, with the material's specular
         buffBaseColor = vec4(baseColor.rgb, material.specular);
