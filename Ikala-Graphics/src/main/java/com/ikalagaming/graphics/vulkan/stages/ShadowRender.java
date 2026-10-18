@@ -1051,8 +1051,9 @@ public class ShadowRender implements RenderStage {
             // Only the position is needed, the rest of the vertex is skipped over, except the
             // texture coordinates and material for alpha testing
             // Level of detail's cut outs also take the texture coordinates' bits whole, where a
-            // coverage volume shell's corner keeps its coverage
-            final int attributeCount = cutout ? (lod ? 4 : baked ? 3 : 2) : 1;
+            // coverage volume shell's corner keeps its straight in coverage, and the normal's,
+            // where it keeps its grazing coverage, see Attributes.shellNormal
+            final int attributeCount = cutout ? (lod ? 5 : baked ? 3 : 2) : 1;
             VkVertexInputAttributeDescription.Buffer vertexAttributes =
                     volume
                             ? SceneRender.volumeVertexAttributes(stack)
@@ -1096,6 +1097,12 @@ public class ShadowRender implements RenderStage {
                             .location(3)
                             .format(VK_FORMAT_R32_UINT)
                             .offset(LodVertex.UV_OFFSET);
+                    vertexAttributes
+                            .get(4)
+                            .binding(0)
+                            .location(4)
+                            .format(VK_FORMAT_R32_UINT)
+                            .offset(LodVertex.NORMAL_OFFSET);
                 }
             }
 
