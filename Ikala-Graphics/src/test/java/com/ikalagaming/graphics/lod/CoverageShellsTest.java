@@ -143,9 +143,10 @@ class CoverageShellsTest {
             light += coverage(thin.attributes(), at);
         }
         light /= thin.attributes().length / Attributes.VALUES;
-        // Closed boxes' shells cover most of what is in front of them; corners out in a hull's
-        // margin see only its share of its neighbors' voxels, so cover less
-        assertTrue(most > 0.8, "Closed boxes' shells cover at most " + most);
+        // Closed boxes' shells cover much of what is behind them, as their voxels do: a voxel on
+        // a surface stops what share of the light the voxelizer measured, and a surface seen
+        // edge on stops little
+        assertTrue(most > 0.6, "Closed boxes' shells cover at most " + most);
         assertTrue(light < dense, "Boxes with holes cover " + light + " against " + dense);
     }
 

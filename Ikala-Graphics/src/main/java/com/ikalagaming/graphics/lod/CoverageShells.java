@@ -41,11 +41,29 @@ public final class CoverageShells {
     /** Values in a triangle's corners. */
     private static final int TRIANGLE_VALUES = 9;
 
-    /** Rays a hull corner looks into the volume along. */
-    private static final int RAYS = 5;
+    /** Rays a hull corner looks into the volume along, half straight in and half grazing. */
+    private static final int RAYS = 16;
 
-    /** How far the rays around the inward normal lean from it, in radians. */
-    private static final double LEAN = Math.toRadians(30);
+    /** The widest the straight in rays lean from a face's normal. */
+    private static final double STRAIGHT_LEAN = Math.toRadians(30);
+
+    /**
+     * How far the grazing rays lean from a face's normal, as a canopy's rim is seen; scene_lod.vert
+     * takes its cosine as where a corner's grazing coverage holds.
+     */
+    private static final double GRAZING_LEAN = Math.toRadians(75);
+
+    /** The turn between one ray and the next around the inward normal, the golden angle. */
+    private static final double GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+
+    /**
+     * Steps between rays' start points on a face, the R2 sequence's (Roberts 2018), so they spread
+     * evenly over it.
+     */
+    private static final double[] R2 = {0.7548776662466927, 0.5698402909980532};
+
+    /** The step between rays' distances from the normal, apart from the others'. */
+    private static final double SPREAD_STEP = Math.sqrt(2) - 1;
 
     /** How far apart samples along a ray are, in voxels. */
     private static final double STEP = 0.5;
@@ -102,12 +120,16 @@ public final class CoverageShells {
      * What a hull corner sees looking into the volume.
      *
      * @param look Linear red, green and blue, roughness and metalness, and in the specular's place
-     *     its coverage, see {@link #lookInto}.
+     *     its coverage looking straight in, see {@link #lookInto}.
+     * @param grazing Its coverage looking in at a grazing angle.
      * @param shade For a named shell, the mean shade of what it sees.
      * @param materials For a named shell, how much of each material it sees; empty for others.
      */
     private record Seen(
-            float @NonNull [] look, float shade, @NonNull Map<Integer, Double> materials) {}
+            float @NonNull [] look,
+            float grazing,
+            float shade,
+            @NonNull Map<Integer, Double> materials) {}
 
     /**
      * Wrap a volume in shells.
@@ -446,24 +468,28 @@ public final class CoverageShells {
         final double reach = reachVoxels * size;
         final Map<Integer, int[]> cornerAttributes = new HashMap<>();
         final Map<Integer, Seen> cornerSeen = new HashMap<>();
+        final Map<Integer, List<int[]>> around = new HashMap<>();
+        for (int[] face : split) {
+            for (int corner : face) {
+                around.computeIfAbsent(corner, k -> new ArrayList<>()).add(face);
+            }
+        }
         for (int[] face : split) {
             for (int corner : face) {
                 if (cornerAttributes.containsKey(corner)) {
                     continue;
                 }
                 final double[] n = unit(normals.get(corner));
-                final double[] p = positions.get(corner);
-                final double[] position = {
-                    origin[0] + p[0] * size, origin[1] + p[1] * size, origin[2] + p[2] * size
-                };
-                final Seen seen = lookInto(volume, named, share, position, n, reach);
+                final Seen seen =
+                        lookInto(
+                                volume, named, share, corner, around.get(corner), positions, reach);
                 final float[] normal = {(float) n[0], (float) n[1], (float) n[2]};
                 final float coverage = seen.look()[MaterialAverages.SPECULAR];
                 final int[] out = new int[Attributes.VALUES];
                 if (named) {
-                    Attributes.namedShell(normal, seen.shade(), coverage, out, 0);
+                    Attributes.namedShell(normal, seen.shade(), coverage, seen.grazing(), out, 0);
                 } else {
-                    Attributes.shell(normal, seen.look(), coverage, out, 0);
+                    Attributes.shell(normal, seen.look(), coverage, seen.grazing(), out, 0);
                 }
                 cornerAttributes.put(corner, out);
                 cornerSeen.put(corner, seen);
@@ -659,48 +685,111 @@ public final class CoverageShells {
     }
 
     /**
-     * What a hull corner sees looking into its piece of the volume: rays around its inward normal,
-     * each losing light to the piece's share of the voxels it crosses. Only its share, since a ray
+     * What a hull corner stands for looking into its piece of the volume, over the faces it is a
+     * corner of, as their corners' values blend across them: rays start from points spread over
+     * those faces, weighted by how much of the corner's value each point takes, half going straight
+     * in, within a narrow cone of the face's inward normal, and half grazing it. Each loses light
+     * to the piece's share of the voxels it crosses. A view looking straight at a canopy sees
+     * through all of it, and one across its rim only its edge, so the corner keeps both coverages
+     * and the vertex shader blends them by how the camera sees it; a hull's corners, its extremes,
+     * stand for their faces rather than only themselves. Only the piece's share, since a ray
      * through several pieces crosses each one's shell and is stopped by each in turn.
      *
      * @param volume The volume.
      * @param named Whether to tally the materials and shades it sees too.
      * @param share How much of each voxel the piece's hull takes.
-     * @param position The corner.
-     * @param normal Its outward unit normal.
+     * @param corner The corner.
+     * @param faces The faces it is a corner of, facing out.
+     * @param positions The hull's corners, in voxels on the volume's grid.
      * @param reach How far the rays go.
      * @return Linear red, green and blue, roughness and metalness, each weighted by how much of it
-     *     the rays see, and in the specular's place the share of the light they lose; with, if
-     *     named, the materials and mean shade they see, weighted alike.
+     *     the rays see, and in the specular's place the share of the light the straight rays lose;
+     *     the share the grazing rays lose; and, if named, the materials and mean shade they see,
+     *     weighted alike.
      */
     private static Seen lookInto(
             @NonNull CoverageVolume volume,
             boolean named,
             double @NonNull [] share,
-            double @NonNull [] position,
-            double @NonNull [] normal,
+            int corner,
+            @NonNull List<int[]> faces,
+            @NonNull List<double[]> positions,
             double reach) {
-        final double[] inward = {-normal[0], -normal[1], -normal[2]};
-        final double[] across = unit(cross(inward, Math.abs(inward[0]) < 0.9 ? X : Y));
-        final double[] up = cross(inward, across);
-        final double step = STEP * volume.voxelSize();
+        final double[] origin = volume.origin();
+        final double size = volume.voxelSize();
+        // Each face's area and inward normal, and where its corners are, this one first
+        final double[] areas = new double[faces.size()];
+        final double[][] inwards = new double[faces.size()][];
+        final double[][][] corners = new double[faces.size()][][];
+        double total = 0;
+        for (int f = 0; f < faces.size(); ++f) {
+            final int[] face = faces.get(f);
+            int first = 0;
+            while (face[first] != corner) {
+                ++first;
+            }
+            corners[f] = new double[CORNERS][];
+            for (int c = 0; c < CORNERS; ++c) {
+                corners[f][c] = positions.get(face[(first + c) % CORNERS]);
+            }
+            final double[] n =
+                    cross(minus(corners[f][1], corners[f][0]), minus(corners[f][2], corners[f][0]));
+            final double length = Math.sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+            areas[f] = length / 2;
+            total += areas[f];
+            inwards[f] =
+                    length > 0
+                            ? new double[] {-n[0] / length, -n[1] / length, -n[2] / length}
+                            : new double[] {0, 0, -1};
+        }
+        final double step = STEP * size;
         final double[] look = new double[MaterialAverages.VALUES];
         double seen = 0;
-        double lost = 0;
+        // Straight in, then grazing
+        final double[] lost = new double[2];
+        final double[] weights = new double[2];
         double shade = 0;
         final Map<Integer, Double> materials = new HashMap<>();
+        final double[] position = new double[AXES];
         final double[] point = new double[AXES];
+        final double[] direction = new double[AXES];
         for (int r = 0; r < RAYS; ++r) {
-            final double[] direction = inward.clone();
-            if (r > 0) {
-                final double angle = (r - 1) * Math.PI / 2;
-                for (int axis = 0; axis < AXES; ++axis) {
-                    direction[axis] =
-                            Math.cos(LEAN) * inward[axis]
-                                    + Math.sin(LEAN)
-                                            * (Math.cos(angle) * across[axis]
-                                                    + Math.sin(angle) * up[axis]);
-                }
+            // A face by its area, then a point on it, and how much of this corner's value it takes
+            double pick = (r + 0.5) / RAYS * total;
+            int f = 0;
+            while (f < faces.size() - 1 && pick > areas[f]) {
+                pick -= areas[f];
+                ++f;
+            }
+            final double s = Math.sqrt(fraction((r + 0.5) * R2[0]));
+            final double t = fraction((r + 0.5) * R2[1]);
+            final double weight = 1 - s;
+            for (int axis = 0; axis < AXES; ++axis) {
+                position[axis] =
+                        origin[axis]
+                                + size
+                                        * ((1 - s) * corners[f][0][axis]
+                                                + s * (1 - t) * corners[f][1][axis]
+                                                + s * t * corners[f][2][axis]);
+            }
+            // Cosine weighted about the face's inward normal: evenly over the unit disc, then up
+            // onto the hemisphere
+            final double[] inward = inwards[f];
+            final double[] across = unit(cross(inward, Math.abs(inward[0]) < 0.9 ? X : Y));
+            final double[] up = cross(inward, across);
+            final int set = r < RAYS / 2 ? 0 : 1;
+            final double out =
+                    set == 0
+                            ? Math.sin(STRAIGHT_LEAN) * Math.sqrt(fraction((r + 0.5) * SPREAD_STEP))
+                            : Math.sin(GRAZING_LEAN);
+            final double angle = r * GOLDEN_ANGLE;
+            final double in = Math.sqrt(1 - out * out);
+            for (int axis = 0; axis < AXES; ++axis) {
+                direction[axis] =
+                        in * inward[axis]
+                                + out
+                                        * (Math.cos(angle) * across[axis]
+                                                + Math.sin(angle) * up[axis]);
             }
             double through = 1;
             for (double d = step / 2; d < reach && through > 1e-3; d += step) {
@@ -717,7 +806,7 @@ public final class CoverageShells {
                                         * volume.density(v)
                                         * volume.projectedArea(v, direction)
                                         * step);
-                final double seenHere = through * (1 - kept);
+                final double seenHere = weight * through * (1 - kept);
                 for (int c = 0; c < CoverageVolume.COLOR_VALUES; ++c) {
                     look[MaterialAverages.RED + c] += seenHere * volume.color(v, c);
                 }
@@ -730,20 +819,53 @@ public final class CoverageShells {
                 }
                 through *= kept;
             }
-            lost += 1 - through;
+            lost[set] += weight * (1 - through);
+            weights[set] += weight;
         }
         final float[] out = new float[MaterialAverages.VALUES];
         for (int k = 0; k < MaterialAverages.SPECULAR; ++k) {
             out[k] = seen > 0 ? (float) (look[k] / seen) : 0;
         }
         // Nearly covering is covering, so the shells behind lose to the depth test
-        final double coverage = lost / RAYS;
-        out[MaterialAverages.SPECULAR] = (float) (coverage >= OPAQUE_ENOUGH ? 1 : coverage);
+        out[MaterialAverages.SPECULAR] = (float) snap(weights[0] > 0 ? lost[0] / weights[0] : 0);
+        final double grazing = snap(weights[1] > 0 ? lost[1] / weights[1] : 0);
         double tallied = 0;
         for (double w : materials.values()) {
             tallied += w;
         }
-        return new Seen(out, tallied > 0 ? (float) (shade / tallied) : 1, materials);
+        return new Seen(
+                out, (float) grazing, tallied > 0 ? (float) (shade / tallied) : 1, materials);
+    }
+
+    /**
+     * A coverage, nearly covering taken as covering.
+     *
+     * @param coverage The coverage.
+     * @return It, or 1.
+     */
+    private static double snap(double coverage) {
+        return coverage >= OPAQUE_ENOUGH ? 1 : coverage;
+    }
+
+    /**
+     * The fraction of a number.
+     *
+     * @param value The number.
+     * @return It less its floor.
+     */
+    private static double fraction(double value) {
+        return value - Math.floor(value);
+    }
+
+    /**
+     * One point less another.
+     *
+     * @param a The point.
+     * @param b The other.
+     * @return a - b.
+     */
+    private static double[] minus(double @NonNull [] a, double @NonNull [] b) {
+        return new double[] {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
     }
 
     /** The x axis. */

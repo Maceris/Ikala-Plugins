@@ -141,6 +141,14 @@ const uint FLAG_SHELL = 16;
 const uint FLAG_NAMED = 32;
 // The specular a coverage volume shell's corners get, whose specular byte holds their coverage
 const float SHELL_SPECULAR = 0.5;
+// Where a shell corner's two coverages hold, by the cosine of the angle the camera sees it at:
+// straight in, about the middle of CoverageShells' straight rays, and grazing, its grazing rays'
+const float SHELL_STRAIGHT_COS = 0.966;
+const float SHELL_GRAZING_COS = 0.259;
+// A snorm16's largest value, and the low bits of a shell corner's normal holding half its grazing
+// coverage, see Attributes.shellNormal
+const float SNORM16_MAX = 32767.0;
+const int GRAZING_MASK = 15;
 
 // Undo the octahedral folding BakedVertex.octahedral does
 vec3 fromOctahedral(vec2 e)
@@ -200,10 +208,20 @@ void main()
             outTextCoord = vec2(look.a, more.z);
             // A coverage volume shell's corner: its coverage in place of the specular, see
             // Attributes.shell, for scene.frag's hashed alpha test; z is 2 for a model's, which
-            // names its material and carries only its shade, in the color's red
-            outBitangent = (materialFlags.y & FLAG_SHELL) != 0
-                ? vec3(SHELL_SPECULAR, more.w, (materialFlags.y & FLAG_NAMED) != 0 ? 2.0 : 1.0)
-                : vec3(more.w, 0.0, 0.0);
+            // names its material and carries only its shade, in the color's red. The coverage is
+            // blended from looking straight in to grazing by how the camera sees the corner.
+            if ((materialFlags.y & FLAG_SHELL) != 0) {
+                ivec2 raw = ivec2(round(normalOct * SNORM16_MAX));
+                float grazing = float((raw.x & GRAZING_MASK) | ((raw.y & GRAZING_MASK) << 4))
+                    / 255.0;
+                float facing = abs(dot(normal, normalize(render)));
+                float coverage = mix(grazing, more.w, clamp((facing - SHELL_GRAZING_COS)
+                    / (SHELL_STRAIGHT_COS - SHELL_GRAZING_COS), 0.0, 1.0));
+                outBitangent = vec3(SHELL_SPECULAR, coverage,
+                    (materialFlags.y & FLAG_NAMED) != 0 ? 2.0 : 1.0);
+            } else {
+                outBitangent = vec3(more.w, 0.0, 0.0);
+            }
             outViewPosition = vec4(0.0, 0.0, 0.0, 2.0);
         } else {
             outTextCoord = texCoord;

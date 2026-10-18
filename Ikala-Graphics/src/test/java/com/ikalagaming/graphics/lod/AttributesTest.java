@@ -126,6 +126,32 @@ class AttributesTest {
      * spans more than half; a small one beside the seam whose u went from one end to the other
      * would take attributes from the wrong side.
      */
+    /**
+     * A shell corner's grazing coverage rides in its normal's low bits and comes back to the byte,
+     * moving the normal by no more than those bits, and never to -32768 at the octahedron's edge.
+     */
+    @Test
+    void testShellNormalsCarryGrazingCoverage() {
+        final float[][] normals = {
+            {0, 0, 1}, {0, 0, -1}, {1, 0, 0}, {-1, 0, 0}, {0, -1, 0}, {0.3f, -0.8f, 0.52f}
+        };
+        for (float[] normal : normals) {
+            for (int g = 0; g <= 255; g += 17) {
+                final float grazing = g / 255f;
+                final int[] out = new int[Attributes.VALUES];
+                Attributes.shell(normal, new float[MaterialAverages.VALUES], 1, grazing, out, 0);
+                assertEquals(grazing, Attributes.grazingOf(out, 0), 1e-6);
+                final int plain = Attributes.encodeDirection(normal);
+                for (int half = 0; half < 2; ++half) {
+                    final short a = (short) (out[0] >>> (16 * half));
+                    final short b = (short) (plain >>> (16 * half));
+                    assertTrue(Math.abs(a - b) <= 2 * 15, a + " against " + b);
+                    assertTrue(a != Short.MIN_VALUE, "A snorm16 of -32768");
+                }
+            }
+        }
+    }
+
     @Test
     void testAttributesSurviveSimplification() {
         final LodDag dag = DagBuilder.build(java.util.List.of(sphere()), OPTIONS);

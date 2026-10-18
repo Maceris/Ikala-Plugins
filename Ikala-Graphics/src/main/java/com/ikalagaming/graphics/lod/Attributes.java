@@ -85,6 +85,20 @@ public final class Attributes {
     private static final int AXES = 3;
 
     /**
+     * The low bits of each half of a shell corner's normal, which hold half its grazing coverage.
+     */
+    private static final int GRAZING_MASK = 0xF;
+
+    /** Bits in each half of the grazing coverage. */
+    private static final int GRAZING_BITS = 4;
+
+    /**
+     * The most a shell corner's normal's snorm16s reach either way, so setting their low bits never
+     * makes one -32768, which reads as -1 as -32767 does and so wouldn't round trip.
+     */
+    private static final int SHELL_SNORM = Short.MAX_VALUE - GRAZING_MASK;
+
+    /**
      * Read one baked vertex's attributes.
      *
      * @param vertices The baked vertices, little endian.
@@ -173,7 +187,8 @@ public final class Attributes {
      * @param normal The normal; it needn't be unit length, but mustn't be zero.
      * @param average Its {@link MaterialAverages#VALUES} values, its color linear; the specular is
      *     ignored.
-     * @param coverage How much of the light it stops, 0 to 1.
+     * @param coverage How much of the light it stops looking straight in, 0 to 1.
+     * @param grazing How much it stops seen at a grazing angle, 0 to 1, see {@link #shellNormal}.
      * @param out Where the corner goes.
      * @param at Where in it.
      */
@@ -181,9 +196,11 @@ public final class Attributes {
             float @NonNull [] normal,
             float @NonNull [] average,
             float coverage,
+            float grazing,
             int @NonNull [] out,
             int at) {
         averaged(normal, average, out, at);
+        out[at + NORMAL] = shellNormal(normal, grazing);
         out[at + UV] =
                 SHELL_UV
                         | toByte(average[MaterialAverages.METALLIC]) << SHORT_BITS
@@ -198,15 +215,58 @@ public final class Attributes {
      *
      * @param normal The normal; it needn't be unit length, but mustn't be zero.
      * @param shade Its shade, 0 to 1.
-     * @param coverage How much of the light it stops, 0 to 1.
+     * @param coverage How much of the light it stops looking straight in, 0 to 1.
+     * @param grazing How much it stops seen at a grazing angle, 0 to 1, see {@link #shellNormal}.
      * @param out Where the corner goes.
      * @param at Where in it.
      */
     public static void namedShell(
-            float @NonNull [] normal, float shade, float coverage, int @NonNull [] out, int at) {
-        out[at + NORMAL] = encodeDirection(normal);
+            float @NonNull [] normal,
+            float shade,
+            float coverage,
+            float grazing,
+            int @NonNull [] out,
+            int at) {
+        out[at + NORMAL] = shellNormal(normal, grazing);
         out[at + TANGENT] = toByte(shade);
         out[at + UV] = NAMED_SHELL_UV | toByte(coverage) << (SHORT_BITS + BYTE_BITS);
+    }
+
+    /**
+     * A shell corner's normal, with its grazing coverage in the low bits of its two snorm16s, four
+     * each: they move the normal by under a hundredth of a degree, so it reads as any normal does,
+     * and scene_lod.vert gets the bits back from the values it reads.
+     *
+     * @param normal The normal; it needn't be unit length, but mustn't be zero.
+     * @param grazing How much the corner stops seen at a grazing angle, 0 to 1.
+     * @return The packed normal.
+     */
+    static int shellNormal(float @NonNull [] normal, float grazing) {
+        final float[] encoded = new float[2];
+        BakedVertex.octahedral(normal[0], normal[1], normal[2], encoded);
+        final int bits = toByte(grazing);
+        final int x =
+                (Math.clamp(BakedVertex.snorm16(encoded[0]), -SHELL_SNORM, SHELL_SNORM)
+                                & ~GRAZING_MASK)
+                        | (bits & GRAZING_MASK);
+        final int y =
+                (Math.clamp(BakedVertex.snorm16(encoded[1]), -SHELL_SNORM, SHELL_SNORM)
+                                & ~GRAZING_MASK)
+                        | (bits >>> GRAZING_BITS);
+        return (x & LOW_16) | (y << SHORT_BITS);
+    }
+
+    /**
+     * A shell corner's grazing coverage, see {@link #shellNormal}.
+     *
+     * @param attributes Corners' ints.
+     * @param at Where the corner starts.
+     * @return How much it stops seen at a grazing angle, 0 to 1.
+     */
+    public static float grazingOf(int @NonNull [] attributes, int at) {
+        final int normal = attributes[at + NORMAL];
+        return fromByte(
+                (normal & GRAZING_MASK) | ((normal >>> SHORT_BITS) & GRAZING_MASK) << GRAZING_BITS);
     }
 
     /**
