@@ -93,7 +93,9 @@ class CoverageShellsTest {
         for (int i = 0; i < 8; ++i) {
             cube[i] = new long[] {i & 1, (i >> 1) & 1, (i >> 2) & 1};
         }
-        assertEquals(12, CoverageShells.ConvexHull.of(cube, 1).size());
+        final List<int[]> cubeFaces = CoverageShells.ConvexHull.of(cube, 1);
+        assertEquals(12, cubeFaces.size());
+        assertEquals(1, CoverageShells.ConvexHull.held(cube, cubeFaces), 1e-9);
     }
 
     /**
@@ -193,17 +195,17 @@ class CoverageShellsTest {
         for (int x = 0; x < 2 * side; ++x) {
             final long voxel = CoverageVolume.key(x, side / 2, side / 2);
             final double sum =
-                    CoverageShells.shareOf(voxel, low, both)
-                            + CoverageShells.shareOf(voxel, high, both);
+                    CoverageShells.shareOf(voxel, low, both, side)
+                            + CoverageShells.shareOf(voxel, high, both, side);
             assertEquals(1, sum, 1e-9, "Shares at x = " + x);
         }
         // Next to the plane between them, each takes some of the other's voxels
         final long acrossPlane = CoverageVolume.key(side, side / 2, side / 2);
-        final double taken = CoverageShells.shareOf(acrossPlane, low, both);
+        final double taken = CoverageShells.shareOf(acrossPlane, low, both, side);
         assertTrue(taken > 0 && taken < 0.5, "The low brick takes " + taken);
         // Alone, a brick takes all of its voxels, even near its planes
         final long edge = CoverageVolume.key(side - 1, side / 2, side / 2);
-        assertEquals(1, CoverageShells.shareOf(edge, low, Set.of(low)), 1e-9);
+        assertEquals(1, CoverageShells.shareOf(edge, low, Set.of(low), side), 1e-9);
     }
 
     /**

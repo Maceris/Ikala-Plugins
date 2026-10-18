@@ -50,8 +50,20 @@ public final class CoverageShells {
     /** How far apart samples along a ray are, in voxels. */
     private static final double STEP = 0.5;
 
-    /** How far past its brick a hull wraps its neighbors' voxels, in voxels. */
-    private static final int MARGIN = 2;
+    /** The largest pieces a group is split into for its hulls, a brick, in voxels a side. */
+    private static final int LARGEST_PIECE = CoverageBricks.SIDE;
+
+    /** The smallest pieces, in voxels a side. */
+    private static final int SMALLEST_PIECE = 4;
+
+    /** How far past its piece a hull wraps its neighbors' voxels, as a share of its side. */
+    private static final int MARGIN_SHARE = 4;
+
+    /**
+     * How much of its pieces' hulls a group's voxels must fill for it not to be split finer: below
+     * this, its hulls stretch across gaps it has, which they would cover.
+     */
+    private static final double MIN_FILL = 0.25;
 
     /** How much a corner must cover to be taken as covering all, see CoverageVoxelizer. */
     private static final double OPAQUE_ENOUGH = 0.9;
@@ -111,24 +123,26 @@ public final class CoverageShells {
         final List<Integer> materials = new ArrayList<>();
         final double[] share = new double[volume.size()];
         for (int[] component : components(volume)) {
-            // A hull for each brick's share of the group, so the shell follows its outline,
-            // wrapping a little of its neighbors' too, so its faces don't lie along the bricks'
-            // planes, where coverage would step from one hull to the next
-            final List<int[]> pieces = pieces(volume, component);
-            final Set<Long> bricks = new HashSet<>();
-            for (int[] piece : pieces) {
-                bricks.add(brickOf(volume.keyOf(piece[0])));
-            }
-            for (int[] piece : pieces) {
-                final long brick = brickOf(volume.keyOf(piece[0]));
-                final int[] wrapped = wrapped(volume, component, piece);
-                for (int v : wrapped) {
-                    share[v] = shareOf(volume.keyOf(v), brick, bricks);
+            // Hulls of smaller pieces while the group's voxels fill little of its hulls, as a
+            // sparse canopy does, so they don't stretch across its gaps
+            for (int side = LARGEST_PIECE; ; side /= 2) {
+                final int start = corners.size();
+                final double hulls =
+                        hulls(
+                                volume,
+                                named,
+                                component,
+                                side,
+                                share,
+                                corners,
+                                attributes,
+                                materials);
+                if (side / 2 < SMALLEST_PIECE || component.length >= MIN_FILL * hulls) {
+                    break;
                 }
-                hull(volume, named, wrapped, share, corners, attributes, materials);
-                for (int v : wrapped) {
-                    share[v] = 0;
-                }
+                corners.subList(start, corners.size()).clear();
+                attributes.subList(start, attributes.size()).clear();
+                materials.subList(start, materials.size()).clear();
             }
         }
         final float[] allCorners = new float[corners.size() * TRIANGLE_VALUES];
@@ -150,16 +164,61 @@ public final class CoverageShells {
     }
 
     /**
-     * A group's voxels split by the brick of {@link CoverageBricks#SIDE} cubed voxels they are in.
+     * Add a group's hulls, one for each piece's share of it, so the shell follows its outline, each
+     * wrapping a little of its neighbors' too, so its faces don't lie along the pieces' planes,
+     * where coverage would step from one hull to the next.
+     *
+     * @param volume The volume.
+     * @param named Whether its corners name materials.
+     * @param group The group's voxels.
+     * @param side The pieces' side, in voxels.
+     * @param share Each voxel's share for a hull, all zero, and left so.
+     * @param corners Receives the triangles' corners.
+     * @param attributes Receives the triangles' attributes.
+     * @param materials Receives the triangles' materials.
+     * @return How much the hulls hold, in cubed voxels.
+     */
+    private static double hulls(
+            @NonNull CoverageVolume volume,
+            boolean named,
+            int @NonNull [] group,
+            int side,
+            double @NonNull [] share,
+            @NonNull List<float[]> corners,
+            @NonNull List<int[]> attributes,
+            @NonNull List<Integer> materials) {
+        final List<int[]> pieces = pieces(volume, group, side);
+        final Set<Long> cells = new HashSet<>();
+        for (int[] piece : pieces) {
+            cells.add(pieceOf(volume.keyOf(piece[0]), side));
+        }
+        double held = 0;
+        for (int[] piece : pieces) {
+            final long cell = pieceOf(volume.keyOf(piece[0]), side);
+            final int[] wrapped = wrapped(volume, group, piece, side);
+            for (int v : wrapped) {
+                share[v] = shareOf(volume.keyOf(v), cell, cells, side);
+            }
+            held += hull(volume, named, wrapped, share, corners, attributes, materials);
+            for (int v : wrapped) {
+                share[v] = 0;
+            }
+        }
+        return held;
+    }
+
+    /**
+     * A group's voxels split by the cube of some side they are in.
      *
      * @param volume The volume.
      * @param group The group's voxels.
-     * @return Each brick's share of them.
+     * @param side The cubes' side, in voxels.
+     * @return Each cube's share of them.
      */
-    static List<int[]> pieces(@NonNull CoverageVolume volume, int @NonNull [] group) {
+    static List<int[]> pieces(@NonNull CoverageVolume volume, int @NonNull [] group, int side) {
         final Map<Long, List<Integer>> byBrick = new java.util.LinkedHashMap<>();
         for (int v : group) {
-            byBrick.computeIfAbsent(brickOf(volume.keyOf(v)), k -> new ArrayList<>()).add(v);
+            byBrick.computeIfAbsent(pieceOf(volume.keyOf(v), side), k -> new ArrayList<>()).add(v);
         }
         final List<int[]> out = new ArrayList<>(byBrick.size());
         for (List<Integer> piece : byBrick.values()) {
@@ -169,31 +228,43 @@ public final class CoverageShells {
     }
 
     /**
-     * The brick a voxel is in.
+     * The piece a voxel is in.
      *
      * @param key The voxel's key.
-     * @return The brick's key, in bricks.
+     * @param side The pieces' side, in voxels.
+     * @return The piece's key, in pieces.
      */
-    static long brickOf(long key) {
+    static long pieceOf(long key, int side) {
         return CoverageVolume.key(
-                CoverageVolume.coordinate(key, 0) / CoverageBricks.SIDE,
-                CoverageVolume.coordinate(key, 1) / CoverageBricks.SIDE,
-                CoverageVolume.coordinate(key, 2) / CoverageBricks.SIDE);
+                CoverageVolume.coordinate(key, 0) / side,
+                CoverageVolume.coordinate(key, 1) / side,
+                CoverageVolume.coordinate(key, 2) / side);
     }
 
     /**
-     * How much of a voxel a brick's hull takes: all of it well inside the brick, tapering to none
-     * {@link #MARGIN} voxels past it, shared with the neighboring bricks' hulls so the shares add
-     * to one. A ray across the margin then crosses both hulls and loses the voxel's light once
-     * between them, so there is neither a seam along the brick's plane nor a double layer over it.
+     * How far past its piece a hull wraps its neighbors' voxels.
+     *
+     * @param side The pieces' side, in voxels.
+     * @return The margin, in voxels.
+     */
+    private static int marginOf(int side) {
+        return Math.max(1, side / MARGIN_SHARE);
+    }
+
+    /**
+     * How much of a voxel a piece's hull takes: all of it well inside the piece, tapering to none
+     * its margin past it, shared with the neighboring pieces' hulls so the shares add to one. A ray
+     * across the margin then crosses both hulls and loses the voxel's light once between them, so
+     * there is neither a seam along the piece's plane nor a double layer over it.
      *
      * @param key The voxel's key.
-     * @param brick The brick's key, in bricks.
-     * @param bricks The bricks with hulls in the voxel's group.
-     * @return The brick's share, from 0 to 1.
+     * @param brick The piece's key, in pieces.
+     * @param bricks The pieces with hulls in the voxel's group.
+     * @param side The pieces' side, in voxels.
+     * @return The piece's share, from 0 to 1.
      */
-    static double shareOf(long key, long brick, @NonNull Set<Long> bricks) {
-        final long own = brickOf(key);
+    static double shareOf(long key, long brick, @NonNull Set<Long> bricks, int side) {
+        final long own = pieceOf(key, side);
         double total = 0;
         for (int dx = -1; dx <= 1; ++dx) {
             for (int dy = -1; dy <= 1; ++dy) {
@@ -206,58 +277,57 @@ public final class CoverageShells {
                     }
                     final long near = CoverageVolume.key(x, y, z);
                     if (bricks.contains(near)) {
-                        total += taper(key, near);
+                        total += taper(key, near, side);
                     }
                 }
             }
         }
-        return taper(key, brick) / total;
+        return taper(key, brick, side) / total;
     }
 
     /**
-     * How much a brick holds of a voxel before sharing with its neighbors: one inside, falling
-     * evenly to none across {@link #MARGIN} voxels either side of each of its planes, so two
-     * neighbors' holds add to one across the plane between them.
+     * How much a piece holds of a voxel before sharing with its neighbors: one inside, falling
+     * evenly to none across its margin either side of each of its planes, so two neighbors' holds
+     * add to one across the plane between them.
      *
      * @param key The voxel's key.
-     * @param brick The brick's key, in bricks.
-     * @return The brick's hold, from 0 to 1.
+     * @param brick The piece's key, in pieces.
+     * @param side The pieces' side, in voxels.
+     * @return The piece's hold, from 0 to 1.
      */
-    private static double taper(long key, long brick) {
+    private static double taper(long key, long brick, int side) {
+        final int margin = marginOf(side);
         double out = 1;
         for (int axis = 0; axis < AXES; ++axis) {
             final double at =
                     CoverageVolume.coordinate(key, axis)
                             + 0.5
-                            - (double) CoverageVolume.coordinate(brick, axis) * CoverageBricks.SIDE;
-            out *=
-                    Math.clamp(
-                            Math.min(at + MARGIN, CoverageBricks.SIDE + MARGIN - at) / (2 * MARGIN),
-                            0,
-                            1);
+                            - (double) CoverageVolume.coordinate(brick, axis) * side;
+            out *= Math.clamp(Math.min(at + margin, side + margin - at) / (2 * margin), 0, 1);
         }
         return out;
     }
 
     /**
-     * A brick's share of a group and the group's voxels within {@link #MARGIN} voxels around the
-     * brick, which its hull wraps.
+     * A piece's share of a group and the group's voxels within its margin around the piece, which
+     * its hull wraps.
      *
      * @param volume The volume.
      * @param group The group's voxels.
-     * @param piece The brick's share of them.
+     * @param piece The piece's share of them.
+     * @param side The pieces' side, in voxels.
      * @return The voxels to wrap.
      */
     private static int[] wrapped(
-            @NonNull CoverageVolume volume, int @NonNull [] group, int @NonNull [] piece) {
+            @NonNull CoverageVolume volume,
+            int @NonNull [] group,
+            int @NonNull [] piece,
+            int side) {
+        final int margin = marginOf(side);
         final long first = volume.keyOf(piece[0]);
         final int[] low = new int[AXES];
         for (int axis = 0; axis < AXES; ++axis) {
-            low[axis] =
-                    CoverageVolume.coordinate(first, axis)
-                                    / CoverageBricks.SIDE
-                                    * CoverageBricks.SIDE
-                            - MARGIN;
+            low[axis] = CoverageVolume.coordinate(first, axis) / side * side - margin;
         }
         final List<Integer> out = new ArrayList<>();
         for (int v : group) {
@@ -265,7 +335,7 @@ public final class CoverageShells {
             boolean near = true;
             for (int axis = 0; axis < AXES && near; ++axis) {
                 final int at = CoverageVolume.coordinate(key, axis);
-                near = at >= low[axis] && at < low[axis] + CoverageBricks.SIDE + 2 * MARGIN;
+                near = at >= low[axis] && at < low[axis] + side + 2 * margin;
             }
             if (near) {
                 out.add(v);
@@ -332,8 +402,9 @@ public final class CoverageShells {
      * @param corners Receives its triangles' corners.
      * @param attributes Receives its triangles' attributes.
      * @param materials Receives its triangles' materials.
+     * @return How much the hull holds, in cubed voxels.
      */
-    private static void hull(
+    private static double hull(
             @NonNull CoverageVolume volume,
             boolean named,
             int @NonNull [] group,
@@ -344,7 +415,7 @@ public final class CoverageShells {
         final long[][] points = hullPoints(volume, group);
         final List<int[]> faces = ConvexHull.of(points, SEED);
         if (faces.isEmpty()) {
-            return;
+            return 0;
         }
         // Each hull corner's normal, its faces' normals weighted by their area
         final List<double[]> positions = new ArrayList<>();
@@ -417,6 +488,7 @@ public final class CoverageShells {
             attributes.add(own);
             materials.add(named ? mainMaterial(cornerSeen, face) : 0);
         }
+        return ConvexHull.held(points, faces);
     }
 
     /**
@@ -860,6 +932,27 @@ public final class CoverageShells {
             final long[] pa = points[a];
             final long[] pp = points[p];
             return n[0] * (pp[0] - pa[0]) + n[1] * (pp[1] - pa[1]) + n[2] * (pp[2] - pa[2]);
+        }
+
+        /**
+         * How much a hull holds: the sum of the tetrahedra from the origin to its faces.
+         *
+         * @param points The points.
+         * @param faces The hull's faces, facing out.
+         * @return Its volume, in the points' units cubed.
+         */
+        static double held(long @NonNull [] @NonNull [] points, @NonNull List<int[]> faces) {
+            long six = 0;
+            for (int[] f : faces) {
+                final long[] a = points[f[0]];
+                final long[] b = points[f[1]];
+                final long[] c = points[f[2]];
+                six +=
+                        a[0] * (b[1] * c[2] - b[2] * c[1])
+                                + a[1] * (b[2] * c[0] - b[0] * c[2])
+                                + a[2] * (b[0] * c[1] - b[1] * c[0]);
+            }
+            return Math.abs(six) / 6.0;
         }
 
         /**
