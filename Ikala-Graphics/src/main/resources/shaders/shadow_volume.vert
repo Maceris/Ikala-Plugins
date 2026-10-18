@@ -7,7 +7,7 @@
 layout(location = 0) in ivec3 position;  // grid steps from the world's origin
 layout(location = 1) in float voxelSize; // the brick's voxel size, in the model's units
 layout(location = 2) in uint corner;     // which corner of the box: bits x, y, z from the lowest
-layout(location = 3) in uint slot;       // the brick's slot in the brick table
+layout(location = 3) in uint slot;       // where the brick starts in the brick table, in words
 
 // Where the fragment is, in render space: from the camera, in the world's axes
 layout(location = 0) out vec3 outRender;

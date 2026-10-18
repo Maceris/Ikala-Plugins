@@ -2,6 +2,7 @@
 #extension GL_EXT_buffer_reference : require
 #extension GL_GOOGLE_include_directive : require
 
+#include "coverage_bricks.glsl"
 #include "roughening.glsl"
 
 // Coverage volumes, see CoverageVolume and CoverageBricks: each fragment of a brick's box walks
@@ -37,11 +38,6 @@ layout(set = 0, binding = 0) uniform Uniforms {
     mat4 viewMatrix;
 };
 
-// A brick: a header (x: voxel size bits), then its voxels, x fastest, see CoverageBricks
-layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Bricks {
-    uvec4 words[];
-};
-
 layout(push_constant) uniform SceneConstants {
     layout(offset = 24) uint frame;
     uint debugSources;
@@ -49,8 +45,7 @@ layout(push_constant) uniform SceneConstants {
 };
 
 // Match CoverageBricks
-const int SIDE = 8;
-const uint WORDS_PER_BRICK = 1u + uint(SIDE * SIDE * SIDE);
+const int SIDE = BRICK_SIDE;
 // The most voxels a ray crosses in a brick
 const int MAX_STEPS = 3 * SIDE;
 // The specular a volume's surfaces get, as materials' default
@@ -161,12 +156,11 @@ void main()
     vec3 next = (vec3(voxel) + max(vec3(step), vec3(0.0)) - localOrigin) * inverse;
     // The microflakes' facing is in the model's axes
     vec3 modelDirection = unrotate(outTurn, direction);
-    uint base = outSlot * WORDS_PER_BRICK + 1u;
     float depth = 0.0;
     float t = enter;
     for (int i = 0; i < MAX_STEPS; ++i) {
         float exit = min(min(next.x, next.y), min(next.z, leave));
-        uvec4 data = bricks.words[base + uint(voxel.x + SIDE * (voxel.y + SIDE * voxel.z))];
+        uvec4 data = brickVoxel(bricks, outSlot, voxel.x + SIDE * (voxel.y + SIDE * voxel.z));
         float density = unpackHalf2x16(data.x).x;
         if (density > 0.0) {
             mat3 S = sggx(data);

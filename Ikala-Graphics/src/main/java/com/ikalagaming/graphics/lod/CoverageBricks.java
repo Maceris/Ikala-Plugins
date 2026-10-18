@@ -11,13 +11,17 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * A {@link CoverageVolume} laid out for the GPU: dense bricks of {@value #SIDE} cubed voxels
- * covering its sparse voxels, each drawn as a box whose fragments walk it, see {@code
- * scene_volume.frag}. A brick is a header then its voxels, x fastest:
+ * A {@link CoverageVolume} laid out for the GPU: bricks of {@value #SIDE} cubed voxels covering its
+ * sparse voxels, each drawn as a box whose fragments walk it, see {@code scene_volume.frag}. Few of
+ * a brick's voxels hold anything (a few percent, as volumes stand for scattered fine parts), so a
+ * brick keeps only those, in order, after a mask of which they are. A brick is words of four uints:
  *
  * <pre>
- * header  float voxel size, three unused floats
- * voxel   uint density (half float, low 16 bits), roughness (byte), metalness (byte)
+ * header  float voxel size; how many voxels the mask's first quarter holds (low 16 bits) and its
+ *         first half (high 16 bits); how many its first three quarters hold; unused
+ * mask    4 words, 512 bits: whether each voxel holds anything, x fastest, bit i of uint i / 32
+ * voxel   one word for each voxel the mask holds, in order:
+ *         uint density (half float, low 16 bits), roughness (byte), metalness (byte)
  *         uint color, sRGB encoded, red in the low byte
  *         uint SGGX sigma x, y, z (bytes, 0 to 1), r xy (byte, -1 to 1)
  *         uint SGGX r xz, r yz (bytes, -1 to 1)
@@ -35,14 +39,23 @@ public final class CoverageBricks {
     /** Voxels in a brick. */
     public static final int VOXELS = SIDE * SIDE * SIDE;
 
-    /** Bytes a voxel takes. */
-    public static final int VOXEL_BYTES = 4 * Integer.BYTES;
+    /** Bytes a word takes: the header, a quarter of the mask, or a voxel. */
+    public static final int WORD_BYTES = 4 * Integer.BYTES;
 
-    /** Bytes the header takes. */
-    public static final int HEADER_BYTES = 4 * Integer.BYTES;
+    /** Words of a brick before its voxels: the header, then the mask. */
+    public static final int HEAD_WORDS = 5;
 
-    /** Bytes a brick takes. */
-    public static final int BRICK_BYTES = HEADER_BYTES + VOXELS * VOXEL_BYTES;
+    /** Bits in a uint of the mask. */
+    private static final int MASK_BITS = Integer.SIZE;
+
+    /** Uints in the mask. */
+    private static final int MASK_INTS = VOXELS / MASK_BITS;
+
+    /** Voxels in a quarter of the mask, one word of it. */
+    private static final int QUARTER = VOXELS / 4;
+
+    /** Where the mask starts, in bytes. */
+    private static final int MASK_START = WORD_BYTES;
 
     /** Coordinates in a position. */
     private static final int AXES = 3;
@@ -69,9 +82,18 @@ public final class CoverageBricks {
      * @param x Its lowest voxel's x on the volume's grid, a multiple of {@link #SIDE}.
      * @param y Its lowest voxel's y.
      * @param z Its lowest voxel's z.
-     * @param data Its {@link #BRICK_BYTES} bytes, little endian.
+     * @param data Its words, little endian.
      */
-    public record Brick(int x, int y, int z, @NonNull ByteBuffer data) {}
+    public record Brick(int x, int y, int z, @NonNull ByteBuffer data) {
+        /**
+         * How many words it takes.
+         *
+         * @return The count.
+         */
+        public int words() {
+            return data.capacity() / WORD_BYTES;
+        }
+    }
 
     /**
      * Lay a volume out in bricks.
@@ -80,8 +102,13 @@ public final class CoverageBricks {
      * @return Its bricks, in the order their voxels first come.
      */
     public static List<Brick> of(@NonNull CoverageVolume volume) {
-        final Map<Long, Brick> bricks = new LinkedHashMap<>();
+        // Each brick's voxels that hold anything, by their place in it
+        final Map<Long, int[]> corners = new LinkedHashMap<>();
+        final Map<Long, java.util.TreeMap<Integer, Integer>> held = new LinkedHashMap<>();
         for (int v = 0; v < volume.size(); ++v) {
+            if (isEmpty(volume, v)) {
+                continue;
+            }
             final long key = volume.keyOf(v);
             final int x = CoverageVolume.coordinate(key, 0);
             final int y = CoverageVolume.coordinate(key, 1);
@@ -89,20 +116,54 @@ public final class CoverageBricks {
             final int bx = x / SIDE * SIDE;
             final int by = y / SIDE * SIDE;
             final int bz = z / SIDE * SIDE;
-            final Brick brick =
-                    bricks.computeIfAbsent(
-                            CoverageVolume.key(bx, by, bz),
-                            k -> {
-                                final ByteBuffer data =
-                                        ByteBuffer.allocate(BRICK_BYTES)
-                                                .order(ByteOrder.LITTLE_ENDIAN);
-                                data.putFloat(0, (float) volume.voxelSize());
-                                return new Brick(bx, by, bz, data);
-                            });
+            final long brick = CoverageVolume.key(bx, by, bz);
+            corners.computeIfAbsent(brick, k -> new int[] {bx, by, bz});
             final int local = (x - bx) + SIDE * ((y - by) + SIDE * (z - bz));
-            putVoxel(volume, v, brick.data(), HEADER_BYTES + local * VOXEL_BYTES);
+            held.computeIfAbsent(brick, k -> new java.util.TreeMap<>()).put(local, v);
         }
-        return new ArrayList<>(bricks.values());
+        final List<Brick> out = new ArrayList<>(held.size());
+        for (Map.Entry<Long, java.util.TreeMap<Integer, Integer>> entry : held.entrySet()) {
+            final java.util.TreeMap<Integer, Integer> voxels = entry.getValue();
+            final ByteBuffer data =
+                    ByteBuffer.allocate((HEAD_WORDS + voxels.size()) * WORD_BYTES)
+                            .order(ByteOrder.LITTLE_ENDIAN);
+            final int[] mask = new int[MASK_INTS];
+            final int[] before = new int[4];
+            int rank = 0;
+            for (Map.Entry<Integer, Integer> voxel : voxels.entrySet()) {
+                final int local = voxel.getKey();
+                mask[local / MASK_BITS] |= 1 << (local % MASK_BITS);
+                for (int quarter = local / QUARTER + 1; quarter < before.length; ++quarter) {
+                    ++before[quarter];
+                }
+                putVoxel(volume, voxel.getValue(), data, (HEAD_WORDS + rank) * WORD_BYTES);
+                ++rank;
+            }
+            data.putFloat(0, (float) volume.voxelSize());
+            data.putInt(Integer.BYTES, before[1] | before[2] << Short.SIZE);
+            data.putInt(2 * Integer.BYTES, before[3]);
+            for (int i = 0; i < MASK_INTS; ++i) {
+                data.putInt(MASK_START + i * Integer.BYTES, mask[i]);
+            }
+            final int[] corner = corners.get(entry.getKey());
+            out.add(new Brick(corner[0], corner[1], corner[2], data));
+        }
+        return out;
+    }
+
+    /**
+     * Whether a voxel stops no light, which a brick leaves out.
+     *
+     * @param volume The volume.
+     * @param v The voxel.
+     * @return True if it is empty.
+     */
+    private static boolean isEmpty(@NonNull CoverageVolume volume, int v) {
+        double largest = 0;
+        for (int axis = 0; axis < AXES; ++axis) {
+            largest = Math.max(largest, volume.sggx(v, axis));
+        }
+        return largest <= 0 || volume.density(v) <= 0;
     }
 
     /**
@@ -185,16 +246,16 @@ public final class CoverageBricks {
     }
 
     /**
-     * A volume's bricks as boxes to draw, each brick's corners carrying its slot in the brick table
-     * and which corner they are, see {@link LodVertex#putVolume}.
+     * A volume's bricks as boxes to draw, each brick's corners carrying where it starts in the
+     * brick table, in words, and which corner they are, see {@link LodVertex#putVolume}.
      *
      * @param volume The volume.
      * @param bricks Its bricks.
-     * @param slots Each brick's slot in the brick table.
+     * @param offsets Where each brick starts in the brick table, in words.
      * @return The boxes.
      */
     public static ClusterMeshes.Mesh mesh(
-            @NonNull CoverageVolume volume, @NonNull List<Brick> bricks, int @NonNull [] slots) {
+            @NonNull CoverageVolume volume, @NonNull List<Brick> bricks, int @NonNull [] offsets) {
         final ByteBuffer vertices =
                 ByteBuffer.allocate(bricks.size() * BOX_CORNERS * LodVertex.SIZE)
                         .order(ByteOrder.LITTLE_ENDIAN);
@@ -222,7 +283,7 @@ public final class CoverageBricks {
                         b * BOX_CORNERS + corner,
                         grid,
                         (float) volume.voxelSize(),
-                        slots[b],
+                        offsets[b],
                         corner);
             }
             for (int i = 0; i < BOX_TRIANGLES.length; ++i) {

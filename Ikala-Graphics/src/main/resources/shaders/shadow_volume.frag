@@ -1,5 +1,8 @@
 #version 460
 #extension GL_EXT_buffer_reference : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "coverage_bricks.glsl"
 
 // Coverage volumes in a shadow map: scene_volume.frag's walk, along the direction the map looks,
 // from where the ray enters the brick's box, writing the depth where its stochastic coverage stops
@@ -15,18 +18,13 @@ layout(location = 4) flat in uint outSlot;
 layout(location = 5) flat in vec3 outDirection;
 layout(location = 6) flat in float outDepthStep;
 
-layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Bricks {
-    uvec4 words[];
-};
-
 layout(push_constant) uniform ShadowConstants {
     layout(offset = 88) Bricks bricks;
     uint frame;
 };
 
 // Match CoverageBricks
-const int SIDE = 8;
-const uint WORDS_PER_BRICK = 1u + uint(SIDE * SIDE * SIDE);
+const int SIDE = BRICK_SIDE;
 const int MAX_STEPS = 3 * SIDE;
 // How far past its stop a volume's shadow starts, in voxels
 const float SHADOW_OFFSET = 1.5;
@@ -92,12 +90,11 @@ void main()
     vec3 delta = abs(inverse);
     vec3 next = (vec3(voxel) + max(vec3(step), vec3(0.0)) - localOrigin) * inverse;
     vec3 modelDirection = unrotate(outTurn, direction);
-    uint base = outSlot * WORDS_PER_BRICK + 1u;
     float depth = 0.0;
     float t = enter;
     for (int i = 0; i < MAX_STEPS; ++i) {
         float exit = min(min(next.x, next.y), min(next.z, leave));
-        uvec4 data = bricks.words[base + uint(voxel.x + SIDE * (voxel.y + SIDE * voxel.z))];
+        uvec4 data = brickVoxel(bricks, outSlot, voxel.x + SIDE * (voxel.y + SIDE * voxel.z));
         float density = unpackHalf2x16(data.x).x;
         if (density > 0.0) {
             mat3 S = sggx(data);

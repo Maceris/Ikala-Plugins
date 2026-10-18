@@ -77,7 +77,7 @@ public final class LodVertex {
     /**
      * A corner of a coverage volume's brick box ({@link CoverageBricks}): its normal's bits hold
      * the brick's voxel size as a float, its tangent's which corner of the box it is, and its
-     * texture coordinates' the brick's slot in the brick table.
+     * texture coordinates' where the brick starts in the brick table, in words.
      */
     public static final int FLAG_VOLUME = 1 << 3;
 
@@ -163,7 +163,7 @@ public final class LodVertex {
      * @param index Which vertex it is; it goes at {@code index * SIZE}.
      * @param grid Its position, in grid steps.
      * @param voxelSize The brick's voxel size.
-     * @param slot The brick's slot in the brick table.
+     * @param slot Where the brick starts in the brick table, in words.
      * @param corner Which corner of the box it is, its bits x, y, z from the lowest.
      */
     public static void putVolume(

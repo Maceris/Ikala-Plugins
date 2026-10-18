@@ -135,8 +135,8 @@ public class LodRenderer {
     /** How many counters there are. */
     public static final int COUNTER_COUNT = COUNTER_LEVELS + LEVEL_COUNTERS * COUNTERS_PER_LEVEL;
 
-    /** How many coverage volume bricks the brick table starts with room for. */
-    private static final int INITIAL_BRICKS = 64;
+    /** How many words of coverage volume bricks the brick table starts with room for. */
+    private static final int INITIAL_BRICK_WORDS = 4096;
 
     /** How many clusters the tables start with room for. */
     private static final int INITIAL_CLUSTERS = 1024;
@@ -286,21 +286,22 @@ public class LodRenderer {
     @Getter private final DeviceTable pairs;
 
     /**
-     * The coverage volumes' bricks, see {@link CoverageBricks}, by slot. -- GETTER -- The brick
-     * table.
+     * The coverage volumes' bricks, see {@link CoverageBricks}, word by word, each volume's
+     * together. -- GETTER -- The brick table.
      *
      * @return The table.
      */
     @Getter private final DeviceTable bricks;
 
     /** Brick table entries changed this frame. */
-    private DeviceTable.Entries brickEntries = new DeviceTable.Entries(CoverageBricks.BRICK_BYTES);
+    private DeviceTable.Entries brickEntries = new DeviceTable.Entries(CoverageBricks.WORD_BYTES);
 
-    /** The brick table's slots. */
-    private final Slots brickSlots = new Slots();
+    /** The brick table's words, a range for each registered volume. */
+    private final RangeAllocator brickWords =
+            new RangeAllocator(INITIAL_BRICK_WORDS, Integer.MAX_VALUE);
 
-    /** The brick slots each registered volume mesh holds, given back with it. */
-    private final Map<MeshHandle, int[]> brickSlotsOf = new IdentityHashMap<>();
+    /** Where each registered volume mesh's words start and how many, given back with it. */
+    private final Map<MeshHandle, int[]> brickRangeOf = new IdentityHashMap<>();
 
     /** Pair entries changed this frame, uploaded by {@link #record}. Render thread. */
     private DeviceTable.Entries pairEntries = new DeviceTable.Entries(LodCullMath.PAIR_ENTRY_SIZE);
@@ -759,7 +760,7 @@ public class LodRenderer {
         pairs = new DeviceTable(state, "lod pairs", LodCullMath.PAIR_ENTRY_SIZE, INITIAL_SLOTS);
         bricks =
                 new DeviceTable(
-                        state, "lod volume bricks", CoverageBricks.BRICK_BYTES, INITIAL_BRICKS);
+                        state, "lod volume bricks", CoverageBricks.WORD_BYTES, INITIAL_BRICK_WORDS);
         shadows =
                 state.shadowInvalidation != null
                         ? state.shadowInvalidation
@@ -1437,14 +1438,33 @@ public class LodRenderer {
         }
         // Coverage volumes draw as the boxes of their bricks
         final List<CoverageBricks.Brick> list = CoverageBricks.of(volume);
-        final int[] slots = new int[list.size()];
-        for (int b = 0; b < slots.length; ++b) {
-            slots[b] = brickSlots.take();
-            brickEntries.next(slots[b]).put(list.get(b).data().duplicate().clear());
+        // Its bricks together, each as long as the voxels it holds
+        int words = 0;
+        for (CoverageBricks.Brick brick : list) {
+            words += brick.words();
+        }
+        final int first = brickWords.allocate(words);
+        if (first < 0) {
+            throw new IllegalStateException("No room for " + words + " more brick words");
+        }
+        final int[] offsets = new int[list.size()];
+        int at = first;
+        for (int b = 0; b < offsets.length; ++b) {
+            offsets[b] = at;
+            final ByteBuffer data = list.get(b).data();
+            for (int w = 0; w < list.get(b).words(); ++w) {
+                brickEntries
+                        .next(at + w)
+                        .put(
+                                data.duplicate()
+                                        .position(w * CoverageBricks.WORD_BYTES)
+                                        .limit((w + 1) * CoverageBricks.WORD_BYTES));
+            }
+            at += list.get(b).words();
         }
         final MeshHandle handle =
-                register(state, world.owner, CoverageBricks.mesh(volume, list, slots));
-        brickSlotsOf.put(handle, slots);
+                register(state, world.owner, CoverageBricks.mesh(volume, list, offsets));
+        brickRangeOf.put(handle, new int[] {first, words});
         return handle;
     }
 
@@ -1459,17 +1479,15 @@ public class LodRenderer {
     }
 
     /**
-     * Release a cluster's mesh, and its bricks' slots if it is a volume. Render thread.
+     * Release a cluster's mesh, and its bricks' words if it is a volume. Render thread.
      *
      * @param mesh The mesh.
      */
     private void release(@NonNull MeshHandle mesh) {
         arena.release(mesh);
-        final int[] slots = brickSlotsOf.remove(mesh);
-        if (slots != null) {
-            for (int slot : slots) {
-                brickSlots.give(slot);
-            }
+        final int[] range = brickRangeOf.remove(mesh);
+        if (range != null) {
+            brickWords.free(range[0], range[1]);
         }
     }
 
@@ -2689,7 +2707,7 @@ public class LodRenderer {
                                     (unitSlots.bound() + LodCullMath.BITS_PER_WORD - 1)
                                             / LodCullMath.BITS_PER_WORD));
             final int pairCapacity = Math.max(1, pairRanges.getCapacity());
-            final int brickCapacity = Math.max(1, brickSlots.bound());
+            final int brickCapacity = Math.max(1, brickWords.getCapacity());
             if (!clusters.hasWork(capacity, clusterEntries)
                     && !bricks.hasWork(brickCapacity, brickEntries)
                     && !pairs.hasWork(pairCapacity, pairEntries)
@@ -2719,7 +2737,7 @@ public class LodRenderer {
             historyEntries = new DeviceTable.Entries(WORD_SIZE);
             pairEntries = new DeviceTable.Entries(LodCullMath.PAIR_ENTRY_SIZE);
             brickEntries.free();
-            brickEntries = new DeviceTable.Entries(CoverageBricks.BRICK_BYTES);
+            brickEntries = new DeviceTable.Entries(CoverageBricks.WORD_BYTES);
         }
     }
 
@@ -3071,8 +3089,8 @@ public class LodRenderer {
         clusters.cleanup(state);
         bricks.cleanup(state);
         brickEntries.free();
-        brickEntries = new DeviceTable.Entries(CoverageBricks.BRICK_BYTES);
-        brickSlotsOf.clear();
+        brickEntries = new DeviceTable.Entries(CoverageBricks.WORD_BYTES);
+        brickRangeOf.clear();
         arena.cleanup(state);
     }
 }
