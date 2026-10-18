@@ -58,7 +58,7 @@ public final class LodStore {
      * builder, the simplifier or anything else changes the cells built from the same input, so
      * cached cells from before are rebuilt.
      */
-    public static final int BUILDER_VERSION = 13;
+    public static final int BUILDER_VERSION = 14;
 
     /** How many child cells a parent spans along each axis. */
     private static final int BRANCHING = 2;
@@ -1025,57 +1025,88 @@ public final class LodStore {
             final SectionPos position = positions.get(i);
             hash.putInt(position.x()).putInt(position.y()).putInt(position.z());
             hash.putInt(position.level());
-            final LodMesh mesh = inside.get(i);
-            hash.putDouble(mesh.getLeafError());
-            for (double value : mesh.getOrigin()) {
-                hash.putDouble(value);
-            }
-            hash.putInt(mesh.getVertexCount());
-            for (int v = 0; v < mesh.getVertexCount() * AXES; ++v) {
-                hash.putFloat(mesh.positions[v]);
-            }
-            for (int v = 0; v < mesh.getVertexCount(); ++v) {
-                hash.putInt(mesh.locked[v] ? 1 : 0);
-            }
-            hash.putInt(mesh.getTriangleCount());
-            for (int t = 0; t < mesh.getTriangleCount() * LodMesh.CORNERS; ++t) {
-                hash.putInt(mesh.triangles[t]);
-            }
-            for (int t = 0; t < mesh.getTriangleCount(); ++t) {
-                hash.putInt(mesh.materials[t]);
-                hash.putFloat(mesh.visibility[t]);
-            }
-            final int[] attributes = mesh.attributes;
-            hash.putInt(attributes == null ? 0 : attributes.length);
-            if (attributes != null) {
-                for (int value : attributes) {
-                    hash.putInt(value);
-                }
-            }
+            putMesh(hash, inside.get(i));
         }
         // What the leaves' materials average to, as far-out groups blend it: a changed texture
         // changes them
-        final MaterialAverages averages = options.averages();
-        hash.putInt(averages == null ? 0 : 1);
-        if (averages != null) {
-            final TreeSet<Integer> materials = new TreeSet<>();
-            for (LodMesh mesh : inside) {
-                for (int t = 0; t < mesh.getTriangleCount(); ++t) {
-                    materials.add(mesh.materials[t]);
-                }
+        putAverages(hash, options.averages(), inside);
+        return hash.hex();
+    }
+
+    /**
+     * Feed a mesh to a cache key whole.
+     *
+     * @param hash The key's hash.
+     * @param mesh The mesh.
+     */
+    static void putMesh(@NonNull KeyHash hash, @NonNull LodMesh mesh) {
+        hash.putDouble(mesh.getLeafError());
+        for (double value : mesh.getOrigin()) {
+            hash.putDouble(value);
+        }
+        hash.putInt(mesh.getVertexCount());
+        for (int v = 0; v < mesh.getVertexCount() * AXES; ++v) {
+            hash.putFloat(mesh.positions[v]);
+        }
+        for (int v = 0; v < mesh.getVertexCount(); ++v) {
+            hash.putInt(mesh.locked[v] ? 1 : 0);
+        }
+        hash.putInt(mesh.getTriangleCount());
+        for (int t = 0; t < mesh.getTriangleCount() * LodMesh.CORNERS; ++t) {
+            hash.putInt(mesh.triangles[t]);
+        }
+        for (int t = 0; t < mesh.getTriangleCount(); ++t) {
+            hash.putInt(mesh.materials[t]);
+            hash.putFloat(mesh.visibility[t]);
+        }
+        final int[] attributes = mesh.attributes;
+        hash.putInt(attributes == null ? 0 : attributes.length);
+        if (attributes != null) {
+            for (int value : attributes) {
+                hash.putInt(value);
             }
-            for (int material : materials) {
-                hash.putInt(material);
-                final float[] average = averages.average(material);
-                hash.putInt(average == null ? 0 : average.length);
-                if (average != null) {
-                    for (float value : average) {
-                        hash.putFloat(value);
-                    }
+        }
+    }
+
+    /**
+     * Feed what meshes' materials average to to a cache key.
+     *
+     * @param hash The key's hash.
+     * @param averages The averages, or null.
+     * @param meshes The meshes.
+     */
+    static void putAverages(
+            @NonNull KeyHash hash, MaterialAverages averages, @NonNull List<LodMesh> meshes) {
+        hash.putInt(averages == null ? 0 : 1);
+        if (averages == null) {
+            return;
+        }
+        for (int material : materialsOf(meshes)) {
+            hash.putInt(material);
+            final float[] average = averages.average(material);
+            hash.putInt(average == null ? 0 : average.length);
+            if (average != null) {
+                for (float value : average) {
+                    hash.putFloat(value);
                 }
             }
         }
-        return hash.hex();
+    }
+
+    /**
+     * Every material meshes' triangles have.
+     *
+     * @param meshes The meshes.
+     * @return The materials, in order.
+     */
+    static TreeSet<Integer> materialsOf(@NonNull List<LodMesh> meshes) {
+        final TreeSet<Integer> materials = new TreeSet<>();
+        for (LodMesh mesh : meshes) {
+            for (int t = 0; t < mesh.getTriangleCount(); ++t) {
+                materials.add(mesh.materials[t]);
+            }
+        }
+        return materials;
     }
 
     /**
@@ -1124,7 +1155,7 @@ public final class LodStore {
     }
 
     /** A SHA-256 hash fed values in little endian, through a buffer. */
-    private static final class KeyHash {
+    static final class KeyHash {
         /** Bytes buffered before they go to the digest. */
         private static final int BUFFER = 8192;
 

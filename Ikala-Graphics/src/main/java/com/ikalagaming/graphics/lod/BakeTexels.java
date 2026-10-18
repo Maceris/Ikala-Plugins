@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.lod;
 
 import lombok.NonNull;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -91,6 +92,98 @@ public final class BakeTexels {
         childWeights = new float[texels * 2];
         ownTriangles = new int[texels];
         ownWeights = new float[texels * 2];
+    }
+
+    /**
+     * How many bytes {@link #write} writes.
+     *
+     * @return The size.
+     */
+    int bytes() {
+        final int texels = width * height;
+        return Integer.BYTES * 3
+                + texels * (Integer.BYTES * 3 + Float.BYTES * 4)
+                + splatTexels.length * (Integer.BYTES * 3 + Float.BYTES * 3);
+    }
+
+    /**
+     * Write the mapping whole: its size, each texel's child cluster, child triangle and own
+     * triangle, their weights, then its splats.
+     *
+     * @param out Where it goes, little endian.
+     */
+    void write(@NonNull ByteBuffer out) {
+        out.putInt(width).putInt(height);
+        for (int value : childClusters) {
+            out.putInt(value);
+        }
+        for (int value : childTriangles) {
+            out.putInt(value);
+        }
+        for (int value : ownTriangles) {
+            out.putInt(value);
+        }
+        for (float value : childWeights) {
+            out.putFloat(value);
+        }
+        for (float value : ownWeights) {
+            out.putFloat(value);
+        }
+        out.putInt(splatTexels.length);
+        for (int s = 0; s < splatTexels.length; ++s) {
+            out.putInt(splatTexels[s]).putInt(splatClusters[s]).putInt(splatTriangles[s]);
+            out.putFloat(splatWeights[s * 2]).putFloat(splatWeights[s * 2 + 1]);
+            out.putFloat(splatCoverage[s]);
+        }
+    }
+
+    /**
+     * Read a mapping {@link #write} wrote.
+     *
+     * @param in Where it is, little endian.
+     * @return The mapping.
+     * @throws IllegalArgumentException If its counts make no sense.
+     */
+    static BakeTexels read(@NonNull ByteBuffer in) {
+        final int width = in.getInt();
+        final int height = in.getInt();
+        if (width <= 0 || height <= 0 || (long) width * height * Integer.BYTES > in.remaining()) {
+            throw new IllegalArgumentException("A bake of " + width + " x " + height + " texels");
+        }
+        final BakeTexels out = new BakeTexels(width, height);
+        for (int i = 0; i < out.childClusters.length; ++i) {
+            out.childClusters[i] = in.getInt();
+        }
+        for (int i = 0; i < out.childTriangles.length; ++i) {
+            out.childTriangles[i] = in.getInt();
+        }
+        for (int i = 0; i < out.ownTriangles.length; ++i) {
+            out.ownTriangles[i] = in.getInt();
+        }
+        for (int i = 0; i < out.childWeights.length; ++i) {
+            out.childWeights[i] = in.getFloat();
+        }
+        for (int i = 0; i < out.ownWeights.length; ++i) {
+            out.ownWeights[i] = in.getFloat();
+        }
+        final int splats = in.getInt();
+        if (splats < 0 || (long) splats * (Integer.BYTES * 3 + Float.BYTES * 3) > in.remaining()) {
+            throw new IllegalArgumentException("A bake with " + splats + " splats");
+        }
+        out.splatTexels = new int[splats];
+        out.splatClusters = new int[splats];
+        out.splatTriangles = new int[splats];
+        out.splatWeights = new float[splats * 2];
+        out.splatCoverage = new float[splats];
+        for (int s = 0; s < splats; ++s) {
+            out.splatTexels[s] = in.getInt();
+            out.splatClusters[s] = in.getInt();
+            out.splatTriangles[s] = in.getInt();
+            out.splatWeights[s * 2] = in.getFloat();
+            out.splatWeights[s * 2 + 1] = in.getFloat();
+            out.splatCoverage[s] = in.getFloat();
+        }
+        return out;
     }
 
     /**

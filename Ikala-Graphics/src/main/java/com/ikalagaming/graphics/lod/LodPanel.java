@@ -204,7 +204,9 @@ public final class LodPanel implements AutoCloseable {
                             try {
                                 final List<LodMesh> meshes = inputs.get();
                                 final LodDag dag =
-                                        cells ? inCells(meshes) : DagBuilder.build(meshes, options);
+                                        cells
+                                                ? inCells(meshes)
+                                                : LodDagCache.build(meshes, options);
                                 buildMillis = (System.nanoTime() - started) / NANOS_PER_MILLI;
                                 levels = LodTables.levels(dag);
                                 log.info(

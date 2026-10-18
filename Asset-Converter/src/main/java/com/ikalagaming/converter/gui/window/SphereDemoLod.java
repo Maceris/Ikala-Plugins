@@ -20,6 +20,7 @@ import com.ikalagaming.graphics.gui.enums.Condition;
 import com.ikalagaming.graphics.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.lod.DagBuilder;
 import com.ikalagaming.graphics.lod.LodDag;
+import com.ikalagaming.graphics.lod.LodDagCache;
 import com.ikalagaming.graphics.lod.LodMesh;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.FrameTimings;
@@ -274,7 +275,7 @@ final class SphereDemoLod {
                             // No baking or blending, which would fix one look for every instance;
                             // coverage volumes name their materials, so instances' remaps reach
                             // them
-                            return DagBuilder.build(
+                            return LodDagCache.build(
                                     List.of(mesh),
                                     new DagBuilder.Options(
                                                     defaults.virtualEdgeFactor(),

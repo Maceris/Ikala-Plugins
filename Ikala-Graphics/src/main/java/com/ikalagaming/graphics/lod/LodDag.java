@@ -341,6 +341,24 @@ public final class LodDag {
     }
 
     /**
+     * Every baked cluster's tile mapping, by cluster id, for {@link LodCellFile}.
+     *
+     * @return A read-only view.
+     */
+    Map<Integer, BakeTexels> bakes() {
+        return Collections.unmodifiableMap(bakes);
+    }
+
+    /**
+     * Every consumed cluster's volume kinds, by cluster id, for {@link LodCellFile}.
+     *
+     * @return A read-only view.
+     */
+    Map<Integer, byte[]> volumeKinds() {
+        return Collections.unmodifiableMap(volumeKinds);
+    }
+
+    /**
      * What a baked cluster's tile texels stand for, until it is baked.
      *
      * @param cluster The cluster's id.

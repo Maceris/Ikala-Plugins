@@ -24,7 +24,7 @@ import java.util.Map;
  * every cluster with its corners, materials and visibility, and every group; meshes are made again
  * from the corners when the cell is drawn.
  *
- * <p>Sections, all required, little endian, each record starting with its own size in bytes:
+ * <p>Sections, little endian, each record starting with its own size in bytes:
  *
  * <ul>
  *   <li>{@code LCEL}: the cell: its key's level and place, the DAG's origin, its leaf edge lengths,
@@ -32,6 +32,15 @@ import java.util.Map;
  *       parent, which child cluster each of its first clusters is.
  *   <li>{@code LCLU}: a count, then a record per cluster in id order.
  *   <li>{@code LGRP}: a count, then a record per group in id order.
+ * </ul>
+ *
+ * <p>And only where the DAG has them:
+ *
+ * <ul>
+ *   <li>{@code LVOL}: its clusters' coverage volumes.
+ *   <li>{@code LBAK}: what its baked clusters' tile texels stand for, until they are baked, as a
+ *       whole DAG the asset workbench builds keeps them (see {@link LodDagCache}).
+ *   <li>{@code LKND}: which of its consumed clusters' triangles would go to volumes.
  * </ul>
  *
  * <p>The META section names the exporter and the builder version, and holds the cache key, which a
@@ -51,10 +60,19 @@ public final class LodCellFile {
     /** The coverage volume section, only in cells with volumes. */
     public static final int LVOL = SectionTag.of("LVOL");
 
+    /** The bake section, only in DAGs with tiles still to bake. */
+    public static final int LBAK = SectionTag.of("LBAK");
+
+    /** The volume kinds section, only in DAGs that worked them out. */
+    public static final int LKND = SectionTag.of("LKND");
+
     /** The version of the coverage volume section: 2 added each voxel's material and shade. */
     public static final int VOLUMES_VERSION = 2;
 
-    /** The version of every section but the clusters. */
+    /** The version of the group section: 2 added each group's outputs' bake tiles. */
+    public static final int GROUPS_VERSION = 2;
+
+    /** The version of every section but the clusters, groups and volumes. */
     public static final int VERSION = 1;
 
     /**
@@ -101,8 +119,10 @@ public final class LodCellFile {
         return KnownSections.graphics()
                 .with(LCEL, VERSION)
                 .with(LCLU, CLUSTERS_VERSION)
-                .with(LGRP, VERSION)
-                .with(LVOL, VOLUMES_VERSION);
+                .with(LGRP, GROUPS_VERSION)
+                .with(LVOL, VOLUMES_VERSION)
+                .with(LBAK, VERSION)
+                .with(LKND, VERSION);
     }
 
     /**
@@ -126,9 +146,97 @@ public final class LodCellFile {
                                         .with(KEY, cacheKey))
                         .section(LCEL, VERSION, true, encodeCell(key, cell))
                         .section(LCLU, CLUSTERS_VERSION, true, encodeClusters(cell.dag()))
-                        .section(LGRP, VERSION, true, encodeGroups(cell.dag()));
+                        .section(LGRP, GROUPS_VERSION, true, encodeGroups(cell.dag()));
         final ByteBuffer volumes = encodeVolumes(cell.dag());
-        return volumes == null ? writer : writer.section(LVOL, VOLUMES_VERSION, true, volumes);
+        if (volumes != null) {
+            writer.section(LVOL, VOLUMES_VERSION, true, volumes);
+        }
+        if (!cell.dag().bakes().isEmpty()) {
+            writer.section(LBAK, VERSION, true, encodeBakes(cell.dag()));
+        }
+        if (!cell.dag().volumeKinds().isEmpty()) {
+            writer.section(LKND, VERSION, true, encodeKinds(cell.dag()));
+        }
+        return writer;
+    }
+
+    /**
+     * Encode every bake mapping: a count, then each one's cluster id and mapping.
+     *
+     * @param dag The DAG.
+     * @return The data.
+     */
+    private static ByteBuffer encodeBakes(@NonNull LodDag dag) {
+        final List<Integer> ids = new ArrayList<>(dag.bakes().keySet());
+        ids.sort(null);
+        int size = Integer.BYTES;
+        for (int id : ids) {
+            size += Integer.BYTES + dag.bakes().get(id).bytes();
+        }
+        final ByteBuffer out = ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN);
+        out.putInt(ids.size());
+        for (int id : ids) {
+            out.putInt(id);
+            dag.bakes().get(id).write(out);
+        }
+        return out.flip();
+    }
+
+    /**
+     * Decode the bake mappings into a DAG.
+     *
+     * @param in The data.
+     * @param dag The DAG.
+     * @param clusters How many clusters it has.
+     */
+    private static void decodeBakes(@NonNull ByteBuffer in, @NonNull LodDag dag, int clusters) {
+        final int count = count(in.getInt());
+        for (int i = 0; i < count; ++i) {
+            dag.setBake(clusterId(in.getInt(), clusters), BakeTexels.read(in));
+        }
+    }
+
+    /**
+     * Encode every cluster's volume kinds: a count, then each one's cluster id, length and kinds.
+     *
+     * @param dag The DAG.
+     * @return The data.
+     */
+    private static ByteBuffer encodeKinds(@NonNull LodDag dag) {
+        final List<Integer> ids = new ArrayList<>(dag.volumeKinds().keySet());
+        ids.sort(null);
+        int size = Integer.BYTES;
+        for (int id : ids) {
+            size += Integer.BYTES * 2 + dag.volumeKinds().get(id).length;
+        }
+        final ByteBuffer out = ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN);
+        out.putInt(ids.size());
+        for (int id : ids) {
+            final byte[] kinds = dag.volumeKinds().get(id);
+            out.putInt(id).putInt(kinds.length).put(kinds);
+        }
+        return out.flip();
+    }
+
+    /**
+     * Decode the volume kinds into a DAG.
+     *
+     * @param in The data.
+     * @param dag The DAG.
+     * @param clusters How many clusters it has.
+     */
+    private static void decodeKinds(@NonNull ByteBuffer in, @NonNull LodDag dag, int clusters) {
+        final int count = count(in.getInt());
+        for (int i = 0; i < count; ++i) {
+            final int id = clusterId(in.getInt(), clusters);
+            final int length = count(in.getInt());
+            if (length > in.remaining()) {
+                throw new IllegalArgumentException("Volume kinds past the section's end");
+            }
+            final byte[] kinds = new byte[length];
+            in.get(kinds);
+            dag.setVolumeKinds(id, kinds);
+        }
     }
 
     /**
@@ -202,6 +310,14 @@ public final class LodCellFile {
         final ByteBuffer volumeData = file.section(LVOL).map(Section::data).orElse(null);
         if (volumeData != null) {
             decodeVolumes(volumeData, dag, clusters);
+        }
+        final ByteBuffer bakeData = file.section(LBAK).map(Section::data).orElse(null);
+        if (bakeData != null) {
+            decodeBakes(bakeData, dag, clusters);
+        }
+        final ByteBuffer kindData = file.section(LKND).map(Section::data).orElse(null);
+        if (kindData != null) {
+            decodeKinds(kindData, dag, clusters);
         }
         dag.setLeafEdge(dagLeafEdge);
         dag.setStopReason(new String(reason, StandardCharsets.UTF_8));
@@ -539,6 +655,10 @@ public final class LodCellFile {
             for (int output : g.outputs()) {
                 out.putInt(output);
             }
+            out.putInt(g.bakeTiles().length);
+            for (int tile : g.bakeTiles()) {
+                out.putInt(tile);
+            }
         }
         return out.flip();
     }
@@ -696,7 +816,8 @@ public final class LodCellFile {
                 + Double.BYTES * (3 + SPHERE_VALUES)
                 + Integer.BYTES * 7
                 + Long.BYTES
-                + (group.children().length + group.outputs().length) * Integer.BYTES;
+                + (group.children().length + group.outputs().length) * Integer.BYTES
+                + (1 + group.bakeTiles().length) * Integer.BYTES;
     }
 
     /**
@@ -731,6 +852,13 @@ public final class LodCellFile {
         for (int i = 0; i < outputs.length; ++i) {
             outputs[i] = clusterId(in.getInt(), clusters);
         }
+        final int[] bakeTiles = new int[count(in.getInt())];
+        if (bakeTiles.length != 0 && bakeTiles.length != outputs.length) {
+            throw new IllegalArgumentException("Group " + id + " has bake tiles for some outputs");
+        }
+        for (int i = 0; i < bakeTiles.length; ++i) {
+            bakeTiles[i] = in.getInt();
+        }
         if (in.position() - start != size) {
             throw new IllegalArgumentException("Group " + id + "'s record size doesn't match");
         }
@@ -751,7 +879,7 @@ public final class LodCellFile {
                 rejectedFlips,
                 rejectedLinks,
                 buildNanos,
-                new int[0]);
+                bakeTiles);
     }
 
     /**
