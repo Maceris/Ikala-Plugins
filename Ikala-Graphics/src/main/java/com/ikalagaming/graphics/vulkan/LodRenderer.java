@@ -9,6 +9,7 @@ import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.lod.ClusterMeshes;
 import com.ikalagaming.graphics.lod.CoverageBricks;
+import com.ikalagaming.graphics.lod.CoverageShells;
 import com.ikalagaming.graphics.lod.CoverageVolume;
 import com.ikalagaming.graphics.lod.LiveLod;
 import com.ikalagaming.graphics.lod.LodCut;
@@ -1463,10 +1464,64 @@ public class LodRenderer {
             }
             at += list.get(b).words();
         }
-        final MeshHandle handle =
-                register(state, world.owner, CoverageBricks.mesh(volume, list, offsets));
+        ClusterMeshes.Mesh drawn = CoverageBricks.mesh(volume, list, offsets);
+        if (world.modelClusters < 0) {
+            // Then its shell, drawn in place of the boxes once it is small on screen; a model's
+            // instances may draw it with other materials, which a shell's colors can't follow
+            drawn = withShell(drawn, CoverageShells.of(volume));
+        }
+        final MeshHandle handle = register(state, world.owner, drawn);
         brickRangeOf.put(handle, new int[] {first, words});
         return handle;
+    }
+
+    /**
+     * A volume's brick boxes with its shell after them, in one mesh.
+     *
+     * @param boxes The boxes.
+     * @param shell The shell.
+     * @return The mesh.
+     */
+    private static ClusterMeshes.Mesh withShell(
+            ClusterMeshes.@NonNull Mesh boxes, CoverageShells.@NonNull Shell shell) {
+        if (shell.triangles() == 0) {
+            return boxes;
+        }
+        final int triangles = shell.triangles();
+        final ClusterMeshes.Mesh hull =
+                ClusterMeshes.of(
+                        new LodDag.Cluster(
+                                -1,
+                                0,
+                                shell.corners(),
+                                new int[triangles],
+                                new float[triangles],
+                                shell.attributes(),
+                                0,
+                                new double[4],
+                                new double[4],
+                                -1,
+                                -1));
+        final int vertexCount = boxes.vertexCount() + hull.vertexCount();
+        final ByteBuffer vertices =
+                ByteBuffer.allocate(vertexCount * LodVertex.SIZE).order(ByteOrder.LITTLE_ENDIAN);
+        vertices.put(
+                boxes.vertices().duplicate().clear().limit(boxes.vertexCount() * LodVertex.SIZE));
+        vertices.put(
+                hull.vertices().duplicate().clear().limit(hull.vertexCount() * LodVertex.SIZE));
+        vertices.flip();
+        final int[] indices = new int[boxes.indices().length + hull.indices().length];
+        System.arraycopy(boxes.indices(), 0, indices, 0, boxes.indices().length);
+        for (int i = 0; i < hull.indices().length; ++i) {
+            indices[boxes.indices().length + i] = boxes.vertexCount() + hull.indices()[i];
+        }
+        final float[] min = boxes.min().clone();
+        final float[] max = boxes.max().clone();
+        for (int axis = 0; axis < min.length; ++axis) {
+            min[axis] = Math.min(min[axis], hull.min()[axis]);
+            max[axis] = Math.max(max[axis], hull.max()[axis]);
+        }
+        return new ClusterMeshes.Mesh(vertices, vertexCount, indices, min, max);
     }
 
     /**
@@ -2342,7 +2397,23 @@ public class LodRenderer {
                         // Counted from the finest: the cell's own level plus the level within it
                         piece.key.level() + cluster.cluster().level()),
                 (cutOut(cluster.cluster()) ? LodCullMath.FLAG_CUT_OUT : 0)
-                        | (cluster.volume() != null ? LodCullMath.FLAG_VOLUME : 0));
+                        | (cluster.volume() != null ? volumeFlags(world, cluster.volume()) : 0));
+    }
+
+    /**
+     * A coverage volume cluster's flags: that it is one, and, if it has a shell after its boxes,
+     * how many of its mesh's indices the boxes take, see {@link LodCullMath#SHELL_SHIFT}.
+     *
+     * @param world Its world.
+     * @param volume The volume.
+     * @return The flags.
+     */
+    private static int volumeFlags(@NonNull World world, @NonNull CoverageVolume volume) {
+        final int boxes =
+                world.modelClusters < 0
+                        ? CoverageBricks.count(volume) * CoverageBricks.BOX_INDICES
+                        : 0;
+        return LodCullMath.FLAG_VOLUME | boxes << LodCullMath.SHELL_SHIFT;
     }
 
     /**
@@ -2933,6 +3004,9 @@ public class LodRenderer {
         out.putFloat(
                 base + LodCullMath.WORLD_RENDER_OFFSET_OFFSET + AXES * Float.BYTES,
                 (float) placement.scale());
+        out.putFloat(
+                base + LodCullMath.WORLD_EYE_OFFSET + AXES * Float.BYTES,
+                GraphicsManager.getSettings().lodShellPixels);
         out.putInt(base + LodCullMath.WORLD_INFO_OFFSET, colors.ordinal());
         out.putInt(base + LodCullMath.WORLD_INFO_OFFSET + Integer.BYTES, 1);
         out.putFloat(base + LodCullMath.WORLD_INFO_OFFSET + 2 * Integer.BYTES, thresholdPixels);
@@ -2998,6 +3072,10 @@ public class LodRenderer {
                     base + LodCullMath.WORLD_CAMERA_FRACTION_OFFSET + axis * Float.BYTES,
                     (float) (relative - step / LodVertex.STEPS_PER_UNIT));
         }
+        // How small a coverage volume must be on screen to be drawn as its shell
+        out.putFloat(
+                base + LodCullMath.WORLD_EYE_OFFSET + AXES * Float.BYTES,
+                GraphicsManager.getSettings().lodShellPixels);
         out.putInt(base + LodCullMath.WORLD_INFO_OFFSET, colors.ordinal());
         out.putInt(base + LodCullMath.WORLD_INFO_OFFSET + Integer.BYTES, drawn ? 1 : 0);
         out.putFloat(base + LodCullMath.WORLD_INFO_OFFSET + 2 * Integer.BYTES, thresholdPixels);

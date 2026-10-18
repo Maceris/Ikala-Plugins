@@ -81,6 +81,13 @@ public final class LodVertex {
      */
     public static final int FLAG_VOLUME = 1 << 3;
 
+    /**
+     * Set with {@link #FLAG_AVERAGED} for a coverage volume shell's corner ({@link
+     * Attributes#shell}): its specular's byte is how much of the light it stops, for a hashed alpha
+     * test.
+     */
+    public static final int FLAG_SHELL = 1 << 4;
+
     /** The largest material index that fits. */
     public static final int MAX_MATERIAL = 0xFFFF;
 
@@ -145,6 +152,9 @@ public final class LodVertex {
                 // Its color and roughness, whole: no tangent, so no flip
                 out.putInt(base + TANGENT_OFFSET, attributes[at + 1]);
                 flags |= FLAG_AVERAGED;
+                if (Attributes.isShell(attributes, at)) {
+                    flags |= FLAG_SHELL;
+                }
             } else {
                 out.putInt(base + TANGENT_OFFSET, Attributes.tangentBits(attributes[at + 1]));
                 if (Attributes.flipped(attributes[at + 1])) {

@@ -908,8 +908,9 @@ public class ShadowRender implements RenderStage {
 
     /**
      * Create the pipeline for coverage volumes' bricks: their boxes' corners as {@link
-     * SceneRender#volumeVertexAttributes} reads them, both faces drawn, since each fragment walks
-     * the whole box along the map's direction, and no depth bias, since the walk writes the depth.
+     * SceneRender#volumeVertexAttributes} reads them, their faces toward the light drawn, each
+     * fragment walking the box along the map's direction, and no depth bias, since the walk writes
+     * the depth.
      *
      * @param state The Vulkan state.
      * @return The VkPipeline.
@@ -1049,7 +1050,9 @@ public class ShadowRender implements RenderStage {
 
             // Only the position is needed, the rest of the vertex is skipped over, except the
             // texture coordinates and material for alpha testing
-            final int attributeCount = cutout ? (baked || lod ? 3 : 2) : 1;
+            // Level of detail's cut outs also take the texture coordinates' bits whole, where a
+            // coverage volume shell's corner keeps its coverage
+            final int attributeCount = cutout ? (lod ? 4 : baked ? 3 : 2) : 1;
             VkVertexInputAttributeDescription.Buffer vertexAttributes =
                     volume
                             ? SceneRender.volumeVertexAttributes(stack)
@@ -1085,6 +1088,14 @@ public class ShadowRender implements RenderStage {
                             .location(2)
                             .format(VK_FORMAT_R16G16_UINT)
                             .offset(lod ? LodVertex.MATERIAL_OFFSET : BakedVertex.MATERIAL_OFFSET);
+                }
+                if (lod) {
+                    vertexAttributes
+                            .get(3)
+                            .binding(0)
+                            .location(3)
+                            .format(VK_FORMAT_R32_UINT)
+                            .offset(LodVertex.UV_OFFSET);
                 }
             }
 
@@ -1148,7 +1159,9 @@ public class ShadowRender implements RenderStage {
                     VkPipelineRasterizationStateCreateInfo.calloc(stack)
                             .sType$Default()
                             .polygonMode(VK_POLYGON_MODE_FILL)
-                            .cullMode(volume ? VK_CULL_MODE_NONE : VK_CULL_MODE_BACK_BIT)
+                            // Volumes' boxes too, by their faces toward the light, so the
+                            // depth test drops those behind what is drawn before their walks run
+                            .cullMode(VK_CULL_MODE_BACK_BIT)
                             .frontFace(VK_FRONT_FACE_CLOCKWISE)
                             .depthBiasEnable(!volume && !brick)
                             .depthBiasConstantFactor(DEPTH_BIAS_CONSTANT)

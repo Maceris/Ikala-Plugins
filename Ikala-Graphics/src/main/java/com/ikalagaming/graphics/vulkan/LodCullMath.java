@@ -91,6 +91,12 @@ public final class LodCullMath {
      */
     public static final int FLAG_VOLUME = 2;
 
+    /**
+     * Where a coverage volume cluster's flags keep how many of its mesh's indices are its bricks'
+     * boxes, the rest its shell's, which it is drawn as once small on screen: 0 for no shell.
+     */
+    public static final int SHELL_SHIFT = 8;
+
     /** Where a cluster's tight sphere starts. */
     public static final int CLUSTER_TIGHT_OFFSET = 0;
 

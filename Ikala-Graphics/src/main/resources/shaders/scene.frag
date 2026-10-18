@@ -148,7 +148,13 @@ void main() {
         baseColor = sampleTexture(material.textureIndex);
         baseColor.rgb = linearToSRGB(baseColor.rgb);
     }
-    if (ALPHA_TEST) {
+    if (ALPHA_TEST && averaged && outBitangent.z > 0.5) {
+        // A coverage volume's shell covers as much of the pixel as its volume stops light, by a
+        // threshold of the pixel's own each frame, which temporal antialiasing averages
+        if (outBitangent.y <= shellThreshold(gl_FragCoord.xy, frame, uint(gl_PrimitiveID))) {
+            discard;
+        }
+    } else if (ALPHA_TEST) {
         bool covered = baseColor.a >= ALPHA_CUT;
         if (material.textureIndex > 0) {
             vec2 size = vec2(textureSize(bindlessTextures[nonuniformEXT(material.textureIndex)], 0));

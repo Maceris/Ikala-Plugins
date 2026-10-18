@@ -37,4 +37,16 @@ bool alphaTestPasses(float alpha, float mip, vec2 uv, vec2 size) {
     return alpha >= mix(ALPHA_CUT, alphaTestHash(uv, size), soft);
 }
 
+// A pixel's threshold for a coverage volume shell's alpha in a frame, between 0 and 1 (a PCG hash).
+// A shell is a hull for each brick, so a pixel may see several, one behind another; each layer
+// needs its own threshold, its triangle's, or they cover the pixel together only as much as the
+// most covering of them does, not as their light lost multiplies up
+float shellThreshold(vec2 pixel, uint frame, uint layer) {
+    uvec2 at = uvec2(pixel);
+    uint h = at.x * 747796405u + at.y * 2891336453u + frame * 277803737u + layer * 2246822519u;
+    h = ((h >> ((h >> 28u) + 4u)) ^ h) * 277803737u;
+    h = (h >> 22u) ^ h;
+    return float(h) / 4294967296.0;
+}
+
 #endif

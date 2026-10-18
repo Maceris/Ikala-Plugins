@@ -125,6 +125,16 @@ public final class ConverterScripts {
     }
 
     /**
+     * Set how small a coverage volume must be on screen to be drawn as its shell, for checks that
+     * compare shells with volumes.
+     *
+     * @param pixels The sphere's radius on screen, in pixels; 0 never draws shells.
+     */
+    public static void setShellPixels(double pixels) {
+        graphics().ui().post(() -> GraphicsManager.getSettings().lodShellPixels = (float) pixels);
+    }
+
+    /**
      * Move the camera by some amount, for checks that fly through a scene a frame at a time.
      *
      * @param dx How far along x.

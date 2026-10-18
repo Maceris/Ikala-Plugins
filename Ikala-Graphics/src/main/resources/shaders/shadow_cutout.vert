@@ -9,6 +9,8 @@ layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec2 outTextCoord;
 layout(location = 1) flat out uint outMaterialIdx;
+// Never a coverage volume shell's, see shadow_cutout.frag
+layout(location = 2) out float outShellAlpha;
 
 // What this frame draws, written by the culling pass: (instance slot, material) per instance,
 // grouped by mesh. Each draw command's first instance points at its mesh's group.
@@ -33,4 +35,5 @@ void main()
     gl_Position = projViewMatrix * modelMatrices[instance.x] * vec4(position, 1.0);
     outTextCoord = texCoord;
     outMaterialIdx = instance.y;
+    outShellAlpha = -1.0;
 }

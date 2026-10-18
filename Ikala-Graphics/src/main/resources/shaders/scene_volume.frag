@@ -21,8 +21,10 @@
 // a little brighter than the true average. The samples' spread widens the roughness, see
 // roughening.glsl, so the mean doesn't shine sharper than the microflakes it stands for.
 //
-// Boxes are drawn by their back faces, so a camera inside one still sees it, and the walk starts
-// where the ray enters the box, or at the camera.
+// Boxes are drawn by their front faces, since volumes are only drawn far off and the camera is
+// never inside one; the walk starts where the ray enters the box, and the depth it writes is never
+// in front of the face's, so the depth test drops boxes behind what is already drawn before their
+// walks run.
 
 layout(location = 0) in vec3 outRender;
 layout(location = 1) flat in vec3 outCorner;
@@ -32,6 +34,9 @@ layout(location = 4) flat in uint outSlot;
 layout(location = 5) flat in uvec4 outRemapFrom;
 layout(location = 6) flat in uvec4 outRemapTo;
 layout(location = 7) flat in uint outRemapCount;
+
+// Never in front of the box's face, see above
+layout(depth_greater) out float gl_FragDepth;
 
 layout(location = 0) out vec4 buffBaseColor;
 layout(location = 1) out vec4 buffNormal;

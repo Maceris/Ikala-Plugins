@@ -75,6 +75,13 @@ public final class CoverageVoxelizer {
     /** How far off its surface a hit's shadow ray starts, in voxels, so it misses that surface. */
     private static final double SHADOW_START = 1e-4;
 
+    /**
+     * How much of the light a voxel must stop over its width to be taken as stopping all of it:
+     * nearly solid voxels made solid change little to look at, and walks end in them at once rather
+     * than carrying the rest of the light on through the voxels behind.
+     */
+    private static final double OPAQUE_ENOUGH = 0.9;
+
     /** The smoothest a voxel's microflakes are, by projected area across a surface. */
     private static final double MIN_SPREAD = 0.05;
 
@@ -292,7 +299,9 @@ public final class CoverageVoxelizer {
                             solveDensity(
                                     sggx,
                                     kept * CoverageVolume.SGGX_VALUES,
-                                    Math.min(MOST_OPAQUE, (double) hits / RAYS),
+                                    (double) hits / RAYS >= OPAQUE_ENOUGH
+                                            ? MOST_OPAQUE
+                                            : (double) hits / RAYS,
                                     voxelSize);
             ++kept;
         }

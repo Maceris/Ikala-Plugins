@@ -134,6 +134,9 @@ vec3 rotate(vec4 q, vec3 v)
 const uint FLAG_FLIPPED_BITANGENT = 1;
 const uint FLAG_TEXTURED = 2;
 const uint FLAG_AVERAGED = 4;
+const uint FLAG_SHELL = 16;
+// The specular a coverage volume shell's corners get, whose specular byte holds their coverage
+const float SHELL_SPECULAR = 0.5;
 
 // Undo the octahedral folding BakedVertex.octahedral does
 vec3 fromOctahedral(vec2 e)
@@ -191,7 +194,11 @@ void main()
             vec4 more = unpackUnorm4x8(texCoordBits);
             outTangent = look.rgb;
             outTextCoord = vec2(look.a, more.z);
-            outBitangent = vec3(more.w, 0.0, 0.0);
+            // A coverage volume shell's corner: its coverage in place of the specular, see
+            // Attributes.shell, for scene.frag's hashed alpha test
+            outBitangent = (materialFlags.y & FLAG_SHELL) != 0
+                ? vec3(SHELL_SPECULAR, more.w, 1.0)
+                : vec3(more.w, 0.0, 0.0);
             outViewPosition = vec4(0.0, 0.0, 0.0, 2.0);
         } else {
             outTextCoord = texCoord;

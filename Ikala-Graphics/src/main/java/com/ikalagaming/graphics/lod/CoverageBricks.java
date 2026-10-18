@@ -174,6 +174,31 @@ public final class CoverageBricks {
     }
 
     /**
+     * How many bricks a volume lays out in, as {@link #of} lays it out.
+     *
+     * @param volume The volume.
+     * @return The count.
+     */
+    public static int count(@NonNull CoverageVolume volume) {
+        final java.util.Set<Long> bricks = new java.util.HashSet<>();
+        for (int v = 0; v < volume.size(); ++v) {
+            if (isEmpty(volume, v)) {
+                continue;
+            }
+            final long key = volume.keyOf(v);
+            bricks.add(
+                    CoverageVolume.key(
+                            CoverageVolume.coordinate(key, 0) / SIDE,
+                            CoverageVolume.coordinate(key, 1) / SIDE,
+                            CoverageVolume.coordinate(key, 2) / SIDE));
+        }
+        return bricks.size();
+    }
+
+    /** Indices of a brick's box: 12 triangles. */
+    public static final int BOX_INDICES = 36;
+
+    /**
      * Whether a voxel stops no light, which a brick leaves out.
      *
      * @param volume The volume.

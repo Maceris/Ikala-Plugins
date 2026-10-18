@@ -10,6 +10,8 @@
 
 layout(location = 0) in vec2 inTextCoord;
 layout(location = 1) flat in uint inMaterialIdx;
+// A coverage volume shell's coverage, or -1 for a cut out material
+layout(location = 2) in float inShellAlpha;
 
 layout(std430, set = 0, binding = 1) readonly buffer Materials {
     Material materials[];
@@ -19,6 +21,13 @@ layout(set = 1, binding = 0) uniform sampler2D bindlessTextures[];
 
 void main()
 {
+    if (inShellAlpha >= 0.0) {
+        // A shell stops as much light as its volume, by each texel's own threshold
+        if (inShellAlpha <= shellThreshold(gl_FragCoord.xy, 0u, uint(gl_PrimitiveID))) {
+            discard;
+        }
+        return;
+    }
     Material material = materials[inMaterialIdx];
     if (material.textureIndex <= 0) {
         if (material.baseColor.a < ALPHA_CUT) {

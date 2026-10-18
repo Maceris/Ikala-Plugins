@@ -203,6 +203,9 @@ const uint COUNTERS_PER_LEVEL = 3u;
 const uint CLUSTER_CUT_OUT = 1;
 // Set when it is a coverage volume, its mesh its bricks' boxes
 const uint CLUSTER_VOLUME = 2;
+// Where a coverage volume cluster's flags keep how many of its mesh's indices are its bricks'
+// boxes, the rest its shell's, see LodCullMath.SHELL_SHIFT
+const uint SHELL_SHIFT = 8;
 
 // Set in the view flags when the scene is culled by occlusion
 const uint FLAG_OCCLUSION = 1;
@@ -424,6 +427,20 @@ void main()
     // Cut out clusters go to their lists' cut out share
     uint lists = (cluster.unit.w & CLUSTER_VOLUME) != 0u ? VOLUME_LISTS
         : (cluster.unit.w & CLUSTER_CUT_OUT) != 0u ? CUT_OUT_LISTS : 0u;
+    // A coverage volume with a shell after its boxes is drawn as the shell, alpha tested with the
+    // cut outs, once its sphere is small on screen (the world's eye.w, in pixels), else as the boxes
+    uint boxIndices = cluster.unit.w >> SHELL_SHIFT;
+    if ((cluster.unit.w & CLUSTER_VOLUME) != 0u && boxIndices > 0u && boxIndices < mesh.info.z) {
+        float pixels = cluster.tight.w * pixelsPerUnit
+            / max(length(cluster.tight.xyz - w.eye.xyz), 1e-6);
+        if (pixels < w.eye.w) {
+            lists = CUT_OUT_LISTS;
+            mesh.info.y += boxIndices;
+            mesh.info.z -= boxIndices;
+        } else {
+            mesh.info.z = boxIndices;
+        }
+    }
 
     // An instance's spheres are in the model's frame, its scale in renderOffset.w
     vec3 center = instanced

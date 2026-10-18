@@ -1361,11 +1361,11 @@ public class SceneRender implements RenderStage {
                     VkPipelineRasterizationStateCreateInfo.calloc(stack)
                             .sType$Default()
                             .polygonMode(wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL)
-                            // A volume's boxes by their back faces, so a camera inside one sees it
-                            .cullMode(
-                                    format == VertexFormat.VOLUME
-                                            ? VK_CULL_MODE_FRONT_BIT
-                                            : VK_CULL_MODE_BACK_BIT)
+                            // A volume's boxes by their front faces too: they are only drawn far
+                            // off, so the camera is never inside one, and the walk's depth is
+                            // then never in front of the face's, which lets the depth test drop
+                            // boxes behind what is drawn before their walks run
+                            .cullMode(VK_CULL_MODE_BACK_BIT)
                             .frontFace(VK_FRONT_FACE_COUNTER_CLOCKWISE)
                             .lineWidth(1.0f);
             VkPipelineMultisampleStateCreateInfo multisampleState =

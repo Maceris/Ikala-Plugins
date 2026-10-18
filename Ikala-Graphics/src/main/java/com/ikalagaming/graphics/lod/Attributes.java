@@ -25,6 +25,13 @@ public final class Attributes {
      */
     public static final int NO_UV = 0x7E00;
 
+    /**
+     * What a coverage volume shell's corner holds in place of texture coordinates, another NaN, so
+     * it is averaged too, and in the specular's place how much of the light it stops, see {@link
+     * #shell}.
+     */
+    public static final int SHELL_UV = 0x7E01;
+
     /** The most a byte holds, for values from 0 to 1. */
     private static final int BYTE_MAX = 0xFF;
 
@@ -63,6 +70,9 @@ public final class Attributes {
 
     /** Bits in a short. */
     private static final int SHORT_BITS = 16;
+
+    /** The low 16 bits. */
+    private static final int SHORT_MASK = 0xFFFF;
 
     /** Coordinates in a direction. */
     private static final int AXES = 3;
@@ -147,6 +157,41 @@ public final class Attributes {
                 NO_UV
                         | toByte(average[MaterialAverages.METALLIC]) << SHORT_BITS
                         | toByte(average[MaterialAverages.SPECULAR]) << (SHORT_BITS + BYTE_BITS);
+    }
+
+    /**
+     * Set a coverage volume shell's corner, as {@link #averaged} sets a corner, but with how much
+     * of the light it stops in place of its specular, for a hashed alpha test.
+     *
+     * @param normal The normal; it needn't be unit length, but mustn't be zero.
+     * @param average Its {@link MaterialAverages#VALUES} values, its color linear; the specular is
+     *     ignored.
+     * @param coverage How much of the light it stops, 0 to 1.
+     * @param out Where the corner goes.
+     * @param at Where in it.
+     */
+    public static void shell(
+            float @NonNull [] normal,
+            float @NonNull [] average,
+            float coverage,
+            int @NonNull [] out,
+            int at) {
+        averaged(normal, average, out, at);
+        out[at + UV] =
+                SHELL_UV
+                        | toByte(average[MaterialAverages.METALLIC]) << SHORT_BITS
+                        | toByte(coverage) << (SHORT_BITS + BYTE_BITS);
+    }
+
+    /**
+     * Whether a corner is a coverage volume shell's.
+     *
+     * @param attributes Corners' ints.
+     * @param at Where the corner starts.
+     * @return True if it is.
+     */
+    public static boolean isShell(int @NonNull [] attributes, int at) {
+        return (attributes[at + UV] & SHORT_MASK) == SHELL_UV;
     }
 
     /**

@@ -120,6 +120,13 @@ public class GraphicsSettings {
     public boolean lodVolumes = true;
 
     /**
+     * How small a coverage volume's sphere must be on screen, as a radius in pixels, before it is
+     * drawn as its shell, a hull of its voxels with a hashed alpha test, rather than walked brick
+     * by brick. 0 never draws shells.
+     */
+    public float lodShellPixels = 16;
+
+    /**
      * Whether ambient light is dimmed where something stands above a point, from the sky occlusion
      * map, so caves and rooms aren't lit like open ground.
      */

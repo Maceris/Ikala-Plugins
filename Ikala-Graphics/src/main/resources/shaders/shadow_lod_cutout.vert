@@ -8,9 +8,12 @@
 layout(location = 0) in ivec3 position;      // grid steps from the world's origin
 layout(location = 1) in vec2 texCoord;       // for textured triangles
 layout(location = 2) in uvec2 materialFlags; // x: material index, y: flags
+layout(location = 3) in uint texCoordBits;   // the texture coordinates' bits, for shells
 
 layout(location = 0) out vec2 outTextCoord;
 layout(location = 1) flat out uint outMaterialIdx;
+// A coverage volume shell's coverage, or -1 for a cut out material
+layout(location = 2) out float outShellAlpha;
 
 // Where the camera is for each LOD world, see LodCullMath
 struct World {
@@ -58,6 +61,8 @@ layout(push_constant) uniform ShadowConstants {
     Clusters clusterTable;
 };
 
+// Match LodVertex
+const uint FLAG_SHELL = 16u;
 // Grid steps per unit, see LodVertex
 const float STEPS_PER_UNIT = 1024.0;
 
@@ -96,4 +101,8 @@ void main()
     }
     gl_Position = projViewMatrix * vec4(render, 1.0);
     outTextCoord = texCoord;
+    // A shell's corner keeps its coverage in the high byte, see Attributes.shell
+    outShellAlpha = (materialFlags.y & FLAG_SHELL) != 0u
+        ? float(texCoordBits >> 24u) / 255.0
+        : -1.0;
 }

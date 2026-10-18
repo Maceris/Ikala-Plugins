@@ -18,6 +18,10 @@ layout(location = 4) flat in uint outSlot;
 layout(location = 5) flat in vec3 outDirection;
 layout(location = 6) flat in float outDepthStep;
 
+// Never in front of the box's face toward the light, which the walk starts behind, so the depth
+// test drops boxes behind what is already drawn before their walks run
+layout(depth_greater) out float gl_FragDepth;
+
 layout(push_constant) uniform ShadowConstants {
     layout(offset = 88) Bricks bricks;
     uint frame;
