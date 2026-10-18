@@ -88,6 +88,9 @@ class CoverageVoxelizerTest {
             for (int c = 0; c < CoverageVolume.COLOR_VALUES; ++c) {
                 assertEquals(LOOK[c], volume.color(v, c), 1e-6);
             }
+            // Its own material, unshaded, since nothing shadows a lone plane
+            assertEquals(0, volume.material(v));
+            assertEquals(1, volume.shade(v), 1e-6);
         }
     }
 

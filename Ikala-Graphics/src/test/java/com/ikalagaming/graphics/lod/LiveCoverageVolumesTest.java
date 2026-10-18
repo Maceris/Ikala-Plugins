@@ -162,6 +162,8 @@ class LiveCoverageVolumesTest {
                     assertEquals(a.keyOf(v), b.keyOf(v));
                     assertEquals(a.density(v), b.density(v));
                     assertEquals(a.roughness(v), b.roughness(v));
+                    assertEquals(a.material(v), b.material(v));
+                    assertEquals(a.shade(v), b.shade(v));
                     for (int k = 0; k < CoverageVolume.SGGX_VALUES; ++k) {
                         assertEquals(a.sggx(v, k), b.sggx(v, k));
                     }

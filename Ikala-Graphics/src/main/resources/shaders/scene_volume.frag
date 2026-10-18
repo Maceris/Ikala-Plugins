@@ -1,8 +1,11 @@
 #version 460
 #extension GL_EXT_buffer_reference : require
 #extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_nonuniform_qualifier : enable
 
+#include "color.glsl"
 #include "coverage_bricks.glsl"
+#include "material.glsl"
 #include "roughening.glsl"
 
 // Coverage volumes, see CoverageVolume and CoverageBricks: each fragment of a brick's box walks
@@ -26,6 +29,9 @@ layout(location = 1) flat in vec3 outCorner;
 layout(location = 2) flat in vec4 outTurn;
 layout(location = 3) flat in vec2 outCell;
 layout(location = 4) flat in uint outSlot;
+layout(location = 5) flat in uvec4 outRemapFrom;
+layout(location = 6) flat in uvec4 outRemapTo;
+layout(location = 7) flat in uint outRemapCount;
 
 layout(location = 0) out vec4 buffBaseColor;
 layout(location = 1) out vec4 buffNormal;
@@ -37,6 +43,12 @@ layout(set = 0, binding = 0) uniform Uniforms {
     mat4 projectionMatrix;
     mat4 viewMatrix;
 };
+
+layout(std430, set = 0, binding = 2) readonly buffer Materials {
+    Material materials[];
+};
+
+layout(set = 1, binding = 0) uniform sampler2D bindlessTextures[];
 
 layout(push_constant) uniform SceneConstants {
     layout(offset = 24) uint frame;
@@ -123,6 +135,13 @@ vec3 sampleVisibleNormal(vec3 wi, mat3 S, float u1, float u2)
     return normalize(m.x * wk + m.y * wj + m.z * wi);
 }
 
+// A texture's average, its smallest mip
+vec4 averageTexel(int index)
+{
+    int levels = textureQueryLevels(bindlessTextures[nonuniformEXT(index)]);
+    return textureLod(bindlessTextures[nonuniformEXT(index)], vec2(0.5), float(levels - 1));
+}
+
 void main()
 {
     float cell = outCell.x;
@@ -196,9 +215,37 @@ void main()
                 vec3 across = abs(viewNormal.x) < 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
                 vec3 tangent = normalize(cross(viewNormal, across));
                 vec4 extra = unpackUnorm4x8(data.x);
-                buffBaseColor = vec4(unpackUnorm4x8(data.y).rgb, SPECULAR);
-                buffNormal = vec4(viewNormal, roughenBySpread(extra.z, spread));
-                buffTangent = vec4(tangent, extra.w);
+                vec3 color = unpackUnorm4x8(data.y).rgb;
+                float roughness = extra.z;
+                float metallic = extra.w;
+                if (bricks.words[outSlot].w != 0u) {
+                    // A model's voxel names its material, through the instance's remaps, and its
+                    // shade against that material's average
+                    uint material = data.y & 0xFFFFu;
+                    uint own = material;
+                    for (uint r = 0u; r < outRemapCount; ++r) {
+                        if (outRemapFrom[r] == own) {
+                            material = outRemapTo[r];
+                        }
+                    }
+                    Material look = materials[material];
+                    vec3 linear = sRGBToLinear(look.baseColor.rgb);
+                    if (look.textureIndex > 0) {
+                        linear = averageTexel(look.textureIndex).rgb;
+                    }
+                    roughness = look.roughness;
+                    metallic = look.metallic;
+                    if (look.occlusionRoughnessMetalIndex > 0) {
+                        vec3 packedValues = averageTexel(look.occlusionRoughnessMetalIndex).rgb;
+                        roughness = packedValues.g;
+                        metallic = packedValues.b;
+                    }
+                    float shade = float((data.y >> 16) & 0xFFu) / 255.0;
+                    color = linearToSRGB(linear * shade);
+                }
+                buffBaseColor = vec4(color, SPECULAR);
+                buffNormal = vec4(viewNormal, roughenBySpread(roughness, spread));
+                buffTangent = vec4(tangent, metallic);
                 buffMaterial = 0u;
                 buffEmission = vec4(0.0, 0.0, 0.0, 1.0);
                 return;

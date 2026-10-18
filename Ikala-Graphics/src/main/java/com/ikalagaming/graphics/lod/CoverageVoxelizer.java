@@ -60,6 +60,15 @@ public final class CoverageVoxelizer {
      */
     private static final double SELF_SHADOW_REACH = 1.5;
 
+    /** Rec. 709 luminance weights. */
+    private static final double LUMA_RED = 0.2126;
+
+    /** Rec. 709 luminance weight of green. */
+    private static final double LUMA_GREEN = 0.7152;
+
+    /** Rec. 709 luminance weight of blue. */
+    private static final double LUMA_BLUE = 0.0722;
+
     /** How far apart samples of source volumes along a ray are, in their finest voxels. */
     private static final double SOURCE_STEP = 0.5;
 
@@ -157,6 +166,9 @@ public final class CoverageVoxelizer {
         final float[] color = new float[count * CoverageVolume.COLOR_VALUES];
         final float[] roughness = new float[count];
         final float[] metallic = new float[count];
+        final int[] mainMaterial = new int[count];
+        final float[] shade = new float[count];
+        final java.util.Map<Integer, Integer> hitsBy = new java.util.HashMap<>();
         final double[] matrix = new double[CoverageVolume.SGGX_VALUES];
         final double[] look = new double[MaterialAverages.VALUES];
         final float[][] lookOf = new float[n][];
@@ -175,6 +187,7 @@ public final class CoverageVoxelizer {
             int lit = 0;
             Arrays.fill(matrix, 0);
             Arrays.fill(look, 0);
+            hitsBy.clear();
             for (int r = 0; r < RAYS; ++r) {
                 for (int axis = 0; axis < AXES; ++axis) {
                     start[axis] =
@@ -199,6 +212,7 @@ public final class CoverageVoxelizer {
                         ++hits;
                         final CoverageVolume source = sources.get(stoppedIn[0]);
                         final int voxel = stoppedIn[1];
+                        hitsBy.merge(source.material(voxel), 1, Integer::sum);
                         for (int k = 0; k < CoverageVolume.SGGX_VALUES; ++k) {
                             matrix[k] += source.sggx(voxel, k);
                         }
@@ -229,6 +243,7 @@ public final class CoverageVoxelizer {
                     continue;
                 }
                 ++hits;
+                hitsBy.merge(materials[t], 1, Integer::sum);
                 faceNormal(triangles, t, normal);
                 for (int axis = 0; axis < AXES; ++axis) {
                     point[axis] = start[axis] + ray[axis] * share;
@@ -255,6 +270,21 @@ public final class CoverageVoxelizer {
                 color[kept * CoverageVolume.COLOR_VALUES + c] =
                         (float) (look[MaterialAverages.RED + c] / hits * shadowing);
             }
+            // The material most of its hits were on, and how bright it is against that one's look
+            int main = -1;
+            int most = 0;
+            for (java.util.Map.Entry<Integer, Integer> entry : hitsBy.entrySet()) {
+                if (entry.getValue() > most || entry.getValue() == most && entry.getKey() < main) {
+                    main = entry.getKey();
+                    most = entry.getValue();
+                }
+            }
+            mainMaterial[kept] = main;
+            final float[] mainLook = main < 0 || averages == null ? null : averages.average(main);
+            final double own = luminance(color, kept * CoverageVolume.COLOR_VALUES);
+            final double reference =
+                    luminance(mainLook == null ? DEFAULT_LOOK : mainLook, MaterialAverages.RED);
+            shade[kept] = (float) (reference <= 0 ? 1 : Math.clamp(own / reference, 0, 1));
             roughness[kept] = (float) (look[MaterialAverages.ROUGHNESS] / hits);
             metallic[kept] = (float) (look[MaterialAverages.METALLIC] / hits);
             density[kept] =
@@ -274,7 +304,20 @@ public final class CoverageVoxelizer {
                 Arrays.copyOf(sggx, kept * CoverageVolume.SGGX_VALUES),
                 Arrays.copyOf(color, kept * CoverageVolume.COLOR_VALUES),
                 Arrays.copyOf(roughness, kept),
-                Arrays.copyOf(metallic, kept));
+                Arrays.copyOf(metallic, kept),
+                Arrays.copyOf(mainMaterial, kept),
+                Arrays.copyOf(shade, kept));
+    }
+
+    /**
+     * A linear color's luminance (Rec. 709).
+     *
+     * @param values The values.
+     * @param at Where its red is.
+     * @return The luminance.
+     */
+    private static double luminance(float @NonNull [] values, int at) {
+        return LUMA_RED * values[at] + LUMA_GREEN * values[at + 1] + LUMA_BLUE * values[at + 2];
     }
 
     /** Finer volumes a voxelization takes in, sampled along rays at half their finest voxel. */

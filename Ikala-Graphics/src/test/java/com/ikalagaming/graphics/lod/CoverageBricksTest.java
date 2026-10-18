@@ -122,4 +122,48 @@ class CoverageBricksTest {
                 words < bricks.size() * (HEAD + CoverageBricks.VOXELS) / 4,
                 words + " words for " + bricks.size() + " bricks");
     }
+
+    /**
+     * A model's bricks name each voxel's main material and its shade in place of a color, and say
+     * so in their headers, so instances' remaps reach them.
+     */
+    @Test
+    void testNamedBricksKeepMaterials() {
+        final float[] triangles = cards();
+        final int[] materials = new int[triangles.length / 9];
+        for (int t = 0; t < materials.length; ++t) {
+            materials[t] = t % 4 < 2 ? 3 : 7;
+        }
+        final CoverageVolume volume =
+                CoverageVoxelizer.voxelize(triangles, materials, null, VOXEL, SEED);
+        final Map<Long, Integer> voxelAt = new HashMap<>();
+        for (int v = 0; v < volume.size(); ++v) {
+            voxelAt.put(volume.keyOf(v), v);
+            assertTrue(volume.material(v) == 3 || volume.material(v) == 7, "Voxel " + v);
+        }
+        int checked = 0;
+        for (CoverageBricks.Brick brick : CoverageBricks.of(volume, true)) {
+            assertEquals(1, brick.data().getInt(3 * Integer.BYTES), "Named in the header");
+            for (int place = 0; place < CoverageBricks.VOXELS; ++place) {
+                final int x = brick.x() + place % CoverageBricks.SIDE;
+                final int y = brick.y() + place / CoverageBricks.SIDE % CoverageBricks.SIDE;
+                final int z = brick.z() + place / (CoverageBricks.SIDE * CoverageBricks.SIDE);
+                final Integer v = voxelAt.get(CoverageVolume.key(x, y, z));
+                if (v == null) {
+                    continue;
+                }
+                final int[] data = lookUp(brick.data(), place);
+                assertEquals(volume.material(v), data[1] & 0xFFFF, "Voxel " + v + "'s material");
+                assertEquals(
+                        Math.round(volume.shade(v) * 255),
+                        (data[1] >>> Short.SIZE) & 0xFF,
+                        "Voxel " + v + "'s shade");
+                ++checked;
+            }
+        }
+        assertEquals(volume.size(), checked);
+        for (CoverageBricks.Brick brick : CoverageBricks.of(volume)) {
+            assertEquals(0, brick.data().getInt(3 * Integer.BYTES), "Colored bricks say so");
+        }
+    }
 }

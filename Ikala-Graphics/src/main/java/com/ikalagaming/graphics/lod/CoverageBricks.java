@@ -18,18 +18,24 @@ import java.util.Map;
  *
  * <pre>
  * header  float voxel size; how many voxels the mask's first quarter holds (low 16 bits) and its
- *         first half (high 16 bits); how many its first three quarters hold; unused
+ *         first half (high 16 bits); how many its first three quarters hold; 1 if its voxels
+ *         name their material rather than carry a color, else 0
  * mask    4 words, 512 bits: whether each voxel holds anything, x fastest, bit i of uint i / 32
  * voxel   one word for each voxel the mask holds, in order:
  *         uint density (half float, low 16 bits), roughness (byte), metalness (byte)
- *         uint color, sRGB encoded, red in the low byte
+ *         uint color, sRGB encoded, red in the low byte; or, naming their material, the
+ *              material's index (low 16 bits) and the voxel's shade against its average (byte)
  *         uint SGGX sigma x, y, z (bytes, 0 to 1), r xy (byte, -1 to 1)
  *         uint SGGX r xz, r yz (bytes, -1 to 1)
  * </pre>
  *
  * <p>The SGGX matrix is kept as Heitz et al.'s compact form (§4.4): the square roots of its
  * diagonal and its correlations, scaled so the largest of the diagonal is 1, with the density
- * scaled the other way so the extinction is the same. An empty voxel is all zero.
+ * scaled the other way so the extinction is the same.
+ *
+ * <p>A model's instances may each draw it with other materials, so its voxels name their main
+ * material and how bright they are against that material's average color, and the shader looks the
+ * material up through the instance's remaps.
  */
 public final class CoverageBricks {
 
@@ -76,6 +82,9 @@ public final class CoverageBricks {
     /** The largest byte. */
     private static final int BYTE_MAX = 255;
 
+    /** The bits of a material index a voxel keeps. */
+    private static final int MATERIAL_MASK = 0xFFFF;
+
     /**
      * One brick.
      *
@@ -102,6 +111,18 @@ public final class CoverageBricks {
      * @return Its bricks, in the order their voxels first come.
      */
     public static List<Brick> of(@NonNull CoverageVolume volume) {
+        return of(volume, false);
+    }
+
+    /**
+     * Lay a volume out in bricks.
+     *
+     * @param volume The volume.
+     * @param named Whether its voxels name their material and shade rather than carry a color, for
+     *     a model whose instances may remap materials.
+     * @return Its bricks, in the order their voxels first come.
+     */
+    public static List<Brick> of(@NonNull CoverageVolume volume, boolean named) {
         // Each brick's voxels that hold anything, by their place in it
         final Map<Long, int[]> corners = new LinkedHashMap<>();
         final Map<Long, java.util.TreeMap<Integer, Integer>> held = new LinkedHashMap<>();
@@ -136,12 +157,13 @@ public final class CoverageBricks {
                 for (int quarter = local / QUARTER + 1; quarter < before.length; ++quarter) {
                     ++before[quarter];
                 }
-                putVoxel(volume, voxel.getValue(), data, (HEAD_WORDS + rank) * WORD_BYTES);
+                putVoxel(volume, voxel.getValue(), data, (HEAD_WORDS + rank) * WORD_BYTES, named);
                 ++rank;
             }
             data.putFloat(0, (float) volume.voxelSize());
             data.putInt(Integer.BYTES, before[1] | before[2] << Short.SIZE);
             data.putInt(2 * Integer.BYTES, before[3]);
+            data.putInt(3 * Integer.BYTES, named ? 1 : 0);
             for (int i = 0; i < MASK_INTS; ++i) {
                 data.putInt(MASK_START + i * Integer.BYTES, mask[i]);
             }
@@ -173,9 +195,10 @@ public final class CoverageBricks {
      * @param v The voxel.
      * @param out Where it goes.
      * @param at The byte it starts at.
+     * @param named Whether it names its material and shade rather than carries a color.
      */
     private static void putVoxel(
-            @NonNull CoverageVolume volume, int v, @NonNull ByteBuffer out, int at) {
+            @NonNull CoverageVolume volume, int v, @NonNull ByteBuffer out, int at, boolean named) {
         double largest = 0;
         for (int axis = 0; axis < AXES; ++axis) {
             largest = Math.max(largest, volume.sggx(v, axis));
@@ -203,9 +226,12 @@ public final class CoverageBricks {
                         | unorm(volume.metallic(v)) << (Short.SIZE + Byte.SIZE));
         out.putInt(
                 at + Integer.BYTES,
-                unorm(encodeSrgb(volume.color(v, 0)))
-                        | unorm(encodeSrgb(volume.color(v, 1))) << Byte.SIZE
-                        | unorm(encodeSrgb(volume.color(v, 2))) << Short.SIZE);
+                named
+                        ? (Math.max(0, volume.material(v)) & MATERIAL_MASK)
+                                | unorm(volume.shade(v)) << Short.SIZE
+                        : unorm(encodeSrgb(volume.color(v, 0)))
+                                | unorm(encodeSrgb(volume.color(v, 1))) << Byte.SIZE
+                                | unorm(encodeSrgb(volume.color(v, 2))) << Short.SIZE);
         out.putInt(
                 at + 2 * Integer.BYTES,
                 unorm(sigma[0])

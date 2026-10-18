@@ -1436,8 +1436,9 @@ public class LodRenderer {
         if (volume == null) {
             return register(state, world.owner, drawn(world, cluster, mesh));
         }
-        // Coverage volumes draw as the boxes of their bricks
-        final List<CoverageBricks.Brick> list = CoverageBricks.of(volume);
+        // Coverage volumes draw as the boxes of their bricks; a model's name their materials, since
+        // its instances may draw it with others
+        final List<CoverageBricks.Brick> list = CoverageBricks.of(volume, world.modelClusters >= 0);
         // Its bricks together, each as long as the voxels it holds
         int words = 0;
         for (CoverageBricks.Brick brick : list) {

@@ -19,6 +19,11 @@ layout(location = 2) flat out vec4 outTurn;
 // A voxel's width in render space; where the brick starts in the brick table, in words
 layout(location = 3) flat out vec2 outCell;
 layout(location = 4) flat out uint outSlot;
+// An instance's material remaps, which a model's voxels naming their material go through: from,
+// to, and how many there are
+layout(location = 5) flat out uvec4 outRemapFrom;
+layout(location = 6) flat out uvec4 outRemapTo;
+layout(location = 7) flat out uint outRemapCount;
 
 layout(set = 0, binding = 0) uniform Uniforms {
     mat4 projectionMatrix;
@@ -80,8 +85,14 @@ void main()
     vec3 render;
     vec4 turn = vec4(0.0, 0.0, 0.0, 1.0);
     float scale = 1.0;
+    outRemapFrom = uvec4(0u);
+    outRemapTo = uvec4(0u);
+    outRemapCount = 0u;
     if (instanced) {
         World world = worldTable.worlds[(id & ~INSTANCED) >> INSTANCE_SHIFT];
+        outRemapFrom = world.remapFrom;
+        outRemapTo = world.remapTo;
+        outRemapCount = world.model.w;
         turn = world.rotation;
         scale = world.renderOffset.w;
         render = rotate(turn, vec3(position) * (scale / STEPS_PER_UNIT)) + world.renderOffset.xyz;

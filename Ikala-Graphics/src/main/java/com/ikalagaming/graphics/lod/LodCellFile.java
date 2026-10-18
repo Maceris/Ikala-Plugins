@@ -51,6 +51,9 @@ public final class LodCellFile {
     /** The coverage volume section, only in cells with volumes. */
     public static final int LVOL = SectionTag.of("LVOL");
 
+    /** The version of the coverage volume section: 2 added each voxel's material and shade. */
+    public static final int VOLUMES_VERSION = 2;
+
     /** The version of every section but the clusters. */
     public static final int VERSION = 1;
 
@@ -99,7 +102,7 @@ public final class LodCellFile {
                 .with(LCEL, VERSION)
                 .with(LCLU, CLUSTERS_VERSION)
                 .with(LGRP, VERSION)
-                .with(LVOL, VERSION);
+                .with(LVOL, VOLUMES_VERSION);
     }
 
     /**
@@ -125,7 +128,7 @@ public final class LodCellFile {
                         .section(LCLU, CLUSTERS_VERSION, true, encodeClusters(cell.dag()))
                         .section(LGRP, VERSION, true, encodeGroups(cell.dag()));
         final ByteBuffer volumes = encodeVolumes(cell.dag());
-        return volumes == null ? writer : writer.section(LVOL, VERSION, true, volumes);
+        return volumes == null ? writer : writer.section(LVOL, VOLUMES_VERSION, true, volumes);
     }
 
     /**
@@ -596,6 +599,12 @@ public final class LodCellFile {
             for (int v = 0; v < n; ++v) {
                 out.putFloat(volume.metallic(v));
             }
+            for (int v = 0; v < n; ++v) {
+                out.putInt(volume.material(v));
+            }
+            for (int v = 0; v < n; ++v) {
+                out.putFloat(volume.shade(v));
+            }
         }
         return out.flip();
     }
@@ -615,7 +624,8 @@ public final class LodCellFile {
                                         * (1
                                                 + CoverageVolume.SGGX_VALUES
                                                 + CoverageVolume.COLOR_VALUES
-                                                + 2));
+                                                + 3)
+                                + Integer.BYTES);
     }
 
     /**
@@ -659,10 +669,19 @@ public final class LodCellFile {
             for (int v = 0; v < n; ++v) {
                 metallic[v] = in.getFloat();
             }
+            final int[] material = new int[n];
+            final float[] shade = new float[n];
+            for (int v = 0; v < n; ++v) {
+                material[v] = in.getInt();
+            }
+            for (int v = 0; v < n; ++v) {
+                shade[v] = in.getFloat();
+            }
             dag.setVolume(
                     id,
                     new CoverageVolume(
-                            origin, voxelSize, keys, density, sggx, color, roughness, metallic));
+                            origin, voxelSize, keys, density, sggx, color, roughness, metallic,
+                            material, shade));
         }
     }
 

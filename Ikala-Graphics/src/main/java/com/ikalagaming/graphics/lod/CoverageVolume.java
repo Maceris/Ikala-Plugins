@@ -57,6 +57,15 @@ public final class CoverageVolume {
     /** Each voxel's metalness. */
     private final float[] metallic;
 
+    /** The material most of each voxel's surfaces have, or -1 if none is known. */
+    private final int[] material;
+
+    /**
+     * How bright each voxel is against its main material's average color, 0 to 1: its own shading,
+     * as self-shadowing, which an instance drawing it with another material keeps.
+     */
+    private final float[] shade;
+
     /**
      * Keep a volume.
      *
@@ -68,6 +77,8 @@ public final class CoverageVolume {
      * @param color Each voxel's linear color.
      * @param roughness Each voxel's roughness.
      * @param metallic Each voxel's metalness.
+     * @param material The material most of each voxel's surfaces have, or -1.
+     * @param shade How bright each voxel is against its main material's average color.
      */
     CoverageVolume(
             double @NonNull [] origin,
@@ -77,7 +88,9 @@ public final class CoverageVolume {
             float @NonNull [] sggx,
             float @NonNull [] color,
             float @NonNull [] roughness,
-            float @NonNull [] metallic) {
+            float @NonNull [] metallic,
+            int @NonNull [] material,
+            float @NonNull [] shade) {
         this.origin = origin.clone();
         this.voxelSize = voxelSize;
         this.keys = keys;
@@ -86,6 +99,8 @@ public final class CoverageVolume {
         this.color = color;
         this.roughness = roughness;
         this.metallic = metallic;
+        this.material = material;
+        this.shade = shade;
     }
 
     /**
@@ -198,6 +213,27 @@ public final class CoverageVolume {
      */
     public float metallic(int voxel) {
         return metallic[voxel];
+    }
+
+    /**
+     * The material most of a voxel's surfaces have.
+     *
+     * @param voxel The voxel.
+     * @return The material's index, or -1 if none is known.
+     */
+    public int material(int voxel) {
+        return material[voxel];
+    }
+
+    /**
+     * How bright a voxel is against its main material's average color, so it can be drawn with
+     * another material in that one's place.
+     *
+     * @param voxel The voxel.
+     * @return The shade, 0 to 1.
+     */
+    public float shade(int voxel) {
+        return shade[voxel];
     }
 
     /**

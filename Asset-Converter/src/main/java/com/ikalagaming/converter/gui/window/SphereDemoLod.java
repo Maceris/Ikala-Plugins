@@ -50,6 +50,9 @@ final class SphereDemoLod {
     /** The startup property that turns level of detail on as soon as the demo opens. */
     private static final String LOD_PROPERTY = "ikala.test.sphereLod";
 
+    /** The startup property that sets the error threshold to start with, in pixels. */
+    private static final String ERROR_PROPERTY = "ikala.test.sphereError";
+
     /** The startup property that sets how many rows of copies to scatter. */
     private static final String ROWS_PROPERTY = "ikala.test.sphereRows";
 
@@ -135,7 +138,9 @@ final class SphereDemoLod {
     private final int[] rows = {0};
 
     /** The error threshold. */
-    private final float[] threshold = {DEFAULT_THRESHOLD};
+    private final float[] threshold = {
+        Float.parseFloat(System.getProperty(ERROR_PROPERTY, String.valueOf(DEFAULT_THRESHOLD)))
+    };
 
     /** The model, once built. Render thread. */
     private LodHandle model;
@@ -266,17 +271,20 @@ final class SphereDemoLod {
                             final LodMesh mesh =
                                     SceneLod.ofModel(meshes, cache::getMaterialIndex, true);
                             final DagBuilder.Options defaults = DagBuilder.Options.defaults();
-                            // No baking or blending, which would fix one look for every instance
+                            // No baking or blending, which would fix one look for every instance;
+                            // coverage volumes name their materials, so instances' remaps reach
+                            // them
                             return DagBuilder.build(
                                     List.of(mesh),
                                     new DagBuilder.Options(
-                                            defaults.virtualEdgeFactor(),
-                                            defaults.lockOpenBorder(),
-                                            defaults.threads(),
-                                            false,
-                                            defaults.visibilityReach(),
-                                            defaults.mergePlanar(),
-                                            null));
+                                                    defaults.virtualEdgeFactor(),
+                                                    defaults.lockOpenBorder(),
+                                                    defaults.threads(),
+                                                    false,
+                                                    defaults.visibilityReach(),
+                                                    defaults.mergePlanar(),
+                                                    null)
+                                            .withVolumes(true));
                         })
                 .whenComplete(
                         (dag, failure) ->
