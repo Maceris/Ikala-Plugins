@@ -107,6 +107,15 @@ public class Material {
     private boolean bakedData;
 
     /**
+     * Whether, as a model's level of detail bake page, its color texture names a material and a
+     * shade per texel rather than holding colors: red the shade over 2, green and blue the
+     * material's index, read without filtering, so an instance's material remaps reach far baked
+     * tiles. Set with {@link #bakedData}, whose data texture then holds how much the baked normals
+     * agree in place of roughness.
+     */
+    private boolean indexedBake;
+
+    /**
      * How the material lets light through, which decides which faces it hides when baked and how it
      * is drawn.
      */

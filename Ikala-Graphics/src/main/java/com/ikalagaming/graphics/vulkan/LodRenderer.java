@@ -799,6 +799,7 @@ public class LodRenderer {
      * @param dag The model.
      * @param meshes Each cluster's mesh, by cluster id.
      * @param thresholdPixels The most error a drawn cluster may have, in pixels.
+     * @param bakes Its baked clusters, naming materials, or null.
      * @return The model's id.
      * @throws IllegalArgumentException If it has more clusters than an instanced draw can name.
      */
@@ -807,7 +808,8 @@ public class LodRenderer {
             @NonNull String owner,
             @NonNull LodDag dag,
             @NonNull List<ClusterMeshes.Mesh> meshes,
-            double thresholdPixels) {
+            double thresholdPixels,
+            LodBakes.Plan bakes) {
         if (dag.clusters().size() > LodCullMath.MAX_MODEL_CLUSTERS) {
             throw new IllegalArgumentException(
                     "A model can have at most "
@@ -815,7 +817,7 @@ public class LodRenderer {
                             + " clusters, not "
                             + dag.clusters().size());
         }
-        return addDag(state, owner, dag, meshes, thresholdPixels, null, true);
+        return addDag(state, owner, dag, meshes, thresholdPixels, bakes, true);
     }
 
     /**
@@ -1640,14 +1642,15 @@ public class LodRenderer {
     }
 
     /**
-     * Show or hide a world.
+     * Show or hide a world. A model stays hidden, drawn only by its instances.
      *
      * @param id The world.
      * @param visible Whether it is drawn.
      */
     public void setVisible(long id, boolean visible) {
         final World world = world(id);
-        if (world != null) {
+        // A model is only drawn by its instances, which are shown or hidden one by one
+        if (world != null && world.modelClusters < 0) {
             world.visible = visible;
         }
     }

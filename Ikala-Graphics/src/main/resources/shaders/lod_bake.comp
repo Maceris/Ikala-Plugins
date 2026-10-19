@@ -35,10 +35,16 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Sp
     uvec4 splats[];
 };
 
+// Each source material's index in the material cache, which a model's indexed texels name
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer SourceIndices {
+    uint indices[];
+};
+
 layout(push_constant) uniform BakeConstants {
     Records texels;
     SourceMaterials sources;
     Splats splats;
+    SourceIndices sourceIndices;
     // The tile's corner in the page, in texels, and its width and height
     ivec2 origin;
     ivec2 extent;
@@ -46,6 +52,9 @@ layout(push_constant) uniform BakeConstants {
     int emitting;
     // How many splats the tile has
     uint splatCount;
+    // Nonzero for a model's tile, whose texels name a material and a shade, see
+    // MATERIAL_FLAG_INDEXED_BAKE
+    int indexed;
 };
 
 layout(set = 0, binding = 0, rgba8) uniform restrict writeonly image2D colorPage;
@@ -53,6 +62,11 @@ layout(set = 0, binding = 1, rgba8) uniform restrict writeonly image2D dataPage;
 layout(set = 0, binding = 2, rgba8) uniform writeonly image2D emissionPage;
 
 layout(set = 1, binding = 0) uniform sampler2D bindlessTextures[];
+
+#include "material_average.glsl"
+
+// Rec. 709 luminance weights, for a texel's shade against its material's average
+const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
 // Match LodBakes
 const uint EMPTY = 0xFFFFFFFFu;
@@ -179,6 +193,9 @@ void main()
     }
     float scale = covered > 1.0 ? 1.0 / covered : 1.0;
     float keep = 1.0 - min(covered, 1.0);
+    // A model's texel names the material it samples most, own or a splat's
+    uint named = first.x;
+    float most = keep;
     vec3 color = own.color * keep;
     vec3 normal = own.normal * keep;
     float roughness = own.roughness * keep;
@@ -187,6 +204,10 @@ void main()
     for (uint s = start; s < splatCount && splats.splats[s * 3u].x == texel; ++s) {
         float share = uintBitsToFloat(splats.splats[s * 3u].y) * scale;
         Sampled laid = sampleRecord(splats.splats[s * 3u + 1u], splats.splats[s * 3u + 2u]);
+        if (share > most) {
+            most = share;
+            named = splats.splats[s * 3u + 1u].x;
+        }
         color += laid.color * share;
         normal += laid.normal * share;
         roughness += laid.roughness * share;
@@ -194,10 +215,29 @@ void main()
         emission += laid.emission * share;
     }
     // Unit normals blended by shares that sum to 1, so the blend's length is their mean's
-    roughness = roughenBySpread(roughness, length(normal));
-    normal = length(normal) > 0.0 ? normalize(normal) : own.normal;
+    float agree = length(normal);
+    roughness = roughenBySpread(roughness, agree);
+    normal = agree > 0.0 ? normalize(normal) : own.normal;
 
     ivec2 at = origin + ivec2(int(texel) % extent.x, int(texel) / extent.x);
+    if (indexed != 0) {
+        // The material by its index, and how bright the texel is against its average; how much
+        // the normals agree widens that material's roughness where it is drawn
+        uint material = sourceIndices.indices[named];
+        vec3 average;
+        float ownRoughness;
+        float ownMetallic;
+        averageLook(sources.materials[named], average, ownRoughness, ownMetallic);
+        float base = dot(average, LUMA);
+        float shade = base > 0.0 ? dot(color, LUMA) / base : 1.0;
+        imageStore(colorPage, at, vec4(clamp(shade / MAX_BAKE_SHADE, 0.0, 1.0),
+            float(material & 0xFFu) / 255.0, float((material >> 8u) & 0xFFu) / 255.0, 1.0));
+        imageStore(dataPage, at, vec4(normal.xy * 0.5 + 0.5, agree, 0.0));
+        if (emitting != 0) {
+            imageStore(emissionPage, at, encodeEmission(emission));
+        }
+        return;
+    }
     imageStore(colorPage, at, vec4(linearToSRGB(color), 1.0));
     imageStore(dataPage, at, vec4(normal.xy * 0.5 + 0.5, roughness, metallic));
     if (emitting != 0) {

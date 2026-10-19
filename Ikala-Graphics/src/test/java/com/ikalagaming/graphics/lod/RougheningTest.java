@@ -63,7 +63,7 @@ class RougheningTest {
      * @return The mean roughness of the square's corners.
      */
     private static double transferredRoughness(float height) {
-        final AverageTransfer transfer = new AverageTransfer();
+        final AverageTransfer transfer = new AverageTransfer(null);
         final float step = SIDE / RIDGES;
         for (int i = 0; i < RIDGES; ++i) {
             final float x0 = i * step;
@@ -71,8 +71,8 @@ class RougheningTest {
             // Up one side of a ridge, or down it, along x, all the way along z
             final float y0 = i % 2 == 0 ? 0 : height;
             final float y1 = i % 2 == 0 ? height : 0;
-            transfer.add(new float[] {x0, y0, 0, x0, y0, SIDE, x1, y1, SIDE}, 0, 1, LOOK);
-            transfer.add(new float[] {x0, y0, 0, x1, y1, SIDE, x1, y1, 0}, 0, 1, LOOK);
+            transfer.add(new float[] {x0, y0, 0, x0, y0, SIDE, x1, y1, SIDE}, 0, 1, 0, LOOK);
+            transfer.add(new float[] {x0, y0, 0, x1, y1, SIDE, x1, y1, 0}, 0, 1, 0, LOOK);
         }
         final LodMesh.Builder builder = LodMesh.builder(new double[3]);
         final int a = builder.vertex(1, 0, 1);

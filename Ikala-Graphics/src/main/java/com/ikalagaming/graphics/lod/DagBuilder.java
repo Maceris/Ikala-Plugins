@@ -123,6 +123,9 @@ public final class DagBuilder {
      * @param volumes Whether groups turn what is finer than their resolution into coverage volumes
      *     (see {@link MacroSurfaces} and {@link CoverageVoxelizer}) where the voxels cost less than
      *     the triangles they stand for.
+     * @param named Whether blended corners name the material they mostly blend and a shade against
+     *     its average, rather than carry a color, as a model's must: its instances may draw it with
+     *     other materials (see {@link Attributes#namedAverage}).
      */
     public record Options(
             double virtualEdgeFactor,
@@ -135,7 +138,8 @@ public final class DagBuilder {
             int bakeTile,
             double bakeDensity,
             IntPredicate cutOut,
-            boolean volumes) {
+            boolean volumes,
+            boolean named) {
 
         /** Texels across a baked cluster's error, unless asked otherwise. */
         public static final double DEFAULT_BAKE_DENSITY = 2;
@@ -305,7 +309,8 @@ public final class DagBuilder {
                     bakeTile,
                     bakeDensity,
                     cutOut,
-                    volumes);
+                    volumes,
+                    named);
         }
 
         /**
@@ -326,7 +331,8 @@ public final class DagBuilder {
                     bakeTile,
                     bakeDensity,
                     cutOut,
-                    volumes);
+                    volumes,
+                    named);
         }
 
         /**
@@ -347,7 +353,8 @@ public final class DagBuilder {
                     bakeTile,
                     bakeDensity,
                     cutOut,
-                    volumes);
+                    volumes,
+                    named);
         }
 
         /**
@@ -368,7 +375,8 @@ public final class DagBuilder {
                     tile,
                     bakeDensity,
                     cutOut,
-                    volumes);
+                    volumes,
+                    named);
         }
 
         /**
@@ -389,7 +397,8 @@ public final class DagBuilder {
                     bakeTile,
                     density,
                     cutOut,
-                    volumes);
+                    volumes,
+                    named);
         }
 
         /**
@@ -433,6 +442,70 @@ public final class DagBuilder {
         }
 
         /**
+         * Options as given, blended corners carrying colors.
+         *
+         * @param virtualEdgeFactor See the record.
+         * @param lockOpenBorder See the record.
+         * @param threads See the record.
+         * @param keepLineage See the record.
+         * @param visibilityReach See the record.
+         * @param mergePlanar See the record.
+         * @param averages See the record.
+         * @param bakeTile See the record.
+         * @param bakeDensity See the record.
+         * @param cutOut See the record.
+         * @param volumes See the record.
+         */
+        public Options(
+                double virtualEdgeFactor,
+                boolean lockOpenBorder,
+                int threads,
+                boolean keepLineage,
+                double visibilityReach,
+                boolean mergePlanar,
+                MaterialAverages averages,
+                int bakeTile,
+                double bakeDensity,
+                IntPredicate cutOut,
+                boolean volumes) {
+            this(
+                    virtualEdgeFactor,
+                    lockOpenBorder,
+                    threads,
+                    keepLineage,
+                    visibilityReach,
+                    mergePlanar,
+                    averages,
+                    bakeTile,
+                    bakeDensity,
+                    cutOut,
+                    volumes,
+                    false);
+        }
+
+        /**
+         * The same options, blended corners naming materials, or carrying colors.
+         *
+         * @param turn Whether they name materials.
+         * @return The options.
+         */
+        public Options withNamed(boolean turn) {
+            return new Options(
+                    virtualEdgeFactor,
+                    lockOpenBorder,
+                    threads,
+                    keepLineage,
+                    visibilityReach,
+                    mergePlanar,
+                    averages,
+                    bakeTile,
+                    bakeDensity,
+                    cutOut,
+                    volumes,
+                    turn);
+        }
+
+        /**
          * The same options, turning what is finer than each group's resolution into volumes, or
          * not.
          *
@@ -451,7 +524,8 @@ public final class DagBuilder {
                     bakeTile,
                     bakeDensity,
                     cutOut,
-                    turn);
+                    turn,
+                    named);
         }
 
         /**
@@ -472,7 +546,8 @@ public final class DagBuilder {
                     bakeTile,
                     bakeDensity,
                     materials,
-                    volumes);
+                    volumes,
+                    named);
         }
 
         /**
@@ -1679,7 +1754,8 @@ public final class DagBuilder {
         // Far enough out that a tile per cluster holds the input's look finely enough, the output
         // is baked instead, so nothing about appearance holds simplifying back
         final boolean baking = !averaging && bakes(children);
-        final AverageTransfer average = averaging ? new AverageTransfer() : null;
+        final AverageTransfer average =
+                averaging ? new AverageTransfer(options.named() ? options.averages() : null) : null;
         final float[] look = new float[MaterialAverages.VALUES];
         for (int id : children) {
             final LodDag.Cluster cluster = dag.clusters().get(id);
@@ -1697,8 +1773,12 @@ public final class DagBuilder {
                     }
                 }
                 if (averaging) {
-                    lookOf(attributes, t, material, look);
-                    average.add(corners, t * TRIANGLE_VALUES, cluster.visibility()[t], look);
+                    average.add(
+                            corners,
+                            t * TRIANGLE_VALUES,
+                            cluster.visibility()[t],
+                            lookOf(attributes, t, material, look),
+                            look);
                 }
                 if (builder.triangle(
                         v[0], v[1], v[2], cluster.materials()[t], cluster.visibility()[t])) {
@@ -2722,28 +2802,55 @@ public final class DagBuilder {
 
     /**
      * What an input triangle looks like averaged: an averaged triangle's corners' looks, evened
-     * out, or else its material's average.
+     * out, or else its material's average. A named averaged corner's look is its material's average
+     * times its shade.
      *
      * @param attributes Its cluster's attributes.
      * @param t The triangle.
      * @param material Its material.
      * @param out Receives the {@link MaterialAverages#VALUES} values.
+     * @return The material the look is mostly of: a named triangle's first corner's, else its own.
      */
-    private void lookOf(int @NonNull [] attributes, int t, int material, float @NonNull [] out) {
+    private int lookOf(int @NonNull [] attributes, int t, int material, float @NonNull [] out) {
         final int first = t * Attributes.PER_TRIANGLE;
         if (Attributes.textured(attributes, t) && Attributes.isAveraged(attributes, first)) {
             Arrays.fill(out, 0);
             final float[] corner = new float[MaterialAverages.VALUES];
             for (int c = 0; c < LodMesh.CORNERS; ++c) {
-                Attributes.averageOf(attributes, first + c * Attributes.VALUES, corner);
+                final int at = first + c * Attributes.VALUES;
+                if (Attributes.isNamedAverage(attributes, at)) {
+                    lookOfNamed(attributes, at, corner);
+                } else {
+                    Attributes.averageOf(attributes, at, corner);
+                }
                 for (int k = 0; k < out.length; ++k) {
                     out[k] += corner[k] / LodMesh.CORNERS;
                 }
             }
-            return;
+            return Attributes.isNamedAverage(attributes, first)
+                    ? Attributes.namedMaterial(attributes, first)
+                    : material;
         }
         final float[] average = options.averages().average(material);
         System.arraycopy(average == null ? UNKNOWN_LOOK : average, 0, out, 0, out.length);
+        return material;
+    }
+
+    /**
+     * A named averaged corner's look: its material's average, its color times its shade.
+     *
+     * @param attributes Corners' ints.
+     * @param at Where the corner starts.
+     * @param out Receives the {@link MaterialAverages#VALUES} values.
+     */
+    private void lookOfNamed(int @NonNull [] attributes, int at, float @NonNull [] out) {
+        final float[] average =
+                options.averages().average(Attributes.namedMaterial(attributes, at));
+        System.arraycopy(average == null ? UNKNOWN_LOOK : average, 0, out, 0, out.length);
+        final float shade = Attributes.namedShade(attributes, at);
+        for (int c = 0; c < AXES; ++c) {
+            out[MaterialAverages.RED + c] *= shade;
+        }
     }
 
     /**

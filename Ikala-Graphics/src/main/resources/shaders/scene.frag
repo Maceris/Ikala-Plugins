@@ -6,6 +6,7 @@
 #include "material.glsl"
 #include "volume_fade.glsl"
 #include "alpha_test.glsl"
+#include "roughening.glsl"
 
 layout(location = 0) in vec3 outNormal;
 layout(location = 1) in vec3 outTangent;
@@ -14,6 +15,8 @@ layout(location = 3) in vec2 outTextCoord;
 layout(location = 4) in vec4 outViewPosition;
 layout(location = 5) in vec4 outWorldPosition;
 layout(location = 6) flat in uint outMaterialIdx;
+// A model instance's material remaps, from in the low 16 bits and to in the high, see scene_lod.vert
+layout(location = 7) flat in uvec4 outRemaps;
 
 // Whether to drop pixels the texture's alpha cuts out. Off for baked opaque geometry, so the
 // depth test can run before the shader.
@@ -137,6 +140,51 @@ void main() {
     textCoordDy = dFdy(textCoord);
 
     vec4 baseColor = material.baseColor;
+    // A model's indexed bake: each texel names a material and a shade, read as it was written, and
+    // the material is drawn as the instance draws it, its average look times the shade, its
+    // roughness widened by how much the baked normals agreed
+    bool indexed = (material.flags & MATERIAL_FLAG_INDEXED_BAKE) != 0;
+    Material named = material;
+    float namedRoughness = 0.0;
+    float namedMetallic = 0.0;
+    if (indexed) {
+        // The four nearest texels' colors, filtered as a color texture would be: each names its
+        // own material, which can't be blended, but their looks can
+        int page = material.textureIndex;
+        ivec2 size = textureSize(bindlessTextures[nonuniformEXT(page)], 0);
+        vec2 at = textCoord * vec2(size) - 0.5;
+        ivec2 low = ivec2(floor(at));
+        vec2 blend = at - vec2(low);
+        vec3 linear = vec3(0.0);
+        float most = -1.0;
+        for (int corner = 0; corner < 4; ++corner) {
+            ivec2 offset = ivec2(corner & 1, corner >> 1);
+            ivec2 texel = clamp(low + offset, ivec2(0), size - ivec2(1));
+            vec4 names = texelFetch(bindlessTextures[nonuniformEXT(page)], texel, 0);
+            uint own = uint(round(names.g * 255.0)) | (uint(round(names.b * 255.0)) << 8);
+            uint id = own;
+            for (int i = 0; i < 4; ++i) {
+                if ((outRemaps[i] & 0xFFFFu) == own) {
+                    id = outRemaps[i] >> 16;
+                }
+            }
+            float weight = (offset.x == 1 ? blend.x : 1.0 - blend.x)
+                * (offset.y == 1 ? blend.y : 1.0 - blend.y);
+            vec3 average;
+            float roughness;
+            float metallic;
+            averageLook(materials[id], average, roughness, metallic);
+            linear += weight * average * names.r * MAX_BAKE_SHADE;
+            // The surface's other values from the texel weighing most
+            if (weight > most) {
+                most = weight;
+                named = materials[id];
+                namedRoughness = roughness;
+                namedMetallic = metallic;
+            }
+        }
+        baseColor = vec4(linearToSRGB(clamp(linear, 0.0, 1.0)), 1.0);
+    }
     // An averaged triangle's specular, roughness and metallic
     vec3 averagedLook = vec3(outBitangent.x, outTextCoord);
     if (averaged) {
@@ -153,7 +201,7 @@ void main() {
         vec3 across = abs(surfaceNormal.x) < 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
         tangent = normalize(cross(surfaceNormal, across));
         bitangent = cross(surfaceNormal, tangent);
-    } else if (material.textureIndex > 0) {
+    } else if (!indexed && material.textureIndex > 0) {
         // Sampled in linear light (sRGB textures are decoded by the GPU); the g-buffer holds base
         // colors sRGB encoded, as material colors are given
         baseColor = sampleTexture(material.textureIndex);
@@ -211,8 +259,11 @@ void main() {
             packedLook = true;
         } else if ((material.flags & MATERIAL_FLAG_BAKED_DATA) != 0
                 && material.normalMapIndex > 0) {
-            // A bake's roughness and metalness ride along with its normal
-            packedValues = vec3(1.0, normalTexel.b, normalTexel.a);
+            // A bake's roughness and metalness ride along with its normal; an indexed bake's
+            // material's own, its roughness widened by how much the baked normals agreed
+            packedValues = indexed
+                ? vec3(1.0, roughenBySpread(namedRoughness, normalTexel.b), namedMetallic)
+                : vec3(1.0, normalTexel.b, normalTexel.a);
             packedLook = true;
         }
     }
@@ -233,7 +284,7 @@ void main() {
         buffTangent = vec4(normalize(tangent), averagedLook.z);
     } else if (packedLook && debugHue < 0.0) {
         // The packed texture's roughness and metalness, with the material's specular
-        buffBaseColor = vec4(baseColor.rgb, material.specular);
+        buffBaseColor = vec4(baseColor.rgb, named.specular);
         buffNormal = vec4(normal, packedValues.g);
         buffTangent = vec4(normalize(tangent), packedValues.b);
     } else {

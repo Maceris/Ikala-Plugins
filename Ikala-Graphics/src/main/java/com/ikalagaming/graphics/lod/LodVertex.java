@@ -89,8 +89,9 @@ public final class LodVertex {
     public static final int FLAG_SHELL = 1 << 4;
 
     /**
-     * Set with {@link #FLAG_SHELL} for a model's shell's corner ({@link Attributes#namedShell}),
-     * which carries a shade against its material's look rather than a color.
+     * Set with {@link #FLAG_AVERAGED} for a model's corner that names its material rather than
+     * carrying a color: a shell's ({@link Attributes#namedShell}), whose triangle names it, or an
+     * averaged one's ({@link Attributes#namedAverage}), which names its own.
      */
     public static final int FLAG_NAMED = 1 << 5;
 
@@ -161,7 +162,8 @@ public final class LodVertex {
                 if (Attributes.isShell(attributes, at)) {
                     flags |= FLAG_SHELL;
                 }
-                if (Attributes.isNamedShell(attributes, at)) {
+                if (Attributes.isNamedShell(attributes, at)
+                        || Attributes.isNamedAverage(attributes, at)) {
                     flags |= FLAG_NAMED;
                 }
             } else {

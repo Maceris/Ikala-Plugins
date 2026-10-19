@@ -39,6 +39,19 @@ public final class Attributes {
      */
     public static final int NAMED_SHELL_UV = 0x7E02;
 
+    /**
+     * What a model's averaged corner holds in the low half of its texture coordinates' place, a
+     * fourth NaN: it names a material in the high half, and carries its shade against that
+     * material's average and how much the normals it blends agree, rather than a color, see {@link
+     * #namedAverage}.
+     */
+    public static final int NAMED_AVERAGE_UV = 0x7E03;
+
+    /**
+     * The most a named corner's shade reaches, so a blend brighter than its material still fits.
+     */
+    public static final float MAX_SHADE = 2;
+
     /** The most a byte holds, for values from 0 to 1. */
     private static final int BYTE_MAX = 0xFF;
 
@@ -279,6 +292,76 @@ public final class Attributes {
     public static boolean isShell(int @NonNull [] attributes, int at) {
         final int uv = attributes[at + UV] & SHORT_MASK;
         return uv == SHELL_UV || uv == NAMED_SHELL_UV;
+    }
+
+    /**
+     * Set a model's averaged corner: its normal; in place of a tangent its shade against its
+     * material's average (from 0 to {@link #MAX_SHADE}) and how much the normals it blends agree, a
+     * byte each; in place of texture coordinates {@link #NAMED_AVERAGE_UV}, then the material. The
+     * material's own roughness, widened by the normals' spread, and its metalness stand, so a
+     * material an instance draws in its place brings its own.
+     *
+     * @param normal The normal; it needn't be unit length, but mustn't be zero.
+     * @param material The material blended most.
+     * @param shade Its shade, 0 to {@link #MAX_SHADE}.
+     * @param spread The length of the blended normals' weighted mean, 0 to 1.
+     * @param out Where the corner goes.
+     * @param at Where in it.
+     */
+    public static void namedAverage(
+            float @NonNull [] normal,
+            int material,
+            float shade,
+            double spread,
+            int @NonNull [] out,
+            int at) {
+        out[at + NORMAL] = encodeDirection(normal);
+        out[at + TANGENT] = toByte(shade / MAX_SHADE) | toByte(spread) << BYTE_BITS;
+        out[at + UV] = NAMED_AVERAGE_UV | (material & SHORT_MASK) << SHORT_BITS;
+    }
+
+    /**
+     * Whether a corner is a model's averaged corner, which names its material.
+     *
+     * @param attributes Corners' ints.
+     * @param at Where the corner starts.
+     * @return True if it is.
+     */
+    public static boolean isNamedAverage(int @NonNull [] attributes, int at) {
+        return (attributes[at + UV] & SHORT_MASK) == NAMED_AVERAGE_UV;
+    }
+
+    /**
+     * The material a named averaged corner names.
+     *
+     * @param attributes Corners' ints.
+     * @param at Where the corner starts.
+     * @return The material's index.
+     */
+    public static int namedMaterial(int @NonNull [] attributes, int at) {
+        return attributes[at + UV] >>> SHORT_BITS;
+    }
+
+    /**
+     * A named averaged corner's shade against its material's average.
+     *
+     * @param attributes Corners' ints.
+     * @param at Where the corner starts.
+     * @return The shade, 0 to {@link #MAX_SHADE}.
+     */
+    public static float namedShade(int @NonNull [] attributes, int at) {
+        return fromByte(attributes[at + TANGENT]) * MAX_SHADE;
+    }
+
+    /**
+     * How much the normals a named averaged corner blends agree.
+     *
+     * @param attributes Corners' ints.
+     * @param at Where the corner starts.
+     * @return The length of their weighted mean, 0 to 1.
+     */
+    public static float namedSpread(int @NonNull [] attributes, int at) {
+        return fromByte(attributes[at + TANGENT] >>> BYTE_BITS);
     }
 
     /**

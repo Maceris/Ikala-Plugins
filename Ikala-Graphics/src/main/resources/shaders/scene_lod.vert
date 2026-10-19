@@ -1,5 +1,11 @@
 #version 460
 #extension GL_EXT_buffer_reference : require
+#extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_GOOGLE_include_directive : require
+
+#include "color.glsl"
+#include "material.glsl"
+#include "roughening.glsl"
 
 // The scene vertex shader for level of detail clusters, in the vertex format of LodVertex. Every
 // position is on one grid of 1 / STEPS_PER_UNIT unit from the LOD world's origin, so clusters meet
@@ -15,7 +21,10 @@
 // texture's would be, outTextCoord the roughness and metallic, and outBitangent.x the specular.
 // A coverage volume shell's (FLAG_SHELL) are averaged too, with their coverage in outBitangent.y
 // and 1 in its z; a model's (FLAG_NAMED) have 2 there, and only their shade, in outTangent.x,
-// against their material's average look.
+// against their material's average look. A model's other averaged corners (FLAG_NAMED without
+// FLAG_SHELL) name their own material, which an instance may draw another in place of, and carry
+// their shade against its average and how much the normals they blend agree: their look is worked
+// out here from the material, and passed on as any averaged corner's (see Attributes.namedAverage).
 //
 // A projected triangle's have none: scene.frag, with TRIPLANAR on, works out each flat triangle's
 // normal from how its position changes across the screen, and projects the material's texture
@@ -47,6 +56,17 @@ layout(location = 3) out vec2 outTextCoord;
 layout(location = 4) out vec4 outViewPosition;
 layout(location = 5) out vec4 outWorldPosition;
 layout(location = 6) flat out uint outMaterialIdx;
+// An instance's material remaps, from in the low 16 bits and to in the high, all ones for none,
+// for scene.frag's indexed bakes, whose texels name the materials they draw
+layout(location = 7) flat out uvec4 outRemaps;
+
+layout(std430, set = 0, binding = 2) readonly buffer Materials {
+    Material materials[];
+};
+
+layout(set = 1, binding = 0) uniform sampler2D bindlessTextures[];
+
+#include "material_average.glsl"
 
 layout(set = 0, binding = 0) uniform Uniforms {
     mat4 projectionMatrix;
@@ -141,6 +161,8 @@ const uint FLAG_SHELL = 16;
 const uint FLAG_NAMED = 32;
 // The specular a coverage volume shell's corners get, whose specular byte holds their coverage
 const float SHELL_SPECULAR = 0.5;
+// The most a named averaged corner's shade reaches, see Attributes.MAX_SHADE
+const float MAX_SHADE = 2.0;
 // Where a shell corner's two coverages hold, by the cosine of the angle the camera sees it at:
 // straight in, about the middle of CoverageShells' straight rays, and grazing, its grazing rays'
 const float SHELL_STRAIGHT_COS = 0.966;
@@ -187,6 +209,10 @@ void main()
             outMaterialIdx = world.remapTo[i];
         }
     }
+    outRemaps = uvec4(0xFFFFFFFFu);
+    for (uint i = 0u; instanced && i < world.model.w; ++i) {
+        outRemaps[i] = (world.remapFrom[i] & 0xFFFFu) | (world.remapTo[i] << 16);
+    }
     // An instance's model frame turned into the world's; a world's is the world's
     vec4 turn = instanced ? world.rotation : vec4(0.0, 0.0, 0.0, 1.0);
 
@@ -206,6 +232,7 @@ void main()
             vec4 more = unpackUnorm4x8(texCoordBits);
             outTangent = look.rgb;
             outTextCoord = vec2(look.a, more.z);
+            bool named = (materialFlags.y & FLAG_NAMED) != 0;
             // A coverage volume shell's corner: its coverage in place of the specular, see
             // Attributes.shell, for scene.frag's hashed alpha test; z is 2 for a model's, which
             // names its material and carries only its shade, in the color's red. The coverage is
@@ -219,6 +246,24 @@ void main()
                     / (SHELL_STRAIGHT_COS - SHELL_GRAZING_COS), 0.0, 1.0));
                 outBitangent = vec3(SHELL_SPECULAR, coverage,
                     (materialFlags.y & FLAG_NAMED) != 0 ? 2.0 : 1.0);
+            } else if (named) {
+                // The material it names, as the instance draws it, its average look times the
+                // corner's shade, its roughness widened by how much the blended normals disagreed
+                uint material = texCoordBits >> 16;
+                uint own = material;
+                for (uint i = 0u; instanced && i < world.model.w; ++i) {
+                    if (world.remapFrom[i] == own) {
+                        material = world.remapTo[i];
+                    }
+                }
+                Material drawn = materials[material];
+                vec3 linear;
+                float roughness;
+                float metallic;
+                averageLook(drawn, linear, roughness, metallic);
+                outTangent = linearToSRGB(clamp(linear * look.r * MAX_SHADE, 0.0, 1.0));
+                outTextCoord = vec2(roughenBySpread(roughness, look.g), metallic);
+                outBitangent = vec3(drawn.specular, 0.0, 0.0);
             } else {
                 outBitangent = vec3(more.w, 0.0, 0.0);
             }

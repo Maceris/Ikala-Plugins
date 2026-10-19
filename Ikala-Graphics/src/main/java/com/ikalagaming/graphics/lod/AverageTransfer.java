@@ -54,6 +54,25 @@ final class AverageTransfer {
     /** Each input triangle's values. */
     private final List<float[]> values = new ArrayList<>();
 
+    /** Each input triangle's material, which named corners tally. */
+    private final IntArrayList materials = new IntArrayList();
+
+    /**
+     * What materials look like averaged, if corners name the material they mostly blend and their
+     * shade against it, else null for corners that carry the blend's color.
+     */
+    private final MaterialAverages named;
+
+    /**
+     * Start a transfer.
+     *
+     * @param named What materials look like averaged, for corners that name materials, or null for
+     *     corners that carry colors.
+     */
+    AverageTransfer(MaterialAverages named) {
+        this.named = named;
+    }
+
     /** How far around a corner the input is blended from, set by {@link #transfer}. */
     private double radius;
 
@@ -66,9 +85,15 @@ final class AverageTransfer {
      * @param triangle Its corners, 9 floats from {@code at}.
      * @param at Where they start.
      * @param visibility How visible it is from outside, 0 to 1.
+     * @param material The material its look is mostly of.
      * @param average Its {@link MaterialAverages#VALUES} values.
      */
-    void add(float @NonNull [] triangle, int at, float visibility, float @NonNull [] average) {
+    void add(
+            float @NonNull [] triangle,
+            int at,
+            float visibility,
+            int material,
+            float @NonNull [] average) {
         final float[] copy = new float[TRIANGLE_VALUES];
         System.arraycopy(triangle, at, copy, 0, TRIANGLE_VALUES);
         final double[] normal = new double[AXES];
@@ -86,6 +111,7 @@ final class AverageTransfer {
         normals.add(normal);
         weights.add(area * (MIN_VISIBILITY_WEIGHT + (1 - MIN_VISIBILITY_WEIGHT) * visibility));
         values.add(average.clone());
+        materials.addInt(material);
     }
 
     /**
@@ -196,13 +222,20 @@ final class AverageTransfer {
     private int[] cornerAt(@NonNull Position position, double @NonNull [] normal) {
         final double[] at = {position.x(), position.y(), position.z()};
         final float[] blend = new float[MaterialAverages.VALUES];
-        blendAt(at, normal, blend);
+        final Blend how = blendAt(at, normal, blend);
         final int[] corner = new int[Attributes.VALUES];
-        Attributes.averaged(
-                new float[] {(float) normal[0], (float) normal[1], (float) normal[2]},
-                blend,
-                corner,
-                0);
+        final float[] facing = {(float) normal[0], (float) normal[1], (float) normal[2]};
+        if (named == null) {
+            Attributes.averaged(facing, blend, corner, 0);
+            return corner;
+        }
+        // The material blended most, and how bright the blend is against its average
+        final float[] average = named.average(how.material());
+        final double own =
+                average == null ? 0 : CoverageVoxelizer.luminance(average, MaterialAverages.RED);
+        final double blended = CoverageVoxelizer.luminance(blend, MaterialAverages.RED);
+        final float shade = own > MIN_WEIGHT ? (float) (blended / own) : 1;
+        Attributes.namedAverage(facing, how.material(), shade, how.spread(), corner, 0);
         return corner;
     }
 
@@ -234,19 +267,30 @@ final class AverageTransfer {
     private record Position(float x, float y, float z) {}
 
     /**
+     * What else a blend found, beside its values.
+     *
+     * @param material The material weighing most in it.
+     * @param spread How much the blended normals agree, the length of their weighted mean, 1 when
+     *     they all point the same way.
+     */
+    private record Blend(int material, double spread) {}
+
+    /**
      * Blend the input around a point.
      *
      * @param point The point.
      * @param normal Which way the corner faces, unit length.
      * @param out Receives the {@link MaterialAverages#VALUES} values.
+     * @return The material weighing most, and the normals' spread.
      */
-    private void blendAt(
+    private Blend blendAt(
             double @NonNull [] point, double @NonNull [] normal, float @NonNull [] out) {
         final IntArrayList near =
                 cells.get(key(cellOf(point[0]), cellOf(point[1]), cellOf(point[2])));
         final double[] sum = new double[MaterialAverages.VALUES];
         final double[] normalSum = new double[AXES];
         double total = 0;
+        final Map<Integer, Double> byMaterial = new HashMap<>();
         int nearest = -1;
         double nearestDistance = Double.MAX_VALUE;
         if (near != null) {
@@ -278,6 +322,7 @@ final class AverageTransfer {
                     normalSum[axis] += weight * n[axis];
                 }
                 total += weight;
+                byMaterial.merge(materials.getInt(s), weight, Double::sum);
             }
         }
         if (total > MIN_WEIGHT) {
@@ -292,11 +337,20 @@ final class AverageTransfer {
                             / total;
             out[MaterialAverages.ROUGHNESS] =
                     (float) Roughening.widen(out[MaterialAverages.ROUGHNESS], meanLength);
-            return;
+            int most = materials.getInt(0);
+            double weighs = -1;
+            for (Map.Entry<Integer, Double> e : byMaterial.entrySet()) {
+                if (e.getValue() > weighs || e.getValue() == weighs && e.getKey() < most) {
+                    weighs = e.getValue();
+                    most = e.getKey();
+                }
+            }
+            return new Blend(most, meanLength);
         }
         // Nothing near faces this way: take the nearest, or failing that, anything
-        final float[] value = values.get(nearest >= 0 ? nearest : 0);
-        System.arraycopy(value, 0, out, 0, out.length);
+        final int source = nearest >= 0 ? nearest : 0;
+        System.arraycopy(values.get(source), 0, out, 0, out.length);
+        return new Blend(materials.getInt(source), 1);
     }
 
     /**

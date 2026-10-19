@@ -73,11 +73,17 @@ public final class LodBakes {
     /** Bytes a splat takes. */
     public static final int SPLAT_SIZE = SPLAT_HEADER + RECORD_SIZE;
 
-    /** Offsets {@link #write} gives each job: its materials', records' and splats'. */
-    public static final int OFFSETS = 3;
+    /**
+     * Offsets {@link #write} gives each job: its materials', records', splats' and the materials'
+     * indices in the material cache, which indexed bakes name.
+     */
+    public static final int OFFSETS = 4;
 
     /** A texel's record's material slot when it stands for nothing. */
     private static final int EMPTY = -1;
+
+    /** How many texels out from a model's tile's charts its empty texels are filled. */
+    private static final int GAP_FILL = 2;
 
     /** The most pages there can be, for the descriptor pool. */
     private static final int MAX_PAGES = 1024;
@@ -166,6 +172,9 @@ public final class LodBakes {
      *     texel, the share of it covered, then a record.
      * @param worldPerTexel World units a texel spans.
      * @param emissive Whether any of its sources give off light, so it needs an emission page.
+     * @param sourceIndices Each source's index in the material cache.
+     * @param indexed Whether it is a model's, its texels naming materials and shades rather than
+     *     holding colors, see {@link Material#isIndexedBake()}.
      */
     public record Baked(
             LodDag.@NonNull Cluster cluster,
@@ -175,7 +184,9 @@ public final class LodBakes {
             @NonNull ByteBuffer records,
             @NonNull ByteBuffer splats,
             double worldPerTexel,
-            boolean emissive) {
+            boolean emissive,
+            int @NonNull [] sourceIndices,
+            boolean indexed) {
 
         /**
          * The bytes its tile takes on the GPU.
@@ -259,6 +270,12 @@ public final class LodBakes {
         /** Whether it holds emitting tiles, and so has an emission texture. */
         final boolean emissive;
 
+        /**
+         * Whether it holds models' tiles, which name materials, see {@link
+         * Material#isIndexedBake()}.
+         */
+        final boolean indexed;
+
         /** Its index in the material cache. */
         final int materialIndex;
 
@@ -293,11 +310,13 @@ public final class LodBakes {
          * @param material Its material.
          * @param materialIndex The material's index.
          * @param emissive Whether it holds emitting tiles.
+         * @param indexed Whether it holds models' tiles.
          */
-        Page(int index, Material material, int materialIndex, boolean emissive) {
+        Page(int index, Material material, int materialIndex, boolean emissive, boolean indexed) {
             this.index = index;
             this.material = material;
             this.emissive = emissive;
+            this.indexed = indexed;
             this.materialIndex = materialIndex;
         }
 
@@ -478,6 +497,20 @@ public final class LodBakes {
      * @return The plan, or null if nothing in it is baked.
      */
     public static Plan plan(@NonNull LodDag dag, @NonNull MaterialCache cache) {
+        return plan(dag, cache, false);
+    }
+
+    /**
+     * Work out what each texel of a world's or a model's baked clusters samples, see {@link
+     * #plan(LodDag, MaterialCache)}. A model's tiles name materials and shades rather than hold
+     * colors, so its instances' material remaps reach them.
+     *
+     * @param dag The world or model.
+     * @param cache The scene's materials, which clusters' material indices are into.
+     * @param indexed Whether it is a model.
+     * @return The plan, or null if nothing in it is baked.
+     */
+    public static Plan plan(@NonNull LodDag dag, @NonNull MaterialCache cache, boolean indexed) {
         final List<LodDag.Cluster> baked = new ArrayList<>();
         for (LodDag.Group group : dag.groups()) {
             for (int output : group.bakeTiles().length > 0 ? group.outputs() : new int[0]) {
@@ -495,7 +528,7 @@ public final class LodBakes {
                         .thenComparingInt(LodDag.Cluster::id));
         final Map<Integer, Baked> out = new HashMap<>();
         for (LodDag.Cluster cluster : baked) {
-            out.put(cluster.id(), bake(dag, cluster, out, cache));
+            out.put(cluster.id(), bake(dag, cluster, out, cache, indexed));
         }
         return new Plan(out);
     }
@@ -519,6 +552,7 @@ public final class LodBakes {
                             Math.min(baked.width(), PAGE),
                             Math.min(baked.height(), PAGE),
                             baked.emissive(),
+                            baked.indexed(),
                             cache);
             final Job job = new Job(tile, baked, world);
             jobs.add(job);
@@ -619,12 +653,18 @@ public final class LodBakes {
      * @param width The tile's width.
      * @param height The tile's height.
      * @param emissive Whether it needs an emission page.
+     * @param indexed Whether it is a model's, naming materials.
      * @param cache The scene's materials, for a new page's.
      * @return The tile.
      */
-    private Tile allocate(int width, int height, boolean emissive, @NonNull MaterialCache cache) {
+    private Tile allocate(
+            int width,
+            int height,
+            boolean emissive,
+            boolean indexed,
+            @NonNull MaterialCache cache) {
         for (Page page : pages) {
-            if (page.emissive != emissive) {
+            if (page.emissive != emissive || page.indexed != indexed) {
                 continue;
             }
             final long corner = page.take(width, height);
@@ -637,11 +677,13 @@ public final class LodBakes {
         }
         final Material material = new Material();
         material.setBakedData(true);
+        material.setIndexedBake(indexed);
         if (emissive) {
             // The emission page holds the light itself, see decodeEmission in material.glsl
             material.getEmissive().set(1, 1, 1);
         }
-        final Page page = new Page(pages.size(), material, cache.addMaterial(material), emissive);
+        final Page page =
+                new Page(pages.size(), material, cache.addMaterial(material), emissive, indexed);
         cache.setDirty(true);
         pages.add(page);
         final long corner = page.take(width, height);
@@ -819,13 +861,15 @@ public final class LodBakes {
      * @param cluster The baked cluster, as built.
      * @param planned Clusters baked so far, for children that were baked too.
      * @param cache The scene's materials.
+     * @param indexed Whether it is a model's, naming materials.
      * @return The bake.
      */
     private static Baked bake(
             @NonNull LodDag dag,
             LodDag.@NonNull Cluster cluster,
             @NonNull Map<Integer, Baked> planned,
-            @NonNull MaterialCache cache) {
+            @NonNull MaterialCache cache,
+            boolean indexed) {
         final BakeTexels bake = dag.bakeOf(cluster.id());
         final int width = bake.width();
         final int height = bake.height();
@@ -948,6 +992,9 @@ public final class LodBakes {
                 splatBytes.write(splat.array(), 0, SPLAT_SIZE);
             }
         }
+        if (indexed) {
+            fillGaps(records, width, height);
+        }
         boolean emissive = false;
         for (Material source : sources) {
             final org.joml.Vector3f light = source.getEmissive();
@@ -955,7 +1002,67 @@ public final class LodBakes {
         }
         final ByteBuffer splats =
                 ByteBuffer.wrap(splatBytes.toByteArray()).order(ByteOrder.LITTLE_ENDIAN);
-        return new Baked(cluster, width, height, sources, records, splats, worldPerTexel, emissive);
+        final int[] indices = new int[sources.size()];
+        for (int i = 0; i < indices.length; ++i) {
+            indices[i] = cache.getMaterialIndex(sources.get(i));
+        }
+        return new Baked(
+                cluster,
+                width,
+                height,
+                sources,
+                records,
+                splats,
+                worldPerTexel,
+                emissive,
+                indices,
+                indexed);
+    }
+
+    /**
+     * Give a model's tile's empty texels near its charts the record of the nearest filled one, up
+     * to {@link #GAP_FILL} texels out. A model's tiles are read without filtering, as they name
+     * materials, so a pixel over a chart's edge reads the texel it falls in, which may lie just
+     * outside the chart; an empty one would draw as no material at all.
+     *
+     * @param records Each texel's record, row by row, {@link #RECORD_SIZE} bytes each.
+     * @param width The tile's width.
+     * @param height Its height.
+     */
+    private static void fillGaps(@NonNull ByteBuffer records, int width, int height) {
+        final int texels = width * height;
+        final boolean[] filled = new boolean[texels];
+        for (int texel = 0; texel < texels; ++texel) {
+            filled[texel] = records.getInt(texel * RECORD_SIZE) != EMPTY;
+        }
+        final byte[] record = new byte[RECORD_SIZE];
+        for (int texel = 0; texel < texels; ++texel) {
+            if (filled[texel]) {
+                continue;
+            }
+            final int x = texel % width;
+            final int y = texel / width;
+            int nearest = -1;
+            int best = Integer.MAX_VALUE;
+            for (int dy = -GAP_FILL; dy <= GAP_FILL; ++dy) {
+                for (int dx = -GAP_FILL; dx <= GAP_FILL; ++dx) {
+                    final int nx = x + dx;
+                    final int ny = y + dy;
+                    if (nx < 0 || ny < 0 || nx >= width || ny >= height) {
+                        continue;
+                    }
+                    final int distance = dx * dx + dy * dy;
+                    if (filled[ny * width + nx] && distance < best) {
+                        best = distance;
+                        nearest = ny * width + nx;
+                    }
+                }
+            }
+            if (nearest >= 0) {
+                records.get(nearest * RECORD_SIZE, record);
+                records.put(texel * RECORD_SIZE, record);
+            }
+        }
     }
 
     /**
@@ -1294,7 +1401,13 @@ public final class LodBakes {
             final LongBuffer output = stack.callocLong(1);
             image(state, true, colorImage, stack);
             image(state, false, dataImage, stack);
-            final long colorSampled = view(state, colorImage[0], VK_FORMAT_R8G8B8A8_SRGB, stack);
+            // A model's page names materials, so it is read as it is written
+            final long colorSampled =
+                    view(
+                            state,
+                            colorImage[0],
+                            page.indexed ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_R8G8B8A8_SRGB,
+                            stack);
             page.colorStorageView = view(state, colorImage[0], VK_FORMAT_R8G8B8A8_UNORM, stack);
             final long dataView = view(state, dataImage[0], VK_FORMAT_R8G8B8A8_UNORM, stack);
             long emissionView = dataView;
@@ -1313,7 +1426,12 @@ public final class LodBakes {
                             }
                         }
                     });
-            page.color = register(state, colorImage, colorSampled, Format.R8G8B8A8_SRGB);
+            page.color =
+                    register(
+                            state,
+                            colorImage,
+                            colorSampled,
+                            page.indexed ? Format.R8G8B8A8_UNORM : Format.R8G8B8A8_SRGB);
             page.data = register(state, dataImage, dataView, Format.R8G8B8A8_UNORM);
             if (page.emissive) {
                 page.emission = register(state, emissionImage, emissionView, Format.R8G8B8A8_UNORM);
@@ -1566,6 +1684,8 @@ public final class LodBakes {
             bytes += align(job.baked().records().capacity());
             offsets[i * OFFSETS + 2] = bytes;
             bytes += align(job.baked().splats().capacity());
+            offsets[i * OFFSETS + 3] = bytes;
+            bytes += align((long) job.baked().sourceIndices().length * Integer.BYTES);
         }
         SharedBuffer buffer = uploads[frame];
         if (buffer == null) {
@@ -1588,6 +1708,10 @@ public final class LodBakes {
             data.put(job.baked().records().duplicate().clear());
             data.position((int) offsets[i * OFFSETS + 2]);
             data.put(job.baked().splats().duplicate().clear());
+            data.position((int) offsets[i * OFFSETS + 3]);
+            for (int index : job.baked().sourceIndices()) {
+                data.putInt(index);
+            }
         }
         return buffer;
     }

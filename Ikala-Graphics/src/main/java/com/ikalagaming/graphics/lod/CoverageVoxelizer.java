@@ -325,7 +325,7 @@ public final class CoverageVoxelizer {
      * @param at Where its red is.
      * @return The luminance.
      */
-    private static double luminance(float @NonNull [] values, int at) {
+    static double luminance(float @NonNull [] values, int at) {
         return LUMA_RED * values[at] + LUMA_GREEN * values[at + 1] + LUMA_BLUE * values[at + 2];
     }
 

@@ -88,6 +88,7 @@ public final class LodDagCache {
         hash.putInt(options.bakeTile());
         hash.putDouble(options.bakeDensity());
         hash.putInt(options.volumes() ? 1 : 0);
+        hash.putInt(options.named() ? 1 : 0);
         hash.putInt(meshes.size());
         for (LodMesh mesh : meshes) {
             LodStore.putMesh(hash, mesh);

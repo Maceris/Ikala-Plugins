@@ -24,6 +24,8 @@ layout(location = 3) out vec2 outTextCoord;
 layout(location = 4) out vec4 outViewPosition;
 layout(location = 5) out vec4 outWorldPosition;
 layout(location = 6) flat out uint outMaterialIdx;
+// A model instance's material remaps, see scene_lod.vert; none here
+layout(location = 7) flat out uvec4 outRemaps;
 
 layout(set = SCENE_SET, binding = 0) uniform Uniforms {
     mat4 projectionMatrix;
@@ -55,6 +57,7 @@ void main()
     // gl_InstanceIndex already includes the base instance, unlike gl_InstanceID in OpenGL
     uvec2 instance = visible[gl_InstanceIndex];
     outMaterialIdx = instance.y;
+    outRemaps = uvec4(0xFFFFFFFFu);
 
     mat4 modelMatrix = modelMatrices[instance.x];
     mat4 modelViewMatrix = viewMatrix * modelMatrix;

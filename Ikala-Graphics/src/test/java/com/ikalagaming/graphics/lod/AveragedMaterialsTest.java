@@ -94,6 +94,64 @@ class AveragedMaterialsTest {
         return meshes;
     }
 
+    /** A named averaged corner keeps its normal, material, shade and spread. */
+    @Test
+    void testNamedRoundTrip() {
+        final int[] out = new int[Attributes.VALUES];
+        Attributes.namedAverage(new float[] {0, 0, 3}, 4711, 1.3f, 0.8, out, 0);
+        assertTrue(Attributes.isAveraged(out, 0));
+        assertTrue(Attributes.isNamedAverage(out, 0));
+        assertFalse(Attributes.isShell(out, 0));
+        assertEquals(4711, Attributes.namedMaterial(out, 0));
+        assertEquals(1.3, Attributes.namedShade(out, 0), 2 * Attributes.MAX_SHADE * BYTE_STEP);
+        assertEquals(0.8, Attributes.namedSpread(out, 0), BYTE_STEP);
+        final float[] normal = new float[3];
+        Attributes.decodeDirection(out[0], normal);
+        assertEquals(1, normal[2], 1e-3);
+    }
+
+    /**
+     * Built as a model's, far groups' corners name the material they mostly blend, one of the
+     * input's, with a shade, and its colors come back close to what the corners would carry.
+     */
+    @Test
+    void testNamedCornersNameTheirMaterials() {
+        final List<LodMesh> terrain = checkered();
+        final MaterialAverages averages = spread();
+        final LodDag dag =
+                DagBuilder.build(terrain, OPTIONS.withAverages(averages).withNamed(true));
+        int named = 0;
+        final java.util.Set<Integer> seen = new java.util.HashSet<>();
+        for (LodDag.Cluster cluster : dag.clusters()) {
+            final int[] attributes = cluster.attributes();
+            for (int at = 0; at + Attributes.VALUES <= attributes.length; at += Attributes.VALUES) {
+                if (!Attributes.textured(attributes, at / Attributes.PER_TRIANGLE)
+                        || !Attributes.isAveraged(attributes, at)) {
+                    continue;
+                }
+                assertTrue(Attributes.isNamedAverage(attributes, at), "A colored corner");
+                final int material = Attributes.namedMaterial(attributes, at);
+                assertTrue(material >= 0 && material < MATERIALS, "Material " + material);
+                final float shade = Attributes.namedShade(attributes, at);
+                assertTrue(shade > 0 && shade <= Attributes.MAX_SHADE, "Shade " + shade);
+                final float spread = Attributes.namedSpread(attributes, at);
+                assertTrue(spread > 0 && spread <= 1, "Spread " + spread);
+                seen.add(material);
+                ++named;
+            }
+        }
+        assertTrue(named > 0, "No named corners");
+        assertTrue(seen.size() > 1, "Corners name only " + seen);
+        // Built as a world's, none name materials
+        final LodDag plain = DagBuilder.build(terrain, OPTIONS.withAverages(averages));
+        for (LodDag.Cluster cluster : plain.clusters()) {
+            final int[] attributes = cluster.attributes();
+            for (int at = 0; at + Attributes.VALUES <= attributes.length; at += Attributes.VALUES) {
+                assertFalse(Attributes.isNamedAverage(attributes, at));
+            }
+        }
+    }
+
     /** An averaged corner keeps its normal, color, roughness, metallic and specular. */
     @Test
     void testRoundTrip() {

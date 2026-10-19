@@ -34,7 +34,7 @@ public class LodBake implements RenderStage {
      * The size of the push constants: three addresses, the tile's corner and its size, whether it
      * emits, how many splats it has.
      */
-    private static final int CONSTANTS_SIZE = 3 * Long.BYTES + 6 * Integer.BYTES;
+    private static final int CONSTANTS_SIZE = 4 * Long.BYTES + 7 * Integer.BYTES;
 
     /** Threads in a workgroup, see lod_bake.comp. */
     private static final int GROUP = 64;
@@ -135,13 +135,15 @@ public class LodBake implements RenderStage {
                 constants.putLong(0, buffer.deviceAddress + offsets[at + 1]);
                 constants.putLong(Long.BYTES, buffer.deviceAddress + offsets[at]);
                 constants.putLong(2 * Long.BYTES, buffer.deviceAddress + offsets[at + 2]);
-                constants.putInt(3 * Long.BYTES, job.tile().x());
-                constants.putInt(3 * Long.BYTES + Integer.BYTES, job.tile().y());
-                constants.putInt(3 * Long.BYTES + 2 * Integer.BYTES, job.tile().width());
-                constants.putInt(3 * Long.BYTES + 3 * Integer.BYTES, job.tile().height());
+                constants.putLong(3 * Long.BYTES, buffer.deviceAddress + offsets[at + 3]);
+                constants.putInt(4 * Long.BYTES, job.tile().x());
+                constants.putInt(4 * Long.BYTES + Integer.BYTES, job.tile().y());
+                constants.putInt(4 * Long.BYTES + 2 * Integer.BYTES, job.tile().width());
+                constants.putInt(4 * Long.BYTES + 3 * Integer.BYTES, job.tile().height());
                 constants.putInt(
-                        3 * Long.BYTES + 4 * Integer.BYTES, job.baked().emissive() ? 1 : 0);
-                constants.putInt(3 * Long.BYTES + 5 * Integer.BYTES, job.baked().splatCount());
+                        4 * Long.BYTES + 4 * Integer.BYTES, job.baked().emissive() ? 1 : 0);
+                constants.putInt(4 * Long.BYTES + 5 * Integer.BYTES, job.baked().splatCount());
+                constants.putInt(4 * Long.BYTES + 6 * Integer.BYTES, job.baked().indexed() ? 1 : 0);
                 vkCmdPushConstants(
                         commandBuffer, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
                 final int texels = job.tile().texels();

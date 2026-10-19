@@ -1140,8 +1140,20 @@ public class ShaderBindings {
             /** Flag: the normal map's blue and alpha are roughness and metalness, baked. */
             public static final int FLAG_BAKED_DATA = 4;
 
+            /** Flag: the color texture names a material and a shade per texel, see Material. */
+            public static final int FLAG_INDEXED_BAKE = 8;
+
+            /** Offset in bytes to the average metalness, see {@link #AVERAGE}. */
+            public static final int AVERAGE_METALLIC = FLAGS + Integer.BYTES;
+
+            /**
+             * Offset in bytes to the average look: linear red, green and blue, then roughness, see
+             * {@code material.glsl}.
+             */
+            public static final int AVERAGE = AVERAGE_METALLIC + Float.BYTES;
+
             /** Total size of the struct in bytes, padded to 16 bytes. */
-            public static final int SIZEOF = FLAGS + 2 * Integer.BYTES;
+            public static final int SIZEOF = AVERAGE + 4 * Float.BYTES;
 
             /** Private constructor so this class is not instantiated. */
             private Material() {

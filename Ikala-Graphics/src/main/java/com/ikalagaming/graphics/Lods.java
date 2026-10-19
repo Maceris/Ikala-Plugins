@@ -195,6 +195,9 @@ public final class Lods {
     public LodHandle addModel(@NonNull LodDag dag) {
         context.checkOpen();
         final VulkanInstance renderer = renderer();
+        // A model's baked tiles name materials, so its instances' remaps reach them
+        final LodBakes.Plan plan =
+                LodBakes.plan(dag, GraphicsManager.getScene().getMaterialCache(), true);
         final List<ClusterMeshes.Mesh> meshes = new ArrayList<>(dag.clusters().size());
         for (LodDag.Cluster cluster : dag.clusters()) {
             meshes.add(ClusterMeshes.of(cluster));
@@ -207,7 +210,8 @@ public final class Lods {
                                 context.getOwnerKey(),
                                 dag,
                                 meshes,
-                                GraphicsManager.getSettings().lodThresholdPixels));
+                                GraphicsManager.getSettings().lodThresholdPixels,
+                                plan));
     }
 
     /**

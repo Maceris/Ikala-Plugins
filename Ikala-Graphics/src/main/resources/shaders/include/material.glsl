@@ -30,7 +30,12 @@ struct Material
     int emissiveIndex;
     // See MATERIAL_FLAG_*
     int flags;
-    int padding;
+    // The material's average metalness, see average
+    float averageMetallic;
+    // What the material looks like averaged over its surface, as far stand-ins draw it: its
+    // texture's average, worked out on the CPU, else its base color, in linear light, and in alpha
+    // its roughness, its packed texture's average if it has one
+    vec4 average;
 };
 
 // The normal map's green channel points down the texture, as in DirectX
@@ -40,6 +45,13 @@ const int MATERIAL_FLAG_PACKED_OCCLUSION = 2;
 // The normal map is baked data: normal x and y in red and green, roughness in blue, metalness in
 // alpha, standing in for the material's, as level of detail bakes write it
 const int MATERIAL_FLAG_BAKED_DATA = 4;
+// With MATERIAL_FLAG_BAKED_DATA, a model's bake page: the color texture names a material and a
+// shade per texel (red the shade over MAX_BAKE_SHADE, green and blue the material's index), read
+// without filtering, and the data texture's blue is how much the baked normals agree, which widens
+// the named material's roughness
+const int MATERIAL_FLAG_INDEXED_BAKE = 8;
+// The most an indexed bake texel's shade reaches, see Attributes.MAX_SHADE
+const float MAX_BAKE_SHADE = 2.0;
 
 // Light given off as level of detail bakes store it, in an RGBA8 texel: the color over a scale in
 // red, green and blue, with the scale's log2, from EMISSION_LOG_MIN over EMISSION_LOG_RANGE

@@ -151,9 +151,45 @@ public class SceneRender implements RenderStage {
                                 : 0)
                         | (material.isBakedData()
                                 ? ShaderBindings.Scene.Material.FLAG_BAKED_DATA
+                                : 0)
+                        | (material.isIndexedBake()
+                                ? ShaderBindings.Scene.Material.FLAG_INDEXED_BAKE
                                 : 0));
-        materialData.putInt(0);
+        // Its average look, for far stand-ins that name it: its textures' averages, worked out
+        // on the CPU as level of detail blends materials, or UNKNOWN for a texture whose average
+        // couldn't be, like BC7's, which shaders then take from its smallest mip
+        final float[] texture = textures.average(material.getTexture());
+        final float[] packed = textures.average(material.getOcclusionRoughnessMetal());
+        final boolean packedUnknown =
+                packed == null && material.getOcclusionRoughnessMetal() != null;
+        final boolean colorUnknown = texture == null && material.getTexture() != null;
+        materialData.putFloat(
+                packed != null
+                        ? packed[PACKED_METALLIC]
+                        : packedUnknown ? UNKNOWN : material.getMetallic());
+        for (int c = 0; c < COLORS; ++c) {
+            materialData.putFloat(
+                    texture != null
+                            ? texture[c]
+                            : colorUnknown ? UNKNOWN : ToneMapMath.decode(baseColor.get(c)));
+        }
+        materialData.putFloat(
+                packed != null
+                        ? packed[PACKED_ROUGHNESS]
+                        : packedUnknown ? UNKNOWN : material.getRoughness());
     }
+
+    /** An average the CPU couldn't work out, see {@code material_average.glsl}. */
+    private static final float UNKNOWN = -1;
+
+    /** Color channels in an average. */
+    private static final int COLORS = 3;
+
+    /** Where roughness is in a packed texture's average: its green. */
+    private static final int PACKED_ROUGHNESS = 1;
+
+    /** Where metalness is in a packed texture's average: its blue. */
+    private static final int PACKED_METALLIC = 2;
 
     /** The shader to use for rendering. */
     @NonNull @Setter private ShaderVulkan shader;
