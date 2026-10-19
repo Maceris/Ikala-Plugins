@@ -27,6 +27,17 @@ import java.util.TreeSet;
  * the voxel's color, as Loubet and Neyret's isotropic self-shadowing scales the albedo of light
  * scattered once (<i>A new microflake model with microscopic self-shadowing for accurate volume
  * downsampling</i>, 2018, §4.3). Without it far foliage is brighter and flatter than its leaves.
+ *
+ * <p>A voxel that is mostly one surface, like a stretch of wall or a single leaf, isn't a
+ * scattering of independent flakes: every ray crossing the voxel through the surface meets it, and
+ * the surface's roughness says nothing about which ways it faces. Rays a voxel long from inside it
+ * cross such a surface only about half the time, and roughness spreads its flakes' facing nearly
+ * evenly, so a wall would stop about half the light from every side. So where the triangle hits'
+ * normals agree ({@link #COHERENT}), the voxel's flakes lie flat along their main direction, and
+ * its density is set from how much of the voxel the surface covers seen along it, a cut out
+ * material by its coverage: a wall then stops what crosses it face on and lets through what runs
+ * along it. A voxel the surface only reaches through the origins' blur, which lines through the
+ * voxel itself miss, keeps its density from its hits.
  */
 public final class CoverageVoxelizer {
 
@@ -53,6 +64,19 @@ public final class CoverageVoxelizer {
      * density: what is left gets through.
      */
     private static final double MOST_OPAQUE = 0.999;
+
+    /**
+     * How much of its triangle hits' normals one direction must hold, as a share of their outer
+     * products' trace, for a voxel to be one surface rather than scattered parts: a plane holds all
+     * of it, flakes facing every way a third, two crossed strips a half.
+     */
+    static final double COHERENT = 0.9;
+
+    /** Lines a surface voxel's coverage along its normal is measured with. */
+    private static final int ALONG_RAYS = 32;
+
+    /** Steps of the power iteration that finds a surface voxel's main direction. */
+    private static final int POWER_STEPS = 32;
 
     /**
      * How far leaves shade each other within a voxel's own medium, in voxels: as far past its stop
@@ -177,6 +201,8 @@ public final class CoverageVoxelizer {
         final float[] shade = new float[count];
         final java.util.Map<Integer, Integer> hitsBy = new java.util.HashMap<>();
         final double[] matrix = new double[CoverageVolume.SGGX_VALUES];
+        // Hits' normals, not spread by roughness, for whether they are one surface
+        final double[] facing = new double[CoverageVolume.SGGX_VALUES];
         final double[] look = new double[MaterialAverages.VALUES];
         final float[][] lookOf = new float[n][];
         final float[] coverageOf = new float[n];
@@ -191,7 +217,9 @@ public final class CoverageVoxelizer {
         for (long key : candidates) {
             final SplittableRandom random = new SplittableRandom(seed ^ key * 0x9E3779B97F4A7C15L);
             int hits = 0;
+            int triangleHits = 0;
             int lit = 0;
+            Arrays.fill(facing, 0);
             Arrays.fill(matrix, 0);
             Arrays.fill(look, 0);
             hitsBy.clear();
@@ -252,6 +280,8 @@ public final class CoverageVoxelizer {
                 ++hits;
                 hitsBy.merge(materials[t], 1, Integer::sum);
                 faceNormal(triangles, t, normal);
+                ++triangleHits;
+                addSurface(facing, normal, 0);
                 for (int axis = 0; axis < AXES; ++axis) {
                     point[axis] = start[axis] + ray[axis] * share;
                 }
@@ -294,6 +324,38 @@ public final class CoverageVoxelizer {
             shade[kept] = (float) (reference <= 0 ? 1 : Math.clamp(own / reference, 0, 1));
             roughness[kept] = (float) (look[MaterialAverages.ROUGHNESS] / hits);
             metallic[kept] = (float) (look[MaterialAverages.METALLIC] / hits);
+            // Mostly one surface: flat along it, as dense as it covers the voxel seen along its
+            // normal
+            final double[] surface = 2 * triangleHits >= hits ? mainDirection(facing) : null;
+            final double covered =
+                    surface == null
+                            ? 0
+                            : coveredAlong(
+                                    bvh,
+                                    coverageOf,
+                                    origin,
+                                    voxelSize,
+                                    key,
+                                    surface,
+                                    random,
+                                    stack,
+                                    along);
+            if (covered > 0) {
+                final int at = kept * CoverageVolume.SGGX_VALUES;
+                final double[] flat = new double[CoverageVolume.SGGX_VALUES];
+                addSurface(flat, surface, MIN_SPREAD);
+                for (int k = 0; k < CoverageVolume.SGGX_VALUES; ++k) {
+                    sggx[at + k] = (float) flat[k];
+                }
+                final double stopped = covered >= OPAQUE_ENOUGH ? MOST_OPAQUE : covered;
+                density[kept] =
+                        (float)
+                                (-Math.log(1 - Math.min(stopped, MOST_OPAQUE))
+                                        / (CoverageVolume.projectedArea(sggx, at, surface)
+                                                * voxelSize));
+                ++kept;
+                continue;
+            }
             density[kept] =
                     (float)
                             solveDensity(
@@ -316,6 +378,94 @@ public final class CoverageVoxelizer {
                 Arrays.copyOf(metallic, kept),
                 Arrays.copyOf(mainMaterial, kept),
                 Arrays.copyOf(shade, kept));
+    }
+
+    /**
+     * The direction hits' normals mostly face, if one does: the main eigenvector of their outer
+     * products' sum, found by power iteration, where its eigenvalue holds at least {@link
+     * #COHERENT} of the trace.
+     *
+     * @param facing The sum, SGGX values: xx, yy, zz, xy, xz, yz.
+     * @return The unit direction, or null if the normals don't agree enough.
+     */
+    static double[] mainDirection(double @NonNull [] facing) {
+        final double trace = facing[0] + facing[1] + facing[2];
+        if (trace <= 0) {
+            return null;
+        }
+        // Not along any axis, so it isn't at right angles to the answer
+        double[] v = {1, 0.7, 0.4};
+        double length = 0;
+        for (int step = 0; step < POWER_STEPS; ++step) {
+            final double[] w = {
+                facing[0] * v[0] + facing[3] * v[1] + facing[4] * v[2],
+                facing[3] * v[0] + facing[1] * v[1] + facing[5] * v[2],
+                facing[4] * v[0] + facing[5] * v[1] + facing[2] * v[2]
+            };
+            length = Math.sqrt(w[0] * w[0] + w[1] * w[1] + w[2] * w[2]);
+            if (length <= 0) {
+                return null;
+            }
+            v = new double[] {w[0] / length, w[1] / length, w[2] / length};
+        }
+        return length / trace >= COHERENT ? v : null;
+    }
+
+    /**
+     * How much of a voxel surfaces cover seen along a direction: the share of lines along it,
+     * through random points of the voxel and clipped to it, that hit a triangle, a cut out one with
+     * the chance of its coverage.
+     *
+     * @param bvh The triangles.
+     * @param coverageOf Each triangle's coverage.
+     * @param origin The grid's origin.
+     * @param voxelSize How wide a voxel is.
+     * @param key The voxel.
+     * @param direction The direction, unit length.
+     * @param random The voxel's random numbers.
+     * @param stack Scratch for the queries.
+     * @param along Scratch for the queries.
+     * @return The share, 0 to 1.
+     */
+    private static double coveredAlong(
+            @NonNull TriangleBvh bvh,
+            float @NonNull [] coverageOf,
+            double @NonNull [] origin,
+            double voxelSize,
+            long key,
+            double @NonNull [] direction,
+            @NonNull SplittableRandom random,
+            int @NonNull [] stack,
+            double @NonNull [] along) {
+        int hits = 0;
+        final double[] point = new double[AXES];
+        final double[] start = new double[AXES];
+        final double[] ray = new double[AXES];
+        for (int r = 0; r < ALONG_RAYS; ++r) {
+            // Where the line through a random point of the voxel enters and leaves it
+            double enter = Double.NEGATIVE_INFINITY;
+            double leave = Double.POSITIVE_INFINITY;
+            for (int axis = 0; axis < AXES; ++axis) {
+                final double low = origin[axis] + CoverageVolume.coordinate(key, axis) * voxelSize;
+                point[axis] = low + random.nextDouble() * voxelSize;
+                if (direction[axis] == 0) {
+                    continue;
+                }
+                final double a = (low - point[axis]) / direction[axis];
+                final double b = (low + voxelSize - point[axis]) / direction[axis];
+                enter = Math.max(enter, Math.min(a, b));
+                leave = Math.min(leave, Math.max(a, b));
+            }
+            for (int axis = 0; axis < AXES; ++axis) {
+                start[axis] = point[axis] + direction[axis] * enter;
+                ray[axis] = direction[axis] * (leave - enter);
+            }
+            final int t = bvh.firstHit(start, ray, stack, along);
+            if (t >= 0 && random.nextDouble() < coverageOf[t]) {
+                ++hits;
+            }
+        }
+        return (double) hits / ALONG_RAYS;
     }
 
     /**
