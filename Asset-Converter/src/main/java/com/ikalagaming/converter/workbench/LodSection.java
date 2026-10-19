@@ -2,6 +2,7 @@ package com.ikalagaming.converter.workbench;
 
 import com.ikalagaming.converter.scene.ImportedScene;
 import com.ikalagaming.converter.scene.ImportedScene.Node;
+import com.ikalagaming.converter.scene.LodLooks;
 import com.ikalagaming.converter.scene.SceneLod;
 import com.ikalagaming.converter.scene.ScenePlacement;
 import com.ikalagaming.graphics.GraphicsContext;
@@ -15,7 +16,6 @@ import com.ikalagaming.graphics.lod.DagBuilder;
 import com.ikalagaming.graphics.lod.LodMesh;
 import com.ikalagaming.graphics.lod.LodPanel;
 import com.ikalagaming.graphics.lod.MaterialAverages;
-import com.ikalagaming.graphics.vulkan.ToneMapMath;
 
 import lombok.NonNull;
 
@@ -23,12 +23,9 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.function.IntPredicate;
 import javax.annotation.Nullable;
 
 /**
@@ -43,9 +40,6 @@ final class LodSection {
 
     /** The choices of what to build from, in combo order. */
     private static final String[] SCOPES = {"Whole scene", "Selected node"};
-
-    /** Color channels in an average. */
-    private static final int COLORS = 3;
 
     /** Build from the whole scene. */
     private static final int WHOLE_SCENE = 0;
@@ -84,12 +78,6 @@ final class LodSection {
      * Bistro's exterior stops halving at level 3; without them it gets to level 7.
      */
     private final IkBoolean keepAttributes = new IkBoolean(true);
-
-    /** Where a packed occlusion, roughness and metal texture's roughness is. */
-    private static final int PACKED_ROUGHNESS = 1;
-
-    /** Where its metalness is. */
-    private static final int PACKED_METALLIC = 2;
 
     /** Whether cut out meshes, like leaves, go in too, drawn with an alpha test. */
     private final IkBoolean cutOut = new IkBoolean(true);
@@ -264,8 +252,8 @@ final class LodSection {
                             return List.<LodMesh>of(input.mesh());
                         },
                         material -> names.getOrDefault(material, "material " + material),
-                        options(averages(indices))
-                                .withCutOut(withCutOut ? cutOutMaterials(indices) : null)
+                        options(LodLooks.averages(graphics, indices))
+                                .withCutOut(withCutOut ? LodLooks.cutOut(indices) : null)
                                 .withVolumes(volumes.get()));
     }
 
@@ -287,74 +275,6 @@ final class LodSection {
                 blendFar.get() ? averages : null,
                 bake.get() ? BAKE_TILE : 0,
                 bakeDensity[0]);
-    }
-
-    /**
-     * What each material that goes in looks like averaged, as the scene draws it: its texture's
-     * average where it has one, in place of its base color, else its base color, in linear light,
-     * with its roughness, metallic and specular. Taken now, on the render thread, for the build.
-     *
-     * @param indices Each material's index in the material cache.
-     * @return The averages.
-     */
-    private MaterialAverages averages(@NonNull Map<Material, Integer> indices) {
-        final Map<Integer, float[]> known = new HashMap<>();
-        final Map<Integer, Float> covered = new HashMap<>();
-        for (Map.Entry<Material, Integer> entry : indices.entrySet()) {
-            final Material material = entry.getKey();
-            final float[] out = new float[MaterialAverages.VALUES];
-            final float[] texture = graphics.textures().average(material.getTexture());
-            if (texture != null) {
-                System.arraycopy(texture, 0, out, MaterialAverages.RED, COLORS);
-                if (texture.length > COLORS
-                        && material.getTransparency() == Material.Transparency.CUTOUT) {
-                    covered.put(entry.getValue(), texture[COLORS]);
-                }
-            } else {
-                out[MaterialAverages.RED] = ToneMapMath.decode(material.getBaseColor().x);
-                out[MaterialAverages.RED + 1] = ToneMapMath.decode(material.getBaseColor().y);
-                out[MaterialAverages.RED + 2] = ToneMapMath.decode(material.getBaseColor().z);
-            }
-            out[MaterialAverages.ROUGHNESS] = material.getRoughness();
-            out[MaterialAverages.METALLIC] = material.getMetallic();
-            // A packed texture's roughness and metalness stand in for the material's, as the scene
-            // draws it
-            final float[] packed =
-                    graphics.textures().average(material.getOcclusionRoughnessMetal());
-            if (packed != null) {
-                out[MaterialAverages.ROUGHNESS] = packed[PACKED_ROUGHNESS];
-                out[MaterialAverages.METALLIC] = packed[PACKED_METALLIC];
-            }
-            out[MaterialAverages.SPECULAR] = material.getSpecular();
-            known.put(entry.getValue(), out);
-        }
-        return new MaterialAverages() {
-            @Override
-            public float[] average(int material) {
-                return known.get(material);
-            }
-
-            @Override
-            public float coverage(int material) {
-                return covered.getOrDefault(material, 1f);
-            }
-        };
-    }
-
-    /**
-     * Which of the materials that go in are cut out, by index, taken now for the build.
-     *
-     * @param indices Each material's index in the material cache.
-     * @return Whether a material index is cut out.
-     */
-    private static IntPredicate cutOutMaterials(@NonNull Map<Material, Integer> indices) {
-        final Set<Integer> cut = new HashSet<>();
-        for (Map.Entry<Material, Integer> entry : indices.entrySet()) {
-            if (entry.getKey().getTransparency() == Material.Transparency.CUTOUT) {
-                cut.add(entry.getValue());
-            }
-        }
-        return cut::contains;
     }
 
     /**

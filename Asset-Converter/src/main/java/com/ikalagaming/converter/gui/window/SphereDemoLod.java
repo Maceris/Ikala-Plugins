@@ -1,6 +1,7 @@
 package com.ikalagaming.converter.gui.window;
 
 import com.ikalagaming.converter.ConverterPlugin;
+import com.ikalagaming.converter.scene.LodLooks;
 import com.ikalagaming.converter.scene.SceneLod;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
@@ -22,6 +23,7 @@ import com.ikalagaming.graphics.lod.DagBuilder;
 import com.ikalagaming.graphics.lod.LodDag;
 import com.ikalagaming.graphics.lod.LodDagCache;
 import com.ikalagaming.graphics.lod.LodMesh;
+import com.ikalagaming.graphics.lod.MaterialAverages;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.FrameTimings;
 import com.ikalagaming.graphics.vulkan.LodRenderer;
@@ -33,8 +35,11 @@ import org.joml.Quaternionf;
 import org.joml.Vector3d;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.IntPredicate;
 
 /**
  * The sphere demo's window, with the way back to the menu and a level of detail switch: draws its
@@ -47,6 +52,9 @@ final class SphereDemoLod {
 
     /** The window's name. */
     private static final String WINDOW = "Sphere demo";
+
+    /** The side of the texture tile a baked cluster is expected to need, as the workbench's. */
+    private static final int BAKE_TILE = 64;
 
     /** The startup property that turns level of detail on as soon as the demo opens. */
     private static final String LOD_PROPERTY = "ikala.test.sphereLod";
@@ -267,14 +275,20 @@ final class SphereDemoLod {
         buildStarted = System.nanoTime();
         final MaterialCache cache = GraphicsManager.getScene().getMaterialCache();
         final List<MeshData> meshes = List.copyOf(ball.getMeshDataList());
+        // The materials' looks, taken now, for far groups to blend and bake by
+        final Map<Material, Integer> indices = new HashMap<>();
+        for (MeshData mesh : meshes) {
+            indices.computeIfAbsent(mesh.getMaterial(), cache::getMaterialIndex);
+        }
+        final MaterialAverages averages = LodLooks.averages(graphics, indices);
+        final IntPredicate cutOut = LodLooks.cutOut(indices);
         CompletableFuture.supplyAsync(
                         () -> {
                             final LodMesh mesh =
                                     SceneLod.ofModel(meshes, cache::getMaterialIndex, true);
                             final DagBuilder.Options defaults = DagBuilder.Options.defaults();
-                            // No baking or blending, which would fix one look for every instance;
-                            // coverage volumes name their materials, so instances' remaps reach
-                            // them
+                            // Far groups blend and bake, naming their materials, as coverage
+                            // volumes do, so instances' remaps reach them
                             return LodDagCache.build(
                                     List.of(mesh),
                                     new DagBuilder.Options(
@@ -284,8 +298,11 @@ final class SphereDemoLod {
                                                     false,
                                                     defaults.visibilityReach(),
                                                     defaults.mergePlanar(),
-                                                    null)
-                                            .withVolumes(true));
+                                                    averages,
+                                                    BAKE_TILE)
+                                            .withCutOut(cutOut)
+                                            .withVolumes(true)
+                                            .withNamed(true));
                         })
                 .whenComplete(
                         (dag, failure) ->
