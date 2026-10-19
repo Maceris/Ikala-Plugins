@@ -360,16 +360,20 @@ public final class LodPanel implements AutoCloseable {
             }
         }
         if (IkGui.button("Check cracks")) {
-            final CrackCheck.Result result = new CrackCheck(view.getDag()).check(view.drawn());
+            final CrackCheck.Result result =
+                    new CrackCheck(view.getDag()).check(view.drawn(), CrackCheck.TOLERANCE);
             crackResult =
-                    result.isClean()
-                            ? "No cracks in " + result.drawnClusters() + " clusters."
-                            : result.openEdges().size()
-                                    + " cracks and "
-                                    + result.overdrawnEdges().size()
-                                    + " edges drawn twice in "
-                                    + result.drawnClusters()
-                                    + " clusters.";
+                    (result.isClean()
+                                    ? "No cracks in " + result.drawnClusters() + " clusters"
+                                    : result.openEdges().size()
+                                            + " cracks and "
+                                            + result.overdrawnEdges().size()
+                                            + " edges drawn twice in "
+                                            + result.drawnClusters()
+                                            + " clusters")
+                            + String.format(
+                                    " (%d gaps within the error, %d edges under volumes).",
+                                    result.nearEdges(), result.coveredEdges());
         }
         if (!crackResult.isEmpty()) {
             IkGui.sameLine();

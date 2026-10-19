@@ -596,7 +596,7 @@ public final class DagBuilder {
      * @param edges All edges.
      * @param virtualEdges Virtual edges added.
      * @param rejectedFlips Collapses rejected for flipping.
-     * @param rejectedLinks Collapses rejected by the link condition.
+     * @param rejectedLinks Collapses rejected for breaking a border another group keeps.
      * @param nanos How long it took.
      * @param lineage Where its merged triangles came from, or null if not kept.
      * @param faces Each output cluster's triangles as faces of the merged mesh, or null if not

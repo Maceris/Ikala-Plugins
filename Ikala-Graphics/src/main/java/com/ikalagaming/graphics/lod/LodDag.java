@@ -86,7 +86,7 @@ public final class LodDag {
      * @param edges All its edges.
      * @param virtualEdges Virtual edges the simplifier added.
      * @param rejectedFlips Collapses rejected for flipping a triangle.
-     * @param rejectedLinks Collapses rejected by the link condition.
+     * @param rejectedLinks Collapses rejected for breaking a border another group keeps.
      * @param buildNanos How long it took to build.
      * @param bakeTiles The size of each output's bake tile, packed by {@link #packTile}, in output
      *     order, when it baked its children's appearance rather than keeping their materials; empty

@@ -8,6 +8,7 @@ import com.ikalagaming.graphics.benchmark.BlockMeshes;
 import com.ikalagaming.graphics.benchmark.SyntheticSections;
 import com.ikalagaming.graphics.benchmark.SyntheticTerrain;
 
+import lombok.NonNull;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -36,12 +37,23 @@ class DagTest {
      * @return The meshes, each with its section's origin.
      */
     static List<LodMesh> terrain(int columns) {
+        return blocks(SyntheticTerrain.Recipe.TERRAIN, columns);
+    }
+
+    /**
+     * Bake some columns of a synthetic recipe into one opaque mesh per section, each block type its
+     * own material.
+     *
+     * @param recipe The recipe.
+     * @param columns Columns along x and z.
+     * @return The meshes, each with its section's origin.
+     */
+    static List<LodMesh> blocks(SyntheticTerrain.@NonNull Recipe recipe, int columns) {
         final int[] materials = new int[SyntheticTerrain.BLOCK_TYPES];
         for (int block = 0; block < materials.length; ++block) {
             materials[block] = block;
         }
-        return SyntheticSections.bake(
-                SyntheticTerrain.Recipe.TERRAIN, SEED, columns, SOURCES, materials);
+        return SyntheticSections.bake(recipe, SEED, columns, SOURCES, materials);
     }
 
     /**

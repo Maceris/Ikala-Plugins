@@ -3,10 +3,14 @@ package com.ikalagaming.graphics.lod;
 import lombok.NonNull;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.IntToDoubleFunction;
 
 /**
  * Checks a cut for cracks. Clusters drawn at different levels meet along group borders, which were
@@ -36,13 +40,19 @@ public final class CrackCheck {
      * What a check found.
      *
      * @param openEdges Edges the cut uses once that the level drawing them uses twice: cracks.
-     * @param overdrawnEdges Edges the cut uses more often than the level drawing them does.
+     * @param overdrawnEdges Edges the cut uses more often than the level drawing them does: more
+     *     than twice for an edge its levels have, more than once for any other.
      * @param drawnClusters How many clusters the cut draws.
+     * @param nearEdges Open edges not counted as cracks because another drawn triangle lies within
+     *     the tolerance all along them.
+     * @param coveredEdges Open edges not counted as cracks because drawn volumes cover them.
      */
     public record Result(
             @NonNull List<Grouping.Edge> openEdges,
             @NonNull List<Grouping.Edge> overdrawnEdges,
-            int drawnClusters) {
+            int drawnClusters,
+            int nearEdges,
+            int coveredEdges) {
 
         /**
          * Whether the cut is crack free.
@@ -58,7 +68,8 @@ public final class CrackCheck {
      * What a check of a whole world, column by column, found.
      *
      * @param openEdges Cracks: edges the cut uses once that the level drawing them uses twice.
-     * @param overdrawnEdges Edges the cut uses more often than the level drawing them does.
+     * @param overdrawnEdges Edges the cut uses more often than the level drawing them does: more
+     *     than twice for an edge its levels have, more than once for any other.
      * @param drawnClusters How many clusters the cut draws.
      * @param checkedEdges How many distinct edges the cut draws that were checked.
      * @param longEdges Edges longer than a column, which weren't checked.
@@ -89,6 +100,30 @@ public final class CrackCheck {
      * edges along a line.
      */
     private static final double NEAR_COLUMN = 0.25;
+
+    /**
+     * The share of the larger error on either side a gap may be before a tolerant check counts it:
+     * well under a pixel wherever the cut's own error is.
+     */
+    public static final double TOLERANCE = 0.25;
+
+    /**
+     * How many faces an edge may have in a cut, more than its levels have, without being drawn
+     * twice: two sides of an ordinary edge. Parts the input has apart, one resting against the
+     * other, can be welded where they meet as they simplify, so a cut drawing one level on one side
+     * and another on the other joins them along an edge each level uses once.
+     */
+    private static final int JOINED_USES = 2;
+
+    /**
+     * How many faces a cut may draw on an edge without drawing it twice.
+     *
+     * @param most The most any level drawing the edge uses it.
+     * @return At least one, or {@link #JOINED_USES} for an edge its levels have.
+     */
+    private static int mostAllowed(int most) {
+        return most == 0 ? 1 : Math.max(most, JOINED_USES);
+    }
 
     /** How many findings a tiled check keeps as examples. */
     public static final int EXAMPLES = 16;
@@ -125,6 +160,15 @@ public final class CrackCheck {
         /** Where each cluster's triangles start, by its key. */
         private final Map<Integer, Integer> starts = new HashMap<>();
 
+        /** The clusters' keys, in the order their triangles start. */
+        private final int[] keysInOrder;
+
+        /** Where each of {@link #keysInOrder} starts. */
+        private final int[] startsInOrder;
+
+        /** The largest error of the clusters gathered, set by whoever gathers them. */
+        private double largestError;
+
         /**
          * Gather some clusters' triangles.
          *
@@ -137,10 +181,15 @@ public final class CrackCheck {
                 total += clusters.get(key).corners().length;
             }
             final float[] all = new float[total];
+            keysInOrder = new int[keys.size()];
+            startsInOrder = new int[keys.size()];
             int at = 0;
+            int index = 0;
             for (int key : keys) {
                 final float[] corners = clusters.get(key).corners();
                 starts.put(key, at / TRIANGLE_VALUES);
+                keysInOrder[index] = key;
+                startsInOrder[index++] = at / TRIANGLE_VALUES;
                 System.arraycopy(corners, 0, all, at, corners.length);
                 at += corners.length;
             }
@@ -174,6 +223,66 @@ public final class CrackCheck {
                 }
             }
             return true;
+        }
+
+        /**
+         * Whether another triangle lies near an edge all along it, nearer than a share of the
+         * larger error of the edge's cluster and the one the triangle is in: a gap the error allows
+         * for, such as where a face that touched the edge was simplified a little off it.
+         *
+         * @param from The edge's start, x, y, z.
+         * @param to Its end.
+         * @param key The key of the cluster the edge's triangle is in.
+         * @param triangle The triangle's index in it.
+         * @param share The share of the error a gap may be.
+         * @param errorOf Each cluster's error, by its key.
+         * @param scratch Room for the queries.
+         * @return True if one does.
+         */
+        boolean near(
+                double @NonNull [] from,
+                double @NonNull [] to,
+                int key,
+                int triangle,
+                double share,
+                @NonNull IntToDoubleFunction errorOf,
+                TriangleBvh.@NonNull Scratch scratch) {
+            final int skip = starts.get(key) + triangle;
+            final double own = errorOf.applyAsDouble(key);
+            final double limit = share * largestError;
+            final int samples = TJunctions.samples(from, to);
+            final double[] point = new double[AXES];
+            for (int k = 0; k < samples; ++k) {
+                TJunctions.sample(from, to, k, samples, point);
+                final double found = tree.nearest(point, limit * limit, 0, skip, scratch);
+                if (found >= limit * limit || scratch.triangle < 0) {
+                    return false;
+                }
+                final double allowed =
+                        share * Math.max(own, errorOf.applyAsDouble(keyOf(scratch.triangle)));
+                if (found > allowed * allowed) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /**
+         * The key of the cluster a triangle is in.
+         *
+         * @param triangle The triangle's index among all of them.
+         * @return Its cluster's key.
+         */
+        private int keyOf(int triangle) {
+            int at = Arrays.binarySearch(startsInOrder, triangle);
+            if (at < 0) {
+                at = -at - 2;
+            }
+            // Clusters with no triangles start where the next one does
+            while (at + 1 < startsInOrder.length && startsInOrder[at + 1] == triangle) {
+                ++at;
+            }
+            return keysInOrder[at];
         }
     }
 
@@ -406,7 +515,7 @@ public final class CrackCheck {
                     if (examples.size() < EXAMPLES) {
                         examples.add(middle(edgeUse.getKey()));
                     }
-                } else if (use.count > Math.max(most, 1)) {
+                } else if (use.count > mostAllowed(most)) {
                     ++overdrawn;
                     if (examples.size() < EXAMPLES) {
                         examples.add(middle(edgeUse.getKey()));
@@ -671,12 +780,27 @@ public final class CrackCheck {
     }
 
     /**
-     * Check a cut.
+     * Check a cut. Open edges drawn volumes cover aren't cracks: where a group turned triangles
+     * into a volume, the volume is drawn where they were.
      *
      * @param drawn Whether each cluster is drawn.
      * @return What was found.
      */
     public Result check(boolean @NonNull [] drawn) {
+        return check(drawn, 0);
+    }
+
+    /**
+     * Check a cut, counting an open edge as a crack only where it is wider than a share of the
+     * error drawn there, and as {@link #check(boolean[])} does where drawn volumes cover it. Where
+     * parts meet without sharing corners, a face an edge rests against can be simplified a little
+     * off it, within the error both sides already allow.
+     *
+     * @param drawn Whether each cluster is drawn.
+     * @param tolerance The share of the larger error on either side a gap may be, or 0 for none.
+     * @return What was found.
+     */
+    public Result check(boolean @NonNull [] drawn, double tolerance) {
         List<Integer> clusters = new ArrayList<>();
         for (int i = 0; i < drawn.length; ++i) {
             if (drawn[i]) {
@@ -713,9 +837,19 @@ public final class CrackCheck {
             }
         }
         final Surface cut = new Surface(dag.clusters(), clusters);
+        final List<Integer> volumes = new ArrayList<>();
+        for (int id : clusters) {
+            cut.largestError = Math.max(cut.largestError, dag.clusters().get(id).error());
+            if (dag.volumeOf(id) != null) {
+                volumes.add(id);
+            }
+        }
+        final IntToDoubleFunction errorOf = id -> dag.clusters().get(id).error();
         final TriangleBvh.Scratch scratch = new TriangleBvh.Scratch();
         List<Grouping.Edge> open = new ArrayList<>();
         List<Grouping.Edge> overdrawn = new ArrayList<>();
+        int near = 0;
+        int covered = 0;
         for (Map.Entry<Grouping.Edge, Integer> entry : uses.entrySet()) {
             final int most = allowed.getOrDefault(entry.getKey(), 0);
             if (entry.getValue() == 1) {
@@ -730,13 +864,124 @@ public final class CrackCheck {
                                 .touches(from, to, owner[0], owner[1], scratch)) {
                     continue;
                 }
-                if (!cut.touches(from, to, owner[0], owner[1], scratch)) {
+                if (cut.touches(from, to, owner[0], owner[1], scratch)) {
+                    continue;
+                }
+                if (!volumes.isEmpty() && covered(from, to, volumes)) {
+                    ++covered;
+                } else if (tolerance > 0
+                        && cut.near(from, to, owner[0], owner[1], tolerance, errorOf, scratch)) {
+                    ++near;
+                } else {
                     open.add(entry.getKey());
                 }
-            } else if (entry.getValue() > Math.max(most, 1)) {
+            } else if (entry.getValue() > mostAllowed(most)) {
                 overdrawn.add(entry.getKey());
             }
         }
-        return new Result(open, overdrawn, clusters.size());
+        if (!overdrawn.isEmpty()) {
+            overdrawn = withoutSheets(overdrawn, clusters, allowed);
+        }
+        return new Result(open, overdrawn, clusters.size(), near, covered);
+    }
+
+    /**
+     * Whether a point is in a volume's voxel that stops light, or half a voxel along an axis from
+     * one.
+     *
+     * @param volume The volume.
+     * @param point The point.
+     * @return True if it is.
+     */
+    private static boolean inOrBeside(@NonNull CoverageVolume volume, double @NonNull [] point) {
+        if (volume.indexAt(point) >= 0) {
+            return true;
+        }
+        final double half = volume.voxelSize() / 2;
+        final double[] beside = point.clone();
+        for (int axis = 0; axis < AXES; ++axis) {
+            for (int side = -1; side <= 1; side += 2) {
+                beside[axis] = point[axis] + side * half;
+                if (volume.indexAt(beside) >= 0) {
+                    return true;
+                }
+            }
+            beside[axis] = point[axis];
+        }
+        return false;
+    }
+
+    /**
+     * Edges drawn more often than their levels allow once the two sides of each sheet count as one
+     * use: a part simplified flat keeps a face for each side on the same corners, so that it shows
+     * from both where back faces are culled, and both sides use each of its edges.
+     *
+     * @param overdrawn Edges the cut uses more often than their levels do.
+     * @param clusters The drawn clusters.
+     * @param allowed The most any level drawing each edge uses it.
+     * @return Those still drawn too often.
+     */
+    private List<Grouping.Edge> withoutSheets(
+            @NonNull List<Grouping.Edge> overdrawn,
+            @NonNull List<Integer> clusters,
+            @NonNull Map<Grouping.Edge, Integer> allowed) {
+        final Set<Grouping.Edge> wanted = new HashSet<>(overdrawn);
+        // Each wanted edge's faces, by their corners in any order, so a sheet's sides are one
+        final Map<Grouping.Edge, Set<Set<Grouping.Corner>>> faces = new HashMap<>();
+        for (int id : clusters) {
+            final LodDag.Cluster cluster = dag.clusters().get(id);
+            final float[] corners = cluster.corners();
+            for (int t = 0; t < cluster.triangleCount(); ++t) {
+                final Grouping.Corner[] three = new Grouping.Corner[AXES];
+                for (int corner = 0; corner < AXES; ++corner) {
+                    three[corner] =
+                            Grouping.Corner.of(corners, t * TRIANGLE_VALUES + corner * AXES);
+                }
+                for (int corner = 0; corner < AXES; ++corner) {
+                    final Grouping.Edge edge =
+                            Grouping.Edge.of(three[corner], three[(corner + 1) % AXES]);
+                    if (wanted.contains(edge)) {
+                        faces.computeIfAbsent(edge, e -> new HashSet<>()).add(Set.of(three));
+                    }
+                }
+            }
+        }
+        final List<Grouping.Edge> out = new ArrayList<>();
+        for (Grouping.Edge edge : overdrawn) {
+            if (faces.get(edge).size() > mostAllowed(allowed.getOrDefault(edge, 0))) {
+                out.add(edge);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Whether drawn volumes cover an edge all along it: every point checked on it is in a voxel
+     * that stops light, of one of them, or within half a voxel of one, since an edge on a voxel's
+     * face may lie on the empty side and a volume's error is at least a voxel.
+     *
+     * @param from The edge's start, x, y, z.
+     * @param to Its end.
+     * @param volumes The drawn clusters with volumes.
+     * @return True if they do.
+     */
+    private boolean covered(
+            double @NonNull [] from, double @NonNull [] to, @NonNull List<Integer> volumes) {
+        final int samples = TJunctions.samples(from, to);
+        final double[] point = new double[AXES];
+        for (int k = 0; k < samples; ++k) {
+            TJunctions.sample(from, to, k, samples, point);
+            boolean in = false;
+            for (int id : volumes) {
+                if (inOrBeside(dag.volumeOf(id), point)) {
+                    in = true;
+                    break;
+                }
+            }
+            if (!in) {
+                return false;
+            }
+        }
+        return true;
     }
 }

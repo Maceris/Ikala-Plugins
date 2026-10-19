@@ -43,7 +43,8 @@ public final class LodStats {
      * @param buildMillis Group build times: total, median, 95th percentile, max.
      * @param virtualEdges Virtual edges added in this level's groups.
      * @param rejectedFlips Collapses rejected for flipping in this level's groups.
-     * @param rejectedLinks Collapses rejected by the link condition in this level's groups.
+     * @param rejectedLinks Collapses rejected for breaking a border another group keeps in this
+     *     level's groups.
      * @param bakedClusters Clusters this level's groups baked.
      * @param bakedTexels Texels in their bake tiles.
      * @param volumeGeometry This level's triangles the groups consuming them find finer than their
@@ -355,7 +356,7 @@ public final class LodStats {
                         "build ms (sum/p50/p95/max)",
                         "virtual",
                         "flips",
-                        "links",
+                        "border",
                         "baked",
                         "bake MiB",
                         "vol geo",

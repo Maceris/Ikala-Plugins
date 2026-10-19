@@ -35,6 +35,9 @@ public final class Simplifier {
     /** Vertices in a triangle. */
     private static final int CORNERS = 3;
 
+    /** The most faces an edge of a manifold mesh has. */
+    private static final int MANIFOLD_FACES = 2;
+
     /** Values in a triangle's corners. */
     private static final int TRIANGLE_VALUES = 9;
 
@@ -126,7 +129,8 @@ public final class Simplifier {
      * @param collapses How many edges were collapsed.
      * @param rejectedFlips How many collapses were rejected because they would flip a triangle.
      * @param rejectedLinks How many collapses were rejected because they would make an edge
-     *     non-manifold (the link condition).
+     *     non-manifold where the mesh is manifold (the link condition), or break a border another
+     *     group keeps.
      * @param virtualEdges How many virtual edges were added.
      */
     public record Result(
@@ -235,7 +239,10 @@ public final class Simplifier {
     /** How many collapses were rejected for flipping a triangle. */
     private int rejectedFlips;
 
-    /** How many collapses were rejected by the link condition. */
+    /**
+     * How many collapses were rejected by the link condition or for breaking a border another group
+     * keeps.
+     */
     private int rejectedLinks;
 
     /** The history, or null. */
@@ -406,9 +413,10 @@ public final class Simplifier {
             // The end cost() chose to keep: a locked one, or one on a seam
             final int keep = chosenKeep;
             final int remove = keep == a ? b : a;
-            if (!linkCondition(keep, remove)
-                    || createsKeptOpen(keep, remove)
-                    || dropsLockedEdge(keep, remove)) {
+            if (createsKeptOpen(keep, remove)
+                    || dropsLockedEdge(keep, remove)
+                    || foldsOntoLockedEdge(keep, remove)
+                    || (manifoldAt(keep) && manifoldAt(remove) && !linkCondition(keep, remove))) {
                 ++rejectedLinks;
                 continue;
             }
@@ -615,33 +623,6 @@ public final class Simplifier {
     }
 
     /**
-     * The link condition: a collapse keeps the mesh's edges as manifold as they were only if every
-     * vertex sharing a face with both ends is opposite the edge in a face that uses it. Otherwise
-     * two edges merge into one used by more faces, such as faces folding onto a locked border.
-     * Vertices joined only by virtual edges don't count, so separate parts can still merge.
-     *
-     * @param keep One end.
-     * @param remove The other end.
-     * @return True if the collapse is allowed.
-     */
-    private boolean linkCondition(int keep, int remove) {
-        final IntArrayList around = vertexFaces[remove];
-        for (int k = 0; k < around.size(); ++k) {
-            final int f = around.getInt(k);
-            for (int corner = 0; corner < CORNERS; ++corner) {
-                final int x = faces[f * CORNERS + corner];
-                if (x == keep || x == remove || !sharesFace(keep, x)) {
-                    continue;
-                }
-                if (!opposite(keep, remove, x)) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    /**
      * Whether a collapse would take the last face off an edge between two locked vertices: a face
      * using both ends goes, and with it its edge from the kept vertex to its third corner, unless
      * the removed vertex's edge to that corner has another face to carry it over. A border shared
@@ -677,6 +658,146 @@ public final class Simplifier {
     }
 
     /**
+     * The link condition: a collapse keeps the mesh's edges as manifold as they were only if every
+     * vertex sharing a face with both ends is opposite the edge in a face that uses it. Otherwise
+     * two edges merge into one used by more faces, such as a sphere's cap pinched into a fin.
+     * Vertices joined only by virtual edges don't count, so separate parts can still merge.
+     *
+     * <p>It only holds where the mesh is manifold around both ends: block content welded by virtual
+     * edges meets in junctions of three or more faces everywhere, and keeping the edges around them
+     * as they were stopped it halving. There measured errors still bound how far the surface moves,
+     * and {@link #foldsOntoLockedEdge} keeps borders as they were.
+     *
+     * @param keep One end.
+     * @param remove The other end.
+     * @return True if the collapse is allowed.
+     */
+    private boolean linkCondition(int keep, int remove) {
+        final IntArrayList around = vertexFaces[remove];
+        for (int k = 0; k < around.size(); ++k) {
+            final int f = around.getInt(k);
+            for (int corner = 0; corner < CORNERS; ++corner) {
+                final int x = faces[f * CORNERS + corner];
+                if (x == keep || x == remove || !sharesFace(keep, x)) {
+                    continue;
+                }
+                if (!opposite(keep, remove, x)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether a vertex's edges are manifold: none has more than two faces.
+     *
+     * @param v The vertex.
+     * @return True if so.
+     */
+    private boolean manifoldAt(int v) {
+        final IntArrayList around = vertexFaces[v];
+        for (int k = 0; k < around.size(); ++k) {
+            final int f = around.getInt(k);
+            for (int corner = 0; corner < CORNERS; ++corner) {
+                final int u = faces[f * CORNERS + corner];
+                if (u != v && sharedFaces(v, u) > MANIFOLD_FACES) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether a vertex is opposite an edge, in a face that uses all three.
+     *
+     * @param a One end.
+     * @param b The other end.
+     * @param x The vertex.
+     * @return True if a face uses a, b and x.
+     */
+    private boolean opposite(int a, int b, int x) {
+        return sharedFaces(a, b, x) > 0;
+    }
+
+    /**
+     * Whether two vertices are corners of a common face.
+     *
+     * @param a One vertex.
+     * @param b The other.
+     * @return True if a face uses both.
+     */
+    private boolean sharesFace(int a, int b) {
+        final IntArrayList around = vertexFaces[a];
+        for (int k = 0; k < around.size(); ++k) {
+            if (uses(around.getInt(k), b)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether a collapse would fold faces onto an edge between two locked vertices: leave an edge
+     * the mesh has with more faces than it has. A border shared with another group has one face
+     * here, and the other group's levels meet it with theirs; a second face on it from this group
+     * is a fin drawn along the border, in front of whatever the other group draws there. A new edge
+     * between locked vertices is an ordinary edge across the group.
+     *
+     * @param keep The vertex that stays.
+     * @param remove The vertex that goes.
+     * @return True if it would.
+     */
+    private boolean foldsOntoLockedEdge(int keep, int remove) {
+        if (!locked[keep]) {
+            return false;
+        }
+        final IntArrayList around = vertexFaces[remove];
+        for (int k = 0; k < around.size(); ++k) {
+            final int f = around.getInt(k);
+            if (!faceAlive[f] || uses(f, keep)) {
+                continue;
+            }
+            for (int corner = 0; corner < CORNERS; ++corner) {
+                final int y = faces[f * CORNERS + corner];
+                if (y == remove || !locked[y]) {
+                    continue;
+                }
+                // Faces on keep-y now, those moving over from remove-y, less those the collapse
+                // drops, which used keep, remove and y and counted on both
+                final int before = sharedFaces(keep, y);
+                final int dropped = sharedFaces(keep, remove, y);
+                final int after = before + sharedFaces(remove, y) - 2 * dropped;
+                if (before > 0 && after > before) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * How many faces use three vertices.
+     *
+     * @param a One.
+     * @param b Another.
+     * @param c The third.
+     * @return The count.
+     */
+    private int sharedFaces(int a, int b, int c) {
+        int count = 0;
+        final IntArrayList around = vertexFaces[a];
+        for (int k = 0; k < around.size(); ++k) {
+            final int f = around.getInt(k);
+            if (uses(f, b) && uses(f, c)) {
+                ++count;
+            }
+        }
+        return count;
+    }
+
+    /**
      * Whether a collapse would join the kept vertex to one of the removed vertex's neighbors by an
      * edge that must stay out of the mesh, such as an edge another group already has on the rim of
      * a hole the two share: closing it here would leave a crack where the other group's coarser
@@ -698,42 +819,6 @@ public final class Simplifier {
                     && Arrays.binarySearch(
                                     keepOpen, LongIntMap.pair(Math.min(keep, u), Math.max(keep, u)))
                             >= 0) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Whether two vertices are corners of a common face.
-     *
-     * @param a One vertex.
-     * @param b The other.
-     * @return True if a face uses both.
-     */
-    private boolean sharesFace(int a, int b) {
-        final IntArrayList around = vertexFaces[a];
-        for (int k = 0; k < around.size(); ++k) {
-            if (uses(around.getInt(k), b)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Whether a vertex is opposite an edge, in a face that uses all three.
-     *
-     * @param a One end.
-     * @param b The other end.
-     * @param x The vertex.
-     * @return True if a face uses a, b and x.
-     */
-    private boolean opposite(int a, int b, int x) {
-        final IntArrayList around = vertexFaces[a];
-        for (int k = 0; k < around.size(); ++k) {
-            final int f = around.getInt(k);
-            if (uses(f, b) && uses(f, x)) {
                 return true;
             }
         }
