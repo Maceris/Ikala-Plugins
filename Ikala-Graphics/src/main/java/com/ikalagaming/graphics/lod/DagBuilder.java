@@ -708,10 +708,10 @@ public final class DagBuilder {
     }
 
     /**
-     * Build the DAG of one region cell from its sections. The cell's boundary planes are locked,
-     * with the ring of vertices beside them (see {@link #lockCellBoundary}), so that whatever is
-     * built on the other side of a plane meets this cell exactly at every level. Building stops
-     * once few clusters are left, for the parent cell to take further.
+     * Build the DAG of one region cell from its sections. The cell's boundary planes are locked
+     * (see {@link #lockCellBoundary}), so that whatever is built on the other side of a plane meets
+     * this cell exactly at every level. Building stops once few clusters are left, for the parent
+     * cell to take further.
      *
      * @param sections The cell's section meshes, each with its own origin.
      * @param origin Where the DAG's positions are measured from.
@@ -1052,11 +1052,12 @@ public final class DagBuilder {
     }
 
     /**
-     * Lock a region cell's boundary: every corner on one of its six planes, and every corner that
-     * shares a triangle with one. What lies across a plane is built separately, so no group here
-     * knows its open edges; with the ring beside the plane locked too, no collapse can join two
-     * corners on the plane by a new edge, the way closing a slit or an ear would, so the plane's
-     * edges stay exactly as the input has them until the parent cell unlocks them.
+     * Lock a region cell's boundary: every corner on one of its six planes. What lies across a
+     * plane is built separately, so no group here knows its open edges; the simplifier keeps every
+     * collapse from joining two corners on a plane by a new edge, the way closing a slit or an ear
+     * would, or moving a corner onto a plane (see {@link Simplifier.Options#withinCell}), so the
+     * plane's edges stay exactly as the input has them until the parent cell unlocks them. The
+     * corners beside the plane simplify freely.
      *
      * @param owners Which group uses each corner, -1 for locked; the boundary's corners become -1.
      * @param active This level's clusters.
@@ -1066,19 +1067,35 @@ public final class DagBuilder {
         final Set<Grouping.Corner> lock = new HashSet<>();
         for (int id : active) {
             final float[] corners = dag.clusters().get(id).corners();
-            for (int t = 0; t < corners.length; t += TRIANGLE_VALUES) {
-                boolean touches = false;
-                for (int corner = 0; corner < AXES; ++corner) {
-                    touches |= onCellPlane(corners, t + corner * AXES);
-                }
-                if (touches) {
-                    for (int corner = 0; corner < AXES; ++corner) {
-                        lock.add(Grouping.Corner.of(corners, t + corner * AXES));
-                    }
+            for (int at = 0; at < corners.length; at += AXES) {
+                if (onCellPlane(corners, at)) {
+                    lock.add(Grouping.Corner.of(corners, at));
                 }
             }
         }
         lock.forEach(corner -> owners.put(corner, -1));
+    }
+
+    /**
+     * Which of the cell's planes each vertex of a group's mesh lies on, welded vertices included.
+     *
+     * @param mesh The mesh.
+     * @return A bit per plane for each vertex: min x, y, z, then max x, y, z.
+     */
+    private int[] cellPlanes(@NonNull LodMesh mesh) {
+        final int[] planes = new int[mesh.getVertexCount()];
+        for (int v = 0; v < planes.length; ++v) {
+            for (int axis = 0; axis < AXES; ++axis) {
+                final float value = mesh.position(v, axis);
+                if (value == (float) cellMin[axis]) {
+                    planes[v] |= 1 << axis;
+                }
+                if (value == (float) cellMax[axis]) {
+                    planes[v] |= 1 << (axis + AXES);
+                }
+            }
+        }
+        return planes;
     }
 
     /**
@@ -1855,12 +1872,30 @@ public final class DagBuilder {
         // cells, whose parents count up from their highest child, but triangle sizes don't
         final double edge = averageEdge(merged);
         final double radius = options.virtualEdgeFactor() * edge;
-        final Simplifier.Result result =
-                Simplifier.simplify(
-                        merged,
-                        Simplifier.Options.toCount(merged.getTriangleCount() / 2, radius)
-                                .keepingOpen(keepOpen(builder, merged, rim))
-                                .followingSeams(seams == null ? new long[0] : seams.edges));
+        Simplifier.Options simplify =
+                Simplifier.Options.toCount(merged.getTriangleCount() / 2, radius)
+                        .keepingOpen(keepOpen(builder, merged, rim))
+                        .followingSeams(seams == null ? new long[0] : seams.edges);
+        if (cellMin != null) {
+            final int[] planes = cellPlanes(merged);
+            for (int v = 0; v < planes.length; ++v) {
+                if (planes[v] != 0) {
+                    merged.setLocked(v, true);
+                }
+            }
+            simplify =
+                    simplify.withinCell(
+                            planes,
+                            new double[] {
+                                cellMin[0],
+                                cellMin[1],
+                                cellMin[2],
+                                cellMax[0],
+                                cellMax[1],
+                                cellMax[2]
+                            });
+        }
+        final Simplifier.Result result = Simplifier.simplify(merged, simplify);
         Correspondence.assignMaterials(merged, result);
         // Blended over about what the group's error spans, and at least an edge
         final int[] averaged =

@@ -65,6 +65,10 @@ public final class Simplifier {
      * @param keepOpen Edges no collapse may create, as vertex pairs packed by {@link
      *     LongIntMap#pair} with the lower vertex first, sorted.
      * @param seams Seam edges, packed the same way: their vertices only collapse along them.
+     * @param planes Which of a region cell's planes each vertex lies on, a bit per plane: min x, y,
+     *     z, then max x, y, z. Empty outside a cell.
+     * @param cell The cell's box, min x, y, z then max x, y, z, in the mesh's frame. Empty outside
+     *     a cell.
      */
     public record Options(
             int targetTriangles,
@@ -72,7 +76,9 @@ public final class Simplifier {
             double maxError,
             boolean recordHistory,
             long @NonNull [] keepOpen,
-            long @NonNull [] seams) {
+            long @NonNull [] seams,
+            int @NonNull [] planes,
+            double @NonNull [] cell) {
 
         /**
          * Simplify to a triangle count with no error limit, recording history.
@@ -88,7 +94,9 @@ public final class Simplifier {
                     Double.POSITIVE_INFINITY,
                     true,
                     new long[0],
-                    new long[0]);
+                    new long[0],
+                    new int[0],
+                    new double[0]);
         }
 
         /**
@@ -101,7 +109,14 @@ public final class Simplifier {
             final long[] sorted = edges.clone();
             Arrays.sort(sorted);
             return new Options(
-                    targetTriangles, virtualEdgeRadius, maxError, recordHistory, sorted, seams);
+                    targetTriangles,
+                    virtualEdgeRadius,
+                    maxError,
+                    recordHistory,
+                    sorted,
+                    seams,
+                    planes,
+                    cell);
         }
 
         /**
@@ -112,7 +127,37 @@ public final class Simplifier {
          */
         public Options followingSeams(long @NonNull [] edges) {
             return new Options(
-                    targetTriangles, virtualEdgeRadius, maxError, recordHistory, keepOpen, edges);
+                    targetTriangles,
+                    virtualEdgeRadius,
+                    maxError,
+                    recordHistory,
+                    keepOpen,
+                    edges,
+                    planes,
+                    cell);
+        }
+
+        /**
+         * The same options, inside a region cell whose neighbors are built apart: vertices on the
+         * cell's planes are locked, and no collapse may join two of them on one plane by a new
+         * edge, or move a vertex onto or past a plane it isn't on, so the planes keep exactly the
+         * edges the neighbors have.
+         *
+         * @param vertexPlanes Which planes each vertex lies on, a bit per plane: min x, y, z, then
+         *     max x, y, z.
+         * @param box The cell's box, min x, y, z then max x, y, z, in the mesh's frame.
+         * @return The options.
+         */
+        public Options withinCell(int @NonNull [] vertexPlanes, double @NonNull [] box) {
+            return new Options(
+                    targetTriangles,
+                    virtualEdgeRadius,
+                    maxError,
+                    recordHistory,
+                    keepOpen,
+                    seams,
+                    vertexPlanes,
+                    box);
         }
     }
 
@@ -416,6 +461,8 @@ public final class Simplifier {
             if (createsKeptOpen(keep, remove)
                     || dropsLockedEdge(keep, remove)
                     || foldsOntoLockedEdge(keep, remove)
+                    || joinsOnPlane(keep, remove)
+                    || leavesCell(keep, chosen)
                     || (manifoldAt(keep) && manifoldAt(remove) && !linkCondition(keep, remove))) {
                 ++rejectedLinks;
                 continue;
@@ -732,6 +779,62 @@ public final class Simplifier {
         final IntArrayList around = vertexFaces[a];
         for (int k = 0; k < around.size(); ++k) {
             if (uses(around.getInt(k), b)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether a collapse would join the kept vertex to another on one of the cell's planes by an
+     * edge the mesh doesn't have: a new edge on the plane, which the neighbor across it doesn't
+     * have, as closing a slit or an ear along the plane would make.
+     *
+     * @param keep The vertex that stays.
+     * @param remove The vertex that goes.
+     * @return True if it would.
+     */
+    private boolean joinsOnPlane(int keep, int remove) {
+        final int[] planes = options.planes();
+        if (planes.length == 0 || planes[keep] == 0) {
+            return false;
+        }
+        final IntArrayList around = vertexFaces[remove];
+        for (int k = 0; k < around.size(); ++k) {
+            final int f = around.getInt(k);
+            if (uses(f, keep)) {
+                continue;
+            }
+            for (int corner = 0; corner < CORNERS; ++corner) {
+                final int u = faces[f * CORNERS + corner];
+                if (u != remove && (planes[u] & planes[keep]) != 0 && !sharesFace(keep, u)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether a collapse would put the kept vertex on or past one of the cell's planes it isn't on,
+     * where the neighbor across has nothing to meet it.
+     *
+     * @param keep The vertex that stays.
+     * @param to Where it goes.
+     * @return True if it would.
+     */
+    private boolean leavesCell(int keep, double @NonNull [] to) {
+        final double[] cell = options.cell();
+        if (cell.length == 0) {
+            return false;
+        }
+        final int on = options.planes()[keep];
+        for (int axis = 0; axis < AXES; ++axis) {
+            final float at = (float) to[axis];
+            if ((on & (1 << axis)) == 0 && at <= (float) cell[axis]) {
+                return true;
+            }
+            if ((on & (1 << (axis + AXES))) == 0 && at >= (float) cell[axis + AXES]) {
                 return true;
             }
         }
