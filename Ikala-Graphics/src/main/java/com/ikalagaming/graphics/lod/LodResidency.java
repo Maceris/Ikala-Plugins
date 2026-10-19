@@ -366,6 +366,39 @@ public final class LodResidency {
     }
 
     /**
+     * Whether any unit is wanted and every wanted one is shown: the whole cut the observers want
+     * can be drawn, with no cluster standing in for children that aren't there yet.
+     *
+     * @return True if so.
+     */
+    public boolean wantedAllShown() {
+        boolean any = false;
+        for (int i = 0; i < units.size(); ++i) {
+            if (wanted[i]) {
+                any = true;
+                if (!shown[i]) {
+                    return false;
+                }
+            }
+        }
+        return any;
+    }
+
+    /**
+     * Whether any unit is wanted.
+     *
+     * @return True if one is.
+     */
+    public boolean anyWanted() {
+        for (boolean w : wanted) {
+            if (w) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * How many bytes the wanted units take.
      *
      * @return The bytes.

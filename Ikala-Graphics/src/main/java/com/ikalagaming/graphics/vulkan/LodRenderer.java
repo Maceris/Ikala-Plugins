@@ -161,6 +161,13 @@ public class LodRenderer {
     private static final long RESIDENCY_INTERVAL_NANOS = 100_000_000L;
 
     /**
+     * The longest a newly added world or model waits for its first cut to be resident before it is
+     * drawn anyway, coarse levels standing in for what hasn't loaded, as when its wanted units
+     * don't fit the byte cap.
+     */
+    private static final long SETTLE_NANOS = 2_000_000_000L;
+
+    /**
      * The clusters' geometry. -- GETTER -- The arena.
      *
      * @return The arena.
@@ -632,6 +639,15 @@ public class LodRenderer {
 
         /** Whether it has any pieces, for other threads. */
         volatile boolean shown;
+
+        /**
+         * Whether it has been drawn yet: not before its first cut is resident, so a camera near it
+         * never sees only its coarsest levels while the rest streams in, see {@link #SETTLE_NANOS}.
+         */
+        volatile boolean settled;
+
+        /** When it first wanted any units, from {@link System#nanoTime()}, or 0 until it has. */
+        long firstWanted;
 
         /** How many pieces it has, for other threads. */
         volatile int pieceCount;
@@ -1656,14 +1672,19 @@ public class LodRenderer {
     }
 
     /**
-     * Whether a world has every batch published so far on the GPU, and something to draw.
+     * Whether a world has every batch published so far on the GPU, something to draw, and is drawn:
+     * its first cut has streamed in, see {@link World#settled}.
      *
      * @param id The world.
-     * @return False while a batch is uploading, or there is no such world.
+     * @return False while a batch is uploading, before it settles, or if there is no such world.
      */
     public boolean isResident(long id) {
         final World world = world(id);
-        return world != null && world.shown && !world.busy && world.incoming.isEmpty();
+        return world != null
+                && world.shown
+                && world.settled
+                && !world.busy
+                && world.incoming.isEmpty();
     }
 
     /**
@@ -2021,6 +2042,7 @@ public class LodRenderer {
     private void stream(@NonNull VulkanState state, @NonNull World world) {
         final LodResidency residency = world.residency;
         if (residency == null) {
+            world.settled = true;
             return;
         }
         final long now = System.nanoTime();
@@ -2074,6 +2096,13 @@ public class LodRenderer {
             if (setUnitBit(world.unitSlotOf[unit], true)) {
                 invalidate(world, world.unitMembers.get(unit));
             }
+        }
+        // Drawn once the first cut is all there, or once it has waited long enough
+        if (!world.settled && residency.anyWanted()) {
+            if (world.firstWanted == 0) {
+                world.firstWanted = now;
+            }
+            world.settled = residency.wantedAllShown() || now - world.firstWanted >= SETTLE_NANOS;
         }
         world.residencyNumbers =
                 new long[] {
@@ -2864,7 +2893,7 @@ public class LodRenderer {
         int drawn = 0;
         for (World world : all) {
             slots = Math.max(slots, world.slot + 1);
-            if (world.visible && world.shown) {
+            if (world.visible && world.shown && world.settled) {
                 ++drawn;
             }
         }
@@ -2898,7 +2927,7 @@ public class LodRenderer {
                     world,
                     camera,
                     eye,
-                    world.visible && world.shown,
+                    world.visible && world.shown && world.settled,
                     (float) world.thresholdPixels,
                     pixelsPerUnit,
                     colors);
@@ -2925,7 +2954,7 @@ public class LodRenderer {
             }
             eyes.add(modelEye);
             final Piece piece = model.pieces.get(WHOLE);
-            if (piece == null || instance.firstPair < 0) {
+            if (piece == null || instance.firstPair < 0 || !model.settled) {
                 continue;
             }
             ++drawn;

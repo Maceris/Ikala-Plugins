@@ -82,6 +82,27 @@ class LodResidencyTest {
         assertEquals(List.of(0, 1, 3), residency.toShow());
     }
 
+    /**
+     * The whole wanted cut is there only once every wanted unit is shown, and not before any is
+     * wanted.
+     */
+    @Test
+    void testWantedAllShown() {
+        final LodResidency residency = new LodResidency(tree(), new boolean[4]);
+        assertFalse(residency.anyWanted());
+        assertFalse(residency.wantedAllShown());
+        residency.update(new double[] {0, 0, 0}, PIXELS, THRESHOLD, 0, true);
+        assertTrue(residency.anyWanted());
+        residency.setLoaded(0);
+        residency.toShow();
+        // The root alone stands in for what is still on its way
+        assertFalse(residency.wantedAllShown());
+        residency.setLoaded(1);
+        residency.setLoaded(3);
+        residency.toShow();
+        assertTrue(residency.wantedAllShown());
+    }
+
     /** Unwanted units go after the delay, children first, and not while a child is loaded. */
     @Test
     void testEvictsAfterDelayChildrenFirst() {
