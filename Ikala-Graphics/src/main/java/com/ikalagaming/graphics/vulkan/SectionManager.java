@@ -503,6 +503,12 @@ public class SectionManager {
      */
     private static final long URGENT_NANOS_PER_FRAME = 4_000_000L;
 
+    /**
+     * How long the render thread may spend in a frame registering meshes coming back as the
+     * observer nears their sections; the rest wait for later frames.
+     */
+    private static final long RESTORE_NANOS_PER_FRAME = 4_000_000L;
+
     /** Where the observer was last frame, for deciding which bakes are urgent. */
     private volatile Vector3dc lastEye;
 
@@ -985,8 +991,13 @@ public class SectionManager {
         while ((done = baked.poll()) != null) {
             upload(state, done);
         }
+        // Meshes coming back as the observer nears their sections, a few milliseconds' worth a
+        // frame: a jump of the camera brings back thousands at once, and the sections draw what
+        // they have until theirs are in
+        final long restoreStart = System.nanoTime();
         Restored back;
-        while ((back = restored.poll()) != null) {
+        while (System.nanoTime() - restoreStart < RESTORE_NANOS_PER_FRAME
+                && (back = restored.poll()) != null) {
             restore(state, back);
         }
         Rebricked brick;
