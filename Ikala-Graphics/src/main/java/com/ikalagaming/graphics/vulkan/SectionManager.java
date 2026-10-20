@@ -1178,6 +1178,11 @@ public class SectionManager {
                 new EnumMap<>(Material.Transparency.class);
         final Set<Material.Transparency> offGpu = EnumSet.noneOf(Material.Transparency.class);
         final Vector3dc eye = lastEye;
+        // A bake near the observer, as an edit's is, uploads ahead of meshes loading in
+        final boolean first =
+                eye != null
+                        && distance(eye, done.origin())
+                                <= GraphicsManager.getSettings().lodOverrideDistance;
         for (Material.Transparency transparency : Material.Transparency.values()) {
             final SectionBaker.Bucket bucket = done.result().get(transparency);
             if (bucket == null) {
@@ -1194,7 +1199,7 @@ public class SectionManager {
             MeshHandle handle = null;
             try {
                 if (!skip) {
-                    handle = register(state, owner, MeshKind.baked(transparency), bucket);
+                    handle = register(state, owner, MeshKind.baked(transparency), bucket, first);
                 }
             } catch (IllegalStateException e) {
                 // Out of room in the buffers: this bake is dropped, the section keeps what it has
@@ -1293,13 +1298,15 @@ public class SectionManager {
      * @param owner The owning plugin's key.
      * @param kind The kind of mesh.
      * @param bucket The baked mesh.
+     * @param first Whether it uploads ahead of meshes queued normally.
      * @return Its handle.
      */
     private static MeshHandle register(
             @NonNull VulkanState state,
             @NonNull String owner,
             @NonNull MeshKind kind,
-            @NonNull SectionBaker.Bucket bucket) {
+            @NonNull SectionBaker.Bucket bucket,
+            boolean first) {
         final int vertexBytes = bucket.vertexCount() * BakedVertex.SIZE;
         ByteBuffer vertices = MemoryUtil.memAlloc(vertexBytes);
         ByteBuffer indices = MemoryUtil.memAlloc(bucket.indices().length * Integer.BYTES);
@@ -1314,7 +1321,8 @@ public class SectionManager {
                     vertices,
                     indices,
                     new Vector3f(bucket.min()),
-                    new Vector3f(bucket.max()));
+                    new Vector3f(bucket.max()),
+                    first);
         } finally {
             MemoryUtil.memFree(indices);
             MemoryUtil.memFree(vertices);
@@ -2060,7 +2068,7 @@ public class SectionManager {
                 if (bucket == null) {
                     throw new IllegalStateException("the bake no longer has a " + kind + " mesh");
                 }
-                handles.put(kind, register(state, owner, MeshKind.baked(kind), bucket));
+                handles.put(kind, register(state, owner, MeshKind.baked(kind), bucket, false));
             }
         } catch (IllegalStateException e) {
             log.error("Section {} couldn't get its meshes back: {}", back.id(), e.getMessage());

@@ -146,6 +146,13 @@ public class GeometryArena {
     /** Meshes waiting to be copied in, in the order they were registered. */
     private final Queue<Upload> uploads = new ConcurrentLinkedQueue<>();
 
+    /**
+     * Uploads recorded before any in {@link #uploads}, within the same budget: meshes an edit near
+     * the observer is waiting on, which a burst of loads, as when the camera jumps, would otherwise
+     * hold up for frames.
+     */
+    private final Queue<Upload> firstUploads = new ConcurrentLinkedQueue<>();
+
     /** Removed meshes whose space can be reused once frames in flight are done with them. */
     private final Queue<MeshRegistry.Retired> retiring = new ConcurrentLinkedQueue<>();
 
@@ -220,6 +227,36 @@ public class GeometryArena {
             @NonNull ByteBuffer indexData,
             @NonNull Vector3fc aabbMin,
             @NonNull Vector3fc aabbMax) {
+        return register(state, owner, kind, vertexData, indexData, aabbMin, aabbMax, false);
+    }
+
+    /**
+     * Add a mesh of a given kind, which must be in this arena's vertex format, uploaded before
+     * meshes queued normally if asked. See {@link #register(VulkanState, String, ByteBuffer,
+     * ByteBuffer, Vector3fc, Vector3fc)}.
+     *
+     * @param state The Vulkan state.
+     * @param owner The key of the plugin that owns the mesh.
+     * @param kind The kind of mesh, which its handle carries.
+     * @param vertexData The vertices, tightly packed, from position to limit.
+     * @param indexData The 32-bit indices, from position to limit.
+     * @param aabbMin The minimum corner of the mesh's bounding box.
+     * @param aabbMax The maximum corner of the mesh's bounding box.
+     * @param first Whether it goes ahead of meshes queued normally, as an edit near the observer
+     *     does.
+     * @return The handle, pending until uploaded.
+     * @throws IllegalArgumentException If the data isn't whole vertices and triangles, or an index
+     *     points past the last vertex.
+     */
+    public MeshHandle register(
+            @NonNull VulkanState state,
+            @NonNull String owner,
+            @NonNull MeshKind kind,
+            @NonNull ByteBuffer vertexData,
+            @NonNull ByteBuffer indexData,
+            @NonNull Vector3fc aabbMin,
+            @NonNull Vector3fc aabbMax,
+            boolean first) {
         if (vertexData.remaining() % vertexStride != 0) {
             throw new IllegalArgumentException(
                     vertexData.remaining() + " bytes isn't a whole number of vertices");
@@ -234,11 +271,12 @@ public class GeometryArena {
 
         final MeshRegistry.Reservation reservation =
                 registry.add(owner, kind, vertexCount, indexCount, aabbMin, aabbMax);
-        uploads.add(
-                new Upload(
-                        reservation.handle(),
-                        state.stagingRing.stage(state, vertexData),
-                        state.stagingRing.stage(state, indexData)));
+        (first ? firstUploads : uploads)
+                .add(
+                        new Upload(
+                                reservation.handle(),
+                                state.stagingRing.stage(state, vertexData),
+                                state.stagingRing.stage(state, indexData)));
         return reservation.handle();
     }
 
@@ -319,7 +357,7 @@ public class GeometryArena {
             final MeshRegistry.Retired free = retired;
             state.deferFree(() -> registry.free(free));
         }
-        if (!uploads.isEmpty()) {
+        if (!uploads.isEmpty() || !firstUploads.isEmpty()) {
             recordUploads(state, commandBuffer);
         }
         // After the uploads, which make meshes resident
@@ -401,6 +439,16 @@ public class GeometryArena {
     }
 
     /**
+     * The next upload to record: those that go first, then the rest.
+     *
+     * @return The upload, or null if none is queued.
+     */
+    private Upload nextUpload() {
+        final Upload first = firstUploads.poll();
+        return first != null ? first : uploads.poll();
+    }
+
+    /**
      * Grow the buffers if needed and record queued uploads up to the per-frame budget.
      *
      * @param state The Vulkan state.
@@ -425,7 +473,7 @@ public class GeometryArena {
             // Meshes registered on another thread since the buffers grew above may lie past their
             // ends; those wait for the next frame, which grows the buffers first
             final List<Upload> later = new ArrayList<>();
-            while (bytes < BYTES_PER_FRAME && (upload = uploads.poll()) != null) {
+            while (bytes < BYTES_PER_FRAME && (upload = nextUpload()) != null) {
                 final StagingRing.Staging vertexStaging = upload.vertices();
                 final StagingRing.Staging indexStaging = upload.indices();
                 final MeshRegistry.Location location = registry.locatePending(upload.handle());
@@ -604,7 +652,7 @@ public class GeometryArena {
      */
     public void cleanup(@NonNull VulkanState state) {
         Upload upload;
-        while ((upload = uploads.poll()) != null) {
+        while ((upload = nextUpload()) != null) {
             state.stagingRing.free(state, upload.vertices());
             state.stagingRing.free(state, upload.indices());
         }

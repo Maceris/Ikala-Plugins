@@ -78,12 +78,16 @@ public final class LiveLod implements AutoCloseable {
      *     it; its piece's cluster {@code i} is the cell's cluster {@code inputs + i}.
      * @param clusters Its own clusters, with what each gives way to.
      * @param meshes Each cluster's mesh, in the same order.
+     * @param shells Each cluster's coverage volume's shell, in the same order, or null where it has
+     *     no volume; empty where meshes are. Built here, off the render thread, since hulls and
+     *     their rays take long.
      */
     public record Piece(
             LodStore.@NonNull CellKey key,
             int inputs,
             @NonNull List<LodStore.PieceCluster> clusters,
-            @NonNull List<ClusterMeshes.Mesh> meshes) {}
+            @NonNull List<ClusterMeshes.Mesh> meshes,
+            @NonNull List<CoverageShells.Shell> shells) {}
 
     /**
      * What one rebuild changed.
@@ -451,7 +455,11 @@ public final class LiveLod implements AutoCloseable {
                 if (!built.contains(key)) {
                     tops.add(
                             new Piece(
-                                    key, store.inputCount(key), store.topParents(key), List.of()));
+                                    key,
+                                    store.inputCount(key),
+                                    store.topParents(key),
+                                    List.of(),
+                                    List.of()));
                 }
             }
         }
@@ -583,10 +591,13 @@ public final class LiveLod implements AutoCloseable {
     private Piece piece(LodStore.@NonNull CellKey key) {
         final List<LodStore.PieceCluster> clusters = store.piece(key);
         final List<ClusterMeshes.Mesh> meshes = new ArrayList<>(clusters.size());
+        final List<CoverageShells.Shell> shells = new ArrayList<>(clusters.size());
         for (LodStore.PieceCluster cluster : clusters) {
             meshes.add(ClusterMeshes.of(cluster.cluster()));
+            shells.add(
+                    cluster.volume() == null ? null : CoverageShells.of(cluster.volume(), false));
         }
-        return new Piece(key, store.inputCount(key), clusters, meshes);
+        return new Piece(key, store.inputCount(key), clusters, meshes, shells);
     }
 
     /**

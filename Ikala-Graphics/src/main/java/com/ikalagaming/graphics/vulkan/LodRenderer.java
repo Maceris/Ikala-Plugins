@@ -458,6 +458,9 @@ public class LodRenderer {
         /** Each cluster's mesh data, kept on the CPU. */
         final List<ClusterMeshes.Mesh> meshData;
 
+        /** Each cluster's volume's shell, kept on the CPU with its mesh, or null where none. */
+        final List<CoverageShells.Shell> shells;
+
         /** Each cluster's mesh on the GPU, or null while it isn't or it has no triangles. */
         final MeshHandle[] meshes;
 
@@ -477,6 +480,7 @@ public class LodRenderer {
             this.first = first;
             this.clusters = added.clusters().toArray(new LodStore.PieceCluster[0]);
             this.meshData = added.meshes();
+            this.shells = added.shells();
             this.meshes = meshes;
             this.sections = new LodStore.SectionPos[clusters.length];
         }
@@ -864,7 +868,11 @@ public class LodRenderer {
             world.modelClusters = dag.clusters().size();
         }
         final List<LodStore.PieceCluster> clusterList = new ArrayList<>(meshes.size());
+        // Shells are built here, on the caller's thread, not when their meshes register
+        final List<CoverageShells.Shell> shells = new ArrayList<>(meshes.size());
         for (int i = 0; i < meshes.size(); ++i) {
+            final CoverageVolume volume = dag.volumeOf(i);
+            shells.add(volume == null ? null : CoverageShells.of(volume, model));
             final boolean consumed = dag.consumer(i) >= 0;
             clusterList.add(
                     new LodStore.PieceCluster(
@@ -881,7 +889,7 @@ public class LodRenderer {
                 state,
                 id,
                 new LiveLod.Batch(
-                        List.of(new LiveLod.Piece(WHOLE, 0, clusterList, meshes)),
+                        List.of(new LiveLod.Piece(WHOLE, 0, clusterList, meshes, shells)),
                         List.of(),
                         List.of(),
                         Collections.emptySortedSet(),
@@ -1330,7 +1338,11 @@ public class LodRenderer {
                     added.put(
                             top.key(),
                             new LiveLod.Piece(
-                                    piece.key(), piece.inputs(), clusters, piece.meshes()));
+                                    piece.key(),
+                                    piece.inputs(),
+                                    clusters,
+                                    piece.meshes(),
+                                    piece.shells()));
                 } else {
                     topInputs.put(top.key(), top.inputs());
                     final Map<Integer, LodStore.PieceCluster> byLocal =
@@ -1355,6 +1367,7 @@ public class LodRenderer {
                             entry.getKey(),
                             topInputs.get(entry.getKey()),
                             new ArrayList<>(entry.getValue().values()),
+                            List.of(),
                             List.of()));
         }
         return new LiveLod.Batch(
@@ -1390,7 +1403,12 @@ public class LodRenderer {
             if ((mesh.triangleCount() > 0 || isVolume(piece.clusters().get(uploading.cluster)))
                     && isWanted(world, piece.clusters().get(uploading.cluster))) {
                 uploading.meshes[uploading.piece][uploading.cluster] =
-                        registerDrawn(state, world, piece.clusters().get(uploading.cluster), mesh);
+                        registerDrawn(
+                                state,
+                                world,
+                                piece.clusters().get(uploading.cluster),
+                                mesh,
+                                piece.shells().get(uploading.cluster));
                 bytes += bytes(mesh);
             }
             uploading.cluster += 1;
@@ -1444,13 +1462,15 @@ public class LodRenderer {
      * @param world The world.
      * @param cluster The cluster.
      * @param mesh Its mesh as built.
+     * @param shell Its volume's shell as built off the render thread, or null to build it here.
      * @return Its handle.
      */
     private MeshHandle registerDrawn(
             @NonNull VulkanState state,
             @NonNull World world,
             LodStore.@NonNull PieceCluster cluster,
-            ClusterMeshes.@NonNull Mesh mesh) {
+            ClusterMeshes.@NonNull Mesh mesh,
+            CoverageShells.Shell shell) {
         final CoverageVolume volume = cluster.volume();
         if (volume == null) {
             return register(state, world.owner, drawn(world, cluster, mesh));
@@ -1485,7 +1505,12 @@ public class LodRenderer {
         ClusterMeshes.Mesh drawn = CoverageBricks.mesh(volume, list, offsets);
         // Then its shell, drawn in place of the boxes once it is small on screen; a model's names
         // its materials too, so its instances' remaps reach it
-        drawn = withShell(drawn, CoverageShells.of(volume, world.modelClusters >= 0));
+        drawn =
+                withShell(
+                        drawn,
+                        shell != null
+                                ? shell
+                                : CoverageShells.of(volume, world.modelClusters >= 0));
         final MeshHandle handle = register(state, world.owner, drawn);
         brickRangeOf.put(handle, new int[] {first, words});
         return handle;
@@ -2075,7 +2100,12 @@ public class LodRenderer {
                 if (piece.meshes[member.index()] == null
                         && (mesh.triangleCount() > 0 || isVolume(piece.clusters[member.index()]))) {
                     piece.meshes[member.index()] =
-                            registerDrawn(state, world, piece.clusters[member.index()], mesh);
+                            registerDrawn(
+                                    state,
+                                    world,
+                                    piece.clusters[member.index()],
+                                    mesh,
+                                    piece.shells.get(member.index()));
                     writeEntry(world, piece, member.index());
                     bytes += bytes(mesh);
                 }
