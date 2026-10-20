@@ -59,6 +59,9 @@ layout(location = 6) flat out uint outMaterialIdx;
 // An instance's material remaps, from in the low 16 bits and to in the high, all ones for none,
 // for scene.frag's indexed bakes, whose texels name the materials they draw
 layout(location = 7) flat out uvec4 outRemaps;
+// A seed per triangle for a shell's threshold, so stacked layers don't share one: the index of the
+// triangle's first vertex, which flat outputs take. gl_PrimitiveID would need geometry shaders.
+layout(location = 8) flat out uint outShellSeed;
 
 layout(std430, set = 0, binding = 2) readonly buffer Materials {
     Material materials[];
@@ -210,6 +213,7 @@ void main()
         }
     }
     outRemaps = uvec4(0xFFFFFFFFu);
+    outShellSeed = uint(gl_VertexIndex);
     for (uint i = 0u; instanced && i < world.model.w; ++i) {
         outRemaps[i] = (world.remapFrom[i] & 0xFFFFu) | (world.remapTo[i] << 16);
     }

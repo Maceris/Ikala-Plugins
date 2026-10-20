@@ -13,6 +13,9 @@ layout(location = 0) out vec2 outTextCoord;
 layout(location = 1) flat out uint outMaterialIdx;
 // Never a coverage volume shell's, see shadow_cutout.frag
 layout(location = 2) out float outShellAlpha;
+// A seed per triangle for a shell's threshold, the index of its first vertex, which flat outputs
+// take
+layout(location = 3) flat out uint outShellSeed;
 
 // What this frame draws, written by the culling pass: (instance slot, material) per instance,
 // grouped by mesh. Each draw command's first instance points at its mesh's group.
@@ -38,4 +41,5 @@ void main()
     outTextCoord = texCoord;
     outMaterialIdx = materialFlags.x;
     outShellAlpha = -1.0;
+    outShellSeed = uint(gl_VertexIndex);
 }

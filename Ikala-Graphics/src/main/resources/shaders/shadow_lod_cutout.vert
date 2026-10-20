@@ -16,6 +16,9 @@ layout(location = 0) out vec2 outTextCoord;
 layout(location = 1) flat out uint outMaterialIdx;
 // A coverage volume shell's coverage, or -1 for a cut out material
 layout(location = 2) out float outShellAlpha;
+// A seed per triangle for a shell's threshold, the index of its first vertex, which flat outputs
+// take
+layout(location = 3) flat out uint outShellSeed;
 
 // Where the camera is for each LOD world, see LodCullMath
 struct World {
@@ -136,6 +139,7 @@ void main()
     // A shell's corner keeps its straight in coverage in the high byte, see Attributes.shell, and
     // its grazing coverage in its normal's low bits
     outShellAlpha = -1.0;
+    outShellSeed = uint(gl_VertexIndex);
     if ((materialFlags.y & FLAG_SHELL) != 0u) {
         float straight = float(texCoordBits >> 24u) / 255.0;
         float grazing = float((normalBits & GRAZING_MASK)

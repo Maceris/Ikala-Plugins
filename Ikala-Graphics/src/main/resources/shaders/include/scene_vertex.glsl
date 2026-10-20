@@ -26,6 +26,8 @@ layout(location = 5) out vec4 outWorldPosition;
 layout(location = 6) flat out uint outMaterialIdx;
 // A model instance's material remaps, see scene_lod.vert; none here
 layout(location = 7) flat out uvec4 outRemaps;
+// A seed per triangle for a shell's threshold, see scene_lod.vert; no shells here
+layout(location = 8) flat out uint outShellSeed;
 
 layout(set = SCENE_SET, binding = 0) uniform Uniforms {
     mat4 projectionMatrix;
@@ -58,6 +60,7 @@ void main()
     uvec2 instance = visible[gl_InstanceIndex];
     outMaterialIdx = instance.y;
     outRemaps = uvec4(0xFFFFFFFFu);
+    outShellSeed = 0u;
 
     mat4 modelMatrix = modelMatrices[instance.x];
     mat4 modelViewMatrix = viewMatrix * modelMatrix;

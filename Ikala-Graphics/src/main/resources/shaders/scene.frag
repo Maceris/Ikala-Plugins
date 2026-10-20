@@ -17,6 +17,8 @@ layout(location = 5) in vec4 outWorldPosition;
 layout(location = 6) flat in uint outMaterialIdx;
 // A model instance's material remaps, from in the low 16 bits and to in the high, see scene_lod.vert
 layout(location = 7) flat in uvec4 outRemaps;
+// A seed per triangle for a shell's threshold, its first vertex's index, see scene_lod.vert
+layout(location = 8) flat in uint outShellSeed;
 
 // Whether to drop pixels the texture's alpha cuts out. Off for baked opaque geometry, so the
 // depth test can run before the shader.
@@ -210,7 +212,7 @@ void main() {
     if (ALPHA_TEST && averaged && outBitangent.z > 0.5) {
         // A coverage volume's shell covers as much of the pixel as its volume stops light, by a
         // threshold of the pixel's own each frame, which temporal antialiasing averages
-        if (outBitangent.y <= shellThreshold(gl_FragCoord.xy, frame, uint(gl_PrimitiveID))) {
+        if (outBitangent.y <= shellThreshold(gl_FragCoord.xy, frame, outShellSeed)) {
             discard;
         }
     } else if (ALPHA_TEST) {
