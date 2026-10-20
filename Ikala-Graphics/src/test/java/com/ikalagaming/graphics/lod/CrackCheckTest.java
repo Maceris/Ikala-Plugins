@@ -88,6 +88,23 @@ class CrackCheckTest {
                 PIXELS);
     }
 
+    /**
+     * Drawing two levels at once, which lie over each other, draws edges twice, whole and column by
+     * column, though where faces of different clusters meet at an angle is no overdraw.
+     */
+    @Test
+    void testOverlappingLevelsAreDrawnTwice() {
+        final boolean[] drawn = new boolean[dag.clusters().size()];
+        for (LodDag.Cluster cluster : dag.clusters()) {
+            drawn[cluster.id()] = cluster.level() <= 1;
+        }
+        final CrackCheck.Result whole = new CrackCheck(dag).check(drawn);
+        assertTrue(!whole.overdrawnEdges().isEmpty());
+        final CrackCheck.Tiled tiled =
+                CrackCheck.checkTiled(dag.clusters(), highest, drawn, COLUMN, List.of());
+        assertTrue(tiled.overdrawnEdges() > 0);
+    }
+
     /** Clean cuts are clean column by column too, and both checks count the same edges. */
     @Test
     void testTiledMatchesWholeOnCleanCuts() {

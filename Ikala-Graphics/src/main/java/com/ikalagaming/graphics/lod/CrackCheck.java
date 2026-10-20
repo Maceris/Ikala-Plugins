@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.lod;
 
+import com.ikalagaming.util.IntArrayList;
+
 import lombok.NonNull;
 
 import java.util.ArrayList;
@@ -40,8 +42,9 @@ public final class CrackCheck {
      * What a check found.
      *
      * @param openEdges Edges the cut uses once that the level drawing them uses twice: cracks.
-     * @param overdrawnEdges Edges the cut uses more often than the level drawing them does: more
-     *     than twice for an edge its levels have, more than once for any other.
+     * @param overdrawnEdges Edges drawn twice: for an edge its levels have, more faces than they
+     *     have and at least two, of which two from different clusters lie over each other; for any
+     *     other, more than one face.
      * @param drawnClusters How many clusters the cut draws.
      * @param nearEdges Open edges not counted as cracks because another drawn triangle lies within
      *     the tolerance all along them.
@@ -68,8 +71,9 @@ public final class CrackCheck {
      * What a check of a whole world, column by column, found.
      *
      * @param openEdges Cracks: edges the cut uses once that the level drawing them uses twice.
-     * @param overdrawnEdges Edges the cut uses more often than the level drawing them does: more
-     *     than twice for an edge its levels have, more than once for any other.
+     * @param overdrawnEdges Edges drawn twice: for an edge its levels have, more faces than they
+     *     have and at least two, of which two from different clusters lie over each other; for any
+     *     other, more than one face.
      * @param drawnClusters How many clusters the cut draws.
      * @param checkedEdges How many distinct edges the cut draws that were checked.
      * @param longEdges Edges longer than a column, which weren't checked.
@@ -129,6 +133,12 @@ public final class CrackCheck {
     private static int mostAllowed(int most) {
         return most == 0 ? 1 : Math.max(most, JOINED_USES);
     }
+
+    /**
+     * How nearly two faces on an edge from different clusters must leave it the same way to lie
+     * over each other: the cosine of 5 degrees.
+     */
+    private static final double OVERLAP_COS = Math.cos(Math.toRadians(5));
 
     /** How many findings a tiled check keeps as examples. */
     public static final int EXAMPLES = 16;
@@ -570,13 +580,30 @@ public final class CrackCheck {
                         continue;
                     }
                     ++open;
+                    tempDescribe(
+                            "OPEN",
+                            edgeUse.getKey(),
+                            members,
+                            clusters,
+                            drawn,
+                            highest,
+                            volumes,
+                            most);
                     if (examples.size() < EXAMPLES) {
                         examples.add(middle(edgeUse.getKey()));
                     }
                 } else if (use.count > mostAllowed(most)
-                        && distinctFaces(edgeUse.getKey(), members, clusters, drawn)
-                                > mostAllowed(most)) {
+                        && (most == 0 || drawnTwice(edgeUse.getKey(), members, clusters, drawn))) {
                     ++overdrawn;
+                    tempDescribe(
+                            "OVER",
+                            edgeUse.getKey(),
+                            members,
+                            clusters,
+                            drawn,
+                            highest,
+                            volumes,
+                            most);
                     if (examples.size() < EXAMPLES) {
                         examples.add(middle(edgeUse.getKey()));
                     }
@@ -595,41 +622,215 @@ public final class CrackCheck {
                 examples);
     }
 
+    /** TEMP: describe a crack. */
+    private static void tempDescribe(
+            String kind,
+            Grouping.Edge edge,
+            List<Integer> members,
+            List<LodDag.Cluster> clusters,
+            boolean[] drawn,
+            int[] highest,
+            List<CoverageVolume> volumes,
+            int most) {
+        final double[] a = position(edge.a());
+        final double[] b = position(edge.b());
+        final StringBuilder out = new StringBuilder();
+        out.append(
+                String.format(
+                        "TEMPCRACK %s (%.3f %.3f %.3f)-(%.3f %.3f %.3f) most %d:",
+                        kind, a[0], a[1], a[2], b[0], b[1], b[2], most));
+        final double[] mid = {(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2};
+        double bestGap = Double.MAX_VALUE;
+        int bestCluster = -1;
+        final double[] q = new double[AXES];
+        for (int i : members) {
+            final LodDag.Cluster c = clusters.get(i);
+            final float[] k = c.corners();
+            int uses = 0;
+            for (int t = 0; t < c.triangleCount(); ++t) {
+                for (int corner = 0; corner < AXES; ++corner) {
+                    final Grouping.Edge e =
+                            Grouping.Edge.of(
+                                    Grouping.Corner.of(k, t * TRIANGLE_VALUES + corner * AXES),
+                                    Grouping.Corner.of(
+                                            k, t * TRIANGLE_VALUES + ((corner + 1) % AXES) * AXES));
+                    if (e.equals(edge)) {
+                        ++uses;
+                    }
+                }
+            }
+            if (uses > 0) {
+                out.append(
+                        String.format(
+                                " [c%d L%d..%d err %.3f sec %d prod %d uses %d %s]",
+                                i,
+                                c.level(),
+                                highest[i],
+                                c.error(),
+                                c.section(),
+                                c.producer(),
+                                uses,
+                                drawn[i] ? "DRAWN" : "-"));
+            } else if (drawn[i]) {
+                for (int t = 0; t < c.triangleCount(); ++t) {
+                    final int at = t * TRIANGLE_VALUES;
+                    Geometry.closestOnTriangle(
+                            mid,
+                            new double[] {k[at], k[at + 1], k[at + 2]},
+                            new double[] {k[at + 3], k[at + 4], k[at + 5]},
+                            new double[] {k[at + 6], k[at + 7], k[at + 8]},
+                            q);
+                    final double d = Math.sqrt(Geometry.distanceSquared(mid, q));
+                    if (d < bestGap) {
+                        bestGap = d;
+                        bestCluster = i;
+                    }
+                }
+            }
+        }
+        if (bestCluster >= 0) {
+            final LodDag.Cluster c = clusters.get(bestCluster);
+            out.append(
+                    String.format(
+                            " nearest other drawn c%d L%d err %.3f sec %d gap %.4f%s",
+                            bestCluster,
+                            c.level(),
+                            c.error(),
+                            c.section(),
+                            bestGap,
+                            volumes != null && volumes.get(bestCluster) != null ? " VOLUME" : ""));
+        }
+        int volumesDrawn = 0;
+        if (volumes != null) {
+            for (int i : members) {
+                if (drawn[i] && volumes.get(i) != null) {
+                    ++volumesDrawn;
+                }
+            }
+        }
+        out.append(" drawn volumes near ").append(volumesDrawn);
+        System.out.println(out);
+    }
+
     /**
-     * How many faces of drawn clusters use an edge, the two sides of a sheet counting once.
+     * Whether drawn clusters draw an edge twice: two of its faces, from different clusters, leave
+     * it the same way, so they lie over each other. Faces leaving it at different angles are
+     * surfaces meeting there, such as two parts simplified flat that end on one edge; a sheet's two
+     * sides are one cluster's.
      *
      * @param edge The edge.
      * @param members The clusters to look in.
      * @param clusters All clusters.
      * @param drawn Whether each is drawn.
-     * @return The count.
+     * @return True if it is drawn twice.
      */
-    private static int distinctFaces(
+    private static boolean drawnTwice(
             Grouping.@NonNull Edge edge,
             @NonNull List<Integer> members,
             @NonNull List<LodDag.Cluster> clusters,
             boolean @NonNull [] drawn) {
-        final Set<Set<Grouping.Corner>> faces = new HashSet<>();
+        final List<double[]> leaving = new ArrayList<>();
+        final IntArrayList owners = new IntArrayList();
         for (int i : members) {
             if (!drawn[i]) {
                 continue;
             }
-            final LodDag.Cluster cluster = clusters.get(i);
-            final float[] corners = cluster.corners();
-            for (int t = 0; t < cluster.triangleCount(); ++t) {
-                final Grouping.Corner[] three = new Grouping.Corner[AXES];
-                for (int corner = 0; corner < AXES; ++corner) {
-                    three[corner] =
-                            Grouping.Corner.of(corners, t * TRIANGLE_VALUES + corner * AXES);
+            addLeaving(edge, i, clusters.get(i), leaving, owners);
+        }
+        return overlap(leaving, owners);
+    }
+
+    /**
+     * The ways a cluster's faces on an edge leave it: for each, the unit direction from the edge to
+     * its third corner, square to the edge.
+     *
+     * @param edge The edge.
+     * @param key The cluster's key.
+     * @param cluster The cluster.
+     * @param leaving Receives the directions.
+     * @param owners Receives each direction's cluster key.
+     */
+    private static void addLeaving(
+            Grouping.@NonNull Edge edge,
+            int key,
+            LodDag.@NonNull Cluster cluster,
+            @NonNull List<double[]> leaving,
+            @NonNull IntArrayList owners) {
+        final double[] a = position(edge.a());
+        final double[] b = position(edge.b());
+        final double[] along = new double[AXES];
+        double length = 0;
+        for (int axis = 0; axis < AXES; ++axis) {
+            along[axis] = b[axis] - a[axis];
+            length += along[axis] * along[axis];
+        }
+        length = Math.sqrt(length);
+        for (int axis = 0; axis < AXES; ++axis) {
+            along[axis] /= length;
+        }
+        final float[] corners = cluster.corners();
+        for (int t = 0; t < cluster.triangleCount(); ++t) {
+            int third = -1;
+            boolean hasA = false;
+            boolean hasB = false;
+            for (int corner = 0; corner < AXES; ++corner) {
+                final Grouping.Corner c =
+                        Grouping.Corner.of(corners, t * TRIANGLE_VALUES + corner * AXES);
+                if (c.equals(edge.a())) {
+                    hasA = true;
+                } else if (c.equals(edge.b())) {
+                    hasB = true;
+                } else {
+                    third = corner;
                 }
-                for (int corner = 0; corner < AXES; ++corner) {
-                    if (Grouping.Edge.of(three[corner], three[(corner + 1) % AXES]).equals(edge)) {
-                        faces.add(Set.of(three));
-                    }
+            }
+            if (!hasA || !hasB || third < 0) {
+                continue;
+            }
+            final double[] out = point(corners, t * TRIANGLE_VALUES + third * AXES);
+            double dot = 0;
+            for (int axis = 0; axis < AXES; ++axis) {
+                out[axis] -= a[axis];
+                dot += out[axis] * along[axis];
+            }
+            double norm = 0;
+            for (int axis = 0; axis < AXES; ++axis) {
+                out[axis] -= dot * along[axis];
+                norm += out[axis] * out[axis];
+            }
+            norm = Math.sqrt(norm);
+            if (norm <= 0) {
+                continue;
+            }
+            for (int axis = 0; axis < AXES; ++axis) {
+                out[axis] /= norm;
+            }
+            leaving.add(out);
+            owners.add(key);
+        }
+    }
+
+    /**
+     * Whether two of an edge's faces from different clusters leave it the same way.
+     *
+     * @param leaving The ways the faces leave it.
+     * @param owners Each face's cluster.
+     * @return True if two do.
+     */
+    private static boolean overlap(@NonNull List<double[]> leaving, @NonNull IntArrayList owners) {
+        for (int i = 0; i < leaving.size(); ++i) {
+            for (int j = i + 1; j < leaving.size(); ++j) {
+                if (owners.getInt(i) == owners.getInt(j)) {
+                    continue;
+                }
+                final double[] p = leaving.get(i);
+                final double[] q = leaving.get(j);
+                if (p[0] * q[0] + p[1] * q[1] + p[2] * q[2] >= OVERLAP_COS) {
+                    return true;
                 }
             }
         }
-        return faces.size();
+        return false;
     }
 
     /**
@@ -985,7 +1186,7 @@ public final class CrackCheck {
             }
         }
         if (!overdrawn.isEmpty()) {
-            overdrawn = withoutSheets(overdrawn, clusters, allowed);
+            overdrawn = drawnTwice(overdrawn, clusters, allowed);
         }
         return new Result(open, overdrawn, clusters.size(), near, covered);
     }
@@ -1017,43 +1218,49 @@ public final class CrackCheck {
     }
 
     /**
-     * Edges drawn more often than their levels allow once the two sides of each sheet count as one
-     * use: a part simplified flat keeps a face for each side on the same corners, so that it shows
-     * from both where back faces are culled, and both sides use each of its edges.
+     * Edges drawn more often than their levels allow that are drawn twice, see {@link #drawnTwice}.
      *
      * @param overdrawn Edges the cut uses more often than their levels do.
      * @param clusters The drawn clusters.
      * @param allowed The most any level drawing each edge uses it.
-     * @return Those still drawn too often.
+     * @return Those drawn twice, and any no level has.
      */
-    private List<Grouping.Edge> withoutSheets(
+    private List<Grouping.Edge> drawnTwice(
             @NonNull List<Grouping.Edge> overdrawn,
             @NonNull List<Integer> clusters,
             @NonNull Map<Grouping.Edge, Integer> allowed) {
         final Set<Grouping.Edge> wanted = new HashSet<>(overdrawn);
-        // Each wanted edge's faces, by their corners in any order, so a sheet's sides are one
-        final Map<Grouping.Edge, Set<Set<Grouping.Corner>>> faces = new HashMap<>();
+        final Map<Grouping.Edge, List<double[]>> leaving = new HashMap<>();
+        final Map<Grouping.Edge, IntArrayList> owners = new HashMap<>();
         for (int id : clusters) {
             final LodDag.Cluster cluster = dag.clusters().get(id);
             final float[] corners = cluster.corners();
+            final Set<Grouping.Edge> seen = new HashSet<>();
             for (int t = 0; t < cluster.triangleCount(); ++t) {
-                final Grouping.Corner[] three = new Grouping.Corner[AXES];
-                for (int corner = 0; corner < AXES; ++corner) {
-                    three[corner] =
-                            Grouping.Corner.of(corners, t * TRIANGLE_VALUES + corner * AXES);
-                }
                 for (int corner = 0; corner < AXES; ++corner) {
                     final Grouping.Edge edge =
-                            Grouping.Edge.of(three[corner], three[(corner + 1) % AXES]);
-                    if (wanted.contains(edge)) {
-                        faces.computeIfAbsent(edge, e -> new HashSet<>()).add(Set.of(three));
+                            Grouping.Edge.of(
+                                    Grouping.Corner.of(
+                                            corners, t * TRIANGLE_VALUES + corner * AXES),
+                                    Grouping.Corner.of(
+                                            corners,
+                                            t * TRIANGLE_VALUES + ((corner + 1) % AXES) * AXES));
+                    if (wanted.contains(edge) && seen.add(edge)) {
+                        addLeaving(
+                                edge,
+                                id,
+                                cluster,
+                                leaving.computeIfAbsent(edge, e -> new ArrayList<>()),
+                                owners.computeIfAbsent(edge, e -> new IntArrayList()));
                     }
                 }
             }
         }
         final List<Grouping.Edge> out = new ArrayList<>();
         for (Grouping.Edge edge : overdrawn) {
-            if (faces.get(edge).size() > mostAllowed(allowed.getOrDefault(edge, 0))) {
+            // An edge no level has is drawn wrongly however its faces lie
+            if (allowed.getOrDefault(edge, 0) == 0
+                    || overlap(leaving.get(edge), owners.get(edge))) {
                 out.add(edge);
             }
         }
