@@ -52,7 +52,7 @@ class InstanceTableTest {
             out.position(InstanceTable.ENTRY_SIZE);
             Quaternionf rotation = new Quaternionf(0.1f, 0.2f, 0.3f, 0.9f);
             InstanceTable.writeEntry(
-                    out, true, new Vector3d(1e9 + 0.5, -2, 3), rotation, 0.25f, 5, 2, 9);
+                    out, true, new Vector3d(1e9 + 0.5, -2, 3), rotation, 0.25f, 5, 2, 9, true);
             assertEquals(InstanceTable.ENTRY_SIZE, out.position(), "The position is unchanged");
 
             final int base = InstanceTable.ENTRY_SIZE;
@@ -67,6 +67,7 @@ class InstanceTableTest {
             assertEquals(0.9f, out.getFloat(base + InstanceTable.ROTATION_OFFSET + 12));
             int flags = out.getInt(base + InstanceTable.INFO_OFFSET);
             assertEquals(InstanceTable.FLAG_ALIVE, flags & InstanceTable.FLAG_ALIVE);
+            assertEquals(InstanceTable.FLAG_MOVING, flags & InstanceTable.FLAG_MOVING);
             assertEquals(
                     InstanceTable.VISIBLE_TO_ALL, flags >>> InstanceTable.VISIBILITY_MASK_SHIFT);
             assertEquals(5, out.getInt(base + InstanceTable.INFO_OFFSET + 4));
@@ -75,7 +76,8 @@ class InstanceTableTest {
             // The first entry was left alone
             assertEquals(0, out.getInt(InstanceTable.INFO_OFFSET));
 
-            InstanceTable.writeEntry(out, false, new Vector3d(), new Quaternionf(), 0, 5, 2, 9);
+            InstanceTable.writeEntry(
+                    out, false, new Vector3d(), new Quaternionf(), 0, 5, 2, 9, true);
             assertEquals(0, out.getInt(base + InstanceTable.INFO_OFFSET), "Not alive");
             assertEquals(0, out.getInt(base + InstanceTable.INFO_OFFSET + 4), "No meshes");
         } finally {

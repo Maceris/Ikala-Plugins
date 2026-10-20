@@ -107,7 +107,9 @@ public class InstanceDrawUpdate implements RenderStage {
 
     /**
      * The visible list of the sky occlusion map, after the cascades', so its pass draws to it the
-     * way a cascade's does. Only what doesn't move is drawn from it.
+     * way a cascade's does. Only what doesn't move is drawn from it: baked sections, level of
+     * detail, and instances that aren't moving, see {@link
+     * com.ikalagaming.graphics.vulkan.InstanceTable#FLAG_MOVING}.
      */
     public static final int LIST_SKY = LIST_TRANSLUCENT - 1;
 
@@ -616,7 +618,8 @@ public class InstanceDrawUpdate implements RenderStage {
             }
             planes.put((PASS_COUNT + 1 + i) * out.length, out);
         }
-        // The sky map draws only what doesn't move, and only when it is drawn again
+        // The sky map draws only what doesn't move, and only when it is drawn again, all culled
+        // by the second set of planes
         FrustumPlanes.rejectAll(out);
         planes.put(PASS_SKY * out.length, out);
         final CascadeShadowSplit sky = frameData.skyView;

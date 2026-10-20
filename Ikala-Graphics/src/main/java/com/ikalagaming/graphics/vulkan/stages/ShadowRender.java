@@ -305,6 +305,7 @@ public class ShadowRender implements RenderStage {
                             list,
                             pushConstants,
                             true,
+                            true,
                             true);
                     endWriting(commandBuffer, map, stack);
                     continue;
@@ -323,6 +324,7 @@ public class ShadowRender implements RenderStage {
                             list,
                             pushConstants,
                             true,
+                            false,
                             false);
                     endWriting(commandBuffer, map, stack);
                 }
@@ -338,12 +340,14 @@ public class ShadowRender implements RenderStage {
                             list,
                             pushConstants,
                             false,
+                            true,
                             true);
                     endWriting(commandBuffer, dynamicMap, stack);
                 }
             }
 
-            // The sky occlusion map, what doesn't move from straight above, when it is due
+            // The sky occlusion map, what doesn't move from straight above, when it is due:
+            // instances that stay put too, which culling leaves out while they move
             final CascadeShadowSplit sky = frameData.skyView;
             if (frameData.skyMap != null && sky.getRedraw() != SunShadowCache.Redraw.NONE) {
                 sky.getProjViewMatrix()
@@ -360,6 +364,7 @@ public class ShadowRender implements RenderStage {
                         sky.getRedraw() == SunShadowCache.Redraw.PART ? sky.getRedrawRect() : null,
                         InstanceDrawUpdate.LIST_SKY,
                         pushConstants,
+                        true,
                         true,
                         false);
                 endWriting(commandBuffer, frameData.skyMap, stack);
@@ -649,7 +654,8 @@ public class ShadowRender implements RenderStage {
      * @param list Which visible list the cascade is, to find its draw commands.
      * @param pushConstants The push constants, with the cascade's matrix already filled out.
      * @param statics Whether to draw what doesn't move: baked sections and level of detail.
-     * @param dynamics Whether to draw what moves: standard meshes and listed models.
+     * @param standards Whether to draw standard meshes, which culling put in the list.
+     * @param listed Whether to draw the listed models, animated ones, which always move.
      */
     private void renderMap(
             @NonNull VkCommandBuffer commandBuffer,
@@ -660,7 +666,8 @@ public class ShadowRender implements RenderStage {
             int list,
             @NonNull ByteBuffer pushConstants,
             boolean statics,
-            boolean dynamics) {
+            boolean standards,
+            boolean listed) {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
         final boolean whole = rect == null;
         final int x0 = whole ? 0 : rect[0];
@@ -806,7 +813,7 @@ public class ShadowRender implements RenderStage {
                 // one command per mesh slot. Standard last, which the listed models need.
                 for (int k = MeshKind.ALL.length - 1; k >= 0; --k) {
                     final MeshKind kind = MeshKind.ALL[k];
-                    if (kind.isBaked() ? !statics : !dynamics) {
+                    if (kind.isBaked() ? !statics : !standards) {
                         continue;
                     }
                     final int slots =
@@ -839,7 +846,7 @@ public class ShadowRender implements RenderStage {
                             slots,
                             InstanceDrawUpdate.DRAW_COMMAND_SIZE);
                 }
-                if (dynamics) {
+                if (listed) {
                     SceneRender.drawListedModels(
                             commandBuffer, state, frameData, vertexBuffers, vertexOffsets);
                 }

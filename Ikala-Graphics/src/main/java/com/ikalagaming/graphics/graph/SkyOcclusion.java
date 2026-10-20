@@ -5,10 +5,12 @@ import org.joml.Vector3d;
 import org.joml.Vector3dc;
 
 /**
- * The sky occlusion map: what doesn't move (baked sections and level of detail) drawn from straight
- * above over the whole view, at low resolution, so the light stage can tell how far below the
- * highest thing over it a point is. Points well below it get little sky light, so a cave or a room
- * past the shadows' reach isn't lit like open ground.
+ * The sky occlusion map: what doesn't move (baked sections, level of detail, and placed instances
+ * that stay put) drawn from straight above over the whole view, at low resolution, so the light
+ * stage can tell how far below the highest thing over it a point is. Points well below it get
+ * little sky light, so a cave or a room past the shadows' reach isn't lit like open ground.
+ * Instances that keep moving are left out, see {@link
+ * com.ikalagaming.graphics.vulkan.InstanceTable#FLAG_MOVING}.
  *
  * <p>It is kept in place in the world like the sun's cached cascades, see {@link SunShadowCache}: a
  * square around the camera, snapped to a grid a quarter of the view distance wide, drawn whole when

@@ -102,6 +102,9 @@ public class InstanceRegistry {
          * @param meshFirst Where its model's meshes start in the model mesh list.
          * @param meshCount How many meshes its model has.
          * @param overrideFirst Where its material overrides start in the override list.
+         * @param model Its model, or null if the slot holds none.
+         * @param moving Whether it moved within the last {@link #SETTLE_ROUNDS} rounds of changes,
+         *     so maps kept from frame to frame leave it out.
          */
         void instance(
                 int slot,
@@ -111,7 +114,9 @@ public class InstanceRegistry {
                 float scale,
                 int meshFirst,
                 int meshCount,
-                int overrideFirst);
+                int overrideFirst,
+                @Nullable Model model,
+                boolean moving);
 
         /**
          * A model mesh list entry changed.
@@ -159,6 +164,13 @@ public class InstanceRegistry {
      * @param meshCount How many meshes it has.
      */
     private record ModelState(LinkedHashSet<Integer> slots, int meshFirst, int meshCount) {}
+
+    /**
+     * How many rounds of changes, frames, an instance that moved must stay still before it counts
+     * as still again. One that moves every frame or so stays moving, so what is kept from frame to
+     * frame isn't drawn again for it each time; one put down stops moving a second or so later.
+     */
+    public static final int SETTLE_ROUNDS = 60;
 
     /** How many slots to add when the table runs out. */
     private static final int SLOT_GROWTH = 256;
@@ -229,6 +241,18 @@ public class InstanceRegistry {
     /** How many instances are placed and not removed. */
     private int liveCount;
 
+    /** Slots whose instance was handed over at least once, so a transform is a move. */
+    private final BitSet reported = new BitSet();
+
+    /** Slots whose instance moved within the last {@link #SETTLE_ROUNDS} rounds. */
+    private final BitSet moving = new BitSet();
+
+    /** The round each moving slot last moved in. */
+    private int[] movedRounds = new int[0];
+
+    /** How many rounds of changes have been taken. */
+    private int round;
+
     /**
      * Place an instance. It is drawn from the next frame on.
      *
@@ -267,6 +291,8 @@ public class InstanceRegistry {
             }
             state.slots().add(slot);
             countsChanged = true;
+            reported.clear(slot);
+            moving.clear(slot);
             overrideFirsts[slot] = allocate(overrides, meshCount);
             changedOverrides.set(slot);
             changed.set(slot);
@@ -308,6 +334,10 @@ public class InstanceRegistry {
             if (!Float.isNaN(scale)) {
                 scales[slot] = scale;
             }
+            if (reported.get(slot)) {
+                moving.set(slot);
+                movedRounds[slot] = round;
+            }
             changed.set(slot);
             return true;
         } finally {
@@ -342,6 +372,8 @@ public class InstanceRegistry {
             }
             slotMaterials[meshIndex] = material;
             changedOverrides.set(handle.slot());
+            // Handed over again too, so maps kept from frame to frame draw it again
+            changed.set(handle.slot());
             return true;
         } finally {
             lock.unlock();
@@ -529,6 +561,14 @@ public class InstanceRegistry {
     public Capacities takeChanges(@NonNull Changes changes) {
         lock.lock();
         try {
+            round += 1;
+            // Instances still long enough count as still again, handed over to say so
+            for (int slot = moving.nextSetBit(0); slot >= 0; slot = moving.nextSetBit(slot + 1)) {
+                if (round - movedRounds[slot] > SETTLE_ROUNDS) {
+                    moving.clear(slot);
+                    changed.set(slot);
+                }
+            }
             for (int slot = changed.nextSetBit(0); slot >= 0; slot = changed.nextSetBit(slot + 1)) {
                 final InstanceHandle handle = handles[slot];
                 if (handle != null) {
@@ -541,9 +581,12 @@ public class InstanceRegistry {
                             scales[slot],
                             state.meshFirst(),
                             state.meshCount(),
-                            overrideFirsts[slot]);
+                            overrideFirsts[slot],
+                            handle.model(),
+                            moving.get(slot));
+                    reported.set(slot);
                 } else {
-                    changes.instance(slot, false, ZERO, IDENTITY, 0, 0, 0, 0);
+                    changes.instance(slot, false, ZERO, IDENTITY, 0, 0, 0, 0, null, false);
                 }
             }
             changed.clear();
@@ -708,6 +751,7 @@ public class InstanceRegistry {
             animations = Arrays.copyOf(animations, newLength);
             generations = Arrays.copyOf(generations, newLength);
             overrideFirsts = Arrays.copyOf(overrideFirsts, newLength);
+            movedRounds = Arrays.copyOf(movedRounds, newLength);
             for (int slot = oldLength; slot < newLength; ++slot) {
                 positions[slot] = new Vector3d();
                 rotations[slot] = new Quaternionf();
@@ -787,6 +831,8 @@ public class InstanceRegistry {
         materials[slot] = null;
         animations[slot] = null;
         generations[slot] += 1;
+        reported.clear(slot);
+        moving.clear(slot);
         changed.set(slot);
         liveCount -= 1;
         return slot;

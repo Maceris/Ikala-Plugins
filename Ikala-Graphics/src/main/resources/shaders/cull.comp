@@ -142,6 +142,8 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 // Set in the flags of slots that hold an instance
 const uint FLAG_ALIVE = 1;
+// Set in the flags of instances that are moving, which the sky map leaves out
+const uint FLAG_MOVING = 2;
 
 // A model mesh whose mesh isn't registered
 const uint NO_MESH = 0xFFFFFFFFu;
@@ -162,6 +164,7 @@ const uint LIST_COUNT = 7;
 // each pass's planes for baked meshes, which cached cascades cull to the part they draw again, see
 // InstanceDrawUpdate.FRUSTA_COUNT
 const uint PASS_COUNT = 5;
+const uint PASS_SKY = PASS_COUNT - 1;
 
 // The counter of meshes the occlusion test hid, after one counter per list
 const uint COUNTER_OCCLUDED = LIST_COUNT;
@@ -301,9 +304,12 @@ void main()
         vec3 localExtents = (mesh.aabbMax.xyz - mesh.aabbMin.xyz) * 0.5;
         vec3 center = (model * vec4(localCenter, 1.0)).xyz;
         vec3 extents = absolute * localExtents;
-        // A cascade's baked meshes are culled by their own planes, see PASS_COUNT
-        uint planes = pass > 0 && modelMesh.kind != KIND_STANDARD ? PASS_COUNT + pass : pass;
-        bool inView = inFrustum(planes, center, extents);
+        // A cascade's baked meshes are culled by their own planes, see PASS_COUNT, as is all the
+        // sky map draws: it is kept from frame to frame, with instances that stay put in it
+        bool kept = modelMesh.kind != KIND_STANDARD || pass == PASS_SKY;
+        uint planes = pass > 0 && kept ? PASS_COUNT + pass : pass;
+        bool inView = inFrustum(planes, center, extents)
+            && (pass != PASS_SKY || (instance.info.x & FLAG_MOVING) == 0);
         uint entry = instance.info.w + i;
         uint material = overrides.overrides[entry];
         if (material == 0) {

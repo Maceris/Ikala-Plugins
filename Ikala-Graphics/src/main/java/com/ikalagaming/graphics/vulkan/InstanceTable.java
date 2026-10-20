@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.function.Predicate;
 import javax.annotation.Nullable;
 
 /**
@@ -48,7 +49,7 @@ import javax.annotation.Nullable;
  * vec4 positionHigh;  // xyz: high part of the world position, w: uniform scale
  * vec4 positionLow;   // xyz: low part of the world position, w: unused
  * vec4 rotation;      // quaternion x, y, z, w
- * uvec4 info;         // x: flags (FLAG_ALIVE, visibility mask in bits 8-15),
+ * uvec4 info;         // x: flags (FLAG_ALIVE, FLAG_MOVING, visibility mask in bits 8-15),
  *                     // y: first model mesh, z: mesh count, w: first override
  * </pre>
  *
@@ -75,6 +76,12 @@ public class InstanceTable {
 
     /** Set in the flags when the slot holds an instance. */
     public static final int FLAG_ALIVE = 1;
+
+    /**
+     * Set in the flags while the instance is moving, see {@link InstanceRegistry#SETTLE_ROUNDS}, so
+     * the sky occlusion map, kept from frame to frame, leaves it out.
+     */
+    public static final int FLAG_MOVING = 2;
 
     /** Where the visibility mask starts in the flags, for ray tracing to filter instances by. */
     public static final int VISIBILITY_MASK_SHIFT = 8;
@@ -168,6 +175,9 @@ public class InstanceTable {
     /** Removed instances whose slots can be reused once frames in flight are done with them. */
     private final Queue<Integer> retiring = new ConcurrentLinkedQueue<>();
 
+    /** Which instances the sky occlusion map holds, to draw it again where they change. */
+    private final SkyCasters skyCasters = new SkyCasters();
+
     /**
      * Create the tables.
      *
@@ -211,6 +221,7 @@ public class InstanceTable {
      * @param meshFirst Where its model's meshes start in the model mesh list.
      * @param meshCount How many meshes its model has.
      * @param overrideFirst Where its material overrides start in the override list.
+     * @param moving Whether it is moving, see {@link #FLAG_MOVING}.
      */
     public static void writeEntry(
             @NonNull ByteBuffer out,
@@ -220,7 +231,8 @@ public class InstanceTable {
             float scale,
             int meshFirst,
             int meshCount,
-            int overrideFirst) {
+            int overrideFirst,
+            boolean moving) {
         final int base = out.position();
         out.putFloat(base + POSITION_HIGH_OFFSET, high(position.x()));
         out.putFloat(base + POSITION_HIGH_OFFSET + Float.BYTES, high(position.y()));
@@ -234,7 +246,12 @@ public class InstanceTable {
         out.putFloat(base + ROTATION_OFFSET + Float.BYTES, rotation.y());
         out.putFloat(base + ROTATION_OFFSET + 2 * Float.BYTES, rotation.z());
         out.putFloat(base + ROTATION_OFFSET + 3 * Float.BYTES, rotation.w());
-        final int flags = alive ? FLAG_ALIVE | VISIBLE_TO_ALL << VISIBILITY_MASK_SHIFT : 0;
+        final int flags =
+                alive
+                        ? FLAG_ALIVE
+                                | (moving ? FLAG_MOVING : 0)
+                                | VISIBLE_TO_ALL << VISIBILITY_MASK_SHIFT
+                        : 0;
         out.putInt(base + INFO_OFFSET, flags);
         out.putInt(base + INFO_OFFSET + Integer.BYTES, alive ? meshFirst : 0);
         out.putInt(base + INFO_OFFSET + 2 * Integer.BYTES, alive ? meshCount : 0);
@@ -302,6 +319,14 @@ public class InstanceTable {
         // The culling shader writes the history, it only needs to be big enough
         final DeviceTable.Entries historyEntries = new DeviceTable.Entries(HISTORY_SIZE);
         final List<ModelCount> models = new ArrayList<>();
+        final Predicate<MeshHandle> resident = state.geometry.getRegistry()::isResident;
+        final ShadowInvalidation.Visitor sky =
+                (min, max) -> {
+                    if (state.skyOcclusion != null) {
+                        state.skyOcclusion.invalidate(min, max);
+                    }
+                };
+        skyCasters.settle(resident, sky);
         try (MemoryStack stack = MemoryStack.stackPush()) {
             final InstanceRegistry.Capacities capacities =
                     registry.takeChanges(
@@ -315,7 +340,9 @@ public class InstanceTable {
                                         float scale,
                                         int meshFirst,
                                         int meshCount,
-                                        int overrideFirst) {
+                                        int overrideFirst,
+                                        @Nullable Model model,
+                                        boolean moving) {
                                     writeEntry(
                                             instanceEntries.next(changed),
                                             alive,
@@ -324,7 +351,11 @@ public class InstanceTable {
                                             scale,
                                             meshFirst,
                                             meshCount,
-                                            overrideFirst);
+                                            overrideFirst,
+                                            moving);
+                                    skyCasters.changed(
+                                            changed, alive, position, rotation, scale, model,
+                                            moving, resident, sky);
                                 }
 
                                 @Override

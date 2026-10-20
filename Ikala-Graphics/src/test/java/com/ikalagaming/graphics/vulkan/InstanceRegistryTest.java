@@ -73,6 +73,7 @@ class InstanceRegistryTest {
         final Map<Integer, MeshHandle> modelMeshes = new LinkedHashMap<>();
         final Map<Integer, Material> overrides = new LinkedHashMap<>();
         final Map<Model, Integer> models = new LinkedHashMap<>();
+        final Map<Integer, Boolean> movingSlots = new LinkedHashMap<>();
         InstanceRegistry.Capacities capacities;
 
         @Override
@@ -84,8 +85,11 @@ class InstanceRegistryTest {
                 float scale,
                 int meshFirst,
                 int meshCount,
-                int overrideFirst) {
+                int overrideFirst,
+                Model model,
+                boolean moving) {
             instances.add(new Change(slot, alive, new Vector3d(position), scale));
+            movingSlots.put(slot, moving);
             instanceLists.add(new int[] {meshFirst, meshCount, overrideFirst});
         }
 
@@ -119,6 +123,27 @@ class InstanceRegistryTest {
         List<Integer> slots = new ArrayList<>();
         registry.visit(model, (slot, materials, animation) -> slots.add(slot));
         return slots.stream().mapToInt(Integer::intValue).toArray();
+    }
+
+    @Test
+    void movedInstancesSettleAfterAWhile() {
+        InstanceHandle a = place("p", ball, 1);
+        // Placed and moved before anything saw it: not a move
+        registry.transform(null, a, new Vector3d(5, 0, 0), null, Float.NaN);
+        assertEquals(Boolean.FALSE, take().movingSlots.get(a.slot()));
+
+        registry.transform(null, a, new Vector3d(6, 0, 0), null, Float.NaN);
+        assertEquals(Boolean.TRUE, take().movingSlots.get(a.slot()), "Moved once seen");
+        for (int round = 1; round < InstanceRegistry.SETTLE_ROUNDS; ++round) {
+            assertTrue(take().instances.isEmpty(), "Still moving, nothing to hand over");
+        }
+        Recorded settled = take();
+        assertEquals(Boolean.FALSE, settled.movingSlots.get(a.slot()), "Handed over once still");
+        assertTrue(take().instances.isEmpty());
+
+        // A changed material hands the entry over again too
+        registry.setMaterial(null, a, 0, new Material());
+        assertEquals(Boolean.FALSE, take().movingSlots.get(a.slot()));
     }
 
     @Test
@@ -269,7 +294,8 @@ class InstanceRegistryTest {
         Material red = new Material();
         registry.setMaterial("p", a, 1, red);
         recorded = take();
-        assertTrue(recorded.instances.isEmpty(), "Only the overrides changed");
+        // The entry is handed over again too, so maps kept from frame to frame draw it again
+        assertEquals(1, recorded.instances.size(), "Unmoved, handed over again");
         assertSame(red, recorded.overrides.get(overrideFirst + 1));
 
         // Removed instances give their overrides back
