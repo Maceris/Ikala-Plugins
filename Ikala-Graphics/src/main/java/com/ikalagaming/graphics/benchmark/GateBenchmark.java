@@ -1404,7 +1404,9 @@ public final class GateBenchmark {
                                             cut.highest(),
                                             cut.drawn(),
                                             CHECK_COLUMN,
-                                            boxes));
+                                            boxes,
+                                            cut.volumes(),
+                                            CrackCheck.TOLERANCE));
             return;
         }
         if (!checking.isDone()) {
@@ -1545,13 +1547,16 @@ public final class GateBenchmark {
         final StringBuilder out =
                 new StringBuilder(
                         String.format(
-                                "%s: %,d cracks, %,d overdrawn edges, %,d holes; %,d clusters and"
+                                "%s: %,d cracks, %,d overdrawn edges, %,d holes (%,d gaps within"
+                                        + " the error, %,d edges under volumes); %,d clusters and"
                                         + " %,d triangles drawn, %,d edges checked, %,d too long to"
                                         + " check, %,d on %,d sections drawing themselves",
                                 check.where(),
                                 cracks.openEdges(),
                                 cracks.overdrawnEdges(),
                                 check.missing(),
+                                cracks.nearEdges(),
+                                cracks.coveredEdges(),
                                 cracks.drawnClusters(),
                                 check.triangles(),
                                 cracks.checkedEdges(),

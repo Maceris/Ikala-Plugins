@@ -2483,7 +2483,8 @@ public class LodRenderer {
             boolean @NonNull [] drawn,
             int missing,
             @NonNull Set<LodStore.SectionPos> hidden,
-            long triangles) {}
+            long triangles,
+            @NonNull List<CoverageVolume> volumes) {}
 
     /**
      * Work out the cut of a world as the GPU picks it from the last frame's observer. Render
@@ -2516,6 +2517,7 @@ public class LodRenderer {
                 ByteBuffer.allocate(LodCullMath.CLUSTER_ENTRY_SIZE).order(ByteOrder.nativeOrder());
         final float[] eye = {(float) world.eye[0], (float) world.eye[1], (float) world.eye[2]};
         final List<LodDag.Cluster> clusters = new ArrayList<>(count);
+        final List<CoverageVolume> volumes = new ArrayList<>(count);
         final int[] highest = new int[count];
         final boolean[] drawn = new boolean[count];
         int missing = 0;
@@ -2525,6 +2527,7 @@ public class LodRenderer {
             for (int i = 0; i < piece.clusters.length; ++i, ++k) {
                 final LodStore.PieceCluster cluster = piece.clusters[i];
                 clusters.add(cluster.cluster());
+                volumes.add(cluster.volume());
                 highest[k] =
                         cluster.parentCell() == null
                                 ? top
@@ -2556,7 +2559,7 @@ public class LodRenderer {
                 }
             }
         }
-        return new Cut(clusters, highest, drawn, missing, world.hidden, triangles);
+        return new Cut(clusters, highest, drawn, missing, world.hidden, triangles, volumes);
     }
 
     /**

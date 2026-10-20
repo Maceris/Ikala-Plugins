@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
@@ -85,6 +86,13 @@ class MixedBlocksLodTest {
         for (boolean volumes : new boolean[] {false, true}) {
             final LodDag dag = build(volumes);
             final CrackCheck check = new CrackCheck(dag);
+            final int[] highest = new int[dag.clusters().size()];
+            final List<CoverageVolume> volumeOf = new ArrayList<>();
+            for (int i = 0; i < highest.length; ++i) {
+                final int group = dag.consumer(i);
+                highest[i] = group < 0 ? dag.getLevels() - 1 : dag.groups().get(group).level();
+                volumeOf.add(dag.volumeOf(i));
+            }
             final Random random = new Random(7);
             final double size = COLUMNS * SyntheticTerrain.SECTION;
             for (int v = 0; v < VIEWS; ++v) {
@@ -109,6 +117,17 @@ class MixedBlocksLodTest {
                                 + " open, "
                                 + tolerant.overdrawnEdges().size()
                                 + " drawn twice");
+                // The gate's check, column by column, agrees
+                final CrackCheck.Tiled tiled =
+                        CrackCheck.checkTiled(
+                                dag.clusters(),
+                                highest,
+                                drawn,
+                                SyntheticTerrain.SECTION,
+                                List.of(),
+                                volumeOf,
+                                CrackCheck.TOLERANCE);
+                assertTrue(tiled.isClean(), "Volumes " + volumes + ", view " + v + ": " + tiled);
                 // The tolerance only excuses what the exact check finds
                 assertEquals(
                         exact.openEdges().size(),

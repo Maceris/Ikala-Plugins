@@ -74,6 +74,9 @@ public final class CrackCheck {
      * @param checkedEdges How many distinct edges the cut draws that were checked.
      * @param longEdges Edges longer than a column, which weren't checked.
      * @param excusedEdges Open edges on the box of a section drawn some other way, not counted.
+     * @param nearEdges Open edges not counted because another drawn triangle lies within the
+     *     tolerance all along them.
+     * @param coveredEdges Open edges not counted because drawn volumes cover them.
      * @param examples The middles of up to {@link #EXAMPLES} edges found, x, y, z.
      */
     public record Tiled(
@@ -83,6 +86,8 @@ public final class CrackCheck {
             long checkedEdges,
             long longEdges,
             long excusedEdges,
+            long nearEdges,
+            long coveredEdges,
             @NonNull List<double[]> examples) {
 
         /**
@@ -359,6 +364,33 @@ public final class CrackCheck {
             boolean @NonNull [] drawn,
             double column,
             @NonNull Collection<double[]> excused) {
+        return checkTiled(clusters, highest, drawn, column, excused, null, 0);
+    }
+
+    /**
+     * Check the cut of a whole world in vertical columns, as {@link #checkTiled(List, int[],
+     * boolean[], double, Collection)} does, not counting open edges that drawn volumes cover or,
+     * with a tolerance, gaps under a share of the larger error on either side, as {@link
+     * #check(boolean[], double)} does.
+     *
+     * @param clusters The clusters.
+     * @param highest The highest level each stands at.
+     * @param drawn Whether each is drawn.
+     * @param column The width of a column, in world units.
+     * @param excused Boxes of sections drawn some other way.
+     * @param volumes The volume each cluster is, or null where it is triangles; null if none is.
+     * @param tolerance The share of the larger error on either side a gap may be, or 0 for none.
+     * @return What was found.
+     */
+    public static Tiled checkTiled(
+            @NonNull List<LodDag.Cluster> clusters,
+            int @NonNull [] highest,
+            boolean @NonNull [] drawn,
+            double column,
+            @NonNull Collection<double[]> excused,
+            List<CoverageVolume> volumes,
+            double tolerance) {
+        final IntToDoubleFunction errorOf = id -> clusters.get(id).error();
         // Each column's clusters, by the box around their spheres widened by a column
         final Map<Long, List<Integer>> columns = new HashMap<>();
         int drawnCount = 0;
@@ -380,6 +412,8 @@ public final class CrackCheck {
         long overdrawn = 0;
         long checked = 0;
         long excusedCount = 0;
+        long nearCount = 0;
+        long coveredCount = 0;
         final List<double[]> examples = new ArrayList<>();
         final long[] longEdges = new long[1];
         for (Map.Entry<Long, List<Integer>> entry : columns.entrySet()) {
@@ -446,6 +480,7 @@ public final class CrackCheck {
             final Surface[] cutSurface = new Surface[1];
             final Map<Integer, TJunctions> levelLines = new HashMap<>();
             final Map<Integer, Surface> levelSurfaces = new HashMap<>();
+            final List<CoverageVolume> cutVolumes = new ArrayList<>();
             for (Map.Entry<Grouping.Edge, Use> edgeUse : cutUses.entrySet()) {
                 if (!inColumn(edgeUse.getKey(), key, column)) {
                     continue;
@@ -502,6 +537,13 @@ public final class CrackCheck {
                             }
                         }
                         cutSurface[0] = new Surface(clusters, inCut);
+                        for (int i : inCut) {
+                            cutSurface[0].largestError =
+                                    Math.max(cutSurface[0].largestError, clusters.get(i).error());
+                            if (volumes != null && volumes.get(i) != null) {
+                                cutVolumes.add(volumes.get(i));
+                            }
+                        }
                     }
                     if (cutSurface[0].touches(
                             use.from(), use.to(), use.owner, use.triangle, scratch)) {
@@ -511,11 +553,29 @@ public final class CrackCheck {
                         ++excusedCount;
                         continue;
                     }
+                    if (!cutVolumes.isEmpty() && covered(use.from(), use.to(), cutVolumes)) {
+                        ++coveredCount;
+                        continue;
+                    }
+                    if (tolerance > 0
+                            && cutSurface[0].near(
+                                    use.from(),
+                                    use.to(),
+                                    use.owner,
+                                    use.triangle,
+                                    tolerance,
+                                    errorOf,
+                                    scratch)) {
+                        ++nearCount;
+                        continue;
+                    }
                     ++open;
                     if (examples.size() < EXAMPLES) {
                         examples.add(middle(edgeUse.getKey()));
                     }
-                } else if (use.count > mostAllowed(most)) {
+                } else if (use.count > mostAllowed(most)
+                        && distinctFaces(edgeUse.getKey(), members, clusters, drawn)
+                                > mostAllowed(most)) {
                     ++overdrawn;
                     if (examples.size() < EXAMPLES) {
                         examples.add(middle(edgeUse.getKey()));
@@ -524,7 +584,52 @@ public final class CrackCheck {
             }
         }
         return new Tiled(
-                open, overdrawn, drawnCount, checked, longEdges[0], excusedCount, examples);
+                open,
+                overdrawn,
+                drawnCount,
+                checked,
+                longEdges[0],
+                excusedCount,
+                nearCount,
+                coveredCount,
+                examples);
+    }
+
+    /**
+     * How many faces of drawn clusters use an edge, the two sides of a sheet counting once.
+     *
+     * @param edge The edge.
+     * @param members The clusters to look in.
+     * @param clusters All clusters.
+     * @param drawn Whether each is drawn.
+     * @return The count.
+     */
+    private static int distinctFaces(
+            Grouping.@NonNull Edge edge,
+            @NonNull List<Integer> members,
+            @NonNull List<LodDag.Cluster> clusters,
+            boolean @NonNull [] drawn) {
+        final Set<Set<Grouping.Corner>> faces = new HashSet<>();
+        for (int i : members) {
+            if (!drawn[i]) {
+                continue;
+            }
+            final LodDag.Cluster cluster = clusters.get(i);
+            final float[] corners = cluster.corners();
+            for (int t = 0; t < cluster.triangleCount(); ++t) {
+                final Grouping.Corner[] three = new Grouping.Corner[AXES];
+                for (int corner = 0; corner < AXES; ++corner) {
+                    three[corner] =
+                            Grouping.Corner.of(corners, t * TRIANGLE_VALUES + corner * AXES);
+                }
+                for (int corner = 0; corner < AXES; ++corner) {
+                    if (Grouping.Edge.of(three[corner], three[(corner + 1) % AXES]).equals(edge)) {
+                        faces.add(Set.of(three));
+                    }
+                }
+            }
+        }
+        return faces.size();
     }
 
     /**
@@ -837,11 +942,11 @@ public final class CrackCheck {
             }
         }
         final Surface cut = new Surface(dag.clusters(), clusters);
-        final List<Integer> volumes = new ArrayList<>();
+        final List<CoverageVolume> volumes = new ArrayList<>();
         for (int id : clusters) {
             cut.largestError = Math.max(cut.largestError, dag.clusters().get(id).error());
             if (dag.volumeOf(id) != null) {
-                volumes.add(id);
+                volumes.add(dag.volumeOf(id));
             }
         }
         final IntToDoubleFunction errorOf = id -> dag.clusters().get(id).error();
@@ -962,18 +1067,18 @@ public final class CrackCheck {
      *
      * @param from The edge's start, x, y, z.
      * @param to Its end.
-     * @param volumes The drawn clusters with volumes.
+     * @param volumes The drawn volumes.
      * @return True if they do.
      */
-    private boolean covered(
-            double @NonNull [] from, double @NonNull [] to, @NonNull List<Integer> volumes) {
+    private static boolean covered(
+            double @NonNull [] from, double @NonNull [] to, @NonNull List<CoverageVolume> volumes) {
         final int samples = TJunctions.samples(from, to);
         final double[] point = new double[AXES];
         for (int k = 0; k < samples; ++k) {
             TJunctions.sample(from, to, k, samples, point);
             boolean in = false;
-            for (int id : volumes) {
-                if (inOrBeside(dag.volumeOf(id), point)) {
+            for (CoverageVolume volume : volumes) {
+                if (inOrBeside(volume, point)) {
                     in = true;
                     break;
                 }
