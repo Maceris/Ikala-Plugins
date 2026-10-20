@@ -2536,6 +2536,24 @@ public final class DagBuilder {
     }
 
     /**
+     * Whether a triangle has an edge between two locked corners: a border another group or cell
+     * keeps.
+     *
+     * @param mesh The mesh.
+     * @param f The triangle.
+     * @return True if it does.
+     */
+    private static boolean onBorderEdge(@NonNull LodMesh mesh, int f) {
+        for (int corner = 0; corner < AXES; ++corner) {
+            if (mesh.isLocked(mesh.corner(f, corner))
+                    && mesh.isLocked(mesh.corner(f, (corner + 1) % AXES))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * What of a group goes to a volume.
      *
      * @param faces Which merged triangles do.
@@ -2584,12 +2602,10 @@ public final class DagBuilder {
         for (int f = 0; f < n; ++f) {
             final byte[] own = kinds.get(sourceCluster.getInt(f));
             final byte kind = own == null ? LodDag.VOLUME_NONE : own[sourceTriangle.getInt(f)];
-            // A triangle at a locked corner stays: the corner is on a border another group or
-            // cell keeps, and leaving it would open that border where the volume doesn't reach
-            if (kind != LodDag.VOLUME_NONE
-                    && !merged.isLocked(merged.corner(f, 0))
-                    && !merged.isLocked(merged.corner(f, 1))
-                    && !merged.isLocked(merged.corner(f, 2))) {
+            // A triangle on a border edge, between two locked corners, stays: another group or
+            // cell keeps that edge, and leaving it would open the border where the volume doesn't
+            // reach
+            if (kind != LodDag.VOLUME_NONE && !onBorderEdge(merged, f)) {
                 faces[f] = true;
                 ++count;
                 final double faceArea = Geometry.triangleArea(merged, f);
