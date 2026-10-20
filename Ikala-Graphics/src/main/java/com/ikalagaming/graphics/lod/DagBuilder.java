@@ -1833,10 +1833,27 @@ public final class DagBuilder {
                         : Map.of();
         // Far enough out, what is finer than the group's resolution leaves its triangles for a
         // coverage volume, where the voxels cost less than the triangles they stand for
-        final VolumePart volumePart =
+        VolumePart volumePart =
                 options.volumes() && (childError > 0 || cutOutVolume)
                         ? volumePart(children, merged, volumeKinds, sourceCluster, sourceTriangle)
                         : null;
+        // The volume is made before its triangles leave: where nothing in it stops light, they
+        // stay triangles, since dropping them would open a hole wherever they met a border
+        final long[] allBases = basisOf(children);
+        long[] bases = allBases;
+        long[] volumeBases = new long[0];
+        CoverageVolume volume = null;
+        if (volumePart != null) {
+            final long[][] split = splitBases(children, allBases, volumePart);
+            volume = voxelize(split[1], volumePart.voxelSize(), children);
+            if (volume.size() > 0) {
+                bases = split[0];
+                volumeBases = split[1];
+            } else {
+                volume = null;
+                volumePart = null;
+            }
+        }
         if (volumePart != null) {
             merged = dropFaces(merged, volumePart.faces(), sourceCluster, sourceTriangle);
         } else if (cutOutVolume) {
@@ -1975,22 +1992,8 @@ public final class DagBuilder {
         // own error, which is 0 for leaves: by the triangle inequality that bounds how far the
         // output is from the leaves, without adding up every level's step on the way. Never under
         // a child's, so a cluster's error doesn't fall going up.
-        final long[] allBases = basisOf(children);
-        // With a volume, the base triangles under it are its own, and the rest's are measured
-        long[] bases = allBases;
-        long[] volumeBases = new long[0];
-        CoverageVolume volume = null;
-        if (volumePart != null) {
-            final long[][] split = splitBases(children, allBases, volumePart);
-            volume = voxelize(split[1], volumePart.voxelSize(), children);
-            if (volume.size() > 0) {
-                bases = split[0];
-                volumeBases = split[1];
-            } else {
-                // Nothing in it stops light: it is simply gone, and measured as such
-                volume = null;
-            }
-        }
+        // With a volume, the base triangles under it are its own, and the rest's are measured (the
+        // split is made above, with the volume)
         double baseError = 0;
         LodMesh.Builder baseBuilder = LodMesh.builder(dag.getOrigin());
         for (long packed : bases) {
@@ -2581,7 +2584,12 @@ public final class DagBuilder {
         for (int f = 0; f < n; ++f) {
             final byte[] own = kinds.get(sourceCluster.getInt(f));
             final byte kind = own == null ? LodDag.VOLUME_NONE : own[sourceTriangle.getInt(f)];
-            if (kind != LodDag.VOLUME_NONE) {
+            // A triangle at a locked corner stays: the corner is on a border another group or
+            // cell keeps, and leaving it would open that border where the volume doesn't reach
+            if (kind != LodDag.VOLUME_NONE
+                    && !merged.isLocked(merged.corner(f, 0))
+                    && !merged.isLocked(merged.corner(f, 1))
+                    && !merged.isLocked(merged.corner(f, 2))) {
                 faces[f] = true;
                 ++count;
                 final double faceArea = Geometry.triangleArea(merged, f);

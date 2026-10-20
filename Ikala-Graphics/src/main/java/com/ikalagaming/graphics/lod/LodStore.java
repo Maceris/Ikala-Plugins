@@ -58,7 +58,7 @@ public final class LodStore {
      * builder, the simplifier or anything else changes the cells built from the same input, so
      * cached cells from before are rebuilt.
      */
-    public static final int BUILDER_VERSION = 17;
+    public static final int BUILDER_VERSION = 18;
 
     /** How many child cells a parent spans along each axis. */
     private static final int BRANCHING = 2;
