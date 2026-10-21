@@ -84,6 +84,14 @@ public class Scene {
      */
     private TextureHandle skyboxTexture;
 
+    /**
+     * How the skybox texture lays the sky out. -- GETTER -- How the skybox texture lays the sky
+     * out.
+     *
+     * @return The layout.
+     */
+    private volatile SkyboxLayout skyboxLayout = SkyboxLayout.CUBE_FACES;
+
     /** The diffuse color of the skybox, for use when there is no texture. */
     private final Vector4f skyboxDiffuse;
 
@@ -300,6 +308,18 @@ public class Scene {
      * @param texture The texture, or null if the skybox should be untextured.
      */
     public void setSkyboxTexture(TextureHandle texture) {
+        setSkyboxTexture(texture, SkyboxLayout.CUBE_FACES);
+    }
+
+    /**
+     * Set the new skybox texture and how it lays the sky out, such as an HDR environment map. The
+     * scene doesn't take ownership: the plugin that loaded the texture releases it.
+     *
+     * @param texture The texture, or null if the skybox should be untextured.
+     * @param layout How the texture lays the sky out.
+     */
+    public void setSkyboxTexture(TextureHandle texture, @NonNull SkyboxLayout layout) {
+        skyboxLayout = layout;
         skyboxTexture = texture;
     }
 }

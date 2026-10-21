@@ -156,6 +156,7 @@ public class EnvironmentUpdate implements RenderStage {
                             && state.textureRegistry.isResident(texture);
             skyTexture = textured ? state.textureRegistry.slotOrDefault(texture) : -1;
             steps = new int[STEP_COUNT];
+            steps[0] = scene.getSkyboxLayout().ordinal();
         }
         if (!state.environment.takeChange(skyTexture, scene.getSkyboxDiffuse(), steps)) {
             return;
@@ -184,6 +185,8 @@ public class EnvironmentUpdate implements RenderStage {
             constants.putInt(ShaderBindings.Environment.SKY_TEXTURE_OFFSET, skyTexture);
             new Vector4f(sun, (float) radius)
                     .get(ShaderBindings.Environment.SUN_AND_RADIUS_OFFSET, constants);
+            constants.putInt(
+                    ShaderBindings.Environment.LAYOUT_OFFSET, scene.getSkyboxLayout().ordinal());
 
             // The sky into the first level, then each level from the one before
             for (int level = 0; level < Environment.SOURCE_LEVELS; ++level) {

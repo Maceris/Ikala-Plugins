@@ -368,14 +368,15 @@ public class Environment {
      *     #PHYSICAL_SKY}.
      * @param skyColor The skybox's color, used without a texture.
      * @param steps For the physical sky, the steps its sun's direction and the camera's altitude
-     *     are in, three of them, so the cubes follow it a step at a time; ignored otherwise.
+     *     are in, three of them, so the cubes follow it a step at a time; for a skybox texture, its
+     *     layout, then zeros.
      * @return True if the cubes should be worked out again now.
      */
     public boolean takeChange(int skyTexture, @NonNull Vector4fc skyColor, int @NonNull [] steps) {
         final boolean changed =
                 skyTexture != capturedTexture
                         || skyTexture == -1 && !capturedColor.equals(skyColor)
-                        || skyTexture == PHYSICAL_SKY && !Arrays.equals(steps, capturedSteps);
+                        || !Arrays.equals(steps, capturedSteps);
         if (changed) {
             capturedTexture = skyTexture;
             capturedColor.set(skyColor);

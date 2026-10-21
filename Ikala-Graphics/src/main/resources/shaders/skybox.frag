@@ -6,6 +6,8 @@
 // The physical sky's tables are in the environment's set, set 2, see SkyboxRender
 #define ENVIRONMENT_SET 2
 #include "atmosphere.glsl"
+#include "environment.glsl"
+#include "equirect.glsl"
 
 layout(location = 0) in vec2 outTextCoord;
 layout(location = 1) in vec3 outDirection;
@@ -20,10 +22,12 @@ layout(set = 0, binding = 0) uniform Uniforms {
     int textureIndex;
     // Nonzero to draw the physical sky, from its sky view table
     int physicalSky;
+    // How the texture lays the sky out, see SkyboxLayout
+    int skyLayout;
     // Toward the sun, y up, and in w the camera's distance from the planet's center in kilometers
     vec4 sunAndRadius;
-    // What the physical sky is scaled by: the sun's color times its intensity times the sky's
-    // strength
+    // What the physical sky is scaled by, the sun's color times its intensity times the sky's
+    // strength, with w 1; or with w 2, the ambient light an environment map's average is scaled to
     vec4 skyScale;
 };
 
@@ -32,6 +36,9 @@ layout(set = 1, binding = 0) uniform sampler2D bindlessTextures[];
 // The sun's disk: its light through the atmosphere spread over its solid angle, with an edge a
 // fraction of its radius wide so it doesn't alias
 const float SUN_EDGE = 0.1;
+
+// Match SkyboxLayout
+const int LAYOUT_EQUIRECTANGULAR = 1;
 
 // The scene color is linear light, tone mapped later. The sky's texture samples in linear light
 // already; its color is given sRGB encoded, as material colors are.
@@ -50,6 +57,20 @@ void main()
             color += disk * sunTransmittance(r, sun.y) / solidAngle;
         }
         fragColor = vec4(color * skyScale.rgb, 1.0);
+        return;
+    }
+    if (hasTexture == 1 && skyLayout == LAYOUT_EQUIRECTANGULAR) {
+        // Longitude wraps across the map's sides, where the derivatives would jump a whole turn
+        // and pick the smallest mip
+        vec2 uv = equirectUv(normalize(outDirection));
+        vec2 dx = dFdx(uv);
+        vec2 dy = dFdy(uv);
+        dx.x -= round(dx.x);
+        dy.x -= round(dy.x);
+        vec3 color = textureGrad(bindlessTextures[nonuniformEXT(textureIndex)], uv, dx, dy).rgb;
+        // As bright as it lights the scene
+        float average = max(dot(environmentAverage(), ENVIRONMENT_LUMINANCE), 1e-4);
+        fragColor = vec4(color * skyScale.rgb / average, 1.0);
         return;
     }
     vec3 color = hasTexture == 1

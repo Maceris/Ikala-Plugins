@@ -58,6 +58,9 @@ public record ImageFile(
     /** Channels in the decoded pixels. */
     public static final int CHANNELS = 4;
 
+    /** The largest finite half float. */
+    private static final float HALF_MAX = 65_504;
+
     /**
      * Words in a file name that mark a texture as data rather than color, so it loads linear:
      * normal maps, packed roughness and metal maps (Bistro calls those "Specular"), masks. Whole
@@ -298,7 +301,9 @@ public record ImageFile(
                 ByteBuffer pixels = allocate(count * Short.BYTES);
                 ShortBuffer halves = pixels.asShortBuffer();
                 for (int i = 0; i < count; ++i) {
-                    halves.put(i, Float.floatToFloat16(decoded.get(i)));
+                    // A sun in an HDR map can be brighter than a half holds, which would be
+                    // infinite and poison what is filtered from it
+                    halves.put(i, Float.floatToFloat16(Math.min(decoded.get(i), HALF_MAX)));
                 }
                 STBImage.stbi_image_free(decoded);
                 return pixels;

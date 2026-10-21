@@ -53,6 +53,22 @@ class EnvironmentMathTest {
     }
 
     @Test
+    void equirectangularSkiesLookForwardFromTheMiddle() {
+        final double e = 1e-12;
+        org.junit.jupiter.api.Assertions.assertArrayEquals(
+                new double[] {0.5, 0.5}, EnvironmentMath.equirectUv(new Vector3d(0, 0, -1)), e);
+        org.junit.jupiter.api.Assertions.assertArrayEquals(
+                new double[] {0.75, 0.5}, EnvironmentMath.equirectUv(new Vector3d(1, 0, 0)), e);
+        org.junit.jupiter.api.Assertions.assertArrayEquals(
+                new double[] {0.25, 0.5}, EnvironmentMath.equirectUv(new Vector3d(-1, 0, 0)), e);
+        assertEquals(0, EnvironmentMath.equirectUv(new Vector3d(0, 1, 0))[1], e, "Up is the top");
+        assertEquals(1, EnvironmentMath.equirectUv(new Vector3d(0, -1, 0))[1], e);
+        // Behind is the seam, at either side
+        final double behind = EnvironmentMath.equirectUv(new Vector3d(0.001, 0, 1).normalize())[0];
+        assertEquals(1, behind, 1e-3);
+    }
+
+    @Test
     void cubeDirectionsMatchVulkansFaces() {
         // The middle of each face points along its axis
         assertDirection(new Vector3d(1, 0, 0), EnvironmentMath.cubeDirection(0, 0, 0));

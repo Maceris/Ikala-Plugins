@@ -243,10 +243,16 @@ public class ShaderBindings {
         public static final int SUN_AND_RADIUS_OFFSET = ROUGHNESS_OFFSET + Float.BYTES;
 
         /**
+         * How the skybox texture lays the sky out, the {@link
+         * com.ikalagaming.graphics.scene.SkyboxLayout} ordinal.
+         */
+        public static final int LAYOUT_OFFSET = SUN_AND_RADIUS_OFFSET + 4 * Float.BYTES;
+
+        /**
          * The size of the push constants in bytes, which the atmosphere shader shares, see {@link
          * Atmosphere}.
          */
-        public static final int PUSH_CONSTANTS_SIZE = SUN_AND_RADIUS_OFFSET + 4 * Float.BYTES;
+        public static final int PUSH_CONSTANTS_SIZE = LAYOUT_OFFSET + Integer.BYTES;
 
         /** Capture the sky into the source cube's first level. */
         public static final int MODE_CAPTURE = 0;
@@ -1438,6 +1444,12 @@ public class ShaderBindings {
 
         /** Offset in the uniform buffer in bytes for whether to draw the physical sky, 1 if so. */
         public static final int PHYSICAL_SKY_OFFSET = TEXTURE_INDEX_OFFSET + Integer.BYTES;
+
+        /**
+         * Offset in the uniform buffer in bytes for how the texture lays the sky out, the {@link
+         * com.ikalagaming.graphics.scene.SkyboxLayout} ordinal.
+         */
+        public static final int LAYOUT_OFFSET = PHYSICAL_SKY_OFFSET + Integer.BYTES;
 
         /**
          * Offset in the uniform buffer in bytes for the physical sky's sun and the camera's

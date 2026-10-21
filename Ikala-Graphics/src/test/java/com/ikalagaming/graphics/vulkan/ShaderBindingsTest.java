@@ -157,6 +157,7 @@ class ShaderBindingsTest {
         assertEquals(144, ShaderBindings.Skybox.HAS_TEXTURE_OFFSET);
         assertEquals(148, ShaderBindings.Skybox.TEXTURE_INDEX_OFFSET);
         assertEquals(152, ShaderBindings.Skybox.PHYSICAL_SKY_OFFSET);
+        assertEquals(156, ShaderBindings.Skybox.LAYOUT_OFFSET);
         assertEquals(160, ShaderBindings.Skybox.SUN_AND_RADIUS_OFFSET);
         assertEquals(176, ShaderBindings.Skybox.SKY_SCALE_OFFSET);
         assertEquals(192, ShaderBindings.Skybox.UNIFORMS_BUFFER_SIZE);

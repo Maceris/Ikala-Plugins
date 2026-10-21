@@ -17,6 +17,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import org.joml.Vector2f;
 
+import java.util.function.Consumer;
 import javax.annotation.Nullable;
 
 /**
@@ -110,13 +111,18 @@ public class ImageViewer {
     /** Scratch for reading the mouse and layout, reused. */
     private final Vector2f scratch = new Vector2f();
 
+    /** Uses the shown image as the sky. */
+    @NonNull private final Consumer<ImageFile> useAsSky;
+
     /**
      * Set up the viewer.
      *
      * @param textures Switches the shown texture between color spaces.
+     * @param useAsSky Uses an image as the sky, for HDR environment maps.
      */
-    public ImageViewer(@NonNull Textures textures) {
+    public ImageViewer(@NonNull Textures textures, @NonNull Consumer<ImageFile> useAsSky) {
         this.textures = textures;
+        this.useAsSky = useAsSky;
     }
 
     /**
@@ -327,6 +333,16 @@ public class ImageViewer {
             row("File size", sizeText(shown.fileSize()));
             row("Data size", sizeText(shown.dataBytes()));
             IkGui.endTable();
+        }
+        if (shown.depth() == ImageFile.Depth.HALF
+                && shown.pixels() != null
+                && shown.width() == 2 * shown.height()) {
+            if (IkGui.button("Use as the sky")) {
+                useAsSky.accept(shown);
+            }
+            IkGui.setItemTooltip(
+                    "Show this environment map around the scene and light it by the map, its"
+                            + " reflections by roughness and its diffuse light by direction.");
         }
 
         if (ColorSpace.canSwitch(shown.format())) {

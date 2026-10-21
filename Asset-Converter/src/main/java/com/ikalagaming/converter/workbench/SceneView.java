@@ -9,6 +9,7 @@ import com.ikalagaming.graphics.DebugShapeHandle;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.component.GuiWindow;
@@ -22,6 +23,7 @@ import com.ikalagaming.graphics.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.gui.util.Color;
 import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.scene.SkyboxLayout;
 import com.ikalagaming.graphics.scene.debug.DebugBox;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
@@ -165,6 +167,21 @@ public class SceneView {
     /** Whether the exposure adapted before entering. */
     private boolean previousAutoExposure;
 
+    /** The skybox texture before entering. */
+    private TextureHandle previousSkybox;
+
+    /** How the skybox texture laid the sky out before entering. */
+    private SkyboxLayout previousSkyboxLayout = SkyboxLayout.CUBE_FACES;
+
+    /** The environment map the sky shows, which the workbench owns, or null for the plain sky. */
+    private TextureHandle sky;
+
+    /** What the sky is called, for the lighting panel. */
+    private String skyName = "";
+
+    /** Goes back to the plain sky, releasing the map. */
+    private Runnable clearSky = () -> {};
+
     /** The camera position before entering. */
     private final Vector3d previousPosition = new Vector3d();
 
@@ -253,6 +270,28 @@ public class SceneView {
         textureProgress = progress;
     }
 
+    /**
+     * Show an environment map as the sky, lighting the scene, or the plain sky again. The workbench
+     * owns the texture, and releases the one before after this.
+     *
+     * @param texture The equirectangular map, or null for the plain sky.
+     * @param name What it is called.
+     * @param plainSky Goes back to the plain sky, for the lighting panel's button.
+     */
+    public void setSky(TextureHandle texture, @NonNull String name, @NonNull Runnable plainSky) {
+        clearSky = plainSky;
+        sky = texture;
+        skyName = name;
+        if (entered) {
+            final Scene scene = GraphicsManager.getScene();
+            if (texture != null) {
+                scene.setSkyboxTexture(texture, SkyboxLayout.EQUIRECTANGULAR);
+            } else {
+                scene.setSkyboxTexture(previousSkybox, previousSkyboxLayout);
+            }
+        }
+    }
+
     /** Switch the renderer to draw the scene, with a sun, remembering what to put back. */
     private void enter() {
         if (entered) {
@@ -266,6 +305,11 @@ public class SceneView {
         previousExposure = scene.getExposure();
         previousPhysicalSky = scene.getPhysicalSky();
         previousAutoExposure = scene.isAutoExposure();
+        previousSkybox = scene.getSkyboxTexture();
+        previousSkyboxLayout = scene.getSkyboxLayout();
+        if (sky != null) {
+            scene.setSkyboxTexture(sky, SkyboxLayout.EQUIRECTANGULAR);
+        }
         previousPosition.set(scene.getCamera().getPosition());
         previousRotation.set(scene.getCamera().getRotation());
         // The debug stage draws the selection's outline
@@ -301,6 +345,7 @@ public class SceneView {
         scene.setExposure(previousExposure);
         scene.setPhysicalSky(previousPhysicalSky);
         scene.setAutoExposure(previousAutoExposure);
+        scene.setSkyboxTexture(previousSkybox, previousSkyboxLayout);
         scene.getCamera().setPosition(previousPosition.x, previousPosition.y, previousPosition.z);
         scene.getCamera().setRotation(previousRotation.x, previousRotation.y);
         GraphicsManager.swapPipeline(previousPipeline);
@@ -697,6 +742,18 @@ public class SceneView {
         IkGui.sameLine();
         if (IkGui.checkbox("Auto exposure", scene.isAutoExposure())) {
             scene.setAutoExposure(!scene.isAutoExposure());
+        }
+        if (sky != null) {
+            IkGui.text("Sky: " + skyName);
+            IkGui.sameLine();
+            if (IkGui.button("Plain sky")) {
+                clearSky.run();
+            }
+            IkGui.setItemTooltip(
+                    "Go back to the plain sky. The ambient light still sets how bright the map"
+                            + " lights the scene; the physical sky takes its place while on.");
+        } else {
+            IkGui.textDisabled("Open an HDR image and use it as the sky to light by it");
         }
         IkGui.setItemTooltip(
                 "Earth's atmosphere lit by the sun as the sky, lighting the scene as bright as the"

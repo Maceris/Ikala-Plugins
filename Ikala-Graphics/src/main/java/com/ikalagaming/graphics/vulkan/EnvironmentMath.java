@@ -66,6 +66,20 @@ public final class EnvironmentMath {
     }
 
     /**
+     * Where a unit direction falls on an equirectangular sky, as {@code equirect.glsl} has it:
+     * longitude across from -z at the middle, +x a quarter to the right; latitude down from
+     * straight up.
+     *
+     * @param d The direction, y up.
+     * @return u and v, from 0 to 1.
+     */
+    public static double[] equirectUv(@NonNull Vector3dc d) {
+        final double u = 0.5 + Math.atan2(d.x(), -d.z()) / (2 * Math.PI);
+        final double v = Math.acos(Math.clamp(d.y(), -1, 1)) / Math.PI;
+        return new double[] {u, v};
+    }
+
+    /**
      * The direction through a texel of a cube face, as Vulkan samples cube maps, not normalized.
      *
      * @param face The face, +x, -x, +y, -y, +z, -z.

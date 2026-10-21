@@ -33,6 +33,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -152,6 +153,9 @@ public class Workbench {
     /** Whether the workbench is showing. */
     private boolean showing;
 
+    /** The environment map lighting the scene, owned here, or null for the plain sky. */
+    private TextureHandle skyTexture;
+
     /**
      * Create the workbench, browsing the working directory.
      *
@@ -163,7 +167,7 @@ public class Workbench {
         this.graphics = graphics;
         this.ui = ui;
         this.back = back;
-        viewer = new ImageViewer(graphics.textures());
+        viewer = new ImageViewer(graphics.textures(), this::useAsSky);
         sceneView =
                 new SceneView(
                         graphics,
@@ -672,6 +676,47 @@ public class Workbench {
     private void failed(int request, String message) {
         if (request == requests.get()) {
             status.text(message);
+        }
+    }
+
+    /**
+     * Light the scene by an environment map: load its pixels again as the sky's own texture, which
+     * outlives the image shown, and show the scene with it. Render thread.
+     *
+     * @param image The equirectangular image, decoded to half floats.
+     */
+    private void useAsSky(ImageFile image) {
+        final ByteBuffer pixels = image.pixels();
+        if (pixels == null) {
+            return;
+        }
+        final TextureHandle texture =
+                graphics.textures()
+                        .load(
+                                pixels.duplicate().rewind(),
+                                image.format(),
+                                image.width(),
+                                image.height(),
+                                TextureWrap.REPEAT);
+        final TextureHandle old = skyTexture;
+        skyTexture = texture;
+        sceneView.setSky(texture, image.path().getFileName().toString(), this::clearSky);
+        if (old != null) {
+            graphics.textures().release(old);
+        }
+        status.text("Lighting by " + image.path().getFileName());
+        if (sceneView.getPlacement() != null) {
+            showScene();
+        }
+    }
+
+    /** Go back to the plain sky, releasing the environment map's texture. Render thread. */
+    private void clearSky() {
+        final TextureHandle old = skyTexture;
+        skyTexture = null;
+        sceneView.setSky(null, "", this::clearSky);
+        if (old != null) {
+            graphics.textures().release(old);
         }
     }
 

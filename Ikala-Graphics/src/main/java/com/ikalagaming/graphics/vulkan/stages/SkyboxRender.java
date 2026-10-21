@@ -8,6 +8,7 @@ import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.vulkan.*;
 import com.ikalagaming.graphics.vulkan.RenderStage;
@@ -277,6 +278,13 @@ public class SkyboxRender implements RenderStage {
         // The physical sky, from the table the environment update filled this frame
         final PhysicalSky physicalSky = scene.getPhysicalSky();
         uniformData.putInt(ShaderBindings.Skybox.PHYSICAL_SKY_OFFSET, physicalSky != null ? 1 : 0);
+        uniformData.putInt(ShaderBindings.Skybox.LAYOUT_OFFSET, scene.getSkyboxLayout().ordinal());
+        if (physicalSky == null) {
+            // An environment map is drawn as bright as it lights, scaled to the ambient light
+            final AmbientLight ambient = scene.getSceneLights().getAmbientLight();
+            new Vector4f(new Vector3f(ambient.getColor()).mul(ambient.getIntensity()), 2)
+                    .get(ShaderBindings.Skybox.SKY_SCALE_OFFSET, uniformData);
+        }
         if (physicalSky != null) {
             final DirectionalLight sun = scene.getSceneLights().getDirLight();
             new Vector4f(
