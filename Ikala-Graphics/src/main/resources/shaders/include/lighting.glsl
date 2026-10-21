@@ -7,6 +7,9 @@
 
 #include "color.glsl"
 #include "light_inputs.glsl"
+#ifdef ENVIRONMENT_SET
+#include "environment.glsl"
+#endif
 
 // How many lights in one cluster show as full red on the heat map. Must match
 // DebugVisualizers.HEAT_MAP_FULL.
@@ -205,25 +208,35 @@ vec2 environmentBRDF(float roughness, float nDotV) {
     return vec2(-1.04 * a004 + r.z, max(1.04 * a004 + r.w, 0.0));
 }
 
-// How much of the ambient light, the same from every direction, a surface reflects toward the
-// viewer. Specular by the split sum with multiple scattering compensated after Fdez-Aguera ("A
+// The two parts of how much ambient light a surface reflects toward the viewer, see
+// ambientReflectance: what single scattering reflects, through the surface's lobe around the
+// mirror direction, and returned, what more bounces and the diffuse reflect, from all over the
+// hemisphere. Specular by the split sum with multiple scattering compensated after Fdez-Aguera ("A
 // Multiple-Scattering Microfacet Model for Real-Time Image-based Lighting", 2019), so rough
 // surfaces don't lose the light that bounces more than once; the diffuse gets what the specular
 // doesn't reflect, and metals have none.
-vec3 ambientReflectance(vec3 baseLinear, Material material, float nDotV) {
+vec3 ambientParts(vec3 baseLinear, Material material, float nDotV, out vec3 singleScatter) {
     vec3 f0 = specularColor(baseLinear, material);
     vec2 scaleBias = environmentBRDF(material.roughness, nDotV);
     // Single scattering, for white and for this color. The fit can give a color more than white at
     // grazing angles on smooth surfaces, where its scale goes negative, so it is kept to white's.
     float singleWhite = scaleBias.x + scaleBias.y;
-    vec3 singleScatter = min(f0 * scaleBias.x + scaleBias.y, vec3(singleWhite));
+    singleScatter = min(f0 * scaleBias.x + scaleBias.y, vec3(singleWhite));
     float missed = 1.0 - singleWhite;
     // What the missed light does over more bounces, by the average Fresnel
     vec3 average = f0 + (1.0 - f0) / FRESNEL_AVERAGE_DIVISOR;
     vec3 multiScatter = singleScatter * average / (1.0 - missed * average) * missed;
     vec3 specular = singleScatter + multiScatter;
     vec3 diffuse = (1.0 - specular) * baseLinear * (1.0 - material.metallic);
-    return diffuse + specular;
+    return diffuse + multiScatter;
+}
+
+// How much of the ambient light, the same from every direction, a surface reflects toward the
+// viewer: both parts of ambientParts.
+vec3 ambientReflectance(vec3 baseLinear, Material material, float nDotV) {
+    vec3 singleScatter;
+    vec3 spread = ambientParts(baseLinear, material, nDotV, singleScatter);
+    return singleScatter + spread;
 }
 
 vec3 calcFog(vec3 pos, vec3 color, Fog fog, vec3 ambientLight, DirectionalLight directionalLight) {
@@ -510,8 +523,30 @@ vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 ren
     float open = 1.0;
 #endif
     float nDotV = max(dot(normal, normalize(-viewPosition)), MIN_N_DOT_V);
-    vec3 ambient = ambientLight.intensity * ambientLight.color * mix(skyLightFloor, 1.0, sky) * open
-        * material.occlusion * ambientReflectance(sRGBToLinear(baseColor.rgb), material, nDotV);
+    vec3 ambientColor = ambientLight.intensity * ambientLight.color;
+    float ambientVisible = mix(skyLightFloor, 1.0, sky) * open * material.occlusion;
+    vec3 ambient;
+#ifdef ENVIRONMENT_SET
+    if (environmentEnabled != 0) {
+        // The sky's light, scaled so its average is the ambient light
+        vec3 scale = ambientColor / max(dot(environmentAverage(), ENVIRONMENT_LUMINANCE), 1e-4);
+        vec3 worldNormal = mat3(invViewMatrix) * normal;
+        vec3 reflected = mat3(invViewMatrix) * reflect(normalize(viewPosition), normal);
+        vec3 mirrored;
+        vec3 spread = ambientParts(sRGBToLinear(baseColor.rgb), material, nDotV, mirrored);
+        // Lagarde's specular occlusion: what hides the hemisphere hides more of a narrow lobe
+        float ao = open * material.occlusion;
+        float specularVisible = clamp(
+            pow(nDotV + ao, exp2(-16.0 * material.roughness - 1.0)) - 1.0 + ao, 0.0, 1.0);
+        ambient = scale * mix(skyLightFloor, 1.0, sky)
+            * (spread * environmentDiffuse(worldNormal) * ao
+                + mirrored * environmentSpecular(reflected, material.roughness) * specularVisible);
+    } else
+#endif
+    {
+        ambient = ambientColor * ambientVisible
+            * ambientReflectance(sRGBToLinear(baseColor.rgb), material, nDotV);
+    }
     // Light the surface gives off isn't shadowed or occluded, only fogged
     vec3 finalColor = ambient + color + material.emissive;
 

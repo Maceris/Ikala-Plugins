@@ -819,6 +819,13 @@ public class GraphicsDebug extends GuiWindow {
 
         // Sky light under cover, from the sky occlusion map
         final var settings = GraphicsManager.getSettings();
+        if (IkGui.checkbox("Light from the sky", settings.environmentLighting)) {
+            settings.environmentLighting = !settings.environmentLighting;
+        }
+        IkGui.setItemTooltip(
+                "Take ambient light from the skybox: reflections by roughness and diffuse light by"
+                        + " direction, averaging the ambient light. Off, it is the same from every"
+                        + " direction.");
         if (IkGui.checkbox("Sky occlusion", settings.skyOcclusion)) {
             settings.skyOcclusion = !settings.skyOcclusion;
         }

@@ -133,6 +133,13 @@ public class GraphicsSettings {
     public boolean skyOcclusion = true;
 
     /**
+     * Whether ambient light comes from the sky, reflected by roughness and spread over normals by
+     * its spherical harmonics, rather than the same from every direction. Either way its average is
+     * the ambient light's color times its intensity.
+     */
+    public boolean environmentLighting = true;
+
+    /**
      * The least ambient light a point well under cover gets, as a part of open ground's, from 0 for
      * none to 1 for no dimming.
      */

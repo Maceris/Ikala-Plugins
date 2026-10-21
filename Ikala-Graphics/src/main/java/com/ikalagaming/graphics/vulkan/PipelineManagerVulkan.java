@@ -118,6 +118,9 @@ public class PipelineManagerVulkan {
     /** Sorts the lights into clusters for the light stage. */
     private final LightCull stageLightCull;
 
+    /** Works out the light the sky gives when it changes, for the light stage. */
+    private final EnvironmentUpdate stageEnvironmentUpdate;
+
     /** Turns the scene color into the image shown. */
     private final ToneMap stageToneMap;
 
@@ -247,6 +250,9 @@ public class PipelineManagerVulkan {
         stageShadowRender.initialize(state);
         stageLightCull = new LightCull(shaders.getShader(RenderStage.Type.LIGHT_CULL));
         stageLightCull.initialize(state);
+        stageEnvironmentUpdate =
+                new EnvironmentUpdate(shaders.getShader(RenderStage.Type.ENVIRONMENT));
+        stageEnvironmentUpdate.initialize(state);
         stageLightRender = new LightRender(shaders.getShader(RenderStage.Type.LIGHT), quadMesh);
         stageLightRender.initialize(state);
         stageToneMap = new ToneMap(shaders.getShader(RenderStage.Type.TONEMAP), quadMesh);
@@ -362,6 +368,7 @@ public class PipelineManagerVulkan {
             stages.add(stageLodCullLate);
             stages.add(stageSceneRender.getLate());
             stages.add(stageLightCull);
+            stages.add(stageEnvironmentUpdate);
             stages.add(stageLightRender);
         }
         if (RenderConfig.hasSkyboxStage(configuration)) {
@@ -667,6 +674,7 @@ public class PipelineManagerVulkan {
             state.oitVolume = new OitVolume(state);
             state.oitVolume.resize(state, width, height);
             state.occupancy = new OccupancyVolume(state);
+            state.environment = new Environment(state);
             state.volumeBricks = new VolumeBricks(state);
 
             // SharedBuffer adds device address and transfer destination usage to all of these
@@ -886,6 +894,7 @@ public class PipelineManagerVulkan {
         stageVolumeSplat.cleanup(state);
         stageVolumeColor.cleanup(state);
         stageLightCull.cleanup(state);
+        stageEnvironmentUpdate.cleanup(state);
         stageInstanceDrawUpdate.cleanup(state);
         stageOccupancyVoxelize.cleanup(state);
         stageInstanceTransform.cleanup(state);
@@ -905,6 +914,8 @@ public class PipelineManagerVulkan {
         state.oitVolume = null;
         state.occupancy.cleanup(state);
         state.occupancy = null;
+        state.environment.cleanup(state);
+        state.environment = null;
         state.volumeBricks.cleanup(state);
         state.volumeBricks = null;
         TextureInfoVulkan fontAtlasInfo = state.textureRegistry.remove(fontAtlas);

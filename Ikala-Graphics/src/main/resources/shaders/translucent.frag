@@ -13,8 +13,9 @@
 // extinction: -log(1 - opacity), whose sum gives exactly how much of the background shows through,
 // whatever the order; in red and green both, since green leaves out volume bricks, for TAA
 
-// The occupancy volume is set 4, see TranslucentRender
+// The occupancy volume is set 4 and the sky's environment set 5, see TranslucentRender
 #define OCCUPANCY_SET 4
+#define ENVIRONMENT_SET 5
 #include "lighting.glsl"
 #define OIT_VOLUME_SET 3
 #include "oit_volume.glsl"

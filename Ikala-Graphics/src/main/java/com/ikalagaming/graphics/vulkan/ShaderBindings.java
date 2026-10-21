@@ -219,6 +219,47 @@ public class ShaderBindings {
         }
     }
 
+    /** Environment shader variables, see {@code environment.comp} and {@link Environment}. */
+    public static class Environment {
+        /** The skybox's color, sRGB encoded, a vec4. */
+        public static final int SKY_COLOR_OFFSET = 0;
+
+        /** Which pass runs. */
+        public static final int MODE_OFFSET = 4 * Float.BYTES;
+
+        /** The level written. */
+        public static final int LEVEL_OFFSET = MODE_OFFSET + Integer.BYTES;
+
+        /** The skybox texture's bindless slot, or -1 for its color. */
+        public static final int SKY_TEXTURE_OFFSET = LEVEL_OFFSET + Integer.BYTES;
+
+        /** The roughness of the level written, when prefiltering. */
+        public static final int ROUGHNESS_OFFSET = SKY_TEXTURE_OFFSET + Integer.BYTES;
+
+        /** The size of the push constants in bytes. */
+        public static final int PUSH_CONSTANTS_SIZE = ROUGHNESS_OFFSET + Float.BYTES;
+
+        /** Capture the sky into the source cube's first level. */
+        public static final int MODE_CAPTURE = 0;
+
+        /** Fill in a level of the source cube from the one before. */
+        public static final int MODE_DOWNSAMPLE = 1;
+
+        /** Prefilter a level of the environment cube. */
+        public static final int MODE_PREFILTER = 2;
+
+        /** Take the harmonics, one workgroup. */
+        public static final int MODE_HARMONICS = 3;
+
+        /** The width and height of each compute workgroup, in texels. */
+        public static final int WORKGROUP_SIZE = 8;
+
+        /** Private constructor so this class is not instantiated. */
+        private Environment() {
+            cutItOut();
+        }
+    }
+
     /** Depth pyramid shader variables, see {@code depth_pyramid.comp}. */
     public static class DepthPyramid {
         /** The size of what is read, two ints. */
@@ -998,9 +1039,17 @@ public class ShaderBindings {
         public static final int EMISSION_SAMPLER_INDEX_OFFSET =
                 OCCUPANCY_RAY_VIEW_OFFSET + Integer.BYTES;
 
+        /**
+         * The offset into the uniforms for whether ambient light comes from the sky's environment,
+         * see {@link com.ikalagaming.graphics.vulkan.Environment}, rather than the same from every
+         * direction.
+         */
+        public static final int ENVIRONMENT_ENABLED_OFFSET =
+                EMISSION_SAMPLER_INDEX_OFFSET + Integer.BYTES;
+
         /** The size of the uniforms buffer, padded out to 16 bytes under std140 rules. */
         public static final int UNIFORMS_BUFFER_SIZE =
-                (int) SharedBuffer.align(EMISSION_SAMPLER_INDEX_OFFSET + Integer.BYTES);
+                (int) SharedBuffer.align(ENVIRONMENT_ENABLED_OFFSET + Integer.BYTES);
 
         /** Uniforms buffer binding. */
         public static final int UNIFORMS_BINDING = 0;

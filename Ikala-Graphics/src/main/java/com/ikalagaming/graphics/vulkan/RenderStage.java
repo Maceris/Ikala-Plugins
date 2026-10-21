@@ -12,6 +12,7 @@ public interface RenderStage {
         DEBUG,
         DEBUG_NORMALS,
         DEPTH_PYRAMID,
+        ENVIRONMENT,
         FILTER,
         FILTER_BASE_COLOR,
         FILTER_DEPTH,

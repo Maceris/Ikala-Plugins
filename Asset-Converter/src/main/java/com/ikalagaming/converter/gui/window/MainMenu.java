@@ -14,6 +14,7 @@ import com.ikalagaming.graphics.UI;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.ui.Tool;
 import com.ikalagaming.graphics.ui.spec.Observable;
@@ -77,6 +78,12 @@ public class MainMenu {
     /** Where the rows added behind the demo's first row start, along z. */
     private static final int BEHIND_FIRST_ROW = -1;
 
+    /**
+     * The demo's ambient light intensity: the sky's light, as the workbench uses, so metals reflect
+     * the skybox rather than black.
+     */
+    private static final float AMBIENT_INTENSITY = 0.3f;
+
     /** The startup property that opens the sphere demo as soon as the menu opens. */
     private static final String SPHERE_DEMO_PROPERTY = "ikala.test.sphereDemo";
 
@@ -139,6 +146,7 @@ public class MainMenu {
         // What going back to the menu puts back
         final int previousPipeline = GraphicsManager.getPipelineConfig();
         final DirectionalLight previousSun = scene.getSceneLights().getDirLight();
+        final AmbientLight previousAmbient = scene.getSceneLights().getAmbientLight();
 
         Model ballModel =
                 ModelConverter.loadModel(
@@ -355,6 +363,8 @@ public class MainMenu {
                                 new Vector3f(1.0f, 1.0f, 1.0f),
                                 new Vector3f(0.247f, -0.848f, 0.785f),
                                 4f));
+        scene.getSceneLights()
+                .setAmbientLight(new AmbientLight(new Vector3f(1, 1, 1), AMBIENT_INTENSITY));
 
         // The demo has always lit to 10 m; brighter lights would otherwise reach further
         final float lightRange = 10;
@@ -399,6 +409,7 @@ public class MainMenu {
                             .meshes()
                             .release(ballModel);
                     scene.getSceneLights().setDirLight(previousSun);
+                    scene.getSceneLights().setAmbientLight(previousAmbient);
                     GraphicsManager.swapPipeline(previousPipeline);
                     ui.setVisible(SURFACE_ID, true);
                 });

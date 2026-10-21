@@ -96,6 +96,9 @@ layout(set = 0, binding = 0) uniform Uniforms {
     int occupancyRayView;
     // The g-buffer's emission (rgb) and occlusion (a), see scene.frag
     int emissionSamplerIndex;
+    // Nonzero for ambient light from the sky's environment, see environment.glsl, rather than the
+    // same from every direction
+    int environmentEnabled;
 };
 
 // One point light shadow cube map: each face's matrix from render space, where it is drawn from in

@@ -1047,6 +1047,15 @@ public class VulkanInstance {
         shaderMap.addShader(
                 RenderStage.Type.DEPTH_PYRAMID, new ShaderVulkan(pyramidModules, state));
 
+        List<ShaderVulkan.ShaderModuleData> environmentModules = new ArrayList<>();
+        environmentModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/environment.comp",
+                        ShaderVulkan.Type.COMPUTE,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(
+                RenderStage.Type.ENVIRONMENT, new ShaderVulkan(environmentModules, state));
+
         List<ShaderVulkan.ShaderModuleData> lightCullModules = new ArrayList<>();
         lightCullModules.add(
                 new ShaderVulkan.ShaderModuleData(

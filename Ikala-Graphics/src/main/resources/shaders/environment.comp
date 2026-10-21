@@ -1,0 +1,249 @@
+#version 460
+#extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_GOOGLE_include_directive : require
+
+// Turns the sky into the light it gives, see Environment, in four modes:
+//
+// MODE_CAPTURE: the sky into the source cube's first level, one texel per invocation, z the face.
+// The sky is the skybox's texture, a cross of six faces laid out as SkyboxModel draws it, or its
+// color.
+// MODE_DOWNSAMPLE: one level of the source cube from the one before, each texel the average of four.
+// MODE_PREFILTER: one level of the environment cube, the source convolved with the GGX lobe of that
+// level's roughness, by importance sampling with each sample read from the source level whose
+// texels are about its size (Karis 2013, Colbert and Krivanek 2007). The first level is the source
+// as it is, for mirrors.
+// MODE_HARMONICS: the 9 spherical harmonics coefficients of the source, one workgroup, from a small
+// level, each texel weighted by its solid angle.
+//
+// Everything is in linear light, as the skybox draws it, before the light stage scales it to the
+// ambient light.
+
+#include "color.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+const int MODE_CAPTURE = 0;
+const int MODE_DOWNSAMPLE = 1;
+const int MODE_PREFILTER = 2;
+const int MODE_HARMONICS = 3;
+
+// Match Environment
+const int SOURCE_LEVELS = 8;
+const int ENVIRONMENT_LEVELS = 6;
+const int HARMONICS_LEVEL = 3;
+const int HARMONICS_COUNT = 9;
+const int PREFILTER_SAMPLES = 64;
+const int FACES = 6;
+
+const float PI = 3.14159265359;
+
+layout(set = 0, binding = 0, rgba16f) uniform image2DArray sourceLevels[SOURCE_LEVELS];
+layout(set = 0, binding = 1, rgba16f) uniform writeonly image2DArray environmentLevels[ENVIRONMENT_LEVELS];
+layout(set = 0, binding = 2) uniform samplerCube sourceCube;
+layout(std430, set = 0, binding = 4) buffer Harmonics {
+    vec4 harmonics[HARMONICS_COUNT];
+};
+
+layout(set = 1, binding = 0) uniform sampler2D bindlessTextures[];
+
+layout(push_constant) uniform Constants {
+    // sRGB encoded, as material colors are; used when there is no texture
+    vec4 skyColor;
+    int mode;
+    // The level written
+    int level;
+    // The skybox's bindless index, or -1 for its color
+    int skyTexture;
+    // The roughness of the level written, for MODE_PREFILTER
+    float roughness;
+};
+
+// The direction through a texel of a cube face, as Vulkan samples cube maps: s and t from -1 to 1
+vec3 cubeDirection(int face, vec2 st) {
+    switch (face) {
+        case 0: return vec3(1, -st.y, -st.x);
+        case 1: return vec3(-1, -st.y, st.x);
+        case 2: return vec3(st.x, 1, st.y);
+        case 3: return vec3(st.x, -1, -st.y);
+        case 4: return vec3(st.x, -st.y, 1);
+        default: return vec3(-st.x, -st.y, -1);
+    }
+}
+
+// Where a direction lands on the skybox's cross, see SkyboxModel: the four sides in a row through
+// the middle third, -x, -z, +x, +z from the left, the top above -z and the bottom below it. Also
+// gives the face's corner and size in the texture, to keep the filter inside it.
+vec2 crossCoordinates(vec3 d, out vec2 faceMin) {
+    vec3 a = abs(d);
+    const vec2 faceSize = vec2(0.25, 1.0 / 3.0);
+    vec2 face;
+    if (a.y >= a.x && a.y >= a.z) {
+        vec3 p = d / a.y;
+        // Top: x from -1 to 1 left to right, z from 1 to -1 top to bottom; the bottom the other way
+        face = d.y > 0 ? vec2((p.x + 1) * 0.5, (1 - p.z) * 0.5) : vec2((p.x + 1) * 0.5, (p.z + 1) * 0.5);
+        faceMin = d.y > 0 ? vec2(0.25, 0) : vec2(0.25, 2.0 / 3.0);
+    } else if (a.x >= a.z) {
+        vec3 p = d / a.x;
+        face = d.x > 0 ? vec2((p.z + 1) * 0.5, (1 - p.y) * 0.5) : vec2((1 - p.z) * 0.5, (1 - p.y) * 0.5);
+        faceMin = d.x > 0 ? vec2(0.5, 1.0 / 3.0) : vec2(0, 1.0 / 3.0);
+    } else {
+        vec3 p = d / a.z;
+        face = d.z > 0 ? vec2((1 - p.x) * 0.5, (1 - p.y) * 0.5) : vec2((p.x + 1) * 0.5, (1 - p.y) * 0.5);
+        faceMin = d.z > 0 ? vec2(0.75, 1.0 / 3.0) : vec2(0.25, 1.0 / 3.0);
+    }
+    return faceMin + face * faceSize;
+}
+
+// The sky toward a direction, in linear light
+vec3 sky(vec3 d, int size) {
+    if (skyTexture < 0) {
+        return sRGBToLinear(skyColor.rgb);
+    }
+    vec2 faceMin;
+    vec2 uv = crossCoordinates(normalize(d), faceMin);
+    // Read the mip whose texels are about this cube's, kept half a texel inside the face
+    vec2 textureSize = vec2(textureSize(bindlessTextures[nonuniformEXT(skyTexture)], 0));
+    float facePixels = textureSize.x * 0.25;
+    float lod = max(log2(facePixels / float(size)), 0.0);
+    vec2 inset = 0.5 * exp2(lod) / textureSize;
+    uv = clamp(uv, faceMin + inset, faceMin + vec2(0.25, 1.0 / 3.0) - inset);
+    return textureLod(bindlessTextures[nonuniformEXT(skyTexture)], uv, lod).rgb;
+}
+
+// The i-th of n points of the Hammersley set
+vec2 hammersley(uint i, uint n) {
+    return vec2(float(i) / float(n), float(bitfieldReverse(i)) * 2.3283064365386963e-10);
+}
+
+// A half vector around +z drawn from GGX of a roughness, and the distribution's value there
+vec3 sampleGgx(vec2 xi, float alpha, out float d) {
+    float a2 = alpha * alpha;
+    float phi = 2.0 * PI * xi.x;
+    float cosTheta = sqrt((1.0 - xi.y) / (1.0 + (a2 - 1.0) * xi.y));
+    float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+    float denominator = cosTheta * cosTheta * (a2 - 1.0) + 1.0;
+    d = a2 / (PI * denominator * denominator);
+    return vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+}
+
+vec3 prefilter(vec3 n) {
+    if (level == 0) {
+        return textureLod(sourceCube, n, 0.0).rgb;
+    }
+    // The lobe is taken around the normal with the viewer along it (Karis's simplification)
+    vec3 up = abs(n.z) < 0.999 ? vec3(0, 0, 1) : vec3(1, 0, 0);
+    vec3 tangentX = normalize(cross(up, n));
+    vec3 tangentY = cross(n, tangentX);
+    // Perceptual roughness, squared for the distribution, as the light stage takes it
+    float alpha = roughness * roughness;
+    float sourceSize = float(textureSize(sourceCube, 0).x);
+    float texelSolidAngle = 4.0 * PI / (float(FACES) * sourceSize * sourceSize);
+    vec3 sum = vec3(0);
+    float weight = 0.0;
+    for (uint i = 0; i < PREFILTER_SAMPLES; ++i) {
+        float d;
+        vec3 h = sampleGgx(hammersley(i, PREFILTER_SAMPLES), alpha, d);
+        h = tangentX * h.x + tangentY * h.y + n * h.z;
+        vec3 l = 2.0 * dot(n, h) * h - n;
+        float nDotL = dot(n, l);
+        if (nDotL <= 0.0) {
+            continue;
+        }
+        // With the viewer along the normal, the pdf of l is D / 4
+        float pdf = max(d * 0.25, 1e-6);
+        float sampleSolidAngle = 1.0 / (float(PREFILTER_SAMPLES) * pdf);
+        float lod = clamp(0.5 * log2(sampleSolidAngle / texelSolidAngle) + 1.0, 0.0, float(SOURCE_LEVELS - 1));
+        sum += textureLod(sourceCube, l, lod).rgb * nDotL;
+        weight += nDotL;
+    }
+    return sum / max(weight, 1e-6);
+}
+
+// The real spherical harmonics up to the second band, at a unit direction
+void harmonicsBasis(vec3 d, out float y[HARMONICS_COUNT]) {
+    y[0] = 0.282095;
+    y[1] = 0.488603 * d.y;
+    y[2] = 0.488603 * d.z;
+    y[3] = 0.488603 * d.x;
+    y[4] = 1.092548 * d.x * d.y;
+    y[5] = 1.092548 * d.y * d.z;
+    y[6] = 0.315392 * (3.0 * d.z * d.z - 1.0);
+    y[7] = 1.092548 * d.x * d.z;
+    y[8] = 0.546274 * (d.x * d.x - d.y * d.y);
+}
+
+const uint GROUP_THREADS = 64;
+shared vec4 partial[GROUP_THREADS][HARMONICS_COUNT];
+
+void harmonicsPass() {
+    uint thread = gl_LocalInvocationIndex;
+    ivec2 size = imageSize(sourceLevels[HARMONICS_LEVEL]).xy;
+    int texels = size.x * size.y * FACES;
+    vec3 sums[HARMONICS_COUNT];
+    for (int k = 0; k < HARMONICS_COUNT; ++k) {
+        sums[k] = vec3(0);
+    }
+    for (int i = int(thread); i < texels; i += int(GROUP_THREADS)) {
+        int face = i / (size.x * size.y);
+        int inFace = i - face * size.x * size.y;
+        ivec2 texel = ivec2(inFace % size.x, inFace / size.x);
+        vec2 st = (vec2(texel) + 0.5) / vec2(size) * 2.0 - 1.0;
+        // A texel's solid angle: its area on the face over the cube of its distance
+        float r2 = 1.0 + dot(st, st);
+        float solidAngle = 4.0 / (float(size.x * size.y) * r2 * sqrt(r2));
+        vec3 radiance = imageLoad(sourceLevels[HARMONICS_LEVEL], ivec3(texel, face)).rgb;
+        float y[HARMONICS_COUNT];
+        harmonicsBasis(normalize(cubeDirection(face, st)), y);
+        for (int k = 0; k < HARMONICS_COUNT; ++k) {
+            sums[k] += radiance * y[k] * solidAngle;
+        }
+    }
+    for (int k = 0; k < HARMONICS_COUNT; ++k) {
+        partial[thread][k] = vec4(sums[k], 0);
+    }
+    barrier();
+    for (uint stride = GROUP_THREADS / 2; stride > 0; stride /= 2) {
+        if (thread < stride) {
+            for (int k = 0; k < HARMONICS_COUNT; ++k) {
+                partial[thread][k] += partial[thread + stride][k];
+            }
+        }
+        barrier();
+    }
+    if (thread == 0) {
+        for (int k = 0; k < HARMONICS_COUNT; ++k) {
+            harmonics[k] = partial[0][k];
+        }
+    }
+}
+
+void main()
+{
+    if (mode == MODE_HARMONICS) {
+        harmonicsPass();
+        return;
+    }
+    ivec3 texel = ivec3(gl_GlobalInvocationID);
+    ivec2 size = mode == MODE_PREFILTER
+        ? imageSize(environmentLevels[level]).xy
+        : imageSize(sourceLevels[level]).xy;
+    if (texel.x >= size.x || texel.y >= size.y || texel.z >= FACES) {
+        return;
+    }
+    if (mode == MODE_DOWNSAMPLE) {
+        ivec3 base = ivec3(texel.xy * 2, texel.z);
+        vec4 sum = imageLoad(sourceLevels[level - 1], base)
+            + imageLoad(sourceLevels[level - 1], base + ivec3(1, 0, 0))
+            + imageLoad(sourceLevels[level - 1], base + ivec3(0, 1, 0))
+            + imageLoad(sourceLevels[level - 1], base + ivec3(1, 1, 0));
+        imageStore(sourceLevels[level], texel, sum * 0.25);
+        return;
+    }
+    vec2 st = (vec2(texel.xy) + 0.5) / vec2(size) * 2.0 - 1.0;
+    vec3 direction = normalize(cubeDirection(texel.z, st));
+    if (mode == MODE_CAPTURE) {
+        imageStore(sourceLevels[0], texel, vec4(sky(direction, size.x), 1));
+    } else {
+        imageStore(environmentLevels[level], texel, vec4(prefilter(direction), 1));
+    }
+}

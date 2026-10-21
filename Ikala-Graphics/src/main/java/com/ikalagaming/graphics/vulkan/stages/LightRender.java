@@ -192,7 +192,8 @@ public class LightRender implements RenderStage {
                         stack.longs(
                                 descriptorSets[vulkanState.frameIndex],
                                 vulkanState.bindlessTextures.getDescriptorSet(),
-                                vulkanState.occupancy.getSet()),
+                                vulkanState.occupancy.getSet(),
+                                vulkanState.environment.getSet()),
                         null);
                 FullScreenPass.draw(commandBuffer, quadMesh, width, height, stack);
             }
@@ -371,6 +372,9 @@ public class LightRender implements RenderStage {
         uniformData.putInt(
                 ShaderBindings.Light.EMISSION_SAMPLER_INDEX_OFFSET,
                 gBuffer[GBuffer.EMISSION].bindlessIndex);
+        uniformData.putInt(
+                ShaderBindings.Light.ENVIRONMENT_ENABLED_OFFSET,
+                GraphicsManager.getSettings().environmentLighting ? 1 : 0);
         for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
             uniformData.putInt(
                     ShaderBindings.Light.SHADOW_MAP_0_INDEX_OFFSET + i * Integer.BYTES,
@@ -414,7 +418,8 @@ public class LightRender implements RenderStage {
                                     stack.longs(
                                             descriptorSetLayout,
                                             state.bindlessTextures.getDescriptorSetLayout(),
-                                            state.occupancy.getSetLayout()));
+                                            state.occupancy.getSetLayout(),
+                                            state.environment.getSetLayout()));
             checkError(
                     vkCreatePipelineLayout(
                             state.device.logical, pipelineLayoutCreateInfo, null, longOutput));

@@ -5,8 +5,10 @@
 // Lights the g-buffer, one full screen quad. The lighting itself is in lighting.glsl, shared with
 // the transparent stage.
 
-// The occupancy volume is the light stage's set 2, see LightRender
+// The occupancy volume is the light stage's set 2 and the sky's environment set 3, see
+// LightRender
 #define OCCUPANCY_SET 2
+#define ENVIRONMENT_SET 3
 #include "lighting.glsl"
 
 layout(location = 0) in vec2 outTextCoord;

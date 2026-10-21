@@ -67,6 +67,9 @@ public class VulkanState {
     /** Which voxels around the camera hold something that doesn't move. */
     public OccupancyVolume occupancy = null;
 
+    /** The light the sky gives, for image-based lighting, see {@link Environment}. */
+    public Environment environment = null;
+
     /** The volume bricks standing in for distant sections' cut out and translucent blocks. */
     public VolumeBricks volumeBricks = null;
 
