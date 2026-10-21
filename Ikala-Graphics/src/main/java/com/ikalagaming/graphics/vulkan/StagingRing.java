@@ -36,13 +36,15 @@ public class StagingRing {
      * @param size The size of the data, in bytes.
      * @param ringAllocation The range of the ring, or null if this has its own buffer.
      * @param dedicated The buffer of its own, or null if this is in the ring.
+     * @param deviceAddress The data's device address, for shaders to read it.
      */
     public record Staging(
             long buffer,
             long offset,
             long size,
             @Nullable RingAllocator.Allocation ringAllocation,
-            @Nullable SharedBuffer dedicated) {}
+            @Nullable SharedBuffer dedicated,
+            long deviceAddress) {}
 
     /** The ring buffer. */
     private final SharedBuffer ring;
@@ -84,13 +86,22 @@ public class StagingRing {
         final Staging result;
         final long destination;
         if (allocation != null) {
-            result = new Staging(ring.buffer, allocation.getOffset(), size, allocation, null);
+            result =
+                    new Staging(
+                            ring.buffer,
+                            allocation.getOffset(),
+                            size,
+                            allocation,
+                            null,
+                            ring.deviceAddress + allocation.getOffset());
             destination = ring.allocationInfo.pMappedData() + allocation.getOffset();
         } else {
             SharedBuffer dedicated =
                     SharedBuffer.allocate(
                             Math.max(size, 1), state, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-            result = new Staging(dedicated.buffer, 0, size, null, dedicated);
+            result =
+                    new Staging(
+                            dedicated.buffer, 0, size, null, dedicated, dedicated.deviceAddress);
             destination = dedicated.allocationInfo.pMappedData();
         }
         if (size > 0) {

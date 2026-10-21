@@ -70,6 +70,12 @@ public class VulkanState {
     /** The light the sky gives, for image-based lighting, see {@link Environment}. */
     public Environment environment = null;
 
+    /**
+     * Writes scattered table entries in one dispatch, see {@link DeviceTable}, or null until the
+     * pipelines are made, when tables copy instead.
+     */
+    public TableScatter tableScatter = null;
+
     /** The volume bricks standing in for distant sections' cut out and translucent blocks. */
     public VolumeBricks volumeBricks = null;
 

@@ -1169,6 +1169,15 @@ public class VulkanInstance {
         shaderMap.addShader(
                 RenderStage.Type.AUTO_EXPOSURE, new ShaderVulkan(exposureModules, state));
 
+        List<ShaderVulkan.ShaderModuleData> scatterModules = new ArrayList<>();
+        scatterModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/table_scatter.comp",
+                        ShaderVulkan.Type.COMPUTE,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(
+                RenderStage.Type.TABLE_SCATTER, new ShaderVulkan(scatterModules, state));
+
         // The same full screen quad again
         List<ShaderVulkan.ShaderModuleData> taaModules = new ArrayList<>();
         taaModules.add(

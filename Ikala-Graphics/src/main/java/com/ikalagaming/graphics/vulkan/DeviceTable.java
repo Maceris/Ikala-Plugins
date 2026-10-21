@@ -28,9 +28,19 @@ import java.util.Arrays;
 @Slf4j
 public final class DeviceTable {
 
-    /** Usage: read by shaders, written by copies and fills, and copied when it grows. */
+    /**
+     * Usage: read by shaders, written by copies, fills and the scatter dispatch, and copied when it
+     * grows.
+     */
     private static final int USAGE =
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+    /**
+     * The most runs of consecutive entries written with a copy region each; past this the entries
+     * are scattered by a compute dispatch, see {@link TableScatter}, since drivers and validation
+     * slow down with many regions: tens of thousands took over 100 ms when the camera jumped.
+     */
+    static final int SCATTER_RUNS = 32;
 
     /** What the table holds, for log messages. */
     private final String name;
@@ -217,6 +227,10 @@ public final class DeviceTable {
         entries.data.position(0).limit(count * entrySize);
         final StagingRing.Staging staging = state.stagingRing.stage(state, entries.data);
         state.deferFree(() -> state.stagingRing.free(state, staging));
+        if (runsOf(entries.indices, count) > SCATTER_RUNS && state.tableScatter != null) {
+            scatter(state, commandBuffer, entries, staging, stack);
+            return;
+        }
         // Entries packed for consecutive indices go in one region, since whole ranges are often
         // written at once and drivers and validation slow down with many regions. Even so there
         // can be far more than the stack holds, as when a whole world is placed.
@@ -240,6 +254,67 @@ public final class DeviceTable {
             regions.limit(regions.capacity());
             regions.free();
         }
+    }
+
+    /**
+     * How many runs of consecutive indices sorted entries fall in, each a copy region.
+     *
+     * @param indices The entries' indices, sorted.
+     * @param count How many entries.
+     * @return The runs, at least 1.
+     */
+    static int runsOf(int @NonNull [] indices, int count) {
+        int runs = 1;
+        for (int i = 1; i < count; ++i) {
+            if (indices[i] != indices[i - 1] + 1) {
+                runs += 1;
+            }
+        }
+        return runs;
+    }
+
+    /**
+     * Write entries scattered over many runs with a compute dispatch rather than a copy region a
+     * run, see {@link TableScatter}.
+     *
+     * @param state The Vulkan state.
+     * @param commandBuffer The frame's command buffer.
+     * @param entries The entries, sorted, each index once.
+     * @param staging Where the packed entries are staged.
+     * @param stack The stack to allocate on.
+     */
+    private void scatter(
+            @NonNull VulkanState state,
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull Entries entries,
+            StagingRing.@NonNull Staging staging,
+            @NonNull MemoryStack stack) {
+        final int count = entries.count;
+        final ByteBuffer indexBytes = MemoryUtil.memAlloc(count * Integer.BYTES);
+        final StagingRing.Staging indexStaging;
+        try {
+            indexBytes.asIntBuffer().put(entries.indices, 0, count);
+            indexStaging = state.stagingRing.stage(state, indexBytes);
+        } finally {
+            MemoryUtil.memFree(indexBytes);
+        }
+        state.deferFree(() -> state.stagingRing.free(state, indexStaging));
+        // After any clear or growth of the table this frame
+        memoryBarrier(
+                commandBuffer,
+                VK_PIPELINE_STAGE_2_COPY_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT,
+                VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                stack);
+        state.tableScatter.record(
+                commandBuffer,
+                staging.deviceAddress(),
+                indexStaging.deviceAddress(),
+                buffer.deviceAddress,
+                count,
+                entrySize,
+                stack);
     }
 
     /**
@@ -287,8 +362,12 @@ public final class DeviceTable {
                         | VK_PIPELINE_STAGE_2_COPY_BIT
                         | VK_PIPELINE_STAGE_2_CLEAR_BIT,
                 VK_ACCESS_2_TRANSFER_WRITE_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COPY_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT,
-                VK_ACCESS_2_TRANSFER_READ_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COPY_BIT
+                        | VK_PIPELINE_STAGE_2_CLEAR_BIT
+                        | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_TRANSFER_READ_BIT
+                        | VK_ACCESS_2_TRANSFER_WRITE_BIT
+                        | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                 stack);
     }
 
@@ -302,8 +381,10 @@ public final class DeviceTable {
             @NonNull VkCommandBuffer commandBuffer, @NonNull MemoryStack stack) {
         memoryBarrier(
                 commandBuffer,
-                VK_PIPELINE_STAGE_2_COPY_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT,
-                VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COPY_BIT
+                        | VK_PIPELINE_STAGE_2_CLEAR_BIT
+                        | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_TRANSFER_WRITE_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT,
                 VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                 stack);

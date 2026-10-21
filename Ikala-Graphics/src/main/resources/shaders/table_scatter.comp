@@ -1,0 +1,42 @@
+#version 460
+#extension GL_EXT_buffer_reference : require
+
+// Writes a table's changed entries where they go, one invocation an entry, for DeviceTable when
+// they are too scattered for one copy: a copy with tens of thousands of regions costs the driver
+// and validation far more than this dispatch. The entries are packed back to back, already sorted
+// so each index appears once, and their indices follow in a list of their own.
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Words {
+    uint words[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 4) writeonly buffer Table {
+    uint tableWords[];
+};
+
+layout(push_constant) uniform Constants {
+    // The packed entries
+    Words source;
+    // Where each goes, as an index into the table
+    Words indices;
+    // The table
+    Table table;
+    // How many entries, and how many 32-bit words each holds
+    uint count;
+    uint entryWords;
+};
+
+void main()
+{
+    uint entry = gl_GlobalInvocationID.x;
+    if (entry >= count) {
+        return;
+    }
+    uint to = indices.words[entry] * entryWords;
+    uint from = entry * entryWords;
+    for (uint w = 0; w < entryWords; ++w) {
+        table.tableWords[to + w] = source.words[from + w];
+    }
+}

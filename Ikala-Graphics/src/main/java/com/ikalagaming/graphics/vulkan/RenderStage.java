@@ -9,6 +9,7 @@ public interface RenderStage {
         ANIMATION,
         ATMOSPHERE,
         AUTO_EXPOSURE,
+        TABLE_SCATTER,
         CULL,
         LOD_CULL,
         DEBUG,

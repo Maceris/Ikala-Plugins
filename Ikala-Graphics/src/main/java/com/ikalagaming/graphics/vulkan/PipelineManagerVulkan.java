@@ -255,6 +255,8 @@ public class PipelineManagerVulkan {
                         shaders.getShader(RenderStage.Type.ENVIRONMENT),
                         shaders.getShader(RenderStage.Type.ATMOSPHERE));
         stageEnvironmentUpdate.initialize(state);
+        state.tableScatter =
+                new TableScatter(state, shaders.getShader(RenderStage.Type.TABLE_SCATTER));
         stageLightRender = new LightRender(shaders.getShader(RenderStage.Type.LIGHT), quadMesh);
         stageLightRender.initialize(state);
         stageToneMap =
@@ -901,6 +903,8 @@ public class PipelineManagerVulkan {
         stageVolumeColor.cleanup(state);
         stageLightCull.cleanup(state);
         stageEnvironmentUpdate.cleanup(state);
+        state.tableScatter.cleanup(state);
+        state.tableScatter = null;
         stageInstanceDrawUpdate.cleanup(state);
         stageOccupancyVoxelize.cleanup(state);
         stageInstanceTransform.cleanup(state);
