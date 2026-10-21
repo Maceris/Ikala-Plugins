@@ -36,6 +36,33 @@ public final class AtmosphereMath {
     /** Values in a pair of texture coordinates or parameters. */
     private static final int PAIR = 2;
 
+    /** Air's scattering per kilometer at sea level, by color. Mirrors atmosphere.glsl. */
+    private static final double[] RAYLEIGH_SCATTERING = {5.802e-3, 13.558e-3, 33.1e-3};
+
+    /** The height over which air thins by e, in kilometers. */
+    private static final double RAYLEIGH_HEIGHT = 8;
+
+    /** Haze's extinction per kilometer at sea level. */
+    private static final double MIE_EXTINCTION = 4.440e-3;
+
+    /** The height over which haze thins by e, in kilometers. */
+    private static final double MIE_HEIGHT = 1.2;
+
+    /** Ozone's absorption per kilometer at its peak, by color. */
+    private static final double[] OZONE_ABSORPTION = {0.650e-3, 1.881e-3, 0.085e-3};
+
+    /** The height of ozone's peak, in kilometers. */
+    private static final double OZONE_CENTER = 25;
+
+    /** Half the thickness of the ozone layer, in kilometers. */
+    private static final double OZONE_HALF_WIDTH = 15;
+
+    /** How many steps the transmittance is marched in, as the shader's table does. */
+    private static final int TRANSMITTANCE_STEPS = 40;
+
+    /** Colors in a transmittance. */
+    private static final int CHANNELS = 3;
+
     /**
      * The camera's distance from the planet's center.
      *
@@ -75,6 +102,44 @@ public final class AtmosphereMath {
             (int) Math.round(azimuth / SUN_STEP_DEGREES),
             (int) Math.round((radius - BOTTOM_RADIUS) * METERS_PER_KILOMETER / ALTITUDE_STEP)
         };
+    }
+
+    /**
+     * How much of the sun's light gets through the atmosphere to a height, by color, as the
+     * transmittance table holds it: nothing once the planet is in the way.
+     *
+     * @param r The distance from the center, in kilometers.
+     * @param mu The cosine of the sun's angle from straight up.
+     * @return The transmittance, red, green and blue.
+     */
+    public static Vector3f transmittance(double r, double mu) {
+        final double discriminant = r * r * (mu * mu - 1) + BOTTOM_RADIUS * BOTTOM_RADIUS;
+        if (mu < 0 && discriminant >= 0) {
+            return new Vector3f();
+        }
+        final double length = Math.max(distanceToSphere(r, mu, TOP_RADIUS), 0);
+        final double dt = length / TRANSMITTANCE_STEPS;
+        final double[] depth = new double[CHANNELS];
+        for (int i = 0; i < TRANSMITTANCE_STEPS; ++i) {
+            final double t = (i + 0.5) * dt;
+            final double height =
+                    Math.max(Math.sqrt(r * r + t * t + 2 * r * mu * t) - BOTTOM_RADIUS, 0);
+            final double rayleigh = Math.exp(-height / RAYLEIGH_HEIGHT);
+            final double mie = Math.exp(-height / MIE_HEIGHT);
+            final double ozone =
+                    Math.max(0, 1 - Math.abs(height - OZONE_CENTER) / OZONE_HALF_WIDTH);
+            for (int c = 0; c < CHANNELS; ++c) {
+                depth[c] +=
+                        (RAYLEIGH_SCATTERING[c] * rayleigh
+                                        + MIE_EXTINCTION * mie
+                                        + OZONE_ABSORPTION[c] * ozone)
+                                * dt;
+            }
+        }
+        return new Vector3f(
+                (float) Math.exp(-depth[0]),
+                (float) Math.exp(-depth[1]),
+                (float) Math.exp(-depth[2]));
     }
 
     /**

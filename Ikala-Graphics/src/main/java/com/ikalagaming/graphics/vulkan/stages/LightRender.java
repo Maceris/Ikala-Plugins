@@ -239,7 +239,19 @@ public class LightRender implements RenderStage {
         Vector4f auxDir = new Vector4f(dirLight.getDirection(), 0);
         auxDir.mul(scene.getCamera().getViewMatrix());
         offset = ShaderBindings.Light.DIRECTIONAL_LIGHT_OFFSET;
-        dirLight.getColor().get(offset + ShaderBindings.Light.DirectionalLight.COLOR, uniformData);
+        // Under a physical sky the sun's light crosses the atmosphere first, going red near the
+        // horizon and out below it
+        final Vector3f sunColor = new Vector3f(dirLight.getColor());
+        final PhysicalSky atmosphere = scene.getPhysicalSky();
+        if (atmosphere != null) {
+            final Vector3f toward = AtmosphereMath.towardSun(dirLight.getDirection());
+            sunColor.mul(
+                    AtmosphereMath.transmittance(
+                            AtmosphereMath.cameraRadius(
+                                    atmosphere, scene.getCamera().getPosition().y()),
+                            toward.y));
+        }
+        sunColor.get(offset + ShaderBindings.Light.DirectionalLight.COLOR, uniformData);
         new Vector3f(auxDir.x, auxDir.y, auxDir.z)
                 .get(offset + ShaderBindings.Light.DirectionalLight.DIRECTION, uniformData);
         uniformData.putFloat(

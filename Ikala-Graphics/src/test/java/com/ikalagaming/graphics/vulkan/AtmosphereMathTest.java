@@ -48,6 +48,28 @@ class AtmosphereMathTest {
     }
 
     @Test
+    void sunlightThinsThroughTheAtmosphere() {
+        final double ground = AtmosphereMath.BOTTOM_RADIUS;
+        // Straight up: each medium's density integrated over the height, which for air and haze
+        // is their scale height, and for ozone's 30 km tent of peak 1 is 15 km
+        final double[] air = {5.802e-3, 13.558e-3, 33.1e-3};
+        final double[] ozone = {0.650e-3, 1.881e-3, 0.085e-3};
+        final Vector3f up = AtmosphereMath.transmittance(ground, 1);
+        final float[] got = {up.x, up.y, up.z};
+        for (int c = 0; c < 3; ++c) {
+            final double depth = air[c] * 8 + 4.440e-3 * 1.2 + ozone[c] * 15;
+            assertEquals(Math.exp(-depth), got[c], 0.002, "Channel " + c);
+        }
+        assertTrue(up.z < up.y && up.y < up.x, "Blue is scattered most, so the sun is warm");
+        // Low, through much more air, it reddens
+        final Vector3f low =
+                AtmosphereMath.transmittance(ground + 0.001, Math.sin(Math.toRadians(2)));
+        assertTrue(low.x > 0 && low.z / low.x < up.z / up.x, "Redder near the horizon");
+        // Below the horizon the planet is in the way
+        assertEquals(new Vector3f(), AtmosphereMath.transmittance(ground + 0.001, -0.2));
+    }
+
+    @Test
     void theCameraStandsOnTheGround() {
         final PhysicalSky sky = new PhysicalSky();
         sky.setGroundHeight(64);
