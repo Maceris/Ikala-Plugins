@@ -836,6 +836,12 @@ public class GraphicsDebug extends GuiWindow {
                 "Draw Earth's atmosphere lit by the sun in place of the skybox, and light the"
                         + " scene from it, as bright as the sun makes it; the ambient light is not"
                         + " used.");
+        if (skyScene != null && IkGui.checkbox("Auto exposure", skyScene.isAutoExposure())) {
+            skyScene.setAutoExposure(!skyScene.isAutoExposure());
+        }
+        IkGui.setItemTooltip(
+                "Adapt the exposure to the scene as an eye does, the scene's exposure compensating"
+                        + " it, within 4 stops down and 6 up.");
         if (IkGui.checkbox("Sky occlusion", settings.skyOcclusion)) {
             settings.skyOcclusion = !settings.skyOcclusion;
         }

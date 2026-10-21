@@ -97,6 +97,16 @@ public class Scene {
     @Setter private volatile PhysicalSky physicalSky;
 
     /**
+     * Whether the exposure adapts to the scene, as an eye does, with {@link #getExposure()}
+     * compensating it, rather than being the exposure itself. -- GETTER -- Whether the exposure
+     * adapts. -- SETTER -- Make the exposure adapt or not.
+     *
+     * @param autoExposure Whether it adapts.
+     * @return Whether it adapts.
+     */
+    @Setter private volatile boolean autoExposure;
+
+    /**
      * Which built-in debug visualizations to draw.
      *
      * @return The debug visualization settings.

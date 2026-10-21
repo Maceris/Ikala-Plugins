@@ -1,17 +1,31 @@
 #version 460
 #extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_EXT_buffer_reference : require
 
 // Turns the HDR scene color, in linear light, into the image shown: exposure, then Khronos PBR
 // Neutral tone mapping, then the sRGB encode. ToneMapMath has the same math in Java, with tests.
+// With automatic exposure, the exposure auto_exposure.comp adapted to multiplies it too, the
+// scene's exposure compensating it.
 
 layout(location = 0) in vec2 outTextCoord;
 layout(location = 0) out vec4 fragColor;
+
+// The automatic exposure's state, see auto_exposure.comp
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer ExposureState {
+    float adapted;
+    float autoExposure;
+    uint valid;
+    float target;
+};
 
 layout(push_constant) uniform Constants {
     // The bindless slot of the scene color
     int sceneColorIndex;
     // What the scene color is multiplied by first
     float exposure;
+    ExposureState exposureState;
+    // Nonzero to multiply by the automatic exposure too
+    int useAutoExposure;
 };
 
 layout(set = 0, binding = 0) uniform sampler2D bindlessTextures[];
@@ -49,5 +63,9 @@ void main()
 {
     // Drawn 1:1 with the scene color, which can be larger than the screen
     vec3 linear = texelFetch(bindlessTextures[nonuniformEXT(sceneColorIndex)], ivec2(gl_FragCoord.xy), 0).rgb;
-    fragColor = vec4(linearToSRGB(pbrNeutral(max(linear * exposure, vec3(0)))), 1.0);
+    float scale = exposure;
+    if (useAutoExposure != 0 && exposureState.valid != 0) {
+        scale *= exposureState.autoExposure;
+    }
+    fragColor = vec4(linearToSRGB(pbrNeutral(max(linear * scale, vec3(0)))), 1.0);
 }

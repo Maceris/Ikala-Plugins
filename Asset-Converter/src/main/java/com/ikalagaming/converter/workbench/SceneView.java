@@ -162,6 +162,9 @@ public class SceneView {
     /** The physical sky before entering, or null for the skybox. */
     private PhysicalSky previousPhysicalSky;
 
+    /** Whether the exposure adapted before entering. */
+    private boolean previousAutoExposure;
+
     /** The camera position before entering. */
     private final Vector3d previousPosition = new Vector3d();
 
@@ -262,6 +265,7 @@ public class SceneView {
         previousAmbient = scene.getSceneLights().getAmbientLight();
         previousExposure = scene.getExposure();
         previousPhysicalSky = scene.getPhysicalSky();
+        previousAutoExposure = scene.isAutoExposure();
         previousPosition.set(scene.getCamera().getPosition());
         previousRotation.set(scene.getCamera().getRotation());
         // The debug stage draws the selection's outline
@@ -296,6 +300,7 @@ public class SceneView {
         scene.getSceneLights().setAmbientLight(previousAmbient);
         scene.setExposure(previousExposure);
         scene.setPhysicalSky(previousPhysicalSky);
+        scene.setAutoExposure(previousAutoExposure);
         scene.getCamera().setPosition(previousPosition.x, previousPosition.y, previousPosition.z);
         scene.getCamera().setRotation(previousRotation.x, previousRotation.y);
         GraphicsManager.swapPipeline(previousPipeline);
@@ -688,6 +693,10 @@ public class SceneView {
         }
         if (IkGui.checkbox("Physical sky", scene.getPhysicalSky() != null)) {
             scene.setPhysicalSky(scene.getPhysicalSky() == null ? new PhysicalSky() : null);
+        }
+        IkGui.sameLine();
+        if (IkGui.checkbox("Auto exposure", scene.isAutoExposure())) {
+            scene.setAutoExposure(!scene.isAutoExposure());
         }
         IkGui.setItemTooltip(
                 "Earth's atmosphere lit by the sun as the sky, lighting the scene as bright as the"

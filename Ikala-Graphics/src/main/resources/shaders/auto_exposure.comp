@@ -1,0 +1,162 @@
+#version 460
+#extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_EXT_buffer_reference : require
+
+// Meters the scene for automatic exposure, see AutoExposure and ExposureMath, in two modes:
+//
+// MODE_HISTOGRAM: one invocation per pixel of the scene color, before tone mapping, counts it in a
+// histogram of log2 luminance, first in each workgroup's shared copy, then into the buffer. Pixels
+// too dark to matter go in bin 0, which metering leaves out.
+// MODE_ADAPT: one workgroup of HISTOGRAM_BINS invocations takes the average log2 luminance of the
+// pixels between two percentiles of the histogram, ignoring the darkest and the brightest, moves
+// the adapted luminance toward it as an eye adapts, faster toward brighter, works out the exposure
+// that brings it most of the way to middle gray within its limits, and clears the histogram for
+// the next frame.
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+const int MODE_HISTOGRAM = 0;
+const int MODE_ADAPT = 1;
+
+// Match ExposureMath
+const uint HISTOGRAM_BINS = 256;
+const float MIN_LOG2_LUMINANCE = -12.0;
+const float MAX_LOG2_LUMINANCE = 8.0;
+const float LOW_PERCENTILE = 0.5;
+const float HIGH_PERCENTILE = 0.95;
+const float MIDDLE_GRAY = 0.18;
+// How much of the difference from middle gray, in stops, the exposure takes away
+const float ADAPTATION = 0.75;
+
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer Histogram {
+    uint bins[HISTOGRAM_BINS];
+};
+
+// The adapted state, read by the tone map stage and, for the debug window, by the CPU
+layout(buffer_reference, std430, buffer_reference_align = 16) buffer State {
+    // The adapted average log2 luminance
+    float adapted;
+    // The exposure the tone map multiplies by, before compensation
+    float exposure;
+    // Nonzero once adapted is valid; until then it jumps to the target
+    uint valid;
+    // This frame's target average log2 luminance, for the debug window
+    float target;
+};
+
+layout(push_constant) uniform Constants {
+    Histogram histogram;
+    State state;
+    // The bindless slot of the scene color, and its size
+    int sceneColorIndex;
+    int width;
+    int height;
+    int mode;
+    // Seconds since the last frame, and how fast the eye adapts toward brighter and darker, per
+    // second, as the fraction of the way left it covers in a second is 1 - exp(-speed)
+    float deltaSeconds;
+    float speedUp;
+    float speedDown;
+    // The exposure's limits
+    float minExposure;
+    float maxExposure;
+};
+
+layout(set = 0, binding = 0) uniform sampler2D bindlessTextures[];
+
+shared uint localBins[HISTOGRAM_BINS];
+shared float weighted[HISTOGRAM_BINS];
+shared uint counts[HISTOGRAM_BINS];
+shared float kept[HISTOGRAM_BINS];
+
+// Rec. 709 luminance
+const vec3 LUMINANCE = vec3(0.2126, 0.7152, 0.0722);
+
+uint binOf(float luminance) {
+    if (luminance < exp2(MIN_LOG2_LUMINANCE)) {
+        return 0;
+    }
+    float t = (log2(luminance) - MIN_LOG2_LUMINANCE) / (MAX_LOG2_LUMINANCE - MIN_LOG2_LUMINANCE);
+    return uint(clamp(t, 0.0, 1.0) * float(HISTOGRAM_BINS - 2) + 1.0);
+}
+
+float log2LuminanceOf(uint bin) {
+    float t = (float(bin) - 0.5) / float(HISTOGRAM_BINS - 2);
+    return MIN_LOG2_LUMINANCE + t * (MAX_LOG2_LUMINANCE - MIN_LOG2_LUMINANCE);
+}
+
+void histogramPass() {
+    uint local = gl_LocalInvocationIndex;
+    localBins[local] = 0;
+    barrier();
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    if (pixel.x < width && pixel.y < height) {
+        vec3 color = texelFetch(bindlessTextures[nonuniformEXT(sceneColorIndex)], pixel, 0).rgb;
+        atomicAdd(localBins[binOf(dot(max(color, vec3(0)), LUMINANCE))], 1u);
+    }
+    barrier();
+    if (localBins[local] != 0) {
+        atomicAdd(histogram.bins[local], localBins[local]);
+    }
+}
+
+void adaptPass() {
+    uint bin = gl_LocalInvocationIndex;
+    uint count = histogram.bins[bin];
+    // The black bin isn't metered
+    counts[bin] = bin == 0 ? 0 : count;
+    barrier();
+    histogram.bins[bin] = 0;
+    // Inclusive prefix sums of the counts, Hillis and Steele
+    for (uint stride = 1; stride < HISTOGRAM_BINS; stride *= 2) {
+        uint add = bin >= stride ? counts[bin - stride] : 0;
+        barrier();
+        counts[bin] += add;
+        barrier();
+    }
+    float total = float(counts[HISTOGRAM_BINS - 1]);
+    // What of this bin lies between the percentiles
+    float below = bin == 0 ? 0.0 : float(counts[bin - 1]);
+    float above = float(counts[bin]);
+    float low = LOW_PERCENTILE * total;
+    float high = HIGH_PERCENTILE * total;
+    float inside = max(min(above, high) - max(below, low), 0.0);
+    weighted[bin] = inside * log2LuminanceOf(bin);
+    kept[bin] = inside;
+    barrier();
+    for (uint stride = HISTOGRAM_BINS / 2; stride > 0; stride /= 2) {
+        if (bin < stride) {
+            weighted[bin] += weighted[bin + stride];
+            kept[bin] += kept[bin + stride];
+        }
+        barrier();
+    }
+    if (bin != 0) {
+        return;
+    }
+    if (kept[0] <= 0.0) {
+        // Nothing metered, such as a black screen: keep what there was
+        return;
+    }
+    float target = weighted[0] / kept[0];
+    float adapted = state.adapted;
+    if (state.valid == 0) {
+        adapted = target;
+    } else {
+        float speed = target > adapted ? speedUp : speedDown;
+        adapted += (target - adapted) * (1.0 - exp(-deltaSeconds * speed));
+    }
+    state.adapted = adapted;
+    state.target = target;
+    state.valid = 1;
+    state.exposure = clamp(exp2((log2(MIDDLE_GRAY) - adapted) * ADAPTATION), minExposure, maxExposure);
+}
+
+void main()
+{
+    if (mode == MODE_HISTOGRAM) {
+        histogramPass();
+    } else {
+        adaptPass();
+    }
+}

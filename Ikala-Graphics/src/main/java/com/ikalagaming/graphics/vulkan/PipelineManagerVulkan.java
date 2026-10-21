@@ -257,7 +257,11 @@ public class PipelineManagerVulkan {
         stageEnvironmentUpdate.initialize(state);
         stageLightRender = new LightRender(shaders.getShader(RenderStage.Type.LIGHT), quadMesh);
         stageLightRender.initialize(state);
-        stageToneMap = new ToneMap(shaders.getShader(RenderStage.Type.TONEMAP), quadMesh);
+        stageToneMap =
+                new ToneMap(
+                        shaders.getShader(RenderStage.Type.TONEMAP),
+                        shaders.getShader(RenderStage.Type.AUTO_EXPOSURE),
+                        quadMesh);
         stageToneMap.initialize(state);
         stageTaa = new Taa(shaders.getShader(RenderStage.Type.TAA), quadMesh);
         stageTaa.initialize(state);

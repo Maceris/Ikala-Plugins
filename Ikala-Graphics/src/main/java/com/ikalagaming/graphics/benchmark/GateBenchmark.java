@@ -612,6 +612,9 @@ public final class GateBenchmark {
     /** The physical sky before the run, or null for the skybox. */
     @Nullable private PhysicalSky previousPhysicalSky;
 
+    /** Whether the exposure adapted before the run. */
+    private boolean previousAutoExposure;
+
     /**
      * Set up a run.
      *
@@ -1248,6 +1251,8 @@ public final class GateBenchmark {
         if (Boolean.getBoolean(PROPERTY + ".physicalSky")) {
             scene.setPhysicalSky(new PhysicalSky());
         }
+        previousAutoExposure = scene.isAutoExposure();
+        scene.setAutoExposure(Boolean.getBoolean(PROPERTY + ".autoExposure"));
     }
 
     /**
@@ -2329,6 +2334,7 @@ public final class GateBenchmark {
             scene.getSceneLights().setDirLight(previousSun);
             scene.getSceneLights().setAmbientLight(previousAmbient);
             scene.setPhysicalSky(previousPhysicalSky);
+            scene.setAutoExposure(previousAutoExposure);
         }
         if (scene != null && !Double.isNaN(previousViewDistance)) {
             scene.setViewDistance(previousViewDistance);

@@ -16,6 +16,7 @@ import com.ikalagaming.graphics.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.vulkan.TextureInfoVulkan;
 import com.ikalagaming.graphics.vulkan.VulkanState;
 
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.system.MemoryStack;
@@ -29,6 +30,9 @@ import java.nio.LongBuffer;
  * sRGB encode, see {@code tonemap.frag} and {@link com.ikalagaming.graphics.vulkan.ToneMapMath}.
  * Renders into the pre-filter image if there is a filter stage, otherwise the final image, and
  * leaves it as a color attachment for the stages after.
+ *
+ * <p>With {@link Scene#isAutoExposure()}, the scene color is metered first, see {@link
+ * AutoExposure}, and the scene's exposure compensates the one it adapts to.
  */
 @Slf4j
 public class ToneMap implements RenderStage {
@@ -38,6 +42,13 @@ public class ToneMap implements RenderStage {
 
     /** A mesh for rendering onto. */
     @NonNull private final QuadMesh quadMesh;
+
+    /**
+     * The automatic exposure. -- GETTER -- The automatic exposure, for the debug window.
+     *
+     * @return The automatic exposure.
+     */
+    @Getter @NonNull private final AutoExposure autoExposure;
 
     /** VkPipelineLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long pipelineLayout;
@@ -49,10 +60,15 @@ public class ToneMap implements RenderStage {
      * Set up the stage.
      *
      * @param shader The tone map shaders.
+     * @param exposureShader The automatic exposure compute shader.
      * @param quadMesh The mesh to draw over the screen.
      */
-    public ToneMap(@NonNull ShaderVulkan shader, @NonNull QuadMesh quadMesh) {
+    public ToneMap(
+            @NonNull ShaderVulkan shader,
+            @NonNull ShaderVulkan exposureShader,
+            @NonNull QuadMesh quadMesh) {
         this.shader = shader;
+        autoExposure = new AutoExposure(exposureShader);
         this.quadMesh = quadMesh;
         pipelineLayout = VK_NULL_HANDLE;
         pipeline = VK_NULL_HANDLE;
@@ -81,6 +97,7 @@ public class ToneMap implements RenderStage {
         pipeline =
                 FullScreenPass.createPipeline(
                         state, shader, pipelineLayout, PipelineManagerVulkan.SCREEN_FORMAT, null);
+        autoExposure.initialize(state);
     }
 
     @Override
@@ -89,6 +106,7 @@ public class ToneMap implements RenderStage {
         pipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(state.device.logical, pipelineLayout, null);
         pipelineLayout = VK_NULL_HANDLE;
+        autoExposure.cleanup(state);
     }
 
     @Override
@@ -119,7 +137,8 @@ public class ToneMap implements RenderStage {
                     VK_IMAGE_ASPECT_COLOR_BIT,
                     VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
                     VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
+                            | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                     VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                     VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
@@ -137,6 +156,14 @@ public class ToneMap implements RenderStage {
             vkCmdPipelineBarrier2(
                     commandBuffer,
                     VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barriers));
+
+            // Meter what is about to be shown, outside the render pass
+            final boolean auto = scene != null && scene.isAutoExposure();
+            if (auto && width > 0 && height > 0) {
+                autoExposure.record(commandBuffer, state, source, width, height);
+            } else if (!auto) {
+                autoExposure.reset();
+            }
 
             VkRenderingAttachmentInfo.Buffer colorAttachments =
                     VkRenderingAttachmentInfo.calloc(1, stack);
@@ -169,6 +196,11 @@ public class ToneMap implements RenderStage {
                         source.bindlessIndex);
                 constants.putFloat(
                         ShaderBindings.ToneMap.PUSH_CONSTANT_EXPOSURE_OFFSET, scene.getExposure());
+                constants.putLong(
+                        ShaderBindings.ToneMap.PUSH_CONSTANT_EXPOSURE_STATE_OFFSET,
+                        autoExposure.getStateAddress());
+                constants.putInt(
+                        ShaderBindings.ToneMap.PUSH_CONSTANT_AUTO_EXPOSURE_OFFSET, auto ? 1 : 0);
                 vkCmdPushConstants(
                         commandBuffer, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, constants);
                 FullScreenPass.draw(commandBuffer, quadMesh, width, height, stack);

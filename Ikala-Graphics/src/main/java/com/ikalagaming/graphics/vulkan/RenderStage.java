@@ -8,6 +8,7 @@ public interface RenderStage {
     enum Type {
         ANIMATION,
         ATMOSPHERE,
+        AUTO_EXPOSURE,
         CULL,
         LOD_CULL,
         DEBUG,

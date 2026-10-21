@@ -298,6 +298,59 @@ public class ShaderBindings {
         }
     }
 
+    /** Automatic exposure shader variables, see {@code auto_exposure.comp}. */
+    public static class AutoExposure {
+        /** The histogram's address. */
+        public static final int HISTOGRAM_OFFSET = 0;
+
+        /** The state's address. */
+        public static final int STATE_OFFSET = Long.BYTES;
+
+        /** The scene color's bindless slot. */
+        public static final int SCENE_COLOR_INDEX_OFFSET = 2 * Long.BYTES;
+
+        /** The width metered. */
+        public static final int WIDTH_OFFSET = SCENE_COLOR_INDEX_OFFSET + Integer.BYTES;
+
+        /** The height metered. */
+        public static final int HEIGHT_OFFSET = WIDTH_OFFSET + Integer.BYTES;
+
+        /** Which pass runs. */
+        public static final int MODE_OFFSET = HEIGHT_OFFSET + Integer.BYTES;
+
+        /** Seconds since the last frame. */
+        public static final int DELTA_SECONDS_OFFSET = MODE_OFFSET + Integer.BYTES;
+
+        /** How fast it adapts toward brighter. */
+        public static final int SPEED_UP_OFFSET = DELTA_SECONDS_OFFSET + Float.BYTES;
+
+        /** How fast it adapts toward darker. */
+        public static final int SPEED_DOWN_OFFSET = SPEED_UP_OFFSET + Float.BYTES;
+
+        /** The least exposure. */
+        public static final int MIN_EXPOSURE_OFFSET = SPEED_DOWN_OFFSET + Float.BYTES;
+
+        /** The most exposure. */
+        public static final int MAX_EXPOSURE_OFFSET = MIN_EXPOSURE_OFFSET + Float.BYTES;
+
+        /** The size of the push constants in bytes. */
+        public static final int PUSH_CONSTANTS_SIZE = MAX_EXPOSURE_OFFSET + Float.BYTES;
+
+        /** Count the scene's luminance into the histogram. */
+        public static final int MODE_HISTOGRAM = 0;
+
+        /** Meter the histogram and adapt, one workgroup. */
+        public static final int MODE_ADAPT = 1;
+
+        /** The width and height of a histogram workgroup, in pixels. */
+        public static final int WORKGROUP_SIZE = 16;
+
+        /** Private constructor so this class is not instantiated. */
+        private AutoExposure() {
+            cutItOut();
+        }
+    }
+
     /** Depth pyramid shader variables, see {@code depth_pyramid.comp}. */
     public static class DepthPyramid {
         /** The size of what is read, two ints. */
@@ -570,8 +623,16 @@ public class ShaderBindings {
         /** What the scene color is multiplied by before tone mapping. */
         public static final int PUSH_CONSTANT_EXPOSURE_OFFSET = Integer.BYTES;
 
+        /** The automatic exposure's state buffer's address, see {@code AutoExposure}. */
+        public static final int PUSH_CONSTANT_EXPOSURE_STATE_OFFSET = 2 * Integer.BYTES;
+
+        /** Whether to multiply by the automatic exposure too, 1 if so. */
+        public static final int PUSH_CONSTANT_AUTO_EXPOSURE_OFFSET =
+                PUSH_CONSTANT_EXPOSURE_STATE_OFFSET + Long.BYTES;
+
         /** The size of the push constants in bytes. */
-        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_EXPOSURE_OFFSET + Float.BYTES;
+        public static final int PUSH_CONSTANTS_SIZE =
+                PUSH_CONSTANT_AUTO_EXPOSURE_OFFSET + Integer.BYTES;
 
         /** Private constructor so this class is not instantiated. */
         private ToneMap() {

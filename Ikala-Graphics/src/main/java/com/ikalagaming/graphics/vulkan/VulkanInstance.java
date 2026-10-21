@@ -1160,6 +1160,15 @@ public class VulkanInstance {
                         ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(RenderStage.Type.TONEMAP, new ShaderVulkan(toneMapModules, state));
 
+        List<ShaderVulkan.ShaderModuleData> exposureModules = new ArrayList<>();
+        exposureModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/auto_exposure.comp",
+                        ShaderVulkan.Type.COMPUTE,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(
+                RenderStage.Type.AUTO_EXPOSURE, new ShaderVulkan(exposureModules, state));
+
         // The same full screen quad again
         List<ShaderVulkan.ShaderModuleData> taaModules = new ArrayList<>();
         taaModules.add(
