@@ -88,6 +88,15 @@ public class Scene {
     private final Vector4f skyboxDiffuse;
 
     /**
+     * The physical sky drawn in place of the skybox, lighting the scene from it, or null for the
+     * skybox. -- GETTER -- The physical sky. -- SETTER -- Draw a physical sky, or the skybox again.
+     *
+     * @param physicalSky The physical sky, or null for the skybox.
+     * @return The physical sky, or null.
+     */
+    @Setter private volatile PhysicalSky physicalSky;
+
+    /**
      * Which built-in debug visualizations to draw.
      *
      * @return The debug visualization settings.

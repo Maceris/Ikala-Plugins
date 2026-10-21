@@ -251,7 +251,9 @@ public class PipelineManagerVulkan {
         stageLightCull = new LightCull(shaders.getShader(RenderStage.Type.LIGHT_CULL));
         stageLightCull.initialize(state);
         stageEnvironmentUpdate =
-                new EnvironmentUpdate(shaders.getShader(RenderStage.Type.ENVIRONMENT));
+                new EnvironmentUpdate(
+                        shaders.getShader(RenderStage.Type.ENVIRONMENT),
+                        shaders.getShader(RenderStage.Type.ATMOSPHERE));
         stageEnvironmentUpdate.initialize(state);
         stageLightRender = new LightRender(shaders.getShader(RenderStage.Type.LIGHT), quadMesh);
         stageLightRender.initialize(state);

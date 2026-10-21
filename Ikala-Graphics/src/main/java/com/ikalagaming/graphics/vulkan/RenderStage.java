@@ -7,6 +7,7 @@ import lombok.NonNull;
 public interface RenderStage {
     enum Type {
         ANIMATION,
+        ATMOSPHERE,
         CULL,
         LOD_CULL,
         DEBUG,

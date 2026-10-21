@@ -19,6 +19,8 @@
 // brick shades itself too: what it holds a little way toward the sun, and a little way up, dims
 // the sun and the sky light, so the inside and underside of a canopy go dark.
 
+// The sky's environment is set 5, see VolumeColor
+#define ENVIRONMENT_SET 5
 #include "lighting.glsl"
 #define OIT_VOLUME_SET 3
 #include "oit_volume.glsl"
@@ -136,7 +138,11 @@ void main() {
 
     vec3 renderSun = normalize((invViewMatrix * vec4(-directionalLight.direction, 0.0)).xyz);
     vec3 sun = directionalLight.color * directionalLight.intensity;
-    vec3 ambient = ambientLight.color * ambientLight.intensity;
+    // The sky's average light, which for the skybox is the ambient light, and for the physical sky
+    // follows the sun
+    vec3 ambient = environmentEnabled != 0 && environmentScale.w > 0.5
+        ? environmentScale.rgb * environmentAverage()
+        : ambientLight.color * ambientLight.intensity;
     float shadowDistance = -cascadeShadowSplits[NUM_CASCADES - 1].splitDistance;
 
     // How much gets through from the camera to the brick

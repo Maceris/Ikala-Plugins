@@ -6,7 +6,9 @@ import static org.lwjgl.vulkan.VK13.*;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.TextureHandle;
+import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.vulkan.*;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 
@@ -14,6 +16,8 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
+import org.joml.Vector4f;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.*;
@@ -221,7 +225,8 @@ public class SkyboxRender implements RenderStage {
                         0,
                         stack.longs(
                                 descriptorSets[vulkanState.frameIndex],
-                                vulkanState.bindlessTextures.getDescriptorSet()),
+                                vulkanState.bindlessTextures.getDescriptorSet(),
+                                vulkanState.environment.getSet()),
                         null);
                 vkCmdBindVertexBuffers(
                         commandBuffer,
@@ -268,6 +273,24 @@ public class SkyboxRender implements RenderStage {
         uniformData.putInt(
                 ShaderBindings.Skybox.TEXTURE_INDEX_OFFSET,
                 state.textureRegistry.slotOrDefault(texture));
+
+        // The physical sky, from the table the environment update filled this frame
+        final PhysicalSky physicalSky = scene.getPhysicalSky();
+        uniformData.putInt(ShaderBindings.Skybox.PHYSICAL_SKY_OFFSET, physicalSky != null ? 1 : 0);
+        if (physicalSky != null) {
+            final DirectionalLight sun = scene.getSceneLights().getDirLight();
+            new Vector4f(
+                            AtmosphereMath.towardSun(sun.getDirection()),
+                            (float)
+                                    AtmosphereMath.cameraRadius(
+                                            physicalSky, scene.getCamera().getPosition().y()))
+                    .get(ShaderBindings.Skybox.SUN_AND_RADIUS_OFFSET, uniformData);
+            new Vector4f(
+                            new Vector3f(sun.getColor())
+                                    .mul(sun.getIntensity() * physicalSky.getStrength()),
+                            1)
+                    .get(ShaderBindings.Skybox.SKY_SCALE_OFFSET, uniformData);
+        }
     }
 
     private void createPipelineLayout(@NonNull VulkanState state) {
@@ -297,7 +320,8 @@ public class SkyboxRender implements RenderStage {
                             .pSetLayouts(
                                     stack.longs(
                                             descriptorSetLayout,
-                                            state.bindlessTextures.getDescriptorSetLayout()));
+                                            state.bindlessTextures.getDescriptorSetLayout(),
+                                            state.environment.getSetLayout()));
             checkError(
                     vkCreatePipelineLayout(
                             state.device.logical, pipelineLayoutCreateInfo, null, longOutput));

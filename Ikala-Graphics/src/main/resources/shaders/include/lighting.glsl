@@ -528,8 +528,11 @@ vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 ren
     vec3 ambient;
 #ifdef ENVIRONMENT_SET
     if (environmentEnabled != 0) {
-        // The sky's light, scaled so its average is the ambient light
-        vec3 scale = ambientColor / max(dot(environmentAverage(), ENVIRONMENT_LUMINANCE), 1e-4);
+        // The sky's light, scaled by the sun for the physical sky, else so its average is the
+        // ambient light
+        vec3 scale = environmentScale.w > 0.5
+            ? environmentScale.rgb
+            : ambientColor / max(dot(environmentAverage(), ENVIRONMENT_LUMINANCE), 1e-4);
         vec3 worldNormal = mat3(invViewMatrix) * normal;
         vec3 reflected = mat3(invViewMatrix) * reflect(normalize(viewPosition), normal);
         vec3 mirrored;

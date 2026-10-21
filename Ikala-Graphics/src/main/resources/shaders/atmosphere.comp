@@ -1,0 +1,192 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// Fills the physical sky's tables, see atmosphere.glsl and Environment, in three modes:
+//
+// MODE_TRANSMITTANCE: how much light crosses the atmosphere from each height and direction to its
+// top, by marching the extinction.
+// MODE_MULTIPLE_SCATTERING: Hillaire's table of light scattered more than once, for each height and
+// sun angle: the light scattered twice, gathered from every direction around the point as if
+// scattered evenly, then the geometric series of further bounces, which each keep the fraction the
+// point's surroundings scatter back.
+// MODE_SKY_VIEW: the sky's light toward every direction from the camera's height with the sun where
+// it is, once scattered with the real phase functions plus the multiple scattering, and the ground
+// below the horizon. Per unit of the sun's illuminance.
+
+#define ENVIRONMENT_SET 0
+#include "atmosphere.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+const int MODE_TRANSMITTANCE = 0;
+const int MODE_MULTIPLE_SCATTERING = 1;
+const int MODE_SKY_VIEW = 2;
+
+const int TRANSMITTANCE_STEPS = 40;
+const int MULTIPLE_SCATTERING_STEPS = 20;
+// The multiple scattering table gathers from this many directions, a square of them
+const int GATHER_SIDE = 8;
+const int SKY_VIEW_STEPS = 30;
+
+layout(set = 0, binding = 5, rgba16f) uniform writeonly image2D transmittanceImage;
+layout(set = 0, binding = 6, rgba16f) uniform writeonly image2D multipleScatteringImage;
+layout(set = 0, binding = 7, rgba16f) uniform writeonly image2D skyViewImage;
+
+layout(push_constant) uniform Constants {
+    // Toward the sun, y up, and in w the camera's distance from the planet's center in kilometers
+    vec4 sunAndRadius;
+    // The ground's albedo
+    vec4 groundAlbedo;
+    int mode;
+};
+
+vec3 transmittanceAlong(float r, float mu) {
+    float rayLength = distanceToGround(r, mu) >= 0.0 ? distanceToGround(r, mu) : distanceToSphere(r, mu, TOP_RADIUS);
+    float dt = max(rayLength, 0.0) / float(TRANSMITTANCE_STEPS);
+    vec3 depth = vec3(0);
+    for (int i = 0; i < TRANSMITTANCE_STEPS; ++i) {
+        float t = (float(i) + 0.5) * dt;
+        float height = sqrt(r * r + t * t + 2.0 * r * mu * t) - BOTTOM_RADIUS;
+        depth += mediumAt(max(height, 0.0)).extinction * dt;
+    }
+    return exp(-depth);
+}
+
+// The light scattered toward a point along a ray, and what it scatters as if every direction
+// scattered evenly, for the multiple scattering table: once scattered sunlight with an even phase,
+// and the lit ground it ends on
+void gather(vec3 origin, vec3 direction, vec3 sun, out vec3 light, out vec3 asOne) {
+    float r = length(origin);
+    float mu = dot(origin, direction) / r;
+    float ground = distanceToGround(r, mu);
+    float rayLength = ground >= 0.0 ? ground : distanceToSphere(r, mu, TOP_RADIUS);
+    float dt = max(rayLength, 0.0) / float(MULTIPLE_SCATTERING_STEPS);
+    const float evenPhase = 1.0 / (4.0 * ATMOSPHERE_PI);
+    vec3 throughput = vec3(1);
+    light = vec3(0);
+    asOne = vec3(0);
+    for (int i = 0; i < MULTIPLE_SCATTERING_STEPS; ++i) {
+        vec3 p = origin + direction * ((float(i) + 0.5) * dt);
+        float pr = length(p);
+        Medium m = mediumAt(max(pr - BOTTOM_RADIUS, 0.0));
+        vec3 stepThrough = exp(-m.extinction * dt);
+        float muSun = dot(p, sun) / pr;
+        vec3 lit = distanceToGround(pr, muSun) >= 0.0 ? vec3(0) : sunTransmittance(pr, muSun);
+        // Integrated over the step, as the light dims through it
+        vec3 extinction = max(m.extinction, vec3(1e-9));
+        vec3 integral = (vec3(1) - stepThrough) / extinction;
+        light += throughput * m.scattering * lit * evenPhase * integral;
+        asOne += throughput * m.scattering * integral;
+        throughput *= stepThrough;
+    }
+    if (ground >= 0.0) {
+        vec3 p = origin + direction * ground;
+        vec3 up = normalize(p);
+        float muSun = dot(up, sun);
+        light += throughput * sunTransmittance(BOTTOM_RADIUS, muSun) * max(muSun, 0.0)
+            * groundAlbedo.rgb / ATMOSPHERE_PI;
+    }
+}
+
+vec3 multipleScatteringAt(float r, float muSun) {
+    vec3 origin = vec3(0, r, 0);
+    vec3 sun = vec3(sqrt(max(1.0 - muSun * muSun, 0.0)), muSun, 0);
+    vec3 lightSum = vec3(0);
+    vec3 asOneSum = vec3(0);
+    const int count = GATHER_SIDE * GATHER_SIDE;
+    for (int i = 0; i < count; ++i) {
+        // Even over the sphere
+        float a = (float(i % GATHER_SIDE) + 0.5) / float(GATHER_SIDE);
+        float b = (float(i / GATHER_SIDE) + 0.5) / float(GATHER_SIDE);
+        float cosTheta = 1.0 - 2.0 * b;
+        float sinTheta = sqrt(max(1.0 - cosTheta * cosTheta, 0.0));
+        float phi = 2.0 * ATMOSPHERE_PI * a;
+        vec3 direction = vec3(sinTheta * cos(phi), cosTheta, sinTheta * sin(phi));
+        vec3 light;
+        vec3 asOne;
+        gather(origin, direction, sun, light, asOne);
+        lightSum += light;
+        asOneSum += asOne;
+    }
+    // Scattered evenly at the point: the integral over the sphere times 1 / (4 pi), the average
+    vec3 second = lightSum / float(count);
+    vec3 fraction = asOneSum / float(count);
+    return second / (vec3(1) - min(fraction, vec3(0.999)));
+}
+
+vec3 skyViewAt(float r, float viewZenithCos, float lightViewCos, vec3 sunWorld) {
+    // In a frame with the camera straight above the center and the sun in the xy plane
+    float sunCos = sunWorld.y;
+    vec3 sun = vec3(sqrt(max(1.0 - sunCos * sunCos, 0.0)), sunCos, 0);
+    float viewSin = sqrt(max(1.0 - viewZenithCos * viewZenithCos, 0.0));
+    float lightViewSin = sqrt(max(1.0 - lightViewCos * lightViewCos, 0.0));
+    vec3 direction = vec3(viewSin * lightViewCos, viewZenithCos, viewSin * lightViewSin);
+    vec3 origin = vec3(0, r, 0);
+    float mu = viewZenithCos;
+    float ground = distanceToGround(r, mu);
+    float rayLength = ground >= 0.0 ? ground : distanceToSphere(r, mu, TOP_RADIUS);
+    if (rayLength <= 0.0) {
+        return vec3(0);
+    }
+    float dt = rayLength / float(SKY_VIEW_STEPS);
+    float cosTheta = dot(direction, sun);
+    float rayleigh = rayleighPhase(cosTheta);
+    float mie = miePhase(cosTheta);
+    vec3 throughput = vec3(1);
+    vec3 light = vec3(0);
+    for (int i = 0; i < SKY_VIEW_STEPS; ++i) {
+        vec3 p = origin + direction * ((float(i) + 0.5) * dt);
+        float pr = length(p);
+        Medium m = mediumAt(max(pr - BOTTOM_RADIUS, 0.0));
+        vec3 stepThrough = exp(-m.extinction * dt);
+        float muSun = dot(p, sun) / pr;
+        vec3 lit = distanceToGround(pr, muSun) >= 0.0 ? vec3(0) : sunTransmittance(pr, muSun);
+        vec3 scattered = (m.rayleigh * rayleigh + m.mie * mie) * lit
+            + m.scattering * multipleScattering(pr, muSun);
+        vec3 extinction = max(m.extinction, vec3(1e-9));
+        light += throughput * scattered * (vec3(1) - stepThrough) / extinction;
+        throughput *= stepThrough;
+    }
+    if (ground >= 0.0) {
+        vec3 p = origin + direction * ground;
+        float muSun = dot(normalize(p), sun);
+        light += throughput * sunTransmittance(BOTTOM_RADIUS, muSun) * max(muSun, 0.0)
+            * groundAlbedo.rgb / ATMOSPHERE_PI;
+    }
+    return light;
+}
+
+void main()
+{
+    ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
+    if (mode == MODE_TRANSMITTANCE) {
+        if (any(greaterThanEqual(texel, TRANSMITTANCE_SIZE))) {
+            return;
+        }
+        vec2 uv = (vec2(texel) + 0.5) / vec2(TRANSMITTANCE_SIZE);
+        float r;
+        float mu;
+        transmittanceParameters(uv, r, mu);
+        imageStore(transmittanceImage, texel, vec4(transmittanceAlong(r, mu), 1));
+    } else if (mode == MODE_MULTIPLE_SCATTERING) {
+        if (any(greaterThanEqual(texel, MULTIPLE_SCATTERING_SIZE))) {
+            return;
+        }
+        vec2 uv = vec2(texel) / vec2(MULTIPLE_SCATTERING_SIZE - 1);
+        float muSun = uv.x * 2.0 - 1.0;
+        float r = BOTTOM_RADIUS + uv.y * (TOP_RADIUS - BOTTOM_RADIUS);
+        // Just off the ground and the top, so rays from there are well defined
+        r = clamp(r, BOTTOM_RADIUS + 0.001, TOP_RADIUS - 0.001);
+        imageStore(multipleScatteringImage, texel, vec4(multipleScatteringAt(r, muSun), 1));
+    } else {
+        if (any(greaterThanEqual(texel, SKY_VIEW_SIZE))) {
+            return;
+        }
+        vec2 uv = vec2(texel) / vec2(SKY_VIEW_SIZE - 1);
+        float r = sunAndRadius.w;
+        float viewZenithCos;
+        float lightViewCos;
+        skyViewParameters(uv, r, viewZenithCos, lightViewCos);
+        imageStore(skyViewImage, texel, vec4(skyViewAt(r, viewZenithCos, lightViewCos, sunAndRadius.xyz), 1));
+    }
+}

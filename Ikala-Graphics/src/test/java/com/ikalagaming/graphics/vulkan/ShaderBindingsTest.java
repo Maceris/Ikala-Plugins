@@ -53,7 +53,11 @@ class ShaderBindingsTest {
         assertEquals(732, ShaderBindings.Light.OCCUPANCY_AO_VIEW_OFFSET);
         assertEquals(736, ShaderBindings.Light.OCCUPANCY_RAYS_OFFSET);
         assertEquals(740, ShaderBindings.Light.OCCUPANCY_RAY_VIEW_OFFSET);
-        assertEquals(752, ShaderBindings.Light.UNIFORMS_BUFFER_SIZE);
+        assertEquals(744, ShaderBindings.Light.EMISSION_SAMPLER_INDEX_OFFSET);
+        assertEquals(748, ShaderBindings.Light.ENVIRONMENT_ENABLED_OFFSET);
+        // A vec4, on a 16 byte boundary
+        assertEquals(752, ShaderBindings.Light.ENVIRONMENT_SCALE_OFFSET);
+        assertEquals(768, ShaderBindings.Light.UNIFORMS_BUFFER_SIZE);
         // The shadow map index takes the first of the light struct's spare words
         assertEquals(56, ShaderBindings.Light.LightStruct.SHADOW_MAP);
     }
@@ -145,12 +149,16 @@ class ShaderBindingsTest {
     @Test
     void testSkyboxUniformOffsets() {
         // mat4 projectionMatrix; mat4 viewMatrix; vec4 diffuse; int hasTexture; int textureIndex;
+        // int physicalSky; vec4 sunAndRadius; vec4 skyScale;
         assertEquals(0, ShaderBindings.Skybox.PROJECTION_MATRIX_OFFSET);
         assertEquals(64, ShaderBindings.Skybox.VIEW_MATRIX_OFFSET);
         assertEquals(128, ShaderBindings.Skybox.DIFFUSE_OFFSET);
         assertEquals(144, ShaderBindings.Skybox.HAS_TEXTURE_OFFSET);
         assertEquals(148, ShaderBindings.Skybox.TEXTURE_INDEX_OFFSET);
-        assertEquals(152, ShaderBindings.Skybox.UNIFORMS_BUFFER_SIZE);
+        assertEquals(152, ShaderBindings.Skybox.PHYSICAL_SKY_OFFSET);
+        assertEquals(160, ShaderBindings.Skybox.SUN_AND_RADIUS_OFFSET);
+        assertEquals(176, ShaderBindings.Skybox.SKY_SCALE_OFFSET);
+        assertEquals(192, ShaderBindings.Skybox.UNIFORMS_BUFFER_SIZE);
     }
 
     @Test

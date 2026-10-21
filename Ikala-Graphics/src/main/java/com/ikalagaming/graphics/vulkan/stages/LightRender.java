@@ -7,6 +7,7 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.OccupancyClipmap;
 import com.ikalagaming.graphics.scene.Fog;
+import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
@@ -375,6 +376,17 @@ public class LightRender implements RenderStage {
         uniformData.putInt(
                 ShaderBindings.Light.ENVIRONMENT_ENABLED_OFFSET,
                 GraphicsManager.getSettings().environmentLighting ? 1 : 0);
+        // A physical sky's light is per unit of the sun's, so it follows the sun
+        final PhysicalSky physicalSky = scene.getPhysicalSky();
+        final Vector4f environmentScale = new Vector4f();
+        if (physicalSky != null) {
+            final DirectionalLight sun = scene.getSceneLights().getDirLight();
+            environmentScale.set(
+                    new Vector3f(sun.getColor())
+                            .mul(sun.getIntensity() * physicalSky.getStrength()),
+                    1);
+        }
+        environmentScale.get(ShaderBindings.Light.ENVIRONMENT_SCALE_OFFSET, uniformData);
         for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
             uniformData.putInt(
                     ShaderBindings.Light.SHADOW_MAP_0_INDEX_OFFSET + i * Integer.BYTES,

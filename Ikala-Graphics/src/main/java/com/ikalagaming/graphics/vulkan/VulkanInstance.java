@@ -1056,6 +1056,15 @@ public class VulkanInstance {
         shaderMap.addShader(
                 RenderStage.Type.ENVIRONMENT, new ShaderVulkan(environmentModules, state));
 
+        List<ShaderVulkan.ShaderModuleData> atmosphereModules = new ArrayList<>();
+        atmosphereModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/atmosphere.comp",
+                        ShaderVulkan.Type.COMPUTE,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(
+                RenderStage.Type.ATMOSPHERE, new ShaderVulkan(atmosphereModules, state));
+
         List<ShaderVulkan.ShaderModuleData> lightCullModules = new ArrayList<>();
         lightCullModules.add(
                 new ShaderVulkan.ShaderModuleData(

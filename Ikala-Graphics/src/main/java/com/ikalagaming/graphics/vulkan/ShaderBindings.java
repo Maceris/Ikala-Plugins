@@ -236,8 +236,17 @@ public class ShaderBindings {
         /** The roughness of the level written, when prefiltering. */
         public static final int ROUGHNESS_OFFSET = SKY_TEXTURE_OFFSET + Integer.BYTES;
 
-        /** The size of the push constants in bytes. */
-        public static final int PUSH_CONSTANTS_SIZE = ROUGHNESS_OFFSET + Float.BYTES;
+        /**
+         * For the physical sky, toward the sun and the camera's distance from the planet's center,
+         * a vec4.
+         */
+        public static final int SUN_AND_RADIUS_OFFSET = ROUGHNESS_OFFSET + Float.BYTES;
+
+        /**
+         * The size of the push constants in bytes, which the atmosphere shader shares, see {@link
+         * Atmosphere}.
+         */
+        public static final int PUSH_CONSTANTS_SIZE = SUN_AND_RADIUS_OFFSET + 4 * Float.BYTES;
 
         /** Capture the sky into the source cube's first level. */
         public static final int MODE_CAPTURE = 0;
@@ -256,6 +265,35 @@ public class ShaderBindings {
 
         /** Private constructor so this class is not instantiated. */
         private Environment() {
+            cutItOut();
+        }
+    }
+
+    /**
+     * Physical sky shader variables, see {@code atmosphere.comp}. Its pipeline shares the layout of
+     * {@link Environment}'s.
+     */
+    public static class Atmosphere {
+        /** Toward the sun and the camera's distance from the planet's center, a vec4. */
+        public static final int SUN_AND_RADIUS_OFFSET = 0;
+
+        /** The ground's albedo, a vec4. */
+        public static final int GROUND_ALBEDO_OFFSET = 4 * Float.BYTES;
+
+        /** Which table is filled. */
+        public static final int MODE_OFFSET = 8 * Float.BYTES;
+
+        /** Fill the transmittance table. */
+        public static final int MODE_TRANSMITTANCE = 0;
+
+        /** Fill the multiple scattering table. */
+        public static final int MODE_MULTIPLE_SCATTERING = 1;
+
+        /** Fill the sky view table. */
+        public static final int MODE_SKY_VIEW = 2;
+
+        /** Private constructor so this class is not instantiated. */
+        private Atmosphere() {
             cutItOut();
         }
     }
@@ -1047,9 +1085,17 @@ public class ShaderBindings {
         public static final int ENVIRONMENT_ENABLED_OFFSET =
                 EMISSION_SAMPLER_INDEX_OFFSET + Integer.BYTES;
 
+        /**
+         * The offset into the uniforms for what the environment is scaled by, a vec4: in xyz the
+         * scale, used when w is 1, as for the physical sky, whose environment is per unit of the
+         * sun's light; with w 0 the light stage scales it to the ambient light instead.
+         */
+        public static final int ENVIRONMENT_SCALE_OFFSET =
+                (int) SharedBuffer.align(ENVIRONMENT_ENABLED_OFFSET + Integer.BYTES);
+
         /** The size of the uniforms buffer, padded out to 16 bytes under std140 rules. */
         public static final int UNIFORMS_BUFFER_SIZE =
-                (int) SharedBuffer.align(ENVIRONMENT_ENABLED_OFFSET + Integer.BYTES);
+                (int) SharedBuffer.align(ENVIRONMENT_SCALE_OFFSET + 4 * Float.BYTES);
 
         /** Uniforms buffer binding. */
         public static final int UNIFORMS_BINDING = 0;
@@ -1322,9 +1368,21 @@ public class ShaderBindings {
         /** The binding point for the uniforms buffer. */
         public static final int UNIFORMS_BINDING = 0;
 
+        /** Offset in the uniform buffer in bytes for whether to draw the physical sky, 1 if so. */
+        public static final int PHYSICAL_SKY_OFFSET = TEXTURE_INDEX_OFFSET + Integer.BYTES;
+
+        /**
+         * Offset in the uniform buffer in bytes for the physical sky's sun and the camera's
+         * distance from the planet's center, a vec4, see {@code atmosphere.glsl}.
+         */
+        public static final int SUN_AND_RADIUS_OFFSET =
+                (int) SharedBuffer.align(PHYSICAL_SKY_OFFSET + Integer.BYTES);
+
+        /** Offset in the uniform buffer in bytes for what the physical sky is scaled by, a vec4. */
+        public static final int SKY_SCALE_OFFSET = SUN_AND_RADIUS_OFFSET + 4 * Float.BYTES;
+
         /** The size of the uniforms buffer. */
-        public static final int UNIFORMS_BUFFER_SIZE =
-                (4 * 4 * 2 + 4) * Float.BYTES + 2 * Integer.BYTES;
+        public static final int UNIFORMS_BUFFER_SIZE = SKY_SCALE_OFFSET + 4 * Float.BYTES;
 
         /** Offset in the uniform buffer in bytes for the cameras view matrix. */
         public static final int VIEW_MATRIX_OFFSET = 4 * 4 * Float.BYTES;

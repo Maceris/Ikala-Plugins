@@ -99,6 +99,9 @@ layout(set = 0, binding = 0) uniform Uniforms {
     // Nonzero for ambient light from the sky's environment, see environment.glsl, rather than the
     // same from every direction
     int environmentEnabled;
+    // What the environment is scaled by: xyz when w is 1, as for the physical sky, per unit of the
+    // sun's light; with w 0, so its average is the ambient light
+    vec4 environmentScale;
 };
 
 // One point light shadow cube map: each face's matrix from render space, where it is drawn from in

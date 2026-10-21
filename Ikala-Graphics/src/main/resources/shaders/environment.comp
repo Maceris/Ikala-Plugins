@@ -5,8 +5,9 @@
 // Turns the sky into the light it gives, see Environment, in four modes:
 //
 // MODE_CAPTURE: the sky into the source cube's first level, one texel per invocation, z the face.
-// The sky is the skybox's texture, a cross of six faces laid out as SkyboxModel draws it, or its
-// color.
+// The sky is the skybox's texture, six faces laid out as SkyboxModel draws them, its color, or the
+// physical sky, from its sky view table (see atmosphere.glsl), without the sun's disk, which the
+// sun's own light already stands for.
 // MODE_DOWNSAMPLE: one level of the source cube from the one before, each texel the average of four.
 // MODE_PREFILTER: one level of the environment cube, the source convolved with the GGX lobe of that
 // level's roughness, by importance sampling with each sample read from the source level whose
@@ -19,6 +20,8 @@
 // ambient light.
 
 #include "color.glsl"
+#define ENVIRONMENT_SET 0
+#include "atmosphere.glsl"
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
@@ -36,6 +39,8 @@ const int PREFILTER_SAMPLES = 64;
 const int FACES = 6;
 
 const float PI = 3.14159265359;
+// The sky texture slot that stands for the physical sky. Match Environment.PHYSICAL_SKY.
+const int PHYSICAL_SKY = -2;
 
 layout(set = 0, binding = 0, rgba16f) uniform image2DArray sourceLevels[SOURCE_LEVELS];
 layout(set = 0, binding = 1, rgba16f) uniform writeonly image2DArray environmentLevels[ENVIRONMENT_LEVELS];
@@ -56,6 +61,9 @@ layout(push_constant) uniform Constants {
     int skyTexture;
     // The roughness of the level written, for MODE_PREFILTER
     float roughness;
+    // For the physical sky: toward the sun, y up, and in w the camera's distance from the planet's
+    // center in kilometers
+    vec4 sunAndRadius;
 };
 
 // The direction through a texel of a cube face, as Vulkan samples cube maps: s and t from -1 to 1
@@ -96,6 +104,9 @@ vec2 crossCoordinates(vec3 d, out vec2 faceMin) {
 
 // The sky toward a direction, in linear light
 vec3 sky(vec3 d, int size) {
+    if (skyTexture == PHYSICAL_SKY) {
+        return skyRadiance(normalize(d), sunAndRadius.xyz, sunAndRadius.w);
+    }
     if (skyTexture < 0) {
         return sRGBToLinear(skyColor.rgb);
     }

@@ -22,6 +22,7 @@ import com.ikalagaming.graphics.graph.VolumeMath;
 import com.ikalagaming.graphics.lod.CrackCheck;
 import com.ikalagaming.graphics.lod.LodCache;
 import com.ikalagaming.graphics.lod.LodStore;
+import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
@@ -607,6 +608,9 @@ public final class GateBenchmark {
 
     /** The scene's ambient light before the run set its own. */
     @Nullable private AmbientLight previousAmbient;
+
+    /** The physical sky before the run, or null for the skybox. */
+    @Nullable private PhysicalSky previousPhysicalSky;
 
     /**
      * Set up a run.
@@ -1233,12 +1237,33 @@ public final class GateBenchmark {
         final boolean night = Boolean.getBoolean(PROPERTY + ".night");
         scene.getSceneLights()
                 .setDirLight(
-                        new DirectionalLight(SUN_COLOR, SUN_DIRECTION, night ? 0 : SUN_INTENSITY));
+                        new DirectionalLight(SUN_COLOR, sunDirection(), night ? 0 : SUN_INTENSITY));
         scene.getSceneLights()
                 .setAmbientLight(
                         new AmbientLight(
                                 new Vector3f(1, 1, 1),
                                 night ? NIGHT_AMBIENT_INTENSITY : AMBIENT_INTENSITY));
+        // The physical sky in place of the gray skybox, from the startup property
+        previousPhysicalSky = scene.getPhysicalSky();
+        if (Boolean.getBoolean(PROPERTY + ".physicalSky")) {
+            scene.setPhysicalSky(new PhysicalSky());
+        }
+    }
+
+    /**
+     * The way the sun's light travels: {@link #SUN_DIRECTION}, or from the same side at the height
+     * the startup property gives, in degrees above the horizon, to look at the sky at dawn or dusk.
+     *
+     * @return The direction.
+     */
+    private static Vector3f sunDirection() {
+        final String up = System.getProperty(PROPERTY + ".sunUp");
+        if (up == null) {
+            return new Vector3f(SUN_DIRECTION);
+        }
+        final double elevation = Math.toRadians(Double.parseDouble(up));
+        final Vector3f side = new Vector3f(SUN_DIRECTION.x, 0, SUN_DIRECTION.z).normalize();
+        return side.mul((float) Math.cos(elevation)).add(0, (float) -Math.sin(elevation), 0);
     }
 
     /**
@@ -2303,6 +2328,7 @@ public final class GateBenchmark {
         if (scene != null && previousSun != null) {
             scene.getSceneLights().setDirLight(previousSun);
             scene.getSceneLights().setAmbientLight(previousAmbient);
+            scene.setPhysicalSky(previousPhysicalSky);
         }
         if (scene != null && !Double.isNaN(previousViewDistance)) {
             scene.setViewDistance(previousViewDistance);

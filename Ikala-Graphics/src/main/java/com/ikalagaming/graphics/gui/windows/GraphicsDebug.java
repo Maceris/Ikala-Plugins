@@ -27,6 +27,7 @@ import com.ikalagaming.graphics.gui.enums.Condition;
 import com.ikalagaming.graphics.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.gui.util.Alignment;
 import com.ikalagaming.graphics.lod.LodPanel;
+import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
@@ -826,6 +827,15 @@ public class GraphicsDebug extends GuiWindow {
                 "Take ambient light from the skybox: reflections by roughness and diffuse light by"
                         + " direction, averaging the ambient light. Off, it is the same from every"
                         + " direction.");
+        IkGui.sameLine();
+        final Scene skyScene = GraphicsManager.getScene();
+        if (skyScene != null && IkGui.checkbox("Physical sky", skyScene.getPhysicalSky() != null)) {
+            skyScene.setPhysicalSky(skyScene.getPhysicalSky() == null ? new PhysicalSky() : null);
+        }
+        IkGui.setItemTooltip(
+                "Draw Earth's atmosphere lit by the sun in place of the skybox, and light the"
+                        + " scene from it, as bright as the sun makes it; the ambient light is not"
+                        + " used.");
         if (IkGui.checkbox("Sky occlusion", settings.skyOcclusion)) {
             settings.skyOcclusion = !settings.skyOcclusion;
         }

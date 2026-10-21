@@ -20,6 +20,7 @@ import com.ikalagaming.graphics.gui.flags.TableFlags;
 import com.ikalagaming.graphics.gui.flags.TreeNodeFlags;
 import com.ikalagaming.graphics.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.gui.util.Color;
+import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugBox;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
@@ -158,6 +159,9 @@ public class SceneView {
     /** The ambient light before entering. */
     private AmbientLight previousAmbient;
 
+    /** The physical sky before entering, or null for the skybox. */
+    private PhysicalSky previousPhysicalSky;
+
     /** The camera position before entering. */
     private final Vector3d previousPosition = new Vector3d();
 
@@ -257,6 +261,7 @@ public class SceneView {
         previousSun = scene.getSceneLights().getDirLight();
         previousAmbient = scene.getSceneLights().getAmbientLight();
         previousExposure = scene.getExposure();
+        previousPhysicalSky = scene.getPhysicalSky();
         previousPosition.set(scene.getCamera().getPosition());
         previousRotation.set(scene.getCamera().getRotation());
         // The debug stage draws the selection's outline
@@ -290,6 +295,7 @@ public class SceneView {
         scene.getSceneLights().setDirLight(previousSun);
         scene.getSceneLights().setAmbientLight(previousAmbient);
         scene.setExposure(previousExposure);
+        scene.setPhysicalSky(previousPhysicalSky);
         scene.getCamera().setPosition(previousPosition.x, previousPosition.y, previousPosition.z);
         scene.getCamera().setRotation(previousRotation.x, previousRotation.y);
         GraphicsManager.swapPipeline(previousPipeline);
@@ -680,6 +686,12 @@ public class SceneView {
         if (IkGui.sliderFloat("Exposure", value, 0.05f, MAX_EXPOSURE, "%.2f")) {
             scene.setExposure(value[0]);
         }
+        if (IkGui.checkbox("Physical sky", scene.getPhysicalSky() != null)) {
+            scene.setPhysicalSky(scene.getPhysicalSky() == null ? new PhysicalSky() : null);
+        }
+        IkGui.setItemTooltip(
+                "Earth's atmosphere lit by the sun as the sky, lighting the scene as bright as the"
+                        + " sun makes it. The ambient light is not used while it is on.");
         if (shown.lightCount() > 0) {
             value[0] = shown.getLightScale();
             if (IkGui.sliderFloat("File's lights strength", value, 0, MAX_LIGHT_SCALE, "%.2fx")) {

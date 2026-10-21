@@ -6,6 +6,7 @@ import static org.lwjgl.vulkan.VK13.*;
 
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 import org.joml.Vector4f;
 import org.joml.Vector4fc;
 import org.lwjgl.PointerBuffer;
@@ -14,6 +15,7 @@ import org.lwjgl.util.vma.VmaAllocationCreateInfo;
 import org.lwjgl.vulkan.*;
 
 import java.nio.LongBuffer;
+import java.util.Arrays;
 
 /**
  * The light the sky gives, for image-based lighting: the sky captured into a cube map, its GGX
@@ -29,7 +31,13 @@ import java.nio.LongBuffer;
  * chain to filter from, and the environment, whose level {@code m} is the source convolved with the
  * GGX lobe of roughness {@code m / (ENVIRONMENT_LEVELS - 1)}. Both stay in the general layout,
  * written through storage views of each level and read through cube views, in one set the compute
- * passes and the lighting share. Render thread only.
+ * passes and the lighting share.
+ *
+ * <p>The sky is the skybox, its texture or its color, or a physical sky (see {@link
+ * com.ikalagaming.graphics.scene.PhysicalSky}), whose three tables live here too: transmittance
+ * through the atmosphere, its multiple scattering, both filled once, and the sky's light toward
+ * every direction from the camera, filled every frame the physical sky is on, see {@code
+ * atmosphere.comp}. Render thread only.
  */
 public class Environment {
 
@@ -74,11 +82,38 @@ public class Environment {
     /** The binding of the harmonics coefficients, a vec4 each. */
     public static final int HARMONICS_BINDING = 4;
 
+    /** The first binding of the physical sky's tables as storage images, one each. */
+    public static final int TABLES_STORAGE_BINDING = 5;
+
+    /** The first binding of the physical sky's tables, sampled, one each. */
+    public static final int TABLES_SAMPLED_BINDING = 8;
+
+    /** The transmittance table, among the tables. */
+    public static final int TRANSMITTANCE = 0;
+
+    /** The multiple scattering table, among the tables. */
+    public static final int MULTIPLE_SCATTERING = 1;
+
+    /** The sky view table, among the tables. */
+    public static final int SKY_VIEW = 2;
+
+    /** Each table's width, by table. Mirrors atmosphere.glsl. */
+    public static final int[] TABLE_WIDTHS = {256, 32, 192};
+
+    /** Each table's height, by table. Mirrors atmosphere.glsl. */
+    public static final int[] TABLE_HEIGHTS = {64, 32, 108};
+
+    /** The sky texture slot that stands for the physical sky. */
+    public static final int PHYSICAL_SKY = -2;
+
+    /** How many tables there are. */
+    private static final int TABLES = 3;
+
     /** The size of the harmonics buffer. */
     private static final int HARMONICS_SIZE = HARMONICS_COUNT * 4 * Float.BYTES;
 
     /** Bindings in the set. */
-    private static final int BINDINGS = 5;
+    private static final int BINDINGS = 5 + 2 * TABLES;
 
     /** The source cube. */
     private final long sourceImage;
@@ -103,6 +138,24 @@ public class Environment {
 
     /** The harmonics coefficients. */
     private final SharedBuffer harmonics;
+
+    /** The physical sky's tables. */
+    private final long[] tableImages = new long[TABLES];
+
+    /** Their allocations. */
+    private final long[] tableAllocations = new long[TABLES];
+
+    /** Their views. */
+    private final long[] tableViews = new long[TABLES];
+
+    /**
+     * Whether the transmittance and multiple scattering tables are filled, which only has to happen
+     * once. -- GETTER -- Whether they are filled. -- SETTER -- Note them filled.
+     *
+     * @param tablesFilled Whether they are filled.
+     * @return Whether they are filled.
+     */
+    @Getter @Setter private boolean tablesFilled;
 
     /** Filters between texels and levels. */
     private final long sampler;
@@ -129,6 +182,9 @@ public class Environment {
 
     /** The skybox color the cubes hold, when it has no texture. */
     private final Vector4f capturedColor = new Vector4f(Float.NaN);
+
+    /** The physical sky's sun and altitude steps the cubes hold, when they hold it. */
+    private final int[] capturedSteps = new int[3];
 
     /**
      * Times the sky was captured and filtered. -- GETTER -- Times the sky was captured.
@@ -174,6 +230,17 @@ public class Environment {
                                 level,
                                 1,
                                 stack);
+            }
+            for (int table = 0; table < TABLES; ++table) {
+                tableImages[table] =
+                        createTable(
+                                state,
+                                TABLE_WIDTHS[table],
+                                TABLE_HEIGHTS[table],
+                                longOutput,
+                                stack);
+                tableAllocations[table] = longOutput.get(0);
+                tableViews[table] = createTableView(state, tableImages[table], stack);
             }
             harmonics =
                     SharedBuffer.allocateDeviceLocal(
@@ -223,6 +290,18 @@ public class Environment {
                     .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                     .descriptorCount(1)
                     .stageFlags(stages);
+            for (int table = 0; table < TABLES; ++table) {
+                bindings.get(5 + table)
+                        .binding(TABLES_STORAGE_BINDING + table)
+                        .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+                        .descriptorCount(1)
+                        .stageFlags(VK_SHADER_STAGE_COMPUTE_BIT);
+                bindings.get(5 + TABLES + table)
+                        .binding(TABLES_SAMPLED_BINDING + table)
+                        .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                        .descriptorCount(1)
+                        .stageFlags(stages);
+            }
             checkError(
                     vkCreateDescriptorSetLayout(
                             state.device.logical,
@@ -237,8 +316,11 @@ public class Environment {
             poolSizes
                     .get(0)
                     .type(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
-                    .descriptorCount(SOURCE_LEVELS + ENVIRONMENT_LEVELS);
-            poolSizes.get(1).type(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER).descriptorCount(2);
+                    .descriptorCount(SOURCE_LEVELS + ENVIRONMENT_LEVELS + TABLES);
+            poolSizes
+                    .get(1)
+                    .type(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                    .descriptorCount(2 + TABLES);
             poolSizes.get(2).type(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER).descriptorCount(1);
             checkError(
                     vkCreateDescriptorPool(
@@ -268,8 +350,12 @@ public class Environment {
                 state,
                 commandBuffer -> {
                     try (MemoryStack stack = MemoryStack.stackPush()) {
-                        clearWhole(commandBuffer, sourceImage, SOURCE_LEVELS, stack);
-                        clearWhole(commandBuffer, environmentImage, ENVIRONMENT_LEVELS, stack);
+                        clearWhole(commandBuffer, sourceImage, SOURCE_LEVELS, FACES, stack);
+                        clearWhole(
+                                commandBuffer, environmentImage, ENVIRONMENT_LEVELS, FACES, stack);
+                        for (long table : tableImages) {
+                            clearWhole(commandBuffer, table, 1, 1, stack);
+                        }
                         vkCmdFillBuffer(commandBuffer, harmonics.buffer, 0, HARMONICS_SIZE, 0);
                     }
                 });
@@ -278,16 +364,22 @@ public class Environment {
     /**
      * Whether the sky changed since it was last captured, and if so, note it as captured.
      *
-     * @param skyTexture The skybox texture's bindless slot, or -1 for its color.
+     * @param skyTexture The skybox texture's bindless slot, -1 for its color, or {@link
+     *     #PHYSICAL_SKY}.
      * @param skyColor The skybox's color, used without a texture.
+     * @param steps For the physical sky, the steps its sun's direction and the camera's altitude
+     *     are in, three of them, so the cubes follow it a step at a time; ignored otherwise.
      * @return True if the cubes should be worked out again now.
      */
-    public boolean takeChange(int skyTexture, @NonNull Vector4fc skyColor) {
+    public boolean takeChange(int skyTexture, @NonNull Vector4fc skyColor, int @NonNull [] steps) {
         final boolean changed =
-                skyTexture != capturedTexture || skyTexture < 0 && !capturedColor.equals(skyColor);
+                skyTexture != capturedTexture
+                        || skyTexture == -1 && !capturedColor.equals(skyColor)
+                        || skyTexture == PHYSICAL_SKY && !Arrays.equals(steps, capturedSteps);
         if (changed) {
             capturedTexture = skyTexture;
             capturedColor.set(skyColor);
+            System.arraycopy(steps, 0, capturedSteps, 0, capturedSteps.length);
             updates += 1;
         }
         return changed;
@@ -336,7 +428,37 @@ public class Environment {
         VkDescriptorBufferInfo.Buffer harmonicsInfo = VkDescriptorBufferInfo.calloc(1, stack);
         harmonicsInfo.get(0).buffer(harmonics.buffer).offset(0).range(HARMONICS_SIZE);
 
+        VkDescriptorImageInfo.Buffer tableStorage = VkDescriptorImageInfo.calloc(TABLES, stack);
+        VkDescriptorImageInfo.Buffer tableSampled = VkDescriptorImageInfo.calloc(TABLES, stack);
+        for (int table = 0; table < TABLES; ++table) {
+            tableStorage
+                    .get(table)
+                    .imageView(tableViews[table])
+                    .imageLayout(VK_IMAGE_LAYOUT_GENERAL);
+            tableSampled
+                    .get(table)
+                    .sampler(sampler)
+                    .imageView(tableViews[table])
+                    .imageLayout(VK_IMAGE_LAYOUT_GENERAL);
+        }
+
         VkWriteDescriptorSet.Buffer writes = VkWriteDescriptorSet.calloc(BINDINGS, stack);
+        for (int table = 0; table < TABLES; ++table) {
+            writes.get(5 + table)
+                    .sType$Default()
+                    .dstSet(set)
+                    .dstBinding(TABLES_STORAGE_BINDING + table)
+                    .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+                    .descriptorCount(1)
+                    .pImageInfo(VkDescriptorImageInfo.create(tableStorage.address(table), 1));
+            writes.get(5 + TABLES + table)
+                    .sType$Default()
+                    .dstSet(set)
+                    .dstBinding(TABLES_SAMPLED_BINDING + table)
+                    .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                    .descriptorCount(1)
+                    .pImageInfo(VkDescriptorImageInfo.create(tableSampled.address(table), 1));
+        }
         writes.get(0)
                 .sType$Default()
                 .dstSet(set)
@@ -417,6 +539,75 @@ public class Environment {
     }
 
     /**
+     * Create one of the physical sky's tables, a 2D image that can be sampled and written as
+     * storage.
+     *
+     * @param state The Vulkan state.
+     * @param width Its width.
+     * @param height Its height.
+     * @param allocation Where to put its allocation.
+     * @param stack The stack to allocate from.
+     * @return The VkImage.
+     */
+    private static long createTable(
+            @NonNull VulkanState state,
+            int width,
+            int height,
+            @NonNull LongBuffer allocation,
+            @NonNull MemoryStack stack) {
+        LongBuffer longOutput = stack.callocLong(1);
+        PointerBuffer pointerOutput = stack.callocPointer(1);
+        VkImageCreateInfo imageInfo =
+                VkImageCreateInfo.calloc(stack)
+                        .sType$Default()
+                        .imageType(VK_IMAGE_TYPE_2D)
+                        .format(FORMAT)
+                        .extent(e -> e.set(width, height, 1))
+                        .mipLevels(1)
+                        .arrayLayers(1)
+                        .samples(VK_SAMPLE_COUNT_1_BIT)
+                        .tiling(VK_IMAGE_TILING_OPTIMAL)
+                        .usage(
+                                VK_IMAGE_USAGE_STORAGE_BIT
+                                        | VK_IMAGE_USAGE_SAMPLED_BIT
+                                        | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+                        .initialLayout(VK_IMAGE_LAYOUT_UNDEFINED);
+        VmaAllocationCreateInfo allocInfo =
+                VmaAllocationCreateInfo.calloc(stack).usage(VMA_MEMORY_USAGE_AUTO);
+        checkError(
+                vmaCreateImage(
+                        state.vmaAllocator, imageInfo, allocInfo, longOutput, pointerOutput, null));
+        allocation.put(0, pointerOutput.get(0));
+        return longOutput.get(0);
+    }
+
+    /**
+     * Create a view of one of the tables.
+     *
+     * @param state The Vulkan state.
+     * @param image The VkImage.
+     * @param stack The stack to allocate from.
+     * @return The VkImageView.
+     */
+    private static long createTableView(
+            @NonNull VulkanState state, long image, @NonNull MemoryStack stack) {
+        LongBuffer longOutput = stack.callocLong(1);
+        VkImageViewCreateInfo viewInfo =
+                VkImageViewCreateInfo.calloc(stack)
+                        .sType$Default()
+                        .image(image)
+                        .viewType(VK_IMAGE_VIEW_TYPE_2D)
+                        .format(FORMAT)
+                        .subresourceRange(
+                                range ->
+                                        range.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                                                .levelCount(1)
+                                                .layerCount(1));
+        checkError(vkCreateImageView(state.device.logical, viewInfo, null, longOutput));
+        return longOutput.get(0);
+    }
+
+    /**
      * Create a view of a cube's faces.
      *
      * @param state The Vulkan state.
@@ -452,17 +643,19 @@ public class Environment {
     }
 
     /**
-     * Move a new cube to the general layout and clear it to black.
+     * Move a new image to the general layout and clear it to black.
      *
      * @param commandBuffer The command buffer to record into.
      * @param image The VkImage.
      * @param levels How many mip levels it has.
+     * @param layers How many layers it has.
      * @param stack The stack to allocate from.
      */
     private static void clearWhole(
             @NonNull VkCommandBuffer commandBuffer,
             long image,
             int levels,
+            int layers,
             @NonNull MemoryStack stack) {
         VkImageMemoryBarrier2.Buffer barrier = VkImageMemoryBarrier2.calloc(1, stack);
         barrier.get(0)
@@ -480,12 +673,12 @@ public class Environment {
                         range ->
                                 range.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
                                         .levelCount(levels)
-                                        .layerCount(FACES));
+                                        .layerCount(layers));
         vkCmdPipelineBarrier2(
                 commandBuffer,
                 VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barrier));
         VkImageSubresourceRange.Buffer range = VkImageSubresourceRange.calloc(1, stack);
-        range.get(0).aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).levelCount(levels).layerCount(FACES);
+        range.get(0).aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).levelCount(levels).layerCount(layers);
         vkCmdClearColorImage(
                 commandBuffer,
                 image,
@@ -528,6 +721,10 @@ public class Environment {
         }
         vmaDestroyImage(state.vmaAllocator, sourceImage, sourceAllocation);
         vmaDestroyImage(state.vmaAllocator, environmentImage, environmentAllocation);
+        for (int table = 0; table < TABLES; ++table) {
+            vkDestroyImageView(state.device.logical, tableViews[table], null);
+            vmaDestroyImage(state.vmaAllocator, tableImages[table], tableAllocations[table]);
+        }
         vkDestroySampler(state.device.logical, sampler, null);
         SharedBuffer.free(harmonics, state);
     }
