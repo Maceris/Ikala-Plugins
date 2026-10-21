@@ -57,7 +57,8 @@ class ShaderBindingsTest {
         assertEquals(748, ShaderBindings.Light.ENVIRONMENT_ENABLED_OFFSET);
         // A vec4, on a 16 byte boundary
         assertEquals(752, ShaderBindings.Light.ENVIRONMENT_SCALE_OFFSET);
-        assertEquals(768, ShaderBindings.Light.UNIFORMS_BUFFER_SIZE);
+        assertEquals(768, ShaderBindings.Light.ENVIRONMENT_OCCLUSION_OFFSET);
+        assertEquals(784, ShaderBindings.Light.UNIFORMS_BUFFER_SIZE);
         // The shadow map index takes the first of the light struct's spare words
         assertEquals(56, ShaderBindings.Light.LightStruct.SHADOW_MAP);
     }

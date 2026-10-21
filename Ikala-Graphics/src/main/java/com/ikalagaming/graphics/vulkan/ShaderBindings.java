@@ -1154,9 +1154,16 @@ public class ShaderBindings {
         public static final int ENVIRONMENT_SCALE_OFFSET =
                 (int) SharedBuffer.align(ENVIRONMENT_ENABLED_OFFSET + Integer.BYTES);
 
+        /**
+         * The offset into the uniforms for whether what the occupancy volume holds bends the sky's
+         * diffuse light toward where the sky shows and hides its reflections, 1 if so.
+         */
+        public static final int ENVIRONMENT_OCCLUSION_OFFSET =
+                ENVIRONMENT_SCALE_OFFSET + 4 * Float.BYTES;
+
         /** The size of the uniforms buffer, padded out to 16 bytes under std140 rules. */
         public static final int UNIFORMS_BUFFER_SIZE =
-                (int) SharedBuffer.align(ENVIRONMENT_SCALE_OFFSET + 4 * Float.BYTES);
+                (int) SharedBuffer.align(ENVIRONMENT_OCCLUSION_OFFSET + Integer.BYTES);
 
         /** Uniforms buffer binding. */
         public static final int UNIFORMS_BINDING = 0;

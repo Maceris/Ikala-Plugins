@@ -97,8 +97,12 @@ float occupancyFullness(vec3 renderPosition, int level)
 // light reached. Samples blend between the voxels around them, so a surface lying anywhere in its
 // voxel, even right between two layers, gets a steady answer. The normal is best the surface's
 // geometric one.
-float occupancyAmbient(vec3 renderPosition, vec3 renderNormal)
+//
+// Also gives the bent normal: the directions averaged by how open each is, which leans away from
+// what is in the way, toward where the sky shows.
+float occupancyAmbient(vec3 renderPosition, vec3 renderNormal, out vec3 bentNormal)
 {
+    bentNormal = renderNormal;
     if (occupancyEnabled == 0 || occupancyAoReach <= 0.0) {
         return 1.0;
     }
@@ -121,6 +125,7 @@ float occupancyAmbient(vec3 renderPosition, vec3 renderNormal)
         renderNormal + across2, renderNormal - across2);
     float open = 0.0;
     float total = 0.0;
+    vec3 bent = vec3(0);
     for (int d = 0; d < 5; ++d) {
         float weight = d == 0 ? 1.0 : AO_TILT;
         float through = 1.0;
@@ -135,8 +140,18 @@ float occupancyAmbient(vec3 renderPosition, vec3 renderNormal)
         }
         open += weight * reached / float(AO_STEPS);
         total += weight;
+        bent += normalize(directions[d]) * (weight * reached / float(AO_STEPS));
     }
+    // Shut in all around, there is no way it leans
+    bentNormal = dot(bent, bent) > 1e-8 ? normalize(bent) : renderNormal;
     return open / total;
+}
+
+// How much ambient light reaches a surface, see the version that gives the bent normal too
+float occupancyAmbient(vec3 renderPosition, vec3 renderNormal)
+{
+    vec3 bentNormal;
+    return occupancyAmbient(renderPosition, renderNormal, bentNormal);
 }
 
 // The most lights a pixel marches a ray for. Matches ShaderBindings.Light.MAX_OCCUPANCY_RAYS.
@@ -205,6 +220,29 @@ float occupancyRayVisibility(vec3 renderPosition, vec3 renderNormal, vec3 render
         }
     }
     return through;
+}
+
+// How far a reflection is followed through the occupancy volume for what hides the sky, in meters
+const float REFLECTION_REACH = 16.0;
+
+// How far above level, as the sine of its angle, a reflection fades from the ground's light, which
+// the environment's lower half stands for, to the sky's, which what is in the way can hide
+const float REFLECTION_HORIZON_FADE = 0.1;
+
+// How much of the sky a surface sees along its reflection, from 0 to 1: a ray through the occupancy
+// volume, out to REFLECTION_REACH, so floors and walls under cover don't mirror a sky they can't
+// see. Reflections below the horizon mirror the environment's ground, which stands for the real
+// ground's light, so the ground the ray would meet doesn't hide them. The normal is best the
+// surface's geometric one.
+float occupancyReflectionVisibility(vec3 renderPosition, vec3 renderNormal, vec3 reflected)
+{
+    float skyward = smoothstep(0.0, REFLECTION_HORIZON_FADE, reflected.y);
+    // Past the surface's horizon the lobe is mostly hidden already
+    if (skyward <= 0.0 || dot(reflected, renderNormal) <= 0.0) {
+        return 1.0;
+    }
+    float seen = occupancyRayVisibility(renderPosition, renderNormal, renderPosition + reflected * REFLECTION_REACH);
+    return mix(1.0, seen, skyward);
 }
 
 // The occupancy view: red where a surface's own voxel is empty, which would be a hole in the

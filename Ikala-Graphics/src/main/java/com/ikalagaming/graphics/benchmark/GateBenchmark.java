@@ -873,6 +873,12 @@ public final class GateBenchmark {
                 }
                 // Off, ambient light isn't dimmed by the occupancy volume; the view shows it in
                 // gray
+                final String environmentOcclusion =
+                        System.getProperty(PROPERTY + ".environmentOcclusion");
+                if (environmentOcclusion != null) {
+                    GraphicsManager.getSettings().environmentOcclusion =
+                            Boolean.parseBoolean(environmentOcclusion);
+                }
                 final String ao = System.getProperty(PROPERTY + ".ao");
                 if (ao != null) {
                     GraphicsManager.getSettings().occupancyAo = Boolean.parseBoolean(ao);

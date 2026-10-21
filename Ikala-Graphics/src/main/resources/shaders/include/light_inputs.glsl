@@ -102,6 +102,8 @@ layout(set = 0, binding = 0) uniform Uniforms {
     // What the environment is scaled by: xyz when w is 1, as for the physical sky, per unit of the
     // sun's light; with w 0, so its average is the ambient light
     vec4 environmentScale;
+    // Nonzero for the occupancy volume to bend the sky's diffuse light and hide its reflections
+    int environmentOcclusion;
 };
 
 // One point light shadow cube map: each face's matrix from render space, where it is drawn from in

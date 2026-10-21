@@ -39,6 +39,9 @@ const float CLEARCOAT_SPECULAR = 0.04;
 const float MIN_N_DOT_V = 1e-4;
 // The average of Schlick's Fresnel over the hemisphere is F0 + (1 - F0) / 21
 const float FRESNEL_AVERAGE_DIVISOR = 21.0;
+// The roughness from which a reflection's ray through the occupancy volume no longer counts, the
+// ambient occlusion covering what hides a lobe that wide
+const float REFLECTION_ROUGHNESS = 0.8;
 
 float sqr(float x) {
     return x * x;
@@ -518,7 +521,8 @@ vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 ren
     // Ambient light arrives equally from everywhere the sky can be seen, and dimly under cover, less
     // what is in the way nearby
 #ifdef OCCUPANCY_SET
-    float open = occupancyAmbient(renderPosition, renderGeometric);
+    vec3 bentGeometric;
+    float open = occupancyAmbient(renderPosition, renderGeometric, bentGeometric);
 #else
     float open = 1.0;
 #endif
@@ -535,6 +539,21 @@ vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 ren
             : ambientColor / max(dot(environmentAverage(), ENVIRONMENT_LUMINANCE), 1e-4);
         vec3 worldNormal = mat3(invViewMatrix) * normal;
         vec3 reflected = mat3(invViewMatrix) * reflect(normalize(viewPosition), normal);
+        // Diffuse sky light comes from where the sky shows: the shading normal turned as the bent
+        // normal leans from the geometric one
+        vec3 diffuseNormal = worldNormal;
+        float reflectionVisible = 1.0;
+#ifdef OCCUPANCY_SET
+        if (occupancyAoReach > 0.0 && environmentOcclusion != 0) {
+            diffuseNormal = normalize(worldNormal + bentGeometric - renderGeometric);
+            // Smooth surfaces mirror what is along the reflection; rough ones spread past it,
+            // which the ambient occlusion covers
+            if (material.roughness < REFLECTION_ROUGHNESS) {
+                float seen = occupancyReflectionVisibility(renderPosition, renderGeometric, reflected);
+                reflectionVisible = mix(seen, 1.0, material.roughness / REFLECTION_ROUGHNESS);
+            }
+        }
+#endif
         vec3 mirrored;
         vec3 spread = ambientParts(sRGBToLinear(baseColor.rgb), material, nDotV, mirrored);
         // Lagarde's specular occlusion: what hides the hemisphere hides more of a narrow lobe
@@ -542,8 +561,9 @@ vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 ren
         float specularVisible = clamp(
             pow(nDotV + ao, exp2(-16.0 * material.roughness - 1.0)) - 1.0 + ao, 0.0, 1.0);
         ambient = scale * mix(skyLightFloor, 1.0, sky)
-            * (spread * environmentDiffuse(worldNormal) * ao
-                + mirrored * environmentSpecular(reflected, material.roughness) * specularVisible);
+            * (spread * environmentDiffuse(diffuseNormal) * ao
+                + mirrored * environmentSpecular(reflected, material.roughness) * specularVisible
+                    * reflectionVisible);
     } else
 #endif
     {

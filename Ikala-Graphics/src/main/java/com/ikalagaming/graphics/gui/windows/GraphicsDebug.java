@@ -827,6 +827,12 @@ public class GraphicsDebug extends GuiWindow {
                 "Take ambient light from the skybox: reflections by roughness and diffuse light by"
                         + " direction, averaging the ambient light. Off, it is the same from every"
                         + " direction.");
+        if (IkGui.checkbox("Sky light around cover", settings.environmentOcclusion)) {
+            settings.environmentOcclusion = !settings.environmentOcclusion;
+        }
+        IkGui.setItemTooltip(
+                "Bend the sky's diffuse light toward where the occupancy volume finds the sky, and"
+                        + " hide its reflections where a ray along them meets something.");
         IkGui.sameLine();
         final Scene skyScene = GraphicsManager.getScene();
         if (skyScene != null && IkGui.checkbox("Physical sky", skyScene.getPhysicalSky() != null)) {

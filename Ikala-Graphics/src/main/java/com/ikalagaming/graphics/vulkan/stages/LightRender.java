@@ -399,6 +399,9 @@ public class LightRender implements RenderStage {
                     1);
         }
         environmentScale.get(ShaderBindings.Light.ENVIRONMENT_SCALE_OFFSET, uniformData);
+        uniformData.putInt(
+                ShaderBindings.Light.ENVIRONMENT_OCCLUSION_OFFSET,
+                GraphicsManager.getSettings().environmentOcclusion ? 1 : 0);
         for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
             uniformData.putInt(
                     ShaderBindings.Light.SHADOW_MAP_0_INDEX_OFFSET + i * Integer.BYTES,

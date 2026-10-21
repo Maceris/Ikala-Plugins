@@ -140,6 +140,13 @@ public class GraphicsSettings {
     public boolean environmentLighting = true;
 
     /**
+     * Whether what the occupancy volume holds shapes the sky's light: its diffuse light comes from
+     * the way the ambient occlusion finds most open, and a ray along each smooth surface's
+     * reflection hides the sky where something is in the way.
+     */
+    public boolean environmentOcclusion = true;
+
+    /**
      * The least ambient light a point well under cover gets, as a part of open ground's, from 0 for
      * none to 1 for no dimming.
      */
