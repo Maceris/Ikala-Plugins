@@ -27,7 +27,12 @@ import java.util.function.IntToDoubleFunction;
  * it was built. A level is every cluster that stands for its part of the input there: those on the
  * level, and those below it whose consumer makes a higher level, as happens where region cells stop
  * at different levels and their parent takes over. In a DAG built in one piece, that is just the
- * level's own clusters.
+ * level's own clusters. A drawn cluster's edges are judged at its own level, though it stands for
+ * levels above it too: a higher level can close an edge by merging what lies around it, as where a
+ * wall's foot is buried in a slab whose faces against it were culled, while a finer neighbor drawn
+ * beside the cluster shows the edge open as its own level does. Where the cluster meets another
+ * cell or group, its own level has the neighbor's border edges, or its finer ones', so a crack
+ * there is still found.
  *
  * <p>Where parts meet at T-junctions, an edge used once can still be closed: another triangle
  * touches it all along, so the surface goes on past it. Faces that end against the middle of
@@ -457,7 +462,7 @@ public final class CrackCheck {
                             }
                         });
             }
-            // The most any level drawing an edge uses it, and a level that uses it once
+            // The most the drawing clusters' own levels use an edge, and a level that uses it once
             final Map<Grouping.Edge, Integer> allowed = new HashMap<>();
             final Map<Grouping.Edge, Integer> onceIn = new HashMap<>();
             for (int i : members) {
@@ -465,7 +470,6 @@ public final class CrackCheck {
                     continue;
                 }
                 final LodDag.Cluster cluster = clusters.get(i);
-                final int top = highest[i];
                 forEachEdge(
                         cluster,
                         key,
@@ -473,13 +477,12 @@ public final class CrackCheck {
                         null,
                         true,
                         (edge, corners, from, to, triangle) -> {
-                            for (int level = cluster.level(); level <= top; ++level) {
-                                final Use use = levelUses.get(level).get(edge);
-                                final int count = use == null ? 0 : use.count;
-                                allowed.merge(edge, count, Math::max);
-                                if (count == 1) {
-                                    onceIn.put(edge, level);
-                                }
+                            final int level = cluster.level();
+                            final Use use = levelUses.get(level).get(edge);
+                            final int count = use == null ? 0 : use.count;
+                            allowed.merge(edge, count, Math::max);
+                            if (count == 1) {
+                                onceIn.put(edge, level);
                             }
                         });
             }
@@ -1114,8 +1117,8 @@ public final class CrackCheck {
             }
         }
         final Map<Grouping.Edge, Integer> uses = Grouping.edgeUses(dag, clusters);
-        // The most any level drawing an edge uses it, a level that uses it once, and the triangle
-        // using each edge used once
+        // The most the drawing clusters' own levels use an edge, a level that uses it once, and
+        // the triangle using each edge used once
         final Map<Grouping.Edge, Integer> allowed = new HashMap<>();
         final Map<Grouping.Edge, Integer> onceIn = new HashMap<>();
         final Map<Grouping.Edge, int[]> owners = new HashMap<>();
@@ -1132,12 +1135,11 @@ public final class CrackCheck {
                     if (uses.get(edge) == 1) {
                         owners.put(edge, new int[] {id, t, p, q});
                     }
-                    for (int level = cluster.level(); level <= highestStanding(cluster); ++level) {
-                        final int count = levelUses.get(level).getOrDefault(edge, 0);
-                        allowed.merge(edge, count, Math::max);
-                        if (count == 1) {
-                            onceIn.put(edge, level);
-                        }
+                    final int level = cluster.level();
+                    final int count = levelUses.get(level).getOrDefault(edge, 0);
+                    allowed.merge(edge, count, Math::max);
+                    if (count == 1) {
+                        onceIn.put(edge, level);
                     }
                 }
             }
