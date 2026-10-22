@@ -139,7 +139,21 @@ public final class LayoutEngine {
      * @param context The layout context.
      */
     private static void resolveStyles(Node<?> node, float inherited, LayoutContext context) {
-        ComputedStyle style = context.theme().compute(node.styleType(), node.classes, node.inline);
+        // Nodes keep their style while what it is computed from is the same, as it is most frames;
+        // classes and inline styles are replaced, never changed in place
+        final ComputedStyle style;
+        if (node.styledBy == context.theme()
+                && node.styledClasses == node.classes
+                && node.styledInline == node.inline
+                && node.styleType().equals(node.styledType)) {
+            style = node.style;
+        } else {
+            style = context.theme().compute(node.styleType(), node.classes, node.inline);
+            node.styledBy = context.theme();
+            node.styledClasses = node.classes;
+            node.styledInline = node.inline;
+            node.styledType = node.styleType();
+        }
         node.style = style;
         node.scale = context.scale();
 

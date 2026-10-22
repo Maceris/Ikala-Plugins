@@ -28,6 +28,15 @@ import java.util.function.IntFunction;
 @Slf4j
 class IkGuiImplMiscWidgets {
 
+    /**
+     * Reused for whether an item is hovered, as button behavior always sets it. IkGui runs on one
+     * thread, and this is read before any other item is drawn.
+     */
+    private static final IkBoolean scratchHovered = new IkBoolean();
+
+    /** Reused for whether an item is held, see {@link #scratchHovered}. */
+    private static final IkBoolean scratchHeld = new IkBoolean();
+
     public static final String FLOAT_DEFAULT_FORMAT = "%.3f";
     public static final String INT_DEFAULT_FORMAT = "%d";
     public static final String DOUBLE_DEFAULT_FORMAT = "%.6f";
@@ -177,8 +186,8 @@ class IkGuiImplMiscWidgets {
             IkGuiImplMultiSelect.multiSelectItemHeader(id, checked, null);
         }
 
-        final IkBoolean hovered = new IkBoolean();
-        final IkBoolean held = new IkBoolean();
+        final IkBoolean hovered = scratchHovered;
+        final IkBoolean held = scratchHeld;
         boolean pressed =
                 IkGuiInternal.buttonBehavior(totalBB, id, hovered, held, ButtonFlags.NONE);
 
@@ -424,8 +433,8 @@ class IkGuiImplMiscWidgets {
             return false;
         }
 
-        final IkBoolean hovered = new IkBoolean();
-        final IkBoolean held = new IkBoolean();
+        final IkBoolean hovered = scratchHovered;
+        final IkBoolean held = scratchHeld;
         final boolean pressed = IkGuiInternal.buttonBehavior(bb, id, hovered, held, buttonFlags);
 
         IkGuiImplNav.renderNavCursor(bb, id, NavRenderCursorFlags.NONE, -1.0f);
@@ -1200,8 +1209,8 @@ class IkGuiImplMiscWidgets {
         final float centerY = Math.round(y + squareSize * 0.5f);
         final float radius = (squareSize - 1.0f) * 0.5f;
 
-        final IkBoolean hovered = new IkBoolean();
-        final IkBoolean held = new IkBoolean();
+        final IkBoolean hovered = scratchHovered;
+        final IkBoolean held = scratchHeld;
         final boolean pressed =
                 IkGuiInternal.buttonBehavior(totalBB, id, hovered, held, ButtonFlags.NONE);
         if (pressed) {
@@ -1404,8 +1413,8 @@ class IkGuiImplMiscWidgets {
             selected = selectedState.get();
         }
 
-        final IkBoolean hovered = new IkBoolean();
-        final IkBoolean held = new IkBoolean();
+        final IkBoolean hovered = scratchHovered;
+        final IkBoolean held = scratchHeld;
         boolean pressed = IkGuiInternal.buttonBehavior(bb, id, hovered, held, buttonFlags);
         boolean autoSelected = false;
 

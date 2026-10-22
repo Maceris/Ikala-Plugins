@@ -22,6 +22,16 @@ import org.joml.Vector2f;
 
 @Slf4j
 class IkGuiImplTrees {
+
+    /**
+     * Reused for whether an item is hovered, as button behavior always sets it. IkGui runs on one
+     * thread, and this is read before any other item is drawn.
+     */
+    private static final IkBoolean scratchHovered = new IkBoolean();
+
+    /** Reused for whether an item is held, see {@link #scratchHovered}. */
+    private static final IkBoolean scratchHeld = new IkBoolean();
+
     static Context context;
 
     /** A tree node's label size, reused by every node: IkGui runs on one thread. */
@@ -700,8 +710,8 @@ class IkGuiImplTrees {
             buttonFlags |= ButtonFlags.INTERNAL_NO_KEY_MODS_ALLOWED;
         }
 
-        final IkBoolean hovered = new IkBoolean();
-        final IkBoolean held = new IkBoolean();
+        final IkBoolean hovered = scratchHovered;
+        final IkBoolean held = scratchHeld;
         boolean pressed = IkGuiInternal.buttonBehavior(interactBB, id, hovered, held, buttonFlags);
         boolean toggled = false;
 

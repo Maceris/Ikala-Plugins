@@ -15,6 +15,7 @@ import org.lwjgl.vulkan.VkQueryPoolCreateInfo;
 import java.nio.LongBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -130,6 +131,27 @@ public class FrameTimings {
 
     /** Each part's samples, in the order first seen. */
     private final Map<String, Rolling> rolling = new LinkedHashMap<>();
+
+    /** Where a part's time is in its {@link #partSums} entry. */
+    private static final int PART_MILLISECONDS = 0;
+
+    /** Where the read back a part's time is from is in its {@link #partSums} entry. */
+    private static final int PART_READ_BACK = 1;
+
+    /** The size of a {@link #partSums} entry. */
+    private static final int PART_SUM_SIZE = 2;
+
+    /**
+     * Each part's time in the frame read back last, with which read back that was, kept to be
+     * reused every frame. Render thread.
+     */
+    private final Map<String, double[]> partSums = new HashMap<>();
+
+    /** The parts of the frame read back last, in order. Render thread. */
+    private final List<String> frameParts = new ArrayList<>();
+
+    /** How many frames have been read back. Render thread. */
+    private long readBacks;
 
     /** Told about every frame's timings as they are read back, by part name, or null. */
     @Nullable private volatile Consumer<Map<String, Double>> listener;
@@ -295,21 +317,67 @@ public class FrameTimings {
             if (result != VK_SUCCESS) {
                 return;
             }
-            final Map<String, Double> frameTimes = new LinkedHashMap<>();
+            readBacks += 1;
+            frameParts.clear();
             for (int i = 1; i < count; ++i) {
-                frameTimes.merge(
+                addPart(
                         frameNames.get(i),
                         millisecondsBetween(
-                                results.get(i - 1), results.get(i), validBits, tickNanoseconds),
-                        Double::sum);
+                                results.get(i - 1), results.get(i), validBits, tickNanoseconds));
             }
-            frameTimes.put(
+            addPart(
                     GPU_TOTAL,
                     millisecondsBetween(
                             results.get(0), results.get(count - 1), validBits, tickNanoseconds));
-            frameTimes.put(CPU, cpuMilliseconds[frame]);
-            frameTimes.put(FRAME_INTERVAL, intervalMilliseconds[frame]);
-            record(frameTimes);
+            addPart(CPU, cpuMilliseconds[frame]);
+            addPart(FRAME_INTERVAL, intervalMilliseconds[frame]);
+            recordParts();
+        }
+    }
+
+    /**
+     * Add time to a part of the frame being read back; a part marked more than once adds up.
+     *
+     * @param name The part.
+     * @param milliseconds The time.
+     */
+    private void addPart(@NonNull String name, double milliseconds) {
+        double[] sum = partSums.get(name);
+        if (sum == null) {
+            sum = new double[PART_SUM_SIZE];
+            partSums.put(name, sum);
+        }
+        if (sum[PART_READ_BACK] != readBacks) {
+            sum[PART_READ_BACK] = readBacks;
+            sum[PART_MILLISECONDS] = 0;
+            frameParts.add(name);
+        }
+        sum[PART_MILLISECONDS] += milliseconds;
+    }
+
+    /**
+     * Add the parts of the frame read back to the statistics, and tell the listener, making a map
+     * of them only for it, since this happens every frame.
+     */
+    private void recordParts() {
+        lock.lock();
+        try {
+            for (int i = 0; i < frameParts.size(); ++i) {
+                final String name = frameParts.get(i);
+                rolling.computeIfAbsent(name, n -> new Rolling())
+                        .add(partSums.get(name)[PART_MILLISECONDS]);
+            }
+        } finally {
+            lock.unlock();
+        }
+        final Consumer<Map<String, Double>> current = listener;
+        if (current != null) {
+            final Map<String, Double> frameTimes = new LinkedHashMap<>();
+            for (int i = 0; i < frameParts.size(); ++i) {
+                final String name = frameParts.get(i);
+                frameTimes.put(name, partSums.get(name)[PART_MILLISECONDS]);
+            }
+            current.accept(frameTimes);
         }
     }
 

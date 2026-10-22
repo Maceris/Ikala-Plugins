@@ -16,6 +16,16 @@ import lombok.NonNull;
 import org.joml.Vector2f;
 
 class IkGuiImplButtons {
+
+    /**
+     * Reused for whether an item is hovered, as button behavior always sets it. IkGui runs on one
+     * thread, and this is read before any other item is drawn.
+     */
+    private static final IkBoolean scratchHovered = new IkBoolean();
+
+    /** Reused for whether an item is held, see {@link #scratchHovered}. */
+    private static final IkBoolean scratchHeld = new IkBoolean();
+
     static Context context;
 
     /**
@@ -64,8 +74,8 @@ class IkGuiImplButtons {
             return false;
         }
 
-        final IkBoolean hovered = new IkBoolean();
-        final IkBoolean held = new IkBoolean();
+        final IkBoolean hovered = scratchHovered;
+        final IkBoolean held = scratchHeld;
         final boolean pressed = IkGuiInternal.buttonBehavior(bb, id, hovered, held, buttonFlags);
 
         IkGuiImplNav.renderNavCursor(bb, id, NavRenderCursorFlags.NONE, -1.0f);
@@ -152,8 +162,8 @@ class IkGuiImplButtons {
             return false;
         }
 
-        final IkBoolean hovered = new IkBoolean();
-        final IkBoolean held = new IkBoolean();
+        final IkBoolean hovered = scratchHovered;
+        final IkBoolean held = scratchHeld;
         final boolean pressed = IkGuiInternal.buttonBehavior(bb, id, hovered, held, buttonFlags);
 
         IkGuiImplNav.renderNavCursor(bb, id, NavRenderCursorFlags.NONE, -1.0f);

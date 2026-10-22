@@ -899,6 +899,12 @@ public class Context {
 
     public final List<WindowStackData> windowStack;
 
+    /**
+     * Entries for {@link #windowStack}, one per depth, reused by every window begun at that depth,
+     * since windows are begun many times a frame and the stack only grows and shrinks at its end.
+     */
+    public final List<WindowStackData> windowStackEntries = new ArrayList<>();
+
     public Window windowWheeling;
 
     /** The ID of the child window that we are ending, used for error checking. */

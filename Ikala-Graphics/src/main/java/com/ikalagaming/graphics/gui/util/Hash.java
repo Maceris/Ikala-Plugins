@@ -61,10 +61,12 @@ public class Hash {
         if (hidden < 0) {
             return label;
         }
-        // Labels are mostly the same strings every frame, so their displayed parts are kept
-        final int slot = System.identityHashCode(label) & (DISPLAYED_KEPT - 1);
+        // Labels are mostly the same every frame, if not the same strings, so their displayed
+        // parts are kept
+        final int hash = label.hashCode();
+        final int slot = (hash ^ (hash >>> 16)) & (DISPLAYED_KEPT - 1);
         final Displayed kept = displayed[slot];
-        if (kept != null && kept.label() == label) {
+        if (kept != null && kept.label().equals(label)) {
             return kept.text();
         }
         final String text = label.substring(0, hidden);
@@ -84,8 +86,8 @@ public class Hash {
     private static final int DISPLAYED_KEPT = 256;
 
     /**
-     * Displayed parts of labels, by the label's identity hash. Each slot is replaced whole, so
-     * threads see a label with its own part.
+     * Displayed parts of labels, by the label's hash. Each slot is replaced whole, so threads see a
+     * label with its own part.
      */
     private static final Displayed[] displayed = new Displayed[DISPLAYED_KEPT];
 

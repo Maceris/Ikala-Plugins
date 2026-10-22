@@ -2205,7 +2205,77 @@ class IkGuiImplUtils {
     }
 
     public static void pushStyleColor(@NonNull ColorType type, int rgba) {
-        context.colorStack.push(new ColorMod(type, rgba));
+        context.colorStack.push(colorModOf(type, rgba));
+    }
+
+    /** How many stack entries of each kind are kept for reuse, a power of 2. */
+    private static final int MODS_KEPT = 256;
+
+    /** Color stack entries kept for reuse, by a hash of what they hold. */
+    private static final ColorMod[] colorMods = new ColorMod[MODS_KEPT];
+
+    /** Style variable stack entries kept for reuse, by a hash of what they hold. */
+    private static final StyleMod[] styleMods = new StyleMod[MODS_KEPT];
+
+    /**
+     * A color stack entry. Styles push the same few colors every frame, and the entries can't
+     * change, so they are kept and shared.
+     *
+     * @param type The color.
+     * @param rgba The value.
+     * @return The entry.
+     */
+    private static ColorMod colorModOf(@NonNull ColorType type, int rgba) {
+        final int slot = slotOf(31 * type.ordinal() + rgba);
+        final ColorMod kept = colorMods[slot];
+        if (kept != null && kept.type() == type && kept.color() == rgba) {
+            return kept;
+        }
+        final ColorMod made = new ColorMod(type, rgba);
+        colorMods[slot] = made;
+        return made;
+    }
+
+    /**
+     * A style variable stack entry, kept and shared as {@link #colorModOf} does.
+     *
+     * @param variable The variable.
+     * @param x The first value.
+     * @param y The second value.
+     * @param z The third value.
+     * @param w The fourth value.
+     * @return The entry.
+     */
+    private static StyleMod styleModOf(
+            @NonNull StyleVariable variable, float x, float y, float z, float w) {
+        int hash = variable.ordinal();
+        hash = 31 * hash + Float.floatToIntBits(x);
+        hash = 31 * hash + Float.floatToIntBits(y);
+        hash = 31 * hash + Float.floatToIntBits(z);
+        hash = 31 * hash + Float.floatToIntBits(w);
+        final int slot = slotOf(hash);
+        final StyleMod kept = styleMods[slot];
+        if (kept != null
+                && kept.type() == variable
+                && Float.compare(kept.x(), x) == 0
+                && Float.compare(kept.y(), y) == 0
+                && Float.compare(kept.z(), z) == 0
+                && Float.compare(kept.w(), w) == 0) {
+            return kept;
+        }
+        final StyleMod made = new StyleMod(variable, x, y, z, w);
+        styleMods[slot] = made;
+        return made;
+    }
+
+    /**
+     * Where an entry with a hash is kept.
+     *
+     * @param hash The hash.
+     * @return The slot.
+     */
+    private static int slotOf(int hash) {
+        return (hash ^ (hash >>> 16)) & (MODS_KEPT - 1);
     }
 
     public static void pushStyleVarFloat(@NonNull StyleVariable variable, float value) {
@@ -2436,7 +2506,7 @@ class IkGuiImplUtils {
         final float oldY = dimensions >= 2 ? getStyleVarRaw(variable, 1) : 0;
         final float oldZ = dimensions >= 4 ? getStyleVarRaw(variable, 2) : 0;
         final float oldW = dimensions >= 4 ? getStyleVarRaw(variable, 3) : 0;
-        context.styleVariableStack.push(new StyleMod(variable, oldX, oldY, oldZ, oldW));
+        context.styleVariableStack.push(styleModOf(variable, oldX, oldY, oldZ, oldW));
         setStyleVarRaw(variable, x, y, z, w);
     }
 

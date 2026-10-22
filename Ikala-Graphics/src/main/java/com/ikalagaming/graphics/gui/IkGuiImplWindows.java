@@ -223,7 +223,14 @@ class IkGuiImplWindows {
 
         // Add to stack
         setCurrentWindow(window);
-        WindowStackData windowStackData = new WindowStackData(window);
+        final int depth = context.windowStack.size();
+        if (context.windowStackEntries.size() <= depth) {
+            context.windowStackEntries.add(new WindowStackData(window));
+        }
+        // Every field is set again below, or here
+        final WindowStackData windowStackData = context.windowStackEntries.get(depth);
+        windowStackData.window = window;
+        windowStackData.disabledOverrideReenableBackup = 0.0f;
         windowStackData.parentLastItemDataBackup.set(context.lastItemData);
         windowStackData.disabledOverrideReenable =
                 (windowFlags & WindowFlags.INTERNAL_TOOLTIP) != 0

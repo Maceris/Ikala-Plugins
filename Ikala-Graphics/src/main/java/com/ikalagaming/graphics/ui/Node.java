@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.ui;
 
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.util.RectFloat;
+import com.ikalagaming.graphics.ui.style.ActiveTheme;
 import com.ikalagaming.graphics.ui.style.ComputedStyle;
 import com.ikalagaming.graphics.ui.style.Style;
 
@@ -66,6 +67,18 @@ public abstract class Node<S extends Node<S>> {
 
     /** The padding the last layout used: the node's own, the style's, or the default. */
     Insets resolvedPadding = Insets.NONE;
+
+    /** The theme {@link #style} was computed with, or null before the first layout. */
+    ActiveTheme styledBy;
+
+    /** The classes {@link #style} was computed from. */
+    List<String> styledClasses;
+
+    /** The inline style {@link #style} was computed from. */
+    Style styledInline;
+
+    /** The type name {@link #style} was computed for. */
+    String styledType;
 
     /** The IkGui style pushes last worked out for drawing this node, see {@link IkGuiStyler}. */
     IkGuiStyler.Cached stylePushes;
