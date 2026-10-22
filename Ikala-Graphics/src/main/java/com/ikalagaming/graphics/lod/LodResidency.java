@@ -5,6 +5,7 @@ import lombok.NonNull;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
@@ -23,6 +24,9 @@ import java.util.List;
  * no child is loaded. Unwanted units wait {@link #EVICT_DELAY_NANOS} before going, so looking back
  * and forth doesn't churn uploads.
  *
+ * <p>Units are numbered by index, and an index may be free, its unit null, so a caller can keep its
+ * units' indices across rebuilds and only work out again the ones that changed.
+ *
  * <p>Not thread safe: the render thread owns it.
  */
 public final class LodResidency {
@@ -39,6 +43,9 @@ public final class LodResidency {
     /** Not unwanted yet. */
     private static final long WANTED = -1;
 
+    /** The parents of a free index. */
+    private static final int[] NO_PARENTS = {};
+
     /**
      * One unit.
      *
@@ -50,7 +57,7 @@ public final class LodResidency {
     public record Unit(
             double error, double @NonNull [] bound, long bytes, int @NonNull [] parents) {}
 
-    /** The units. */
+    /** The units, null at free indices. */
     private final List<Unit> units;
 
     /** Each unit's children: the units whose parents include it. */
@@ -77,14 +84,17 @@ public final class LodResidency {
     /**
      * Set up for a set of units.
      *
-     * @param units The units.
+     * @param units The units, null at free indices.
      * @param loaded Whether each one's meshes are already on the GPU. Those whose parents are all
      *     shown are shown at once, parents first.
      */
     public LodResidency(@NonNull List<Unit> units, boolean @NonNull [] loaded) {
-        this.units = List.copyOf(units);
+        this.units = Collections.unmodifiableList(new ArrayList<>(units));
         final int n = units.size();
         this.loaded = loaded.clone();
+        for (int i = 0; i < n; ++i) {
+            this.loaded[i] &= units.get(i) != null;
+        }
         this.shown = new boolean[n];
         wanted = new boolean[n];
         unwantedSince = new long[n];
@@ -92,6 +102,9 @@ public final class LodResidency {
         distance = new double[n];
         final int[] childCount = new int[n];
         for (Unit unit : units) {
+            if (unit == null) {
+                continue;
+            }
             for (int parent : unit.parents()) {
                 childCount[parent] += 1;
             }
@@ -102,18 +115,29 @@ public final class LodResidency {
             childCount[i] = 0;
         }
         for (int i = 0; i < n; ++i) {
-            for (int parent : units.get(i).parents()) {
+            for (int parent : parentsOf(i)) {
                 children[parent][childCount[parent]++] = i;
             }
         }
         order = parentsFirst();
         for (int unit : order) {
             boolean parentsShown = true;
-            for (int parent : units.get(unit).parents()) {
+            for (int parent : parentsOf(unit)) {
                 parentsShown &= shown[parent];
             }
             shown[unit] = this.loaded[unit] && parentsShown;
         }
+    }
+
+    /**
+     * A unit's parents.
+     *
+     * @param unit The unit's index.
+     * @return Its parents, none at a free index.
+     */
+    private int[] parentsOf(int unit) {
+        final Unit found = units.get(unit);
+        return found == null ? NO_PARENTS : found.parents();
     }
 
     /**
@@ -126,7 +150,7 @@ public final class LodResidency {
         final int[] waiting = new int[n];
         final ArrayDeque<Integer> ready = new ArrayDeque<>();
         for (int i = 0; i < n; ++i) {
-            waiting[i] = units.get(i).parents().length;
+            waiting[i] = parentsOf(i).length;
             if (waiting[i] == 0) {
                 ready.add(i);
             }
@@ -185,6 +209,10 @@ public final class LodResidency {
             boolean streaming) {
         for (int i = 0; i < units.size(); ++i) {
             final Unit unit = units.get(i);
+            if (unit == null) {
+                wanted[i] = false;
+                continue;
+            }
             final double[] bound = unit.bound();
             double nearest = eyes.length == 0 ? 0 : Double.MAX_VALUE;
             boolean any = !streaming || Double.isInfinite(unit.error());
@@ -241,7 +269,7 @@ public final class LodResidency {
      */
     private int depth(int unit, int @NonNull [] rank) {
         int deepest = -1;
-        for (int parent : units.get(unit).parents()) {
+        for (int parent : parentsOf(unit)) {
             deepest = Math.max(deepest, rank[parent]);
         }
         return deepest + 1;
@@ -269,7 +297,7 @@ public final class LodResidency {
                 continue;
             }
             boolean parentsShown = true;
-            for (int parent : units.get(unit).parents()) {
+            for (int parent : parentsOf(unit)) {
                 parentsShown &= shown[parent];
             }
             if (parentsShown) {
@@ -344,12 +372,25 @@ public final class LodResidency {
     }
 
     /**
-     * How many units there are.
+     * How many unit indices there are, free ones included.
      *
      * @return The count.
      */
     public int size() {
         return units.size();
+    }
+
+    /**
+     * How many units there are, not counting free indices.
+     *
+     * @return The count.
+     */
+    public int count() {
+        int count = 0;
+        for (Unit unit : units) {
+            count += unit != null ? 1 : 0;
+        }
+        return count;
     }
 
     /**
@@ -419,7 +460,7 @@ public final class LodResidency {
     public long totalBytes() {
         long sum = 0;
         for (Unit unit : units) {
-            sum += unit.bytes();
+            sum += unit != null ? unit.bytes() : 0;
         }
         return sum;
     }

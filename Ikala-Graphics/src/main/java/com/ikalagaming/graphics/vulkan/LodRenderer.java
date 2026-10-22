@@ -6,7 +6,6 @@ import static org.lwjgl.vulkan.VK12.vkCmdDrawIndexedIndirectCount;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.graph.Material;
-import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.lod.ClusterMeshes;
 import com.ikalagaming.graphics.lod.CoverageBricks;
 import com.ikalagaming.graphics.lod.CoverageShells;
@@ -235,6 +234,15 @@ public class LodRenderer {
 
     /** Streaming unit slots, shared by every world. Render thread. */
     private final Slots unitSlots = new Slots();
+
+    /** When this frame's mesh registration stops, see {@link #REGISTER_NANOS_PER_FRAME}. */
+    private long registerUntil;
+
+    /**
+     * Whether each material index cuts holes, as looked up this frame: {@link #MATERIAL_UNKNOWN},
+     * {@link #MATERIAL_CUT_OUT} or {@link #MATERIAL_SOLID}. Render thread.
+     */
+    private byte[] cutOutMaterials = new byte[0];
 
     /** The shown unit words as uploaded. Render thread. */
     private int[] unitWords = new int[INITIAL_SLOTS];
@@ -518,6 +526,12 @@ public class LodRenderer {
      * out again from every cluster after each batch. Render thread.
      */
     private static final class UnitState {
+        /** Its key. */
+        final UnitKey key;
+
+        /** Its index, kept while it lasts so a rebuild only works out changed units again. */
+        final int index;
+
         /** The bound of the group that consumes its clusters. */
         final double[] bound;
 
@@ -530,13 +544,20 @@ public class LodRenderer {
         /** Its clusters' mesh bytes. */
         long bytes;
 
+        /** Whether its clusters or parents changed since the last rebuild. */
+        boolean dirty = true;
+
         /**
          * A unit state.
          *
+         * @param key Its key.
+         * @param index Its index.
          * @param bound The consuming group's bound.
          * @param error The consuming group's error.
          */
-        UnitState(double @NonNull [] bound, double error) {
+        UnitState(@NonNull UnitKey key, int index, double @NonNull [] bound, double error) {
+            this.key = key;
+            this.index = index;
             this.bound = bound;
             this.error = error;
         }
@@ -584,6 +605,23 @@ public class LodRenderer {
      * part at a time instead of overflowing the staging ring.
      */
     private static final long REGISTER_BYTES_PER_FRAME = 8L * 1024 * 1024;
+
+    /**
+     * The most time spent registering level of detail meshes in a frame, over every world. Each
+     * mesh costs a few microseconds whatever its size, so a burst of small ones, as when the camera
+     * jumps, would otherwise take several milliseconds a frame for many frames. Each world still
+     * registers at least one mesh a frame.
+     */
+    private static final long REGISTER_NANOS_PER_FRAME = 2_000_000L;
+
+    /** A material not looked up yet this frame. */
+    private static final byte MATERIAL_UNKNOWN = 0;
+
+    /** A material with holes cut out by its texture. */
+    private static final byte MATERIAL_CUT_OUT = 1;
+
+    /** A material without holes. */
+    private static final byte MATERIAL_SOLID = 2;
 
     /** One world. */
     private static final class World {
@@ -674,9 +712,6 @@ public class LodRenderer {
         /** Which units are on the GPU, or null before the first batch. Render thread. */
         LodResidency residency;
 
-        /** Each unit's clusters, by unit index. Render thread. */
-        List<Set<Member>> unitMembers = List.of();
-
         /** Each unit's makeup, by key, in a stable order. Render thread. */
         final Map<UnitKey, UnitState> unitStates = new LinkedHashMap<>();
 
@@ -686,14 +721,23 @@ public class LodRenderer {
          */
         final Map<UnitKey, Map<UnitKey, Integer>> unitParents = new HashMap<>();
 
-        /** Units changed since the last rebuild. Render thread. */
-        final Set<UnitKey> dirtyUnits = new HashSet<>();
+        /** Each unit by its index, null where an index is free. Render thread. */
+        final List<UnitState> unitByIndex = new ArrayList<>();
 
-        /** Each unit key's index at the last rebuild. Render thread. */
-        Map<UnitKey, Integer> unitIndex = Map.of();
+        /** Unit indices free to reuse. Render thread. */
+        final ArrayDeque<Integer> freeUnitIndices = new ArrayDeque<>();
+
+        /** Each unit as the last rebuild gave it to residency, by index. Render thread. */
+        LodResidency.Unit[] units = new LodResidency.Unit[0];
 
         /** Each unit's slot, by unit index. Render thread. */
         int[] unitSlotOf = new int[0];
+
+        /**
+         * Keys whose slots may have no unit any more, given back at the next rebuild if so. Render
+         * thread.
+         */
+        final Set<UnitKey> slotChecks = new HashSet<>();
 
         /** Each unit key's slot. Render thread. */
         final Map<UnitKey, Integer> unitSlotByKey = new HashMap<>();
@@ -702,7 +746,7 @@ public class LodRenderer {
         final ArrayDeque<Integer> loadQueue = new ArrayDeque<>();
 
         /** Units whose meshes are registered, waiting for them to be uploaded. Render thread. */
-        final List<Integer> uploadingUnits = new ArrayList<>();
+        final Set<Integer> uploadingUnits = new LinkedHashSet<>();
 
         /** When residency was last worked out. Render thread. */
         long lastResidency;
@@ -1390,7 +1434,7 @@ public class LodRenderer {
     private void registerSome(
             @NonNull VulkanState state, @NonNull World world, @NonNull Uploading uploading) {
         long bytes = 0;
-        while (!uploading.registered() && bytes < REGISTER_BYTES_PER_FRAME) {
+        while (!uploading.registered() && withinBudget(bytes)) {
             final LiveLod.Piece piece = uploading.batch.added().get(uploading.piece);
             final List<ClusterMeshes.Mesh> pieceMeshes = piece.meshes();
             if (uploading.cluster >= pieceMeshes.size()) {
@@ -1413,6 +1457,16 @@ public class LodRenderer {
             }
             uploading.cluster += 1;
         }
+    }
+
+    /**
+     * Whether more meshes may be registered this frame.
+     *
+     * @param bytes The bytes a world registered so far this frame.
+     * @return True if none yet, or it is within both budgets.
+     */
+    private boolean withinBudget(long bytes) {
+        return bytes == 0 || bytes < REGISTER_BYTES_PER_FRAME && System.nanoTime() < registerUntil;
     }
 
     /**
@@ -1805,6 +1859,9 @@ public class LodRenderer {
      * @param state The Vulkan state.
      */
     public void applyReady(@NonNull VulkanState state) {
+        registerUntil = System.nanoTime() + REGISTER_NANOS_PER_FRAME;
+        // Materials may change between frames
+        Arrays.fill(cutOutMaterials, MATERIAL_UNKNOWN);
         for (int[] range : freeNextFrame) {
             ranges.free(range[0], range[1]);
         }
@@ -1829,7 +1886,10 @@ public class LodRenderer {
             removed.unitSlotByKey.clear();
             removed.unitStates.clear();
             removed.unitParents.clear();
-            removed.dirtyUnits.clear();
+            removed.unitByIndex.clear();
+            removed.freeUnitIndices.clear();
+            removed.units = new LodResidency.Unit[0];
+            removed.slotChecks.clear();
             removed.residency = null;
             removed.incoming.clear();
             if (removed.bakes != null) {
@@ -1878,63 +1938,110 @@ public class LodRenderer {
      * @param world The world.
      */
     private void rebuildUnits(@NonNull World world) {
-        final Map<UnitKey, Integer> index = new HashMap<>();
-        final List<Set<Member>> members = new ArrayList<>(world.unitStates.size());
-        for (Map.Entry<UnitKey, UnitState> entry : world.unitStates.entrySet()) {
-            index.put(entry.getKey(), members.size());
-            members.add(entry.getValue().members);
-        }
-        final List<LodResidency.Unit> units = new ArrayList<>(members.size());
-        final boolean[] loaded = new boolean[members.size()];
+        final int n = world.unitByIndex.size();
         final LodResidency before = world.residency;
-        int u = 0;
-        for (Map.Entry<UnitKey, UnitState> entry : world.unitStates.entrySet()) {
-            final UnitState state = entry.getValue();
-            final Map<UnitKey, Integer> parentKeys =
-                    world.unitParents.getOrDefault(entry.getKey(), Map.of());
-            final int[] parents = new int[parentKeys.size()];
-            int count = 0;
-            for (UnitKey parent : parentKeys.keySet()) {
-                final Integer at = index.get(parent);
-                if (at != null) {
-                    parents[count++] = at;
+        final LodResidency.Unit[] units = Arrays.copyOf(world.units, n);
+        final boolean[] loaded = new boolean[n];
+        if (world.unitSlotOf.length < n) {
+            world.unitSlotOf =
+                    Arrays.copyOf(world.unitSlotOf, Math.max(n, 2 * world.unitSlotOf.length));
+        }
+        for (int i = 0; i < n; ++i) {
+            final UnitState state = world.unitByIndex.get(i);
+            if (state == null) {
+                units[i] = null;
+            } else if (state.dirty || units[i] == null || before == null || i >= before.size()) {
+                units[i] =
+                        new LodResidency.Unit(
+                                state.error, state.bound, state.bytes, parentsOf(world, state.key));
+                loaded[i] = isLoaded(world, state.members);
+                world.unitSlotOf[i] = unitSlot(world, state.key);
+                state.dirty = false;
+            } else {
+                // Unchanged units are as the last residency had them
+                loaded[i] = before.isLoaded(i);
+            }
+        }
+        world.units = units;
+        world.residency = new LodResidency(Arrays.asList(units), loaded);
+        // Slots stay with their keys; the ones gone are given back
+        for (UnitKey key : world.slotChecks) {
+            if (!world.unitStates.containsKey(key)) {
+                final Integer slot = world.unitSlotByKey.remove(key);
+                if (slot != null) {
+                    setUnitBit(slot, false);
+                    unitSlots.give(slot);
                 }
             }
-            units.add(
-                    new LodResidency.Unit(
-                            state.error, state.bound, state.bytes, Arrays.copyOf(parents, count)));
-            // Only changed units are checked again; the rest are as the last residency had them
-            final Integer was = world.unitIndex.get(entry.getKey());
-            loaded[u] =
-                    before == null || was == null || world.dirtyUnits.contains(entry.getKey())
-                            ? isLoaded(world, members.get(u))
-                            : before.isLoaded(was);
-            ++u;
         }
-        world.dirtyUnits.clear();
-        world.unitIndex = index;
-        world.residency = new LodResidency(units, loaded);
-        world.unitMembers = members;
-        // Slots stay with their keys; the ones gone are given back
-        final Iterator<Map.Entry<UnitKey, Integer>> it = world.unitSlotByKey.entrySet().iterator();
-        while (it.hasNext()) {
-            final Map.Entry<UnitKey, Integer> entry = it.next();
-            if (!index.containsKey(entry.getKey())) {
-                setUnitBit(entry.getValue(), false);
-                unitSlots.give(entry.getValue());
-                it.remove();
+        world.slotChecks.clear();
+        for (int i = 0; i < n; ++i) {
+            if (units[i] != null) {
+                setUnitBit(world.unitSlotOf[i], world.residency.isShown(i));
             }
-        }
-        world.unitSlotOf = new int[members.size()];
-        for (Map.Entry<UnitKey, Integer> entry : index.entrySet()) {
-            final int slot = unitSlot(world, entry.getKey());
-            world.unitSlotOf[entry.getValue()] = slot;
-            setUnitBit(slot, world.residency.isShown(entry.getValue()));
         }
         world.loadQueue.clear();
         world.uploadingUnits.clear();
         // Plan again next frame
         world.lastResidency = 0;
+    }
+
+    /**
+     * The indices of a unit's parents.
+     *
+     * @param world The world.
+     * @param key The unit.
+     * @return The indices of the parents that are units.
+     */
+    private static int[] parentsOf(@NonNull World world, @NonNull UnitKey key) {
+        final Map<UnitKey, Integer> parentKeys = world.unitParents.get(key);
+        if (parentKeys == null) {
+            return new int[0];
+        }
+        final int[] parents = new int[parentKeys.size()];
+        int count = 0;
+        for (UnitKey parent : parentKeys.keySet()) {
+            final UnitState state = world.unitStates.get(parent);
+            if (state != null) {
+                parents[count++] = state.index;
+            }
+        }
+        return count == parents.length ? parents : Arrays.copyOf(parents, count);
+    }
+
+    /**
+     * A new unit, at a free index.
+     *
+     * @param world The world.
+     * @param key Its key.
+     * @param cluster A cluster in it.
+     * @return The unit.
+     */
+    private static UnitState newUnit(
+            @NonNull World world, @NonNull UnitKey key, LodStore.@NonNull PieceCluster cluster) {
+        final Integer free = world.freeUnitIndices.poll();
+        final int index = free != null ? free : world.unitByIndex.size();
+        final UnitState state =
+                new UnitState(key, index, cluster.parentBound(), cluster.parentError());
+        if (free != null) {
+            world.unitByIndex.set(index, state);
+        } else {
+            world.unitByIndex.add(state);
+        }
+        return state;
+    }
+
+    /**
+     * Note that a unit's parents changed, if it is a unit.
+     *
+     * @param world The world.
+     * @param key The unit.
+     */
+    private static void markDirty(@NonNull World world, @NonNull UnitKey key) {
+        final UnitState state = world.unitStates.get(key);
+        if (state != null) {
+            state.dirty = true;
+        }
     }
 
     /**
@@ -1948,18 +2055,17 @@ public class LodRenderer {
         final LodStore.PieceCluster cluster = piece.clusters[i];
         final UnitKey own = ownUnitKey(cluster);
         final UnitState state =
-                world.unitStates.computeIfAbsent(
-                        own, key -> new UnitState(cluster.parentBound(), cluster.parentError()));
+                world.unitStates.computeIfAbsent(own, key -> newUnit(world, key, cluster));
         state.members.add(new Member(piece, i));
         state.bytes += bytes(world, piece, i);
-        world.dirtyUnits.add(own);
+        state.dirty = true;
         final int producer = cluster.cluster().producer();
         if (producer >= 0) {
             final UnitKey made = new UnitKey(piece.key, producer);
             world.unitParents
                     .computeIfAbsent(made, key -> new HashMap<>())
                     .merge(own, 1, Integer::sum);
-            world.dirtyUnits.add(made);
+            markDirty(world, made);
         }
     }
 
@@ -1977,10 +2083,13 @@ public class LodRenderer {
         final UnitState state = world.unitStates.get(own);
         if (state != null && state.members.remove(new Member(piece, i))) {
             state.bytes -= bytes(world, piece, i);
+            state.dirty = true;
             if (state.members.isEmpty()) {
                 world.unitStates.remove(own);
+                world.unitByIndex.set(state.index, null);
+                world.freeUnitIndices.add(state.index);
+                world.slotChecks.add(own);
             }
-            world.dirtyUnits.add(own);
         }
         final int producer = cluster.cluster().producer();
         if (producer >= 0) {
@@ -1992,7 +2101,7 @@ public class LodRenderer {
                     world.unitParents.remove(made);
                 }
             }
-            world.dirtyUnits.add(made);
+            markDirty(world, made);
         }
     }
 
@@ -2016,7 +2125,15 @@ public class LodRenderer {
      * @return The slot.
      */
     private int unitSlot(@NonNull World world, @NonNull UnitKey key) {
-        return world.unitSlotByKey.computeIfAbsent(key, k -> unitSlots.take());
+        Integer slot = world.unitSlotByKey.get(key);
+        if (slot == null) {
+            slot = unitSlots.take();
+            world.unitSlotByKey.put(key, slot);
+            if (!world.unitStates.containsKey(key)) {
+                world.slotChecks.add(key);
+            }
+        }
+        return slot;
     }
 
     /**
@@ -2092,9 +2209,9 @@ public class LodRenderer {
         }
         // Register the next wanted units' meshes
         long bytes = 0;
-        while (bytes < REGISTER_BYTES_PER_FRAME && !world.loadQueue.isEmpty()) {
+        while (withinBudget(bytes) && !world.loadQueue.isEmpty()) {
             final int unit = world.loadQueue.poll();
-            for (Member member : world.unitMembers.get(unit)) {
+            for (Member member : world.unitByIndex.get(unit).members) {
                 final Piece piece = member.piece();
                 final ClusterMeshes.Mesh mesh = piece.meshData.get(member.index());
                 if (piece.meshes[member.index()] == null
@@ -2116,7 +2233,7 @@ public class LodRenderer {
         final Iterator<Integer> it = world.uploadingUnits.iterator();
         while (it.hasNext()) {
             final int unit = it.next();
-            if (isLoaded(world, world.unitMembers.get(unit))) {
+            if (isLoaded(world, world.unitByIndex.get(unit).members)) {
                 residency.setLoaded(unit);
                 world.loads += 1;
                 it.remove();
@@ -2124,7 +2241,7 @@ public class LodRenderer {
         }
         for (int unit : residency.toShow()) {
             if (setUnitBit(world.unitSlotOf[unit], true)) {
-                invalidate(world, world.unitMembers.get(unit));
+                invalidate(world, world.unitByIndex.get(unit).members);
             }
         }
         // Drawn once the first cut is all there, or once it has waited long enough
@@ -2136,7 +2253,7 @@ public class LodRenderer {
         }
         world.residencyNumbers =
                 new long[] {
-                    residency.size(),
+                    residency.count(),
                     residency.shownCount(),
                     residency.loadedBytes(),
                     residency.wantedBytes(),
@@ -2153,9 +2270,9 @@ public class LodRenderer {
      */
     private void evict(@NonNull World world, int unit) {
         if (setUnitBit(world.unitSlotOf[unit], false)) {
-            invalidate(world, world.unitMembers.get(unit));
+            invalidate(world, world.unitByIndex.get(unit).members);
         }
-        for (Member member : world.unitMembers.get(unit)) {
+        for (Member member : world.unitByIndex.get(unit).members) {
             final Piece piece = member.piece();
             final MeshHandle mesh = piece.meshes[member.index()];
             if (mesh != null) {
@@ -2478,20 +2595,51 @@ public class LodRenderer {
      * @param cluster The cluster.
      * @return True if one has.
      */
-    private static boolean cutOut(LodDag.@NonNull Cluster cluster) {
-        final MaterialCache cache = GraphicsManager.getScene().getMaterialCache();
+    private boolean cutOut(LodDag.@NonNull Cluster cluster) {
         int last = -1;
         for (int material : cluster.materials()) {
             if (material == last) {
                 continue;
             }
             last = material;
-            final Material found = cache.getMaterial(material);
-            if (found != null && found.getTransparency() == Material.Transparency.CUTOUT) {
+            if (cutOut(material)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * Whether a material has holes cut out by its texture, looked up once a frame, since the
+     * material cache takes a lock for each lookup and a batch asks for thousands of clusters.
+     *
+     * @param material The material's index.
+     * @return True if it has.
+     */
+    private boolean cutOut(int material) {
+        if (material < 0) {
+            return lookUpCutOut(material);
+        }
+        if (material >= cutOutMaterials.length) {
+            cutOutMaterials =
+                    Arrays.copyOf(
+                            cutOutMaterials, Math.max(material + 1, 2 * cutOutMaterials.length));
+        }
+        if (cutOutMaterials[material] == MATERIAL_UNKNOWN) {
+            cutOutMaterials[material] = lookUpCutOut(material) ? MATERIAL_CUT_OUT : MATERIAL_SOLID;
+        }
+        return cutOutMaterials[material] == MATERIAL_CUT_OUT;
+    }
+
+    /**
+     * Whether a material has holes cut out by its texture, from the material cache.
+     *
+     * @param material The material's index.
+     * @return True if it has.
+     */
+    private static boolean lookUpCutOut(int material) {
+        final Material found = GraphicsManager.getScene().getMaterialCache().getMaterial(material);
+        return found != null && found.getTransparency() == Material.Transparency.CUTOUT;
     }
 
     /**

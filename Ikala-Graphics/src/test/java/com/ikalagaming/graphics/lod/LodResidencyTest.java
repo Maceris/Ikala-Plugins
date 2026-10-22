@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /** Tests for deciding which streaming units are on the GPU. */
@@ -137,5 +138,27 @@ class LodResidencyTest {
         for (int u = 0; u < residency.size(); ++u) {
             assertTrue(residency.isWanted(u));
         }
+    }
+
+    /** A free index is never wanted, loaded, shown or counted, even with streaming off. */
+    @Test
+    void testFreeIndicesAreSkipped() {
+        final List<LodResidency.Unit> units = new ArrayList<>(tree());
+        // The far unit is gone, and its index free
+        units.set(2, null);
+        final LodResidency residency =
+                new LodResidency(units, new boolean[] {true, true, true, false});
+        assertEquals(4, residency.size());
+        assertEquals(3, residency.count());
+        assertFalse(residency.isLoaded(2));
+        assertFalse(residency.isShown(2));
+        residency.update(new double[] {0, 0, 0}, PIXELS, THRESHOLD, 0, false);
+        assertFalse(residency.isWanted(2));
+        assertEquals(List.of(3), residency.toLoad());
+        assertEquals(10 + 20 + 40, residency.totalBytes());
+        assertEquals(10 + 20, residency.loadedBytes());
+        residency.setLoaded(3);
+        assertEquals(List.of(3), residency.toShow());
+        assertTrue(residency.wantedAllShown());
     }
 }
