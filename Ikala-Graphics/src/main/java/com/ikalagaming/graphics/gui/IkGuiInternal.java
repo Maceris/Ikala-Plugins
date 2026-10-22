@@ -2878,19 +2878,39 @@ public class IkGuiInternal {
      */
     public static void renderTextLines(
             @NonNull DrawList drawList, float posX, float posY, int color, @NonNull String text) {
+        renderTextLines(drawList, posX, posY, color, text, 0);
+    }
+
+    /**
+     * Render text that may contain multiple lines, wrapping it, with a specific color. Lines are
+     * drawn from where they wrap in the text, without making a wrapped copy of it.
+     *
+     * @param drawList The draw list to render to.
+     * @param posX The left of the text.
+     * @param posY The top of the text.
+     * @param color The color of the text.
+     * @param text The text, which may contain newlines.
+     * @param wrapWidth The width to wrap at, or 0 or less for no wrapping.
+     */
+    private static void renderTextLines(
+            @NonNull DrawList drawList,
+            float posX,
+            float posY,
+            int color,
+            @NonNull String text,
+            float wrapWidth) {
         final float lineHeight = getFontSize();
         int lineStart = 0;
         float y = posY;
         while (lineStart <= text.length()) {
-            int lineEnd = text.indexOf('\n', lineStart);
-            if (lineEnd < 0) {
-                lineEnd = text.length();
-            }
+            final int lineEnd = DrawList.lineEnd(context.fontSize, text, lineStart, wrapWidth);
             if (lineEnd > lineStart) {
-                drawList.addText(
-                        context.fontSize, posX, y, color, text.substring(lineStart, lineEnd));
+                drawList.addText(context.fontSize, posX, y, color, text, lineStart, lineEnd);
             }
-            lineStart = lineEnd + 1;
+            if (wrapWidth > 0 && lineEnd >= text.length()) {
+                break;
+            }
+            lineStart = DrawList.nextLineStart(text, lineEnd, wrapWidth);
             y += lineHeight;
         }
     }
@@ -2908,13 +2928,13 @@ public class IkGuiInternal {
         if (text.isEmpty()) {
             return;
         }
-        final String wrapped = wrapWidth > 0 ? wrapText(text, wrapWidth) : text;
         renderTextLines(
                 context.windowCurrent.drawList,
                 posX,
                 posY,
                 IkGuiImplUtils.getColorWithGlobalAlpha(ColorType.TEXT),
-                wrapped);
+                text,
+                wrapWidth);
         if (context.logEnabled) {
             IkGuiImplLogging.logRenderedText(posY, text);
         }

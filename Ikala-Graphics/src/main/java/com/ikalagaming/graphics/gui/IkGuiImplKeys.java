@@ -51,8 +51,8 @@ class IkGuiImplKeys {
         }
         context.lastKeyModsFrame = keyMods;
 
-        for (Key key : Key.values()) {
-            final int index = key.ordinal();
+        for (int index = 0; index < Key.COUNT; ++index) {
+            final Key key = Key.byOrdinal(index);
             if ((key.isKeyboardKey() || key.isModKey())
                     && context.io.keysDown[index]
                     && context.io.keysDownDurationPrevious[index] < 0) {
@@ -80,8 +80,12 @@ class IkGuiImplKeys {
      * key owners.
      */
     private static void updateKeyRoutingTable() {
-        for (Key key : Key.values()) {
-            final List<KeyRoutingData> entries = context.keysRoutingTable[key.ordinal()];
+        for (int index = 0; index < Key.COUNT; ++index) {
+            final List<KeyRoutingData> entries = context.keysRoutingTable[index];
+            if (entries.isEmpty()) {
+                // Most keys have no routing, and an iterator each would be made every frame
+                continue;
+            }
             for (Iterator<KeyRoutingData> it = entries.iterator(); it.hasNext(); ) {
                 final KeyRoutingData entry = it.next();
                 entry.routingCurrScore = entry.routingNextScore;
@@ -94,7 +98,7 @@ class IkGuiImplKeys {
                 }
                 // Apply routing to the owner if there isn't already an owner
                 if (entry.mods == context.io.keyMods) {
-                    final KeyOwnerData ownerData = context.keysOwnerData[key.ordinal()];
+                    final KeyOwnerData ownerData = context.keysOwnerData[index];
                     if (ownerData.ownerCurr == KEY_OWNER_NO_OWNER) {
                         ownerData.ownerCurr = entry.routingCurr;
                     }

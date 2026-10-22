@@ -49,6 +49,15 @@ public class Font {
      */
     private final Map<Long, FontMetrics> metrics = new HashMap<>();
 
+    /**
+     * The key of the metrics last asked for, which text asks for again and again, so it needn't box
+     * a key each time. Guarded by the lock.
+     */
+    private long lastMetricsKey;
+
+    /** The metrics last asked for, or null before any. Guarded by the lock. */
+    private FontMetrics lastMetrics;
+
     public Font(
             @NonNull String name,
             @NonNull ByteBuffer fontData,
@@ -119,8 +128,13 @@ public class Font {
         final long key = metricsKey(fontSize, dpiFont, dpiScreen);
         this.lock.lock();
         try {
+            if (lastMetrics != null && lastMetricsKey == key) {
+                return lastMetrics;
+            }
             FontMetrics result = metrics.get(key);
             if (result != null) {
+                lastMetricsKey = key;
+                lastMetrics = result;
                 return result;
             }
             // The size is skipped if it hasn't changed, which would miss DPI changes
@@ -138,6 +152,8 @@ public class Font {
             final float height = sizeMetrics.height() / 64.0f;
             result = new FontMetrics(ascent, descent, Math.max(0.0f, height - (ascent - descent)));
             metrics.put(key, result);
+            lastMetricsKey = key;
+            lastMetrics = result;
             return result;
         } finally {
             this.lock.unlock();

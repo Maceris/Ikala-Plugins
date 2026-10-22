@@ -1372,10 +1372,8 @@ public class IkIO {
      */
     public void updateKeyboardInputs(long deltaTime) {
         // Update the mouse key aliases
-        for (MouseButton button : MouseButton.values()) {
-            if (button != MouseButton.NONE) {
-                keysDown[Key.fromMouseButton(button).ordinal()] = mouseDown[button.index];
-            }
+        for (int i = 0; i < MouseButton.COUNT; ++i) {
+            keysDown[Key.fromMouseButton(MouseButton.byIndex(i)).ordinal()] = mouseDown[i];
         }
         keysDown[Key.MOUSE_WHEEL_X.ordinal()] = mouseWheelH != 0.0f;
         keysDown[Key.MOUSE_WHEEL_Y.ordinal()] = mouseWheel != 0.0f;

@@ -13,6 +13,8 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
 
+import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 @Slf4j
@@ -1351,6 +1353,36 @@ class IkGuiImplWindows {
     }
 
     /**
+     * A child window's name, built from its parent's name, its own and its ID the first time and
+     * kept on the parent after that.
+     *
+     * @param parent The parent window.
+     * @param name The child's name, or null.
+     * @param id The child's ID.
+     * @return The name.
+     */
+    private static String childWindowName(@NonNull Window parent, String name, int id) {
+        final List<Window.ChildName> names = parent.childNames;
+        for (int i = 0; i < names.size(); ++i) {
+            final Window.ChildName cached = names.get(i);
+            if (cached.id() == id
+                    && Objects.equals(cached.name(), name)
+                    && cached.parentName().equals(parent.name)) {
+                return cached.windowName();
+            }
+        }
+        if (names.size() >= Window.CHILD_NAMES_KEPT) {
+            names.clear();
+        }
+        final String windowName =
+                name != null
+                        ? String.format("%s/%s_%08X", parent.name, name, id)
+                        : String.format("%s/%08X", parent.name, id);
+        names.add(new Window.ChildName(id, name, parent.name, windowName));
+        return windowName;
+    }
+
+    /**
      * Creates a child window, which is a self-contained independent scrolling/clipping region
      * within a host window.
      *
@@ -1465,12 +1497,7 @@ class IkGuiImplWindows {
 
         // Build up the name. If you need to append to the same child from multiple locations in
         // the ID stack, use beginChild(int id) with a stable value.
-        final String windowName;
-        if (name != null) {
-            windowName = String.format("%s/%s_%08X", parentWindow.name, name, id);
-        } else {
-            windowName = String.format("%s/%08X", parentWindow.name, id);
-        }
+        final String windowName = childWindowName(parentWindow, name, id);
 
         // Set style
         if ((childFlags & ChildFlags.BORDERS) == 0) {

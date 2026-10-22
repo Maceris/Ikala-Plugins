@@ -11,6 +11,7 @@ import lombok.NonNull;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Turns a node's computed style into the IkGui style colors and variables to push around it. The
@@ -145,25 +146,37 @@ final class IkGuiStyler {
      * @return What to pop afterwards.
      */
     static Pushed push(@NonNull List<Push> pushes) {
-        int colors = 0;
-        int variables = 0;
-        for (Push push : pushes) {
-            switch (push) {
-                case ColorPush color -> {
-                    IkGui.pushStyleColor(color.type(), color.color());
-                    ++colors;
-                }
-                case FloatPush value -> {
-                    IkGui.pushStyleVarFloat(value.variable(), value.value());
-                    ++variables;
-                }
-                case PairPush pair -> {
-                    IkGui.pushStyleVarFloat2(pair.variable(), pair.x(), pair.y());
-                    ++variables;
-                }
+        apply(pushes);
+        return counts(pushes);
+    }
+
+    /**
+     * Push each of a list's pushes to IkGui.
+     *
+     * @param pushes The pushes.
+     */
+    private static void apply(@NonNull List<Push> pushes) {
+        for (int i = 0; i < pushes.size(); ++i) {
+            switch (pushes.get(i)) {
+                case ColorPush color -> IkGui.pushStyleColor(color.type(), color.color());
+                case FloatPush value -> IkGui.pushStyleVarFloat(value.variable(), value.value());
+                case PairPush pair -> IkGui.pushStyleVarFloat2(pair.variable(), pair.x(), pair.y());
             }
         }
-        return new Pushed(colors, variables);
+    }
+
+    /**
+     * How many colors and variables a list pushes.
+     *
+     * @param pushes The pushes.
+     * @return The counts, to pop them.
+     */
+    private static Pushed counts(@NonNull List<Push> pushes) {
+        int colors = 0;
+        for (int i = 0; i < pushes.size(); ++i) {
+            colors += pushes.get(i) instanceof ColorPush ? 1 : 0;
+        }
+        return new Pushed(colors, pushes.size() - colors);
     }
 
     /**
@@ -175,14 +188,52 @@ final class IkGuiStyler {
      * @return What to pop afterwards.
      */
     static Pushed push(@NonNull Kind kind, @NonNull Node<?> node, @NonNull UiFrame frame) {
-        return push(
-                pushes(
-                        kind,
-                        node.style,
-                        node.resolvedPadding,
-                        frame.context().scale(),
-                        node.fontPixels));
+        final float scale = frame.context().scale();
+        // Nodes are drawn every frame with the same style, so their pushes are kept
+        Cached cached = node.stylePushes;
+        if (cached == null
+                || cached.kind() != kind
+                || cached.style() != node.style
+                || !Objects.equals(cached.padding(), node.resolvedPadding)
+                || cached.scale() != scale
+                || cached.fontPixels() != node.fontPixels) {
+            final List<Push> pushes =
+                    List.copyOf(
+                            pushes(kind, node.style, node.resolvedPadding, scale, node.fontPixels));
+            cached =
+                    new Cached(
+                            kind,
+                            node.style,
+                            node.resolvedPadding,
+                            scale,
+                            node.fontPixels,
+                            pushes,
+                            counts(pushes));
+            node.stylePushes = cached;
+        }
+        apply(cached.pushes());
+        return cached.pushed();
     }
+
+    /**
+     * A node's pushes, kept while what they were worked out from stays the same.
+     *
+     * @param kind What the node is drawn as.
+     * @param style The node's computed style.
+     * @param padding The node's padding.
+     * @param scale Pixels per UI unit.
+     * @param fontPixels The node's font size in pixels.
+     * @param pushes The pushes.
+     * @param pushed What they push, to pop afterwards.
+     */
+    record Cached(
+            Kind kind,
+            ComputedStyle style,
+            Insets padding,
+            float scale,
+            float fontPixels,
+            List<Push> pushes,
+            Pushed pushed) {}
 
     /**
      * The color set only for the hovered state.

@@ -83,29 +83,23 @@ class IkGuiImplUtils {
             result.set(0.0f, fontSize);
             return;
         }
-        if (wrapWidth > 0.0f) {
-            displayed = IkGuiInternal.wrapText(displayed, wrapWidth);
-        }
-
         float maxWidth = 0.0f;
         int lineCount = 0;
         int lineStart = 0;
-        while (lineStart <= displayed.length()) {
-            // Like upstream, a trailing newline doesn't add an empty line at the end
-            if (lineStart == displayed.length() && lineCount > 0) {
-                break;
-            }
-            int lineEnd = displayed.indexOf('\n', lineStart);
-            if (lineEnd < 0) {
-                lineEnd = displayed.length();
-            }
+        // Lines are measured where they wrap, without making a wrapped copy of the text. Like
+        // upstream, a trailing newline doesn't add an empty line at the end
+        while (lineStart < displayed.length()) {
+            final int lineEnd = DrawList.lineEnd(context.fontSize, displayed, lineStart, wrapWidth);
             maxWidth =
                     Math.max(
                             maxWidth,
                             DrawList.calcTextWidth(
-                                    context.fontSize, displayed.substring(lineStart, lineEnd)));
+                                    context.fontSize, displayed, lineStart, lineEnd));
             lineCount++;
-            lineStart = lineEnd + 1;
+            if (lineEnd >= displayed.length()) {
+                break;
+            }
+            lineStart = DrawList.nextLineStart(displayed, lineEnd, wrapWidth);
         }
 
         result.set(IkGuiInternal.truncate(maxWidth + 0.999_99f), lineCount * fontSize);

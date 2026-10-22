@@ -19,4 +19,18 @@ public enum MouseButton {
 
     /** The number of mouse buttons we support. Not a valid enum value. */
     public static final int COUNT = 5;
+
+    /** Every button, NONE first, so lookups needn't copy {@link #values()} each time. */
+    private static final MouseButton[] ALL = values();
+
+    /**
+     * The button with an index.
+     *
+     * @param index The index, from 0 to {@link #COUNT} - 1.
+     * @return The button.
+     */
+    public static MouseButton byIndex(int index) {
+        // NONE comes first, at index -1
+        return ALL[index + 1];
+    }
 }

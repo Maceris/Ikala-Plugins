@@ -153,6 +153,9 @@ public class GeometryArena {
      */
     private final Queue<Upload> firstUploads = new ConcurrentLinkedQueue<>();
 
+    /** Mesh table entries changed this frame, kept between frames. Render thread. */
+    private DeviceTable.Entries meshEntries = new DeviceTable.Entries(MESH_ENTRY_SIZE);
+
     /** Removed meshes whose space can be reused once frames in flight are done with them. */
     private final Queue<MeshRegistry.Retired> retiring = new ConcurrentLinkedQueue<>();
 
@@ -406,7 +409,7 @@ public class GeometryArena {
      */
     private void recordMeshTable(
             @NonNull VulkanState state, @NonNull VkCommandBuffer commandBuffer) {
-        DeviceTable.Entries entries = new DeviceTable.Entries(MESH_ENTRY_SIZE);
+        final DeviceTable.Entries entries = meshEntries;
         try (MemoryStack stack = MemoryStack.stackPush()) {
             final int capacity =
                     registry.takeChanged(
@@ -434,7 +437,7 @@ public class GeometryArena {
             meshTable.record(state, commandBuffer, capacity, entries, stack);
             DeviceTable.barrierAfter(commandBuffer, stack);
         } finally {
-            entries.free();
+            entries.clear();
         }
     }
 
@@ -661,5 +664,7 @@ public class GeometryArena {
         SharedBuffer.free(vertices, state);
         SharedBuffer.free(indices, state);
         meshTable.cleanup(state);
+        meshEntries.free();
+        meshEntries = new DeviceTable.Entries(MESH_ENTRY_SIZE);
     }
 }

@@ -73,6 +73,15 @@ public final class DeviceTable {
      * one per upload, and {@link #free()} it afterward.
      */
     public static final class Entries {
+        /** How many entries there is room for at first. */
+        private static final int INITIAL_ENTRIES = 64;
+
+        /**
+         * The most entries {@link #clear()} keeps room for; past it, as after a camera jump, the
+         * memory goes back.
+         */
+        private static final int KEPT_ENTRIES = 16 * 1024;
+
         /** The size of one entry, in bytes. */
         private final int entrySize;
 
@@ -80,7 +89,7 @@ public final class DeviceTable {
         private ByteBuffer data;
 
         /** Where each entry goes, as an index into the table. */
-        private int[] indices = new int[64];
+        private int[] indices = new int[INITIAL_ENTRIES];
 
         /**
          * How many entries are packed. -- GETTER -- How many entries are packed.
@@ -156,6 +165,16 @@ public final class DeviceTable {
             data = packed;
             indices = packedIndices;
             count = kept;
+        }
+
+        /** Empty the entries to fill them again, as a table does every frame. */
+        public void clear() {
+            count = 0;
+            if (indices.length > KEPT_ENTRIES) {
+                MemoryUtil.memFree(data);
+                indices = new int[INITIAL_ENTRIES];
+                data = MemoryUtil.memAlloc(INITIAL_ENTRIES * entrySize);
+            }
         }
 
         /** Free the native memory. */

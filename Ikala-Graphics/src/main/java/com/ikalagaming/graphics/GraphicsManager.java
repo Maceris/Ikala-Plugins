@@ -674,7 +674,12 @@ public class GraphicsManager {
 
     /** Close any windows the user closed, other than the main window. */
     private static void closeClosedWindows() {
-        for (Window window : List.copyOf(extraWindows)) {
+        // Backward, since closing one takes it out of the list (and may take others with it)
+        for (int i = extraWindows.size() - 1; i >= 0; --i) {
+            if (i >= extraWindows.size()) {
+                continue;
+            }
+            final Window window = extraWindows.get(i);
             if (window.windowShouldClose()) {
                 closeWindow(window);
             }
@@ -862,10 +867,17 @@ public class GraphicsManager {
         // Nothing is due until the next update or frame: wait for input rather than spin the main
         // loop, which would otherwise call this hundreds of thousands of times a second. The wait
         // can overshoot by a timer tick, so it ends a little early and the last stretch polls, to
-        // keep frames evenly spaced.
-        final double idle = Math.min(nextUpdateTime, nextRenderTime) - getTime() - WAKE_EARLY;
+        // keep frames evenly spaced. That stretch spins here rather than through the main loop,
+        // since each pass of the loop polls input and allocates; the next pass polls once before
+        // the frame.
+        final double due = Math.min(nextUpdateTime, nextRenderTime);
+        final double idle = due - getTime() - WAKE_EARLY;
         if (idle > 0) {
             GlfwPlatform.waitEvents(Math.min(idle, FRAME_TIME));
+        } else {
+            while (getTime() < due) {
+                Thread.onSpinWait();
+            }
         }
 
         return Launcher.STATUS_OK;

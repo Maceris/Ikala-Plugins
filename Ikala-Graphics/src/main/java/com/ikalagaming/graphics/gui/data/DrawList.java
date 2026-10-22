@@ -69,19 +69,6 @@ public class DrawList {
     }
 
     /**
-     * Details for one point.
-     *
-     * @param radius The radius for rounding.
-     * @param edgeFade How far in from the edge, in pixels, the shape fades from transparent to its
-     *     regular color. 0 means a hard edge. Rectangles have one per edge, with the four details
-     *     holding the left, top, right, and bottom edges in order. Other shapes use the first
-     *     detail's fade for their whole outline.
-     * @param colorOrTextureID The color (RGBA32) or texture ID.
-     * @param tint The tint to modify by.
-     */
-    private record SDFPointDetail(float radius, float edgeFade, int colorOrTextureID, int tint) {}
-
-    /**
      * Command flag that inverts the edge fade, so the faded edges are opaque and fade to
      * transparent further in. Must line up with the shader.
      */
@@ -201,7 +188,7 @@ public class DrawList {
     private TextTransform textTransform;
 
     /**
-     * Set up point details for the four corners and edges of a rectangle.
+     * Add point details for the four corners and edges of a rectangle.
      *
      * @param textureID The texture ID or color to use.
      * @param rounding The rounding radius.
@@ -211,10 +198,11 @@ public class DrawList {
      * @param fadeBottom The edge fade of the bottom edge.
      * @param drawFlagsRoundingCorners Draw flags for which corners need rounding.
      * @param tint Tint, for tinting textures.
-     * @return The (four) point details for each of the corners (top left, top right, bottom right,
-     *     then bottom left), which hold the fades for the left, top, right, and bottom edges.
+     * @return The index of the first of the four details, for the corners top left, top right,
+     *     bottom right, then bottom left, which hold the fades for the left, top, right, and bottom
+     *     edges.
      */
-    private static SDFPointDetail[] getSdfPointDetails(
+    private int addSdfPointDetails(
             int textureID,
             float rounding,
             float fadeLeft,
@@ -233,12 +221,11 @@ public class DrawList {
                 (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_RIGHT) != 0 ? rounding : 0;
 
         // Negative fades are meaningless, so treat them as hard edges
-        return new SDFPointDetail[] {
-            new SDFPointDetail(topLeftRadius, Math.max(0, fadeLeft), textureID, tint),
-            new SDFPointDetail(topRightRadius, Math.max(0, fadeTop), textureID, tint),
-            new SDFPointDetail(bottomRightRadius, Math.max(0, fadeRight), textureID, tint),
-            new SDFPointDetail(bottomLeftRadius, Math.max(0, fadeBottom), textureID, tint),
-        };
+        final int first = addDetail(topLeftRadius, Math.max(0, fadeLeft), textureID, tint);
+        addDetail(topRightRadius, Math.max(0, fadeTop), textureID, tint);
+        addDetail(bottomRightRadius, Math.max(0, fadeRight), textureID, tint);
+        addDetail(bottomLeftRadius, Math.max(0, fadeBottom), textureID, tint);
+        return first;
     }
 
     public DrawList(@NonNull String windowName) {
@@ -443,11 +430,24 @@ public class DrawList {
         return newIndex / DrawData.SIZE_OF_POINT;
     }
 
+    /**
+     * Add the details for one point, after any added before it, so a shape's details are the ones
+     * it adds in a row. Written straight into the buffer, since shapes are added thousands of times
+     * a frame.
+     *
+     * @param radius The radius for rounding.
+     * @param edgeFade How far in from the edge, in pixels, the shape fades from transparent to its
+     *     regular color. 0 means a hard edge. Rectangles have one per edge, with the four details
+     *     holding the left, top, right, and bottom edges in order. Other shapes use the first
+     *     detail's fade for their whole outline.
+     * @param colorOrTextureID The color (RGBA32) or texture ID.
+     * @param tint The tint to modify by.
+     * @return The index of the detail.
+     */
     @Synchronized
-    private int addDetails(@NonNull SDFPointDetail... details) {
-        final int newDetailsSize = details.length * DrawData.SIZE_OF_POINT_DETAIL;
-
-        if (pointDetailBuffer.position() + newDetailsSize >= pointDetailBuffer.limit()) {
+    private int addDetail(float radius, float edgeFade, int colorOrTextureID, int tint) {
+        if (pointDetailBuffer.position() + DrawData.SIZE_OF_POINT_DETAIL
+                >= pointDetailBuffer.limit()) {
             ByteBuffer newBuffer =
                     ByteBuffer.allocateDirect(pointDetailBuffer.limit() * 2)
                             .order(ByteOrder.nativeOrder());
@@ -457,15 +457,21 @@ public class DrawList {
         }
 
         final int newDetailIndex = pointDetailBuffer.position();
-
-        for (SDFPointDetail detail : details) {
-            pointDetailBuffer.putFloat(detail.radius());
-            pointDetailBuffer.putFloat(detail.edgeFade());
-            pointDetailBuffer.putInt(detail.colorOrTextureID());
-            pointDetailBuffer.putInt(detail.tint());
-        }
-
+        pointDetailBuffer.putFloat(radius);
+        pointDetailBuffer.putFloat(edgeFade);
+        pointDetailBuffer.putInt(colorOrTextureID);
+        pointDetailBuffer.putInt(tint);
         return newDetailIndex / DrawData.SIZE_OF_POINT_DETAIL;
+    }
+
+    /**
+     * How many details were added from one on, as a shape counts the ones it added.
+     *
+     * @param firstIndex The index of the first.
+     * @return The number of details from it to the last one added.
+     */
+    private int detailsSince(int firstIndex) {
+        return pointDetailBuffer.position() / DrawData.SIZE_OF_POINT_DETAIL - firstIndex;
     }
 
     private void addCommand(
@@ -779,15 +785,12 @@ public class DrawList {
             return;
         }
 
-        SDFPointDetail[] details = {
-            new SDFPointDetail(0.0f, 0.0f, color1, Color.CLEAR),
-            new SDFPointDetail(0.0f, 0.0f, color2, Color.CLEAR),
-        };
         int pointIndex = addPoint(p1X, p1Y, 0, 0);
         addPoint(p2X, p2Y, 0, 0);
-        int detailIndex = addDetails(details);
+        int detailIndex = addDetail(0.0f, 0.0f, color1, Color.CLEAR);
+        addDetail(0.0f, 0.0f, color2, Color.CLEAR);
         final int pointCount = 2;
-        final int detailCount = details.length;
+        final int detailCount = detailsSince(detailIndex);
         addCommand(
                 pointIndex,
                 detailIndex,
@@ -975,16 +978,6 @@ public class DrawList {
         final float width = maxX - minX;
         final float height = maxY - minY;
 
-        SDFPointDetail[] details =
-                getSdfPointDetails(
-                        color,
-                        rounding,
-                        fadeLeft,
-                        fadeTop,
-                        fadeRight,
-                        fadeBottom,
-                        drawFlagsRoundingCorners,
-                        Color.CLEAR);
         final boolean fades = fadeLeft > 0 || fadeTop > 0 || fadeRight > 0 || fadeBottom > 0;
 
         int pointIndex = addPoint(centerX, centerY, width, height);
@@ -997,8 +990,17 @@ public class DrawList {
                     fadeRect.getBottom());
             ++pointCount;
         }
-        int detailIndex = addDetails(details);
-        final int detailCount = details.length;
+        int detailIndex =
+                addSdfPointDetails(
+                        color,
+                        rounding,
+                        fadeLeft,
+                        fadeTop,
+                        fadeRight,
+                        fadeBottom,
+                        drawFlagsRoundingCorners,
+                        Color.CLEAR);
+        final int detailCount = detailsSince(detailIndex);
 
         addCommand(
                 pointIndex,
@@ -1135,16 +1137,6 @@ public class DrawList {
         final float height = maxY - minY;
         final int borderStroke = 0;
 
-        SDFPointDetail[] details =
-                getSdfPointDetails(
-                        color,
-                        rounding,
-                        fadeLeft,
-                        fadeTop,
-                        fadeRight,
-                        fadeBottom,
-                        drawFlagsRoundingCorners,
-                        Color.CLEAR);
         final boolean fades = fadeLeft > 0 || fadeTop > 0 || fadeRight > 0 || fadeBottom > 0;
 
         int pointIndex = addPoint(centerX, centerY, width, height);
@@ -1157,8 +1149,17 @@ public class DrawList {
                     fadeRect.getBottom());
             ++pointCount;
         }
-        int detailIndex = addDetails(details);
-        final int detailCount = details.length;
+        int detailIndex =
+                addSdfPointDetails(
+                        color,
+                        rounding,
+                        fadeLeft,
+                        fadeTop,
+                        fadeRight,
+                        fadeBottom,
+                        drawFlagsRoundingCorners,
+                        Color.CLEAR);
+        final int detailCount = detailsSince(detailIndex);
 
         addCommand(
                 pointIndex,
@@ -1277,12 +1278,6 @@ public class DrawList {
                 (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_RIGHT) != 0 ? rounding : 0;
 
         final float fade = Math.max(0, edgeFade);
-        SDFPointDetail[] details = {
-            new SDFPointDetail(topLeftRadius, fade, colorUpperLeft, Color.CLEAR),
-            new SDFPointDetail(topRightRadius, fade, colorUpperRight, Color.CLEAR),
-            new SDFPointDetail(bottomRightRadius, fade, colorBottomRight, Color.CLEAR),
-            new SDFPointDetail(bottomLeftRadius, fade, colorBottomLeft, Color.CLEAR),
-        };
         if (!addScreenQuad(
                 minX - FILL_EDGE_PADDING,
                 minY - FILL_EDGE_PADDING,
@@ -1291,9 +1286,12 @@ public class DrawList {
             return;
         }
         int pointIndex = addPoint(centerX, centerY, width, height);
-        int detailIndex = addDetails(details);
+        int detailIndex = addDetail(topLeftRadius, fade, colorUpperLeft, Color.CLEAR);
+        addDetail(topRightRadius, fade, colorUpperRight, Color.CLEAR);
+        addDetail(bottomRightRadius, fade, colorBottomRight, Color.CLEAR);
+        addDetail(bottomLeftRadius, fade, colorBottomLeft, Color.CLEAR);
         final int pointCount = 1;
-        final int detailCount = details.length;
+        final int detailCount = detailsSince(detailIndex);
 
         addCommand(
                 pointIndex,
@@ -1330,13 +1328,6 @@ public class DrawList {
             int color,
             float thickness) {
 
-        SDFPointDetail[] details = {
-            new SDFPointDetail(0, 0, color, Color.CLEAR),
-            new SDFPointDetail(0, 0, color, Color.CLEAR),
-            new SDFPointDetail(0, 0, color, Color.CLEAR),
-            new SDFPointDetail(0, 0, color, Color.CLEAR),
-        };
-
         if (!addBoundingQuad(
                 thickness / 2 + ANTI_ALIAS_PADDING, p1X, p1Y, p2X, p2Y, p3X, p3Y, p4X, p4Y)) {
             return;
@@ -1347,10 +1338,13 @@ public class DrawList {
         addPoint(p3X, p3Y, 0, 0);
         addPoint(p4X, p4Y, 0, 0);
 
-        int detailIndex = addDetails(details);
+        int detailIndex = addDetail(0, 0, color, Color.CLEAR);
+        addDetail(0, 0, color, Color.CLEAR);
+        addDetail(0, 0, color, Color.CLEAR);
+        addDetail(0, 0, color, Color.CLEAR);
 
         final int pointCount = 4;
-        final int detailCount = details.length;
+        final int detailCount = detailsSince(detailIndex);
 
         addCommand(
                 pointIndex,
@@ -1389,12 +1383,6 @@ public class DrawList {
 
         final int borderStroke = 0;
 
-        SDFPointDetail[] details = {
-            new SDFPointDetail(0, Math.max(0, edgeFade), color, Color.CLEAR),
-            new SDFPointDetail(0, Math.max(0, edgeFade), color, Color.CLEAR),
-            new SDFPointDetail(0, Math.max(0, edgeFade), color, Color.CLEAR),
-            new SDFPointDetail(0, Math.max(0, edgeFade), color, Color.CLEAR),
-        };
         if (!addBoundingQuad(ANTI_ALIAS_PADDING, p1X, p1Y, p2X, p2Y, p3X, p3Y, p4X, p4Y)) {
             return;
         }
@@ -1403,10 +1391,13 @@ public class DrawList {
         addPoint(p3X, p3Y, 0, 0);
         addPoint(p4X, p4Y, 0, 0);
 
-        int detailIndex = addDetails(details);
+        int detailIndex = addDetail(0, Math.max(0, edgeFade), color, Color.CLEAR);
+        addDetail(0, Math.max(0, edgeFade), color, Color.CLEAR);
+        addDetail(0, Math.max(0, edgeFade), color, Color.CLEAR);
+        addDetail(0, Math.max(0, edgeFade), color, Color.CLEAR);
 
         final int pointCount = 4;
-        final int detailCount = details.length;
+        final int detailCount = detailsSince(detailIndex);
 
         addCommand(
                 pointIndex,
@@ -1433,10 +1424,6 @@ public class DrawList {
             int color,
             float thickness) {
 
-        SDFPointDetail[] details = {
-            new SDFPointDetail(0, 0.0f, color, Color.CLEAR),
-        };
-
         if (!addBoundingQuad(thickness / 2 + ANTI_ALIAS_PADDING, p1X, p1Y, p2X, p2Y, p3X, p3Y)) {
             return;
         }
@@ -1444,10 +1431,10 @@ public class DrawList {
         addPoint(p2X, p2Y, 0, 0);
         addPoint(p3X, p3Y, 0, 0);
 
-        int detailIndex = addDetails(details);
+        int detailIndex = addDetail(0, 0.0f, color, Color.CLEAR);
 
         final int pointCount = 3;
-        final int detailCount = details.length;
+        final int detailCount = detailsSince(detailIndex);
 
         addCommand(
                 pointIndex,
@@ -1476,9 +1463,6 @@ public class DrawList {
 
         final int borderStroke = 0;
 
-        SDFPointDetail[] details = {
-            new SDFPointDetail(0, Math.max(0, edgeFade), color, Color.CLEAR),
-        };
         if (!addBoundingQuad(ANTI_ALIAS_PADDING, p1X, p1Y, p2X, p2Y, p3X, p3Y)) {
             return;
         }
@@ -1486,10 +1470,10 @@ public class DrawList {
         addPoint(p2X, p2Y, 0, 0);
         addPoint(p3X, p3Y, 0, 0);
 
-        int detailIndex = addDetails(details);
+        int detailIndex = addDetail(0, Math.max(0, edgeFade), color, Color.CLEAR);
 
         final int pointCount = 3;
-        final int detailCount = details.length;
+        final int detailCount = detailsSince(detailIndex);
 
         addCommand(
                 pointIndex,
@@ -1527,21 +1511,18 @@ public class DrawList {
         if (!addBoundingQuad(ANTI_ALIAS_PADDING, p1X, p1Y, p2X, p2Y, p3X, p3Y)) {
             return;
         }
-        SDFPointDetail[] details = {
-            new SDFPointDetail(0, 0.0f, color1, Color.CLEAR),
-            new SDFPointDetail(0, 0.0f, color2, Color.CLEAR),
-            new SDFPointDetail(0, 0.0f, color3, Color.CLEAR),
-        };
         int pointIndex = addPoint(p1X, p1Y, 0, 0);
         addPoint(p2X, p2Y, 0, 0);
         addPoint(p3X, p3Y, 0, 0);
-        int detailIndex = addDetails(details);
+        int detailIndex = addDetail(0, 0.0f, color1, Color.CLEAR);
+        addDetail(0, 0.0f, color2, Color.CLEAR);
+        addDetail(0, 0.0f, color3, Color.CLEAR);
 
         addCommand(
                 pointIndex,
                 detailIndex,
                 3,
-                details.length,
+                detailsSince(detailIndex),
                 ElementType.POLYGON,
                 ElementStyle.FILL,
                 0);
@@ -1553,10 +1534,6 @@ public class DrawList {
 
     public void addCircle(float centerX, float centerY, float radius, int color, float thickness) {
 
-        SDFPointDetail[] details = {
-            new SDFPointDetail(0, 0.0f, color, Color.CLEAR),
-        };
-
         if (!addBoundingQuad(
                 thickness / 2 + ANTI_ALIAS_PADDING,
                 centerX - radius,
@@ -1566,10 +1543,10 @@ public class DrawList {
             return;
         }
         int pointIndex = addPoint(centerX, centerY, radius, radius);
-        int detailIndex = addDetails(details);
+        int detailIndex = addDetail(0, 0.0f, color, Color.CLEAR);
 
         final int pointCount = 1;
-        final int detailCount = details.length;
+        final int detailCount = detailsSince(detailIndex);
 
         addCommand(
                 pointIndex,
@@ -1587,9 +1564,6 @@ public class DrawList {
 
     public void addCircleFilled(
             float centerX, float centerY, float radius, int color, float edgeFade) {
-        SDFPointDetail[] details = {
-            new SDFPointDetail(0, Math.max(0, edgeFade), color, Color.CLEAR),
-        };
 
         final int borderStroke = 0;
 
@@ -1602,10 +1576,10 @@ public class DrawList {
             return;
         }
         int pointIndex = addPoint(centerX, centerY, radius, radius);
-        int detailIndex = addDetails(details);
+        int detailIndex = addDetail(0, Math.max(0, edgeFade), color, Color.CLEAR);
 
         final int pointCount = 1;
-        final int detailCount = details.length;
+        final int detailCount = detailsSince(detailIndex);
 
         addCommand(
                 pointIndex,
@@ -1718,15 +1692,38 @@ public class DrawList {
      * @return Total width of the text.
      */
     public int addText(int fontSize, float posX, float posY, int color, @NonNull String text) {
+        return addText(fontSize, posX, posY, color, text, 0, text.length());
+    }
+
+    /**
+     * Add part of some text to the draw list, as {@link #addText(int, float, float, int, String)}
+     * adds all of it, without making a string of the part.
+     *
+     * @param fontSize Font size.
+     * @param posX X position to start drawing at.
+     * @param posY Y position to start drawing at.
+     * @param color Color of the text.
+     * @param text Text to draw from.
+     * @param start The start of the part (inclusive).
+     * @param end The end of the part (exclusive).
+     * @return Total width of the part.
+     */
+    public int addText(
+            int fontSize,
+            float posX,
+            float posY,
+            int color,
+            @NonNull CharSequence text,
+            int start,
+            int end) {
         if (!hasAnyFont()) {
             return 0;
         }
         FontAtlas atlas = IkGui.getContext().io.fonts;
 
-        SDFPointDetail detail = new SDFPointDetail(0, 0.0f, 0, color);
-        final int detailIndex = addDetails(detail);
+        final int detailIndex = addDetail(0, 0.0f, 0, color);
         final int pointCount = 2;
-        final int detailCount = 1;
+        final int detailCount = detailsSince(detailIndex);
         final int borderStroke = 0;
 
         float fontScale =
@@ -1738,7 +1735,7 @@ public class DrawList {
         final List<FontAtlas.CharInfo> infoList = textInfo;
         infoList.clear();
 
-        for (int pos = 0; pos < text.length(); ++pos) {
+        for (int pos = start; pos < end; ++pos) {
             final char c = text.charAt(pos);
             final FontAtlas.CharInfo info = atlas.charInfo(c, fontSize);
             if (info == null) {
@@ -1914,20 +1911,33 @@ public class DrawList {
      * @return The width of the text in pixels.
      */
     public static float calcTextWidth(int fontSize, @NonNull String text) {
-        if (text.isEmpty()) {
+        return calcTextWidth(fontSize, text, 0, text.length());
+    }
+
+    /**
+     * Calculate the width of part of a line of text, see {@link #calcTextWidth(int, String)}.
+     *
+     * @param fontSize The font size.
+     * @param text The text, which should not contain newlines between start and end.
+     * @param start The start of the part (inclusive).
+     * @param end The end of the part (exclusive).
+     * @return The width of the part in pixels.
+     */
+    public static float calcTextWidth(int fontSize, @NonNull String text, int start, int end) {
+        if (start >= end) {
             return 0;
         }
         final float fontScale =
                 (float) IkGui.getContext().dpiScaleScreen / IkGui.getContext().dpiScaleFont;
         if (!hasAnyFont()) {
             // Rough estimate so that layout still works without any fonts loaded
-            return (float) Math.ceil(text.length() * fontSize * fontScale * 0.5f);
+            return (float) Math.ceil((end - start) * fontSize * fontScale * 0.5f);
         }
         FontAtlas atlas = IkGui.getContext().io.fonts;
         // As penAdvance adds them up over the found characters, without a list of them
         float penX = 0;
         FontAtlas.CharInfo previous = null;
-        for (int i = 0; i < text.length(); ++i) {
+        for (int i = start; i < end; ++i) {
             final FontAtlas.CharInfo info = atlas.charInfo(text.charAt(i), fontSize);
             if (info == null) {
                 continue;
@@ -1983,8 +1993,24 @@ public class DrawList {
      */
     public static float[] calcTextOffsets(
             int fontSize, @NonNull CharSequence text, int start, int end) {
+        return calcTextOffsets(fontSize, text, start, end, new float[Math.max(0, end - start) + 1]);
+    }
+
+    /**
+     * Calculate the width of every prefix of a single line of text, see {@link
+     * #calcTextOffsets(int, CharSequence, int, int)}, into an array.
+     *
+     * @param fontSize The font size.
+     * @param text The text to measure, the range of which should not contain newlines.
+     * @param start The start of the range to measure (inclusive).
+     * @param end The end of the range to measure (exclusive).
+     * @param offsets Where to put the widths, at least (end - start + 1) long.
+     * @return The offsets array.
+     */
+    private static float[] calcTextOffsets(
+            int fontSize, @NonNull CharSequence text, int start, int end, float[] offsets) {
         final int count = Math.max(0, end - start);
-        final float[] offsets = new float[count + 1];
+        offsets[0] = 0;
         if (count == 0) {
             return offsets;
         }
@@ -2031,7 +2057,6 @@ public class DrawList {
             int color,
             @NonNull String text,
             float wrapWidth) {
-        final String wrapped = wrapWidth > 0 ? wrapText(fontSize, text, wrapWidth) : text;
         final float lineHeight =
                 (int)
                         (fontSize
@@ -2039,18 +2064,62 @@ public class DrawList {
                                 / IkGui.getContext().dpiScaleFont);
         float y = posY;
         int lineStart = 0;
-        while (lineStart <= wrapped.length()) {
-            int lineEnd = wrapped.indexOf('\n', lineStart);
-            if (lineEnd < 0) {
-                lineEnd = wrapped.length();
-            }
+        while (lineStart < text.length() || lineStart == 0) {
+            final int lineEnd = lineEnd(fontSize, text, lineStart, wrapWidth);
             if (lineEnd > lineStart) {
-                addText(fontSize, posX, y, color, wrapped.substring(lineStart, lineEnd));
+                addText(fontSize, posX, y, color, text, lineStart, lineEnd);
             }
-            lineStart = lineEnd + 1;
+            if (lineEnd >= text.length()) {
+                break;
+            }
+            lineStart = nextLineStart(text, lineEnd, wrapWidth);
             y += lineHeight;
         }
     }
+
+    /**
+     * Where a line of text ends: at the next newline, or with wrapping, where {@link
+     * #calcWordWrapPosition(int, CharSequence, int, int, float, boolean)} wraps it. Lines are laid
+     * out this way rather than by making a wrapped copy of the text.
+     *
+     * @param fontSize The font size.
+     * @param text The text.
+     * @param lineStart The start of the line.
+     * @param wrapWidth The width to wrap at, 0 or less for no wrapping.
+     * @return The end of the line's text (exclusive).
+     */
+    public static int lineEnd(
+            int fontSize, @NonNull CharSequence text, int lineStart, float wrapWidth) {
+        if (wrapWidth > 0) {
+            return calcWordWrapPosition(fontSize, text, lineStart, text.length(), wrapWidth, false);
+        }
+        int lineEnd = lineStart;
+        while (lineEnd < text.length() && text.charAt(lineEnd) != '\n') {
+            ++lineEnd;
+        }
+        return lineEnd;
+    }
+
+    /**
+     * Where the line after one ends starts, see {@link #lineEnd(int, CharSequence, int, float)}.
+     *
+     * @param text The text.
+     * @param lineEnd The end of the line.
+     * @param wrapWidth The width to wrap at, 0 or less for no wrapping.
+     * @return The start of the next line.
+     */
+    public static int nextLineStart(@NonNull CharSequence text, int lineEnd, float wrapWidth) {
+        if (wrapWidth > 0) {
+            return calcWordWrapNextLineStart(text, lineEnd, text.length(), false);
+        }
+        return lineEnd + 1;
+    }
+
+    /**
+     * The widths {@link #calcWordWrapPosition(int, CharSequence, int, int, float, boolean)}
+     * measures into, kept between calls. IkGui lays out text on one thread.
+     */
+    private static float[] wrapOffsets = new float[0];
 
     /** Character class for word wrapping: anything that isn't a blank or punctuation. */
     private static final int WRAP_CLASS_OTHER = 0;
@@ -2117,7 +2186,11 @@ public class DrawList {
         while (lineEnd < end && text.charAt(lineEnd) != '\n') {
             ++lineEnd;
         }
-        final float[] offsets = calcTextOffsets(fontSize, text, start, lineEnd);
+        // Wrapping measures every line of wrapped text every frame, so the widths go in one array
+        if (wrapOffsets.length < lineEnd - start + 1) {
+            wrapOffsets = new float[Math.max(lineEnd - start + 1, 2 * wrapOffsets.length)];
+        }
+        final float[] offsets = calcTextOffsets(fontSize, text, start, lineEnd, wrapOffsets);
 
         float lineWidth = 0.0f;
         float blankWidth = 0.0f;
@@ -2381,8 +2454,7 @@ public class DrawList {
         for (int i = 1; i < pointCount; ++i) {
             addPoint(coordinates[i * 2], coordinates[i * 2 + 1], 0, 0);
         }
-        final int detailIndex =
-                addDetails(new SDFPointDetail(0.0f, Math.max(0, edgeFade), color, Color.CLEAR));
+        final int detailIndex = addDetail(0.0f, Math.max(0, edgeFade), color, Color.CLEAR);
 
         addCommand(
                 pointIndex,
@@ -2465,7 +2537,7 @@ public class DrawList {
         addPoint(p2X, p2Y, 0, 0);
         addPoint(p3X, p3Y, 0, 0);
         addPoint(p4X, p4Y, 0, 0);
-        final int detailIndex = addDetails(new SDFPointDetail(0.0f, 0.0f, color, Color.CLEAR));
+        final int detailIndex = addDetail(0.0f, 0.0f, color, Color.CLEAR);
         addCommand(
                 pointIndex,
                 detailIndex,
@@ -2522,7 +2594,7 @@ public class DrawList {
         int pointIndex = addPoint(p1X, p1Y, 0, 0);
         addPoint(p2X, p2Y, 0, 0);
         addPoint(p3X, p3Y, 0, 0);
-        final int detailIndex = addDetails(new SDFPointDetail(0.0f, 0.0f, color, Color.CLEAR));
+        final int detailIndex = addDetail(0.0f, 0.0f, color, Color.CLEAR);
         addCommand(
                 pointIndex,
                 detailIndex,
@@ -2595,13 +2667,11 @@ public class DrawList {
         final int detailIndex;
         final int detailCount;
         if (minColor == maxColor) {
-            detailIndex = addDetails(new SDFPointDetail(0.0f, 0.0f, minColor, Color.CLEAR));
+            detailIndex = addDetail(0.0f, 0.0f, minColor, Color.CLEAR);
             detailCount = 1;
         } else {
-            detailIndex =
-                    addDetails(
-                            new SDFPointDetail(0.0f, 0.0f, minColor, Color.CLEAR),
-                            new SDFPointDetail(0.0f, 0.0f, maxColor, Color.CLEAR));
+            detailIndex = addDetail(0.0f, 0.0f, minColor, Color.CLEAR);
+            addDetail(0.0f, 0.0f, maxColor, Color.CLEAR);
             detailCount = 2;
         }
         addCommand(
@@ -2796,11 +2866,10 @@ public class DrawList {
         addPoint(p2X, p2Y, u2, v2);
         addPoint(p3X, p3Y, u3, v3);
         addPoint(p4X, p4Y, u4, v4);
-        final int detailIndex =
-                addDetails(new SDFPointDetail(0.0f, Math.max(0, edgeFade), textureIndex, tint));
+        final int detailIndex = addDetail(0.0f, Math.max(0, edgeFade), textureIndex, tint);
 
         final int pointCount = 4;
-        final int detailCount = 1;
+        final int detailCount = detailsSince(detailIndex);
         final int borderStroke = 0;
         addCommand(
                 pointIndex,
@@ -2847,8 +2916,13 @@ public class DrawList {
         }
         final int textureIndex = IkGui.getContext().drawTextures.register(texture);
 
-        SDFPointDetail[] details =
-                getSdfPointDetails(
+        // The rectangle, the texture coordinates, then how to show it; the ints are small enough
+        // to be exact as floats
+        int pointIndex = addPoint((minX + maxX) / 2, (minY + maxY) / 2, maxX - minX, maxY - minY);
+        addPoint(minU, minV, maxU, maxV);
+        addPoint(view.channel().id, view.mipLevel(), view.exposure(), view.options());
+        int detailIndex =
+                addSdfPointDetails(
                         textureIndex,
                         0.0f,
                         0.0f,
@@ -2858,15 +2932,8 @@ public class DrawList {
                         ROUND_CORNERS_NONE,
                         Color.WHITE);
 
-        // The rectangle, the texture coordinates, then how to show it; the ints are small enough
-        // to be exact as floats
-        int pointIndex = addPoint((minX + maxX) / 2, (minY + maxY) / 2, maxX - minX, maxY - minY);
-        addPoint(minU, minV, maxU, maxV);
-        addPoint(view.channel().id, view.mipLevel(), view.exposure(), view.options());
-        int detailIndex = addDetails(details);
-
         final int pointCount = 3;
-        final int detailCount = details.length;
+        final int detailCount = detailsSince(detailIndex);
         final int borderStroke = 0;
         addCommand(
                 pointIndex,
@@ -2982,8 +3049,11 @@ public class DrawList {
         }
         final int textureIndex = IkGui.getContext().drawTextures.register(texture);
 
-        SDFPointDetail[] details =
-                getSdfPointDetails(
+        // The rectangle, then the texture coordinates of the top left and bottom right
+        int pointIndex = addPoint((minX + maxX) / 2, (minY + maxY) / 2, maxX - minX, maxY - minY);
+        addPoint(minU, minV, maxU, maxV);
+        int detailIndex =
+                addSdfPointDetails(
                         textureIndex,
                         rounding,
                         edgeFade,
@@ -2993,13 +3063,8 @@ public class DrawList {
                         drawFlagsRoundingCorners,
                         tint);
 
-        // The rectangle, then the texture coordinates of the top left and bottom right
-        int pointIndex = addPoint((minX + maxX) / 2, (minY + maxY) / 2, maxX - minX, maxY - minY);
-        addPoint(minU, minV, maxU, maxV);
-        int detailIndex = addDetails(details);
-
         final int pointCount = 2;
-        final int detailCount = details.length;
+        final int detailCount = detailsSince(detailIndex);
         final int borderStroke = 0;
         addCommand(
                 pointIndex,

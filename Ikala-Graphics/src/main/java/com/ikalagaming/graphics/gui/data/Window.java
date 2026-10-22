@@ -395,6 +395,22 @@ public class Window {
     /** The name of the window, which is also used for the ID. */
     public String name;
 
+    /**
+     * A child window's name as {@code beginChild} built it.
+     *
+     * @param id The child's ID.
+     * @param name The name it was given, or null.
+     * @param parentName This window's name when it was built.
+     * @param windowName The name built.
+     */
+    public record ChildName(int id, String name, String parentName, String windowName) {}
+
+    /** The most child names {@link #childNames} keeps before starting over. */
+    public static final int CHILD_NAMES_KEPT = 64;
+
+    /** Names built for this window's children, so they aren't formatted again every frame. */
+    public final List<ChildName> childNames = new ArrayList<>();
+
     /** The window padding at the time of creation, locked for the frame. */
     public final Vector2f padding;
 

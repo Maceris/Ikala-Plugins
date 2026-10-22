@@ -20,6 +20,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
 import org.joml.Vector4f;
 
+import java.util.Objects;
+
 @Slf4j
 class IkGuiImplText {
     static Context context;
@@ -135,16 +137,45 @@ class IkGuiImplText {
         context.fontSize = backupInfo.size();
     }
 
+    /**
+     * A backup of a font and size for the font stack. Fonts are pushed many times a frame with few
+     * fonts and sizes, so the backups are kept and reused, being immutable.
+     *
+     * @param name The font's name, or null for none.
+     * @param size The size.
+     * @return The backup.
+     */
+    private static FontBackup backupOf(String name, int size) {
+        for (FontBackup kept : fontBackups) {
+            if (kept != null && kept.size() == size && Objects.equals(kept.name(), name)) {
+                return kept;
+            }
+        }
+        final FontBackup made = new FontBackup(name, size);
+        fontBackups[nextFontBackup] = made;
+        nextFontBackup = (nextFontBackup + 1) % fontBackups.length;
+        return made;
+    }
+
+    /** How many font backups {@link #backupOf(String, int)} keeps. */
+    private static final int FONT_BACKUPS_KEPT = 8;
+
+    /** Font backups kept for reuse, replaced in turn. */
+    private static final FontBackup[] fontBackups = new FontBackup[FONT_BACKUPS_KEPT];
+
+    /** The next of {@link #fontBackups} to replace. */
+    private static int nextFontBackup;
+
     public static void pushFont(@NonNull String font, int size) {
         String oldFont = context.font == null ? null : context.font.name;
-        context.fontStack.push(new FontBackup(oldFont, context.fontSize));
+        context.fontStack.push(backupOf(oldFont, context.fontSize));
         context.font = context.io.fonts.getFont(font);
         context.fontSize = size;
     }
 
     public static void pushFontSize(int size) {
         final String oldFont = context.font == null ? null : context.font.name;
-        context.fontStack.push(new FontBackup(oldFont, context.fontSize));
+        context.fontStack.push(backupOf(oldFont, context.fontSize));
         context.fontSize = size;
     }
 

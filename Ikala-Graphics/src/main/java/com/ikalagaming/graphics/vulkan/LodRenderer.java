@@ -269,6 +269,15 @@ public class LodRenderer {
     /** History entries cleared this frame. Render thread. */
     private DeviceTable.Entries historyEntries = new DeviceTable.Entries(WORD_SIZE);
 
+    /** Cell flag words changed this frame, filled by {@link #record}. Render thread. */
+    private DeviceTable.Entries flagEntries = new DeviceTable.Entries(WORD_SIZE);
+
+    /** Hidden section words changed this frame, filled by {@link #record}. Render thread. */
+    private DeviceTable.Entries wordEntries = new DeviceTable.Entries(WORD_SIZE);
+
+    /** Shown unit words changed this frame, filled by {@link #record}. Render thread. */
+    private DeviceTable.Entries unitEntries = new DeviceTable.Entries(WORD_SIZE);
+
     /** Guards the worlds. */
     private final ReentrantLock lock = new ReentrantLock();
 
@@ -2943,9 +2952,6 @@ public class LodRenderer {
     public void record(@NonNull VulkanState state, @NonNull VkCommandBuffer commandBuffer) {
         arena.record(state, commandBuffer);
         updateFlags();
-        final DeviceTable.Entries flagEntries = new DeviceTable.Entries(WORD_SIZE);
-        final DeviceTable.Entries wordEntries = new DeviceTable.Entries(WORD_SIZE);
-        final DeviceTable.Entries unitEntries = new DeviceTable.Entries(WORD_SIZE);
         try (MemoryStack stack = MemoryStack.stackPush()) {
             for (int slot = dirtyFlags.nextSetBit(0);
                     slot >= 0;
@@ -3006,17 +3012,14 @@ public class LodRenderer {
             bricks.record(state, commandBuffer, brickCapacity, brickEntries, stack);
             DeviceTable.barrierAfter(commandBuffer, stack);
         } finally {
-            unitEntries.free();
-            wordEntries.free();
-            flagEntries.free();
-            clusterEntries.free();
-            historyEntries.free();
-            pairEntries.free();
-            clusterEntries = new DeviceTable.Entries(LodCullMath.CLUSTER_ENTRY_SIZE);
-            historyEntries = new DeviceTable.Entries(WORD_SIZE);
-            pairEntries = new DeviceTable.Entries(LodCullMath.PAIR_ENTRY_SIZE);
-            brickEntries.free();
-            brickEntries = new DeviceTable.Entries(CoverageBricks.WORD_BYTES);
+            // Kept for the next frame, which fills them again
+            unitEntries.clear();
+            wordEntries.clear();
+            flagEntries.clear();
+            clusterEntries.clear();
+            historyEntries.clear();
+            pairEntries.clear();
+            brickEntries.clear();
         }
     }
 
@@ -3376,6 +3379,12 @@ public class LodRenderer {
         bricks.cleanup(state);
         brickEntries.free();
         brickEntries = new DeviceTable.Entries(CoverageBricks.WORD_BYTES);
+        flagEntries.free();
+        flagEntries = new DeviceTable.Entries(WORD_SIZE);
+        wordEntries.free();
+        wordEntries = new DeviceTable.Entries(WORD_SIZE);
+        unitEntries.free();
+        unitEntries = new DeviceTable.Entries(WORD_SIZE);
         brickRangeOf.clear();
         arena.cleanup(state);
     }

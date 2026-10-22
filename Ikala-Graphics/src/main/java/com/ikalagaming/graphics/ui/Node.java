@@ -67,6 +67,9 @@ public abstract class Node<S extends Node<S>> {
     /** The padding the last layout used: the node's own, the style's, or the default. */
     Insets resolvedPadding = Insets.NONE;
 
+    /** The IkGui style pushes last worked out for drawing this node, see {@link IkGuiStyler}. */
+    IkGuiStyler.Cached stylePushes;
+
     /** Whether this node sets its own font size, rather than using its parent's. */
     boolean ownFont;
 

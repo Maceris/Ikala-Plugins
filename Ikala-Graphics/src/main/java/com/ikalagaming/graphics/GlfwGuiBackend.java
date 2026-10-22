@@ -22,6 +22,7 @@ import org.lwjgl.glfw.GLFWMonitorCallback;
 import org.lwjgl.glfw.GLFWVidMode;
 import org.lwjgl.system.MemoryStack;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -108,6 +109,9 @@ final class GlfwGuiBackend {
 
     /** Reused for reading cursor positions. */
     private final double[] doubleX = new double[1];
+
+    /** The viewports with windows, filled again by each {@link #viewportsWithWindows()} call. */
+    private final List<Viewport> windowViewports = new ArrayList<>();
 
     /** Reused for reading cursor positions. */
     private final double[] doubleY = new double[1];
@@ -221,15 +225,21 @@ final class GlfwGuiBackend {
      * The windows IkGui draws in this frame, with what we know about them: the main window, and
      * with viewports on, every window made for a viewport.
      *
-     * @return The viewports that have windows, the main one first.
+     * @return The viewports that have windows, the main one first, in a list reused each call.
      */
-    private static List<Viewport> viewportsWithWindows() {
+    private List<Viewport> viewportsWithWindows() {
+        windowViewports.clear();
         if (!viewportsEnabled()) {
-            return List.of(IkGui.getMainViewport());
+            windowViewports.add(IkGui.getMainViewport());
+            return windowViewports;
         }
-        return IkGui.getPlatformIO().viewports.stream()
-                .filter(viewport -> viewport.platformUserData instanceof ViewportData)
-                .toList();
+        final List<Viewport> viewports = IkGui.getPlatformIO().viewports;
+        for (int i = 0; i < viewports.size(); ++i) {
+            if (viewports.get(i).platformUserData instanceof ViewportData) {
+                windowViewports.add(viewports.get(i));
+            }
+        }
+        return windowViewports;
     }
 
     /**
@@ -244,7 +254,9 @@ final class GlfwGuiBackend {
     private void updateMouseData(@NonNull IkIO io, boolean driving) {
         final boolean viewports = viewportsEnabled();
         int mouseViewportID = 0;
-        for (Viewport viewport : viewportsWithWindows()) {
+        final List<Viewport> windows = viewportsWithWindows();
+        for (int i = 0; i < windows.size(); ++i) {
+            final Viewport viewport = windows.get(i);
             final ViewportData data = (ViewportData) viewport.platformUserData;
             final long handle = data.window.getWindowHandle();
             final boolean focused = glfwGetWindowAttrib(handle, GLFW_FOCUSED) == GLFW_TRUE;
@@ -293,8 +305,9 @@ final class GlfwGuiBackend {
             return;
         }
         final boolean noChange = (io.configFlags & ConfigFlags.NO_MOUSE_CURSOR_CHANGE) != 0;
-        for (Viewport viewport : viewportsWithWindows()) {
-            final ViewportData data = (ViewportData) viewport.platformUserData;
+        final List<Viewport> windows = viewportsWithWindows();
+        for (int i = 0; i < windows.size(); ++i) {
+            final ViewportData data = (ViewportData) windows.get(i).platformUserData;
             mouseCursors.update(
                     data.cursorTarget, IkGui.getMouseCursor(), noChange, io.configMouseDrawCursor);
         }

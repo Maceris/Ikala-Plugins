@@ -16,7 +16,10 @@ public class Hash {
         if (name != null) {
             final int idStart = name.lastIndexOf("###");
             if (idStart >= 0) {
-                hash = name.substring(idStart).hashCode();
+                // The same as the hash code of the part, without making a string of it
+                for (int i = idStart; i < name.length(); ++i) {
+                    hash = 31 * hash + name.charAt(i);
+                }
             } else {
                 hash = name.hashCode();
             }
@@ -55,8 +58,36 @@ public class Hash {
             return "";
         }
         final int hidden = label.indexOf("##");
-        return hidden >= 0 ? label.substring(0, hidden) : label;
+        if (hidden < 0) {
+            return label;
+        }
+        // Labels are mostly the same strings every frame, so their displayed parts are kept
+        final int slot = System.identityHashCode(label) & (DISPLAYED_KEPT - 1);
+        final Displayed kept = displayed[slot];
+        if (kept != null && kept.label() == label) {
+            return kept.text();
+        }
+        final String text = label.substring(0, hidden);
+        displayed[slot] = new Displayed(label, text);
+        return text;
     }
+
+    /**
+     * A label's displayed part, kept by {@link #getDisplayedText(String)}.
+     *
+     * @param label The label.
+     * @param text The part of it displayed.
+     */
+    private record Displayed(String label, String text) {}
+
+    /** How many displayed parts are kept, a power of 2. */
+    private static final int DISPLAYED_KEPT = 256;
+
+    /**
+     * Displayed parts of labels, by the label's identity hash. Each slot is replaced whole, so
+     * threads see a label with its own part.
+     */
+    private static final Displayed[] displayed = new Displayed[DISPLAYED_KEPT];
 
     /**
      * Hash a name, given a parent ID. As in ImGui, an empty name produces the parent ID, so {@code

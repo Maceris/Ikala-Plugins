@@ -197,6 +197,22 @@ public enum Key {
     MOD_ALT,
     MOD_SUPER;
 
+    /** Every key by ordinal, so lookups needn't copy {@link #values()} each time. */
+    private static final Key[] BY_ORDINAL = values();
+
+    /** How many keys there are. */
+    public static final int COUNT = BY_ORDINAL.length;
+
+    /**
+     * The key with an ordinal.
+     *
+     * @param ordinal The ordinal, from 0 to {@link #COUNT} - 1.
+     * @return The key.
+     */
+    public static Key byOrdinal(int ordinal) {
+        return BY_ORDINAL[ordinal];
+    }
+
     /**
      * Whether this is a keyboard key, as opposed to a gamepad key, a mouse key or one of the merged
      * modifier keys.

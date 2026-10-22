@@ -178,6 +178,18 @@ public class InstanceTable {
     /** Which instances the sky occlusion map holds, to draw it again where they change. */
     private final SkyCasters skyCasters = new SkyCasters();
 
+    /** Instance entries changed this frame, kept between frames. Render thread. */
+    private DeviceTable.Entries instanceEntries = new DeviceTable.Entries(ENTRY_SIZE);
+
+    /** Model mesh entries changed this frame, kept between frames. Render thread. */
+    private DeviceTable.Entries meshEntries = new DeviceTable.Entries(MODEL_MESH_SIZE);
+
+    /** Override entries changed this frame, kept between frames. Render thread. */
+    private DeviceTable.Entries overrideEntries = new DeviceTable.Entries(OVERRIDE_SIZE);
+
+    /** History entries cleared this frame, kept between frames. Render thread. */
+    private DeviceTable.Entries historyEntries = new DeviceTable.Entries(HISTORY_SIZE);
+
     /**
      * Create the tables.
      *
@@ -313,11 +325,7 @@ public class InstanceTable {
             state.deferFree(() -> registry.free(free));
         }
 
-        final DeviceTable.Entries instanceEntries = new DeviceTable.Entries(ENTRY_SIZE);
-        final DeviceTable.Entries meshEntries = new DeviceTable.Entries(MODEL_MESH_SIZE);
-        final DeviceTable.Entries overrideEntries = new DeviceTable.Entries(OVERRIDE_SIZE);
         // The culling shader writes the history, it only needs to be big enough
-        final DeviceTable.Entries historyEntries = new DeviceTable.Entries(HISTORY_SIZE);
         final List<ModelCount> models = new ArrayList<>();
         final Predicate<MeshHandle> resident = state.geometry.getRegistry()::isResident;
         final ShadowInvalidation.Visitor sky =
@@ -402,10 +410,10 @@ public class InstanceTable {
             history.record(state, commandBuffer, capacities.overrides(), historyEntries, stack);
             DeviceTable.barrierAfter(commandBuffer, stack);
         } finally {
-            instanceEntries.free();
-            meshEntries.free();
-            overrideEntries.free();
-            historyEntries.free();
+            instanceEntries.clear();
+            meshEntries.clear();
+            overrideEntries.clear();
+            historyEntries.clear();
         }
     }
 
@@ -420,5 +428,13 @@ public class InstanceTable {
         modelMeshes.cleanup(state);
         overrides.cleanup(state);
         history.cleanup(state);
+        instanceEntries.free();
+        instanceEntries = new DeviceTable.Entries(ENTRY_SIZE);
+        meshEntries.free();
+        meshEntries = new DeviceTable.Entries(MODEL_MESH_SIZE);
+        overrideEntries.free();
+        overrideEntries = new DeviceTable.Entries(OVERRIDE_SIZE);
+        historyEntries.free();
+        historyEntries = new DeviceTable.Entries(HISTORY_SIZE);
     }
 }

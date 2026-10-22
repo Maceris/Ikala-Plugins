@@ -61,7 +61,7 @@ public class KeyChord {
      * @return The key, which may be Key.NONE.
      */
     public static Key getKey(int chord) {
-        return Key.values()[chord & KEY_MASK];
+        return Key.byOrdinal(chord & KEY_MASK);
     }
 
     /**

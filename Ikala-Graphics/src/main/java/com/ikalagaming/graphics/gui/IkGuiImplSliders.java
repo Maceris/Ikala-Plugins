@@ -610,6 +610,60 @@ class IkGuiImplSliders {
      */
     static String formatScalar(
             @NonNull SliderDataType dataType, @NonNull Number value, @NonNull String format) {
+        // Most values shown are the same as the frame before, and formatting takes a formatter, a
+        // pattern match and a few strings each time
+        final boolean floating = value instanceof Double || value instanceof Float;
+        final long bits =
+                floating ? Double.doubleToLongBits(value.doubleValue()) : value.longValue();
+        final int slot =
+                (System.identityHashCode(format) * 31
+                                + Long.hashCode(bits) * 7
+                                + dataType.ordinal())
+                        & (FORMATTED_KEPT - 1);
+        final Formatted kept = formatted[slot];
+        if (kept != null
+                && kept.format() == format
+                && kept.dataType() == dataType
+                && kept.floating() == floating
+                && kept.bits() == bits) {
+            return kept.text();
+        }
+        final String text = formatScalarUncached(dataType, value, format);
+        formatted[slot] = new Formatted(format, dataType, floating, bits, text);
+        return text;
+    }
+
+    /**
+     * A value formatted by {@link #formatScalar(SliderDataType, Number, String)}.
+     *
+     * @param format The format string.
+     * @param dataType The data type.
+     * @param floating Whether the value was a Float or Double.
+     * @param bits The value's bits: its double's bits if floating, else its long value.
+     * @param text The formatted text.
+     */
+    private record Formatted(
+            String format, SliderDataType dataType, boolean floating, long bits, String text) {}
+
+    /** How many formatted values are kept, a power of 2. */
+    private static final int FORMATTED_KEPT = 256;
+
+    /**
+     * Formatted values, by format and value. Each slot is replaced whole, so threads see a value
+     * with its own text.
+     */
+    private static final Formatted[] formatted = new Formatted[FORMATTED_KEPT];
+
+    /**
+     * Format a value, see {@link #formatScalar(SliderDataType, Number, String)}.
+     *
+     * @param dataType The data type.
+     * @param value The value.
+     * @param format The format string.
+     * @return The formatted value.
+     */
+    private static String formatScalarUncached(
+            @NonNull SliderDataType dataType, @NonNull Number value, @NonNull String format) {
         final String sanitized = sanitizeFormatForJava(format);
         final int start = findFormatStart(sanitized);
         if (start >= sanitized.length()) {
