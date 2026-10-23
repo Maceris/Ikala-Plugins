@@ -12,6 +12,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ForkJoinPool;
 import java.util.function.IntPredicate;
 import java.util.function.IntToDoubleFunction;
 
@@ -151,6 +152,12 @@ public final class CrackCheck {
      * over each other: the cosine of 5 degrees.
      */
     private static final double OVERLAP_COS = Math.cos(Math.toRadians(5));
+
+    /**
+     * How many columns a tiled check works on at once. Each builds what it searches for its own
+     * clusters, and in a dense world one column for every core outgrew a 16 GiB heap.
+     */
+    private static final int COLUMN_THREADS = 4;
 
     /** How many findings a tiled check keeps as examples. */
     public static final int EXAMPLES = 16;
@@ -416,7 +423,6 @@ public final class CrackCheck {
             @NonNull Collection<double[]> excused,
             List<CoverageVolume> volumes,
             double tolerance) {
-        final IntToDoubleFunction errorOf = id -> clusters.get(id).error();
         // Each column's clusters, by the box around their spheres widened by a column
         final Map<Long, List<Integer>> columns = new HashMap<>();
         int drawnCount = 0;
@@ -434,6 +440,99 @@ public final class CrackCheck {
                 }
             }
         }
+        // Columns are checked apart, each with what it builds for itself, so they run in parallel,
+        // a few at a time; their findings are summed in the columns' order. A list splits evenly
+        // among the workers, where the map would split by its buckets, which neighboring columns'
+        // keys crowd into
+        final List<Map.Entry<Long, List<Integer>>> byColumn = new ArrayList<>(columns.entrySet());
+        final int drawnClusters = drawnCount;
+        final ForkJoinPool pool = new ForkJoinPool(COLUMN_THREADS);
+        try {
+            return pool.submit(
+                            () ->
+                                    byColumn.parallelStream()
+                                            .map(
+                                                    entry ->
+                                                            checkColumn(
+                                                                    entry.getKey(),
+                                                                    entry.getValue(),
+                                                                    clusters,
+                                                                    highest,
+                                                                    drawn,
+                                                                    column,
+                                                                    excused,
+                                                                    volumes,
+                                                                    tolerance))
+                                            .reduce(
+                                                    new Tiled(
+                                                            0,
+                                                            0,
+                                                            drawnClusters,
+                                                            0,
+                                                            0,
+                                                            0,
+                                                            0,
+                                                            0,
+                                                            List.of()),
+                                                    CrackCheck::sum))
+                    .join();
+        } finally {
+            pool.shutdown();
+        }
+    }
+
+    /**
+     * Two tiled checks' findings together, the first's examples first.
+     *
+     * @param a One.
+     * @param b The other.
+     * @return Both, with the first's count of drawn clusters.
+     */
+    private static Tiled sum(@NonNull Tiled a, @NonNull Tiled b) {
+        final List<double[]> examples = new ArrayList<>(a.examples());
+        for (double[] example : b.examples()) {
+            if (examples.size() < EXAMPLES) {
+                examples.add(example);
+            }
+        }
+        return new Tiled(
+                a.openEdges() + b.openEdges(),
+                a.overdrawnEdges() + b.overdrawnEdges(),
+                Math.max(a.drawnClusters(), b.drawnClusters()),
+                a.checkedEdges() + b.checkedEdges(),
+                a.longEdges() + b.longEdges(),
+                a.excusedEdges() + b.excusedEdges(),
+                a.nearEdges() + b.nearEdges(),
+                a.coveredEdges() + b.coveredEdges(),
+                examples);
+    }
+
+    /**
+     * Check one column of a tiled check: its edges, against every cluster near enough to use them.
+     * On any thread: it reads only what it is given, which no column changes.
+     *
+     * @param key The column.
+     * @param members The clusters near enough to it.
+     * @param clusters All clusters.
+     * @param highest The highest level each stands at.
+     * @param drawn Whether each is drawn.
+     * @param column The width of a column, in world units.
+     * @param excused Boxes of sections drawn some other way.
+     * @param volumes The volume each cluster is, or null where it is triangles; null if none is.
+     * @param tolerance The share of the larger error on either side a gap may be, or 0 for none.
+     * @return What was found there, with no drawn clusters counted.
+     */
+    private static Tiled checkColumn(
+            long key,
+            @NonNull List<Integer> members,
+            @NonNull List<LodDag.Cluster> clusters,
+            int @NonNull [] highest,
+            boolean @NonNull [] drawn,
+            double column,
+            @NonNull Collection<double[]> excused,
+            List<CoverageVolume> volumes,
+            double tolerance) {
+        final IntToDoubleFunction errorOf = id -> clusters.get(id).error();
         long open = 0;
         long overdrawn = 0;
         long checked = 0;
@@ -442,189 +541,177 @@ public final class CrackCheck {
         long coveredCount = 0;
         final List<double[]> examples = new ArrayList<>();
         final long[] longEdges = new long[1];
-        for (Map.Entry<Long, List<Integer>> entry : columns.entrySet()) {
-            final long key = entry.getKey();
-            final List<Integer> members = entry.getValue();
-            // Uses of the edges near the column in each level, and in the cut, with the first
-            // triangle using each
-            final Map<Integer, Map<Grouping.Edge, Use>> levelUses = new HashMap<>();
-            final Map<Grouping.Edge, Use> cutUses = new HashMap<>();
-            for (int i : members) {
-                final LodDag.Cluster cluster = clusters.get(i);
-                final int top = highest[i];
-                final boolean inCut = drawn[i];
-                final int owner = i;
-                forEachEdge(
-                        cluster,
-                        key,
-                        column,
-                        null,
-                        false,
-                        (edge, corners, from, to, triangle) -> {
-                            for (int level = cluster.level(); level <= top; ++level) {
-                                levelUses
-                                        .computeIfAbsent(level, l -> new HashMap<>())
-                                        .computeIfAbsent(edge, e -> new Use())
-                                        .add(corners, from, to, owner, triangle);
-                            }
-                            if (inCut) {
-                                cutUses.computeIfAbsent(edge, e -> new Use())
-                                        .add(corners, from, to, owner, triangle);
-                            }
-                        });
+        // Uses of the edges near the column in each level, and in the cut, with the first
+        // triangle using each
+        final Map<Integer, Map<Grouping.Edge, Use>> levelUses = new HashMap<>();
+        final Map<Grouping.Edge, Use> cutUses = new HashMap<>();
+        for (int i : members) {
+            final LodDag.Cluster cluster = clusters.get(i);
+            final int top = highest[i];
+            final boolean inCut = drawn[i];
+            final int owner = i;
+            forEachEdge(
+                    cluster,
+                    key,
+                    column,
+                    null,
+                    false,
+                    (edge, corners, from, to, triangle) -> {
+                        for (int level = cluster.level(); level <= top; ++level) {
+                            levelUses
+                                    .computeIfAbsent(level, l -> new HashMap<>())
+                                    .computeIfAbsent(edge, e -> new Use())
+                                    .add(corners, from, to, owner, triangle);
+                        }
+                        if (inCut) {
+                            cutUses.computeIfAbsent(edge, e -> new Use())
+                                    .add(corners, from, to, owner, triangle);
+                        }
+                    });
+        }
+        // The most the drawing clusters' own levels use an edge, and a level that uses it once
+        final Map<Grouping.Edge, Integer> allowed = new HashMap<>();
+        final Map<Grouping.Edge, Integer> onceIn = new HashMap<>();
+        for (int i : members) {
+            if (!drawn[i]) {
+                continue;
             }
-            // The most the drawing clusters' own levels use an edge, and a level that uses it once
-            final Map<Grouping.Edge, Integer> allowed = new HashMap<>();
-            final Map<Grouping.Edge, Integer> onceIn = new HashMap<>();
-            for (int i : members) {
-                if (!drawn[i]) {
-                    continue;
-                }
-                final LodDag.Cluster cluster = clusters.get(i);
-                forEachEdge(
-                        cluster,
-                        key,
-                        column,
-                        null,
-                        true,
-                        (edge, corners, from, to, triangle) -> {
-                            final int level = cluster.level();
-                            final Use use = levelUses.get(level).get(edge);
-                            final int count = use == null ? 0 : use.count;
-                            allowed.merge(edge, count, Math::max);
-                            if (count == 1) {
-                                onceIn.put(edge, level);
-                            }
-                        });
+            final LodDag.Cluster cluster = clusters.get(i);
+            forEachEdge(
+                    cluster,
+                    key,
+                    column,
+                    null,
+                    true,
+                    (edge, corners, from, to, triangle) -> {
+                        final int level = cluster.level();
+                        final Use use = levelUses.get(level).get(edge);
+                        final int count = use == null ? 0 : use.count;
+                        allowed.merge(edge, count, Math::max);
+                        if (count == 1) {
+                            onceIn.put(edge, level);
+                        }
+                    });
+        }
+        // What touches an edge, in the cut and in each level, made when first needed: first
+        // the edges along its line, which settle most, then the triangles
+        final TriangleBvh.Scratch scratch = new TriangleBvh.Scratch();
+        final TJunctions[] cutLines = new TJunctions[1];
+        final Surface[] cutSurface = new Surface[1];
+        final Map<Integer, TJunctions> levelLines = new HashMap<>();
+        final Map<Integer, Surface> levelSurfaces = new HashMap<>();
+        final List<CoverageVolume> cutVolumes = new ArrayList<>();
+        for (Map.Entry<Grouping.Edge, Use> edgeUse : cutUses.entrySet()) {
+            if (!inColumn(edgeUse.getKey(), key, column)) {
+                continue;
             }
-            // What touches an edge, in the cut and in each level, made when first needed: first
-            // the edges along its line, which settle most, then the triangles
-            final TriangleBvh.Scratch scratch = new TriangleBvh.Scratch();
-            final TJunctions[] cutLines = new TJunctions[1];
-            final Surface[] cutSurface = new Surface[1];
-            final Map<Integer, TJunctions> levelLines = new HashMap<>();
-            final Map<Integer, Surface> levelSurfaces = new HashMap<>();
-            final List<CoverageVolume> cutVolumes = new ArrayList<>();
-            for (Map.Entry<Grouping.Edge, Use> edgeUse : cutUses.entrySet()) {
-                if (!inColumn(edgeUse.getKey(), key, column)) {
-                    continue;
-                }
-                if (tooLong(edgeUse.getKey(), column)) {
-                    ++longEdges[0];
-                    continue;
-                }
-                ++checked;
-                final Use use = edgeUse.getValue();
-                final int most = allowed.getOrDefault(edgeUse.getKey(), 0);
-                if (use.count == 1) {
-                    // A rim, unless something there touches it: of its level, or of the input
-                    final IntPredicate rimAt =
-                            level -> {
-                                final Use own = levelUses.get(level).get(edgeUse.getKey());
-                                if (own.count != 1
-                                        || levelLines
-                                                .computeIfAbsent(
-                                                        level, l -> lines(levelUses.get(l)))
-                                                .covered(own.from(), own.to())) {
-                                    return false;
-                                }
-                                return !levelSurfaces
-                                        .computeIfAbsent(
-                                                level,
-                                                l -> {
-                                                    final List<Integer> standing =
-                                                            new ArrayList<>();
-                                                    for (int i : members) {
-                                                        if (clusters.get(i).level() <= l
-                                                                && l <= highest[i]) {
-                                                            standing.add(i);
-                                                        }
+            if (tooLong(edgeUse.getKey(), column)) {
+                ++longEdges[0];
+                continue;
+            }
+            ++checked;
+            final Use use = edgeUse.getValue();
+            final int most = allowed.getOrDefault(edgeUse.getKey(), 0);
+            if (use.count == 1) {
+                // A rim, unless something there touches it: of its level, or of the input
+                final IntPredicate rimAt =
+                        level -> {
+                            final Use own = levelUses.get(level).get(edgeUse.getKey());
+                            if (own.count != 1
+                                    || levelLines
+                                            .computeIfAbsent(level, l -> lines(levelUses.get(l)))
+                                            .covered(own.from(), own.to())) {
+                                return false;
+                            }
+                            return !levelSurfaces
+                                    .computeIfAbsent(
+                                            level,
+                                            l -> {
+                                                final List<Integer> standing = new ArrayList<>();
+                                                for (int i : members) {
+                                                    if (clusters.get(i).level() <= l
+                                                            && l <= highest[i]) {
+                                                        standing.add(i);
                                                     }
-                                                    return new Surface(clusters, standing);
-                                                })
-                                        .touches(
-                                                own.from(),
-                                                own.to(),
-                                                own.owner,
-                                                own.triangle,
-                                                scratch);
-                            };
-                    if (most == 1 && rimAt.test(onceIn.get(edgeUse.getKey()))) {
-                        continue;
-                    }
-                    if (cutLines[0] == null) {
-                        cutLines[0] = lines(cutUses);
-                    }
-                    if (cutLines[0].covered(use.from(), use.to())) {
-                        continue;
-                    }
-                    if (cutSurface[0] == null) {
-                        final List<Integer> inCut = new ArrayList<>();
-                        for (int i : members) {
-                            if (drawn[i]) {
-                                inCut.add(i);
-                            }
-                        }
-                        cutSurface[0] = new Surface(clusters, inCut);
-                        for (int i : inCut) {
-                            cutSurface[0].largestError =
-                                    Math.max(cutSurface[0].largestError, clusters.get(i).error());
-                            if (volumes != null && volumes.get(i) != null) {
-                                cutVolumes.add(volumes.get(i));
-                            }
+                                                }
+                                                return new Surface(clusters, standing);
+                                            })
+                                    .touches(
+                                            own.from(), own.to(), own.owner, own.triangle, scratch);
+                        };
+                if (most == 1 && rimAt.test(onceIn.get(edgeUse.getKey()))) {
+                    continue;
+                }
+                if (cutLines[0] == null) {
+                    cutLines[0] = lines(cutUses);
+                }
+                if (cutLines[0].covered(use.from(), use.to())) {
+                    continue;
+                }
+                if (cutSurface[0] == null) {
+                    final List<Integer> inCut = new ArrayList<>();
+                    for (int i : members) {
+                        if (drawn[i]) {
+                            inCut.add(i);
                         }
                     }
-                    if (cutSurface[0].touches(
-                            use.from(), use.to(), use.owner, use.triangle, scratch)) {
-                        continue;
-                    }
-                    if (onAny(edgeUse.getKey(), excused)) {
-                        ++excusedCount;
-                        continue;
-                    }
-                    if (!cutVolumes.isEmpty() && covered(use.from(), use.to(), cutVolumes)) {
-                        ++coveredCount;
-                        continue;
-                    }
-                    if (tolerance > 0
-                            && cutSurface[0].near(
-                                    use.from(),
-                                    use.to(),
-                                    use.owner,
-                                    use.triangle,
-                                    tolerance,
-                                    errorOf,
-                                    scratch)) {
-                        ++nearCount;
-                        continue;
-                    }
-                    int lowest = Integer.MAX_VALUE;
-                    for (Map.Entry<Integer, Map<Grouping.Edge, Use>> level : levelUses.entrySet()) {
-                        if (level.getKey() < lowest
-                                && level.getValue().containsKey(edgeUse.getKey())) {
-                            lowest = level.getKey();
+                    cutSurface[0] = new Surface(clusters, inCut);
+                    for (int i : inCut) {
+                        cutSurface[0].largestError =
+                                Math.max(cutSurface[0].largestError, clusters.get(i).error());
+                        if (volumes != null && volumes.get(i) != null) {
+                            cutVolumes.add(volumes.get(i));
                         }
                     }
-                    if (lowest != Integer.MAX_VALUE && rimAt.test(lowest)) {
-                        continue;
+                }
+                if (cutSurface[0].touches(use.from(), use.to(), use.owner, use.triangle, scratch)) {
+                    continue;
+                }
+                if (onAny(edgeUse.getKey(), excused)) {
+                    ++excusedCount;
+                    continue;
+                }
+                if (!cutVolumes.isEmpty() && covered(use.from(), use.to(), cutVolumes)) {
+                    ++coveredCount;
+                    continue;
+                }
+                if (tolerance > 0
+                        && cutSurface[0].near(
+                                use.from(),
+                                use.to(),
+                                use.owner,
+                                use.triangle,
+                                tolerance,
+                                errorOf,
+                                scratch)) {
+                    ++nearCount;
+                    continue;
+                }
+                int lowest = Integer.MAX_VALUE;
+                for (Map.Entry<Integer, Map<Grouping.Edge, Use>> level : levelUses.entrySet()) {
+                    if (level.getKey() < lowest && level.getValue().containsKey(edgeUse.getKey())) {
+                        lowest = level.getKey();
                     }
-                    ++open;
-                    if (examples.size() < EXAMPLES) {
-                        examples.add(middle(edgeUse.getKey()));
-                    }
-                } else if (use.count > mostAllowed(most)
-                        && (most == 0 || drawnTwice(edgeUse.getKey(), members, clusters, drawn))) {
-                    ++overdrawn;
-                    if (examples.size() < EXAMPLES) {
-                        examples.add(middle(edgeUse.getKey()));
-                    }
+                }
+                if (lowest != Integer.MAX_VALUE && rimAt.test(lowest)) {
+                    continue;
+                }
+                ++open;
+                if (examples.size() < EXAMPLES) {
+                    examples.add(middle(edgeUse.getKey()));
+                }
+            } else if (use.count > mostAllowed(most)
+                    && (most == 0 || drawnTwice(edgeUse.getKey(), members, clusters, drawn))) {
+                ++overdrawn;
+                if (examples.size() < EXAMPLES) {
+                    examples.add(middle(edgeUse.getKey()));
                 }
             }
         }
         return new Tiled(
                 open,
                 overdrawn,
-                drawnCount,
+                0,
                 checked,
                 longEdges[0],
                 excusedCount,
