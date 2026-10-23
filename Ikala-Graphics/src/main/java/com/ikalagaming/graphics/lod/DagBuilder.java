@@ -45,6 +45,14 @@ public final class DagBuilder {
     private static final double STALLED = 0.95;
 
     /**
+     * A region cell's level whose triangles are at least this share of the last has stopped
+     * halving: what is left is mostly on the cell's planes, locked until its parent, and further
+     * levels would each take a little off at the cost of a whole round, while the parent, where
+     * those planes lie inside, simplifies them instead.
+     */
+    private static final double CELL_STALLED = 0.85;
+
+    /**
      * How much longer a simplified group's edges are than its input's: half the triangles over the
      * same area, so each twice the area.
      */
@@ -1106,7 +1114,7 @@ public final class DagBuilder {
             }
             active = next.toIntArray();
             ++round;
-            if (trianglesOut >= STALLED * trianglesIn) {
+            if (trianglesOut >= (cellMin != null ? CELL_STALLED : STALLED) * trianglesIn) {
                 dag.setStopReason(
                         String.format(
                                 "stopped halving at level %d (%d of %d triangles)",
