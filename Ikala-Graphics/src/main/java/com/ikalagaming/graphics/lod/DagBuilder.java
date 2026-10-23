@@ -729,6 +729,37 @@ public final class DagBuilder {
             double @NonNull [] cellMax,
             int stopAt,
             @NonNull Options options) {
+        final ExecutorService pool =
+                Executors.newFixedThreadPool(options.threads(), daemonThreads("LOD build"));
+        try {
+            return buildCell(sections, origin, cellMin, cellMax, stopAt, options, pool);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    /**
+     * Build the DAG of one region cell from its sections, as {@link #buildCell(List, double[],
+     * double[], double[], int, Options)} does, its groups on workers shared with other builds.
+     *
+     * @param sections The cell's section meshes, each with its own origin.
+     * @param origin Where the DAG's positions are measured from.
+     * @param cellMin The cell's minimum corner, relative to the origin.
+     * @param cellMax The cell's maximum corner, relative to the origin.
+     * @param stopAt Stop once this many clusters or fewer are left.
+     * @param options How to build.
+     * @param pool The workers, which stay running.
+     * @return The DAG.
+     * @throws IllegalArgumentException If there is nothing to build from.
+     */
+    public static LodDag buildCell(
+            @NonNull List<LodMesh> sections,
+            double @NonNull [] origin,
+            double @NonNull [] cellMin,
+            double @NonNull [] cellMax,
+            int stopAt,
+            @NonNull Options options,
+            @NonNull ExecutorService pool) {
         if (sections.isEmpty()) {
             throw new IllegalArgumentException("A cell needs at least one section");
         }
@@ -736,14 +767,8 @@ public final class DagBuilder {
         builder.cellMin = cellMin.clone();
         builder.cellMax = cellMax.clone();
         builder.stopAt = stopAt;
-        ExecutorService pool =
-                Executors.newFixedThreadPool(options.threads(), daemonThreads("LOD build"));
-        try {
-            builder.leaves(sections, pool);
-            builder.levels(pool);
-        } finally {
-            pool.shutdownNow();
-        }
+        builder.leaves(sections, pool);
+        builder.levels(pool);
         return builder.dag;
     }
 
@@ -773,6 +798,44 @@ public final class DagBuilder {
             double @NonNull [] cellMax,
             int stopAt,
             @NonNull Options options) {
+        final ExecutorService pool =
+                Executors.newFixedThreadPool(options.threads(), daemonThreads("LOD build"));
+        try {
+            return buildParent(
+                    tops, volumes, leafEdge, origin, cellMin, cellMax, stopAt, options, pool);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    /**
+     * Build the DAG of a parent region cell from its children's top clusters, as {@link
+     * #buildParent(List, List, double, double[], double[], double[], int, Options)} does, its
+     * groups on workers shared with other builds.
+     *
+     * @param tops The children's top clusters, relative to the origin; their ids are ignored.
+     * @param volumes The coverage volume each top is, or null where it is triangles; empty if none
+     *     is.
+     * @param leafEdge The leaves' average edge length, which scales virtual edges and sampling.
+     * @param origin Where the DAG's positions are measured from.
+     * @param cellMin The cell's minimum corner, relative to the origin.
+     * @param cellMax The cell's maximum corner, relative to the origin.
+     * @param stopAt Stop once this many clusters or fewer are left.
+     * @param options How to build.
+     * @param pool The workers, which stay running.
+     * @return The DAG, whose first clusters are the tops in order.
+     * @throws IllegalArgumentException If there is nothing to build from.
+     */
+    public static LodDag buildParent(
+            @NonNull List<LodDag.Cluster> tops,
+            @NonNull List<CoverageVolume> volumes,
+            double leafEdge,
+            double @NonNull [] origin,
+            double @NonNull [] cellMin,
+            double @NonNull [] cellMax,
+            int stopAt,
+            @NonNull Options options,
+            @NonNull ExecutorService pool) {
         if (tops.isEmpty()) {
             throw new IllegalArgumentException("A parent cell needs at least one cluster");
         }
@@ -805,13 +868,7 @@ public final class DagBuilder {
                 builder.dag.getLineage().addCluster(null);
             }
         }
-        ExecutorService pool =
-                Executors.newFixedThreadPool(options.threads(), daemonThreads("LOD build"));
-        try {
-            builder.levels(pool);
-        } finally {
-            pool.shutdownNow();
-        }
+        builder.levels(pool);
         return builder.dag;
     }
 

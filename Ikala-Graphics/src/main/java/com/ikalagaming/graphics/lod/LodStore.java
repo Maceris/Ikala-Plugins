@@ -71,12 +71,6 @@ public final class LodStore {
     private static final int THREADS_PER_CELL_AT_ONCE = 2;
 
     /**
-     * The fewest threads one cell's groups are built on, when as many cells as can be are built at
-     * once; fewer cells at once, as for the last parents, each get more.
-     */
-    private static final int GROUP_THREADS = 4;
-
-    /**
      * Added to level 0 cell indices so they are positive and parents halve them evenly. Its bits
      * alternate, so the planes between level k cells lie about 2^k / 3 cells from the origin, a
      * different place at each level: a fixed grid would have a plane through the origin at every
@@ -830,28 +824,28 @@ public final class LodStore {
      * in the same order. Interrupting the calling thread stops them.
      *
      * @param jobs What each cell is built from.
-     * @param build Builds one cell with the options for each, and must not touch the store's state.
+     * @param build Builds one cell on the workers given, and must not touch the store's state.
      * @param <J> The kind of job.
      * @return The cells.
      * @throws CancellationException If the calling thread was interrupted.
      * @throws IllegalStateException If a cell failed to build.
      */
     private <J> List<Cell> buildAll(
-            @NonNull List<J> jobs, @NonNull BiFunction<J, DagBuilder.Options, Cell> build) {
+            @NonNull List<J> jobs, @NonNull BiFunction<J, Workers, Cell> build) {
         final List<Cell> out = new ArrayList<>(jobs.size());
         if (jobs.size() <= 1 || cellsAtOnce <= 1) {
             for (J job : jobs) {
-                out.add(build.apply(job, options));
+                out.add(build.apply(job, new Workers(options, null)));
             }
             return out;
         }
-        // The threads shared out between the cells built at once, so a few last cells get more
+        // Every cell's groups go to one pool of all the threads, so the cells still building when
+        // others are done get their workers, rather than each keeping its share to the end
         final int atOnce = Math.min(cellsAtOnce, jobs.size());
-        final DagBuilder.Options each =
-                options.withThreads(
-                        Math.min(
-                                options.threads(),
-                                Math.max(GROUP_THREADS, options.threads() / atOnce)));
+        final ExecutorService groups =
+                Executors.newFixedThreadPool(
+                        options.threads(), DagBuilder.daemonThreads("LOD build"));
+        final Workers each = new Workers(options, groups);
         final ExecutorService pool =
                 Executors.newFixedThreadPool(atOnce, DagBuilder.daemonThreads("LOD cell"));
         try {
@@ -871,24 +865,48 @@ public final class LodStore {
         } finally {
             // Interrupts the cells still building if one failed or this thread was interrupted
             pool.shutdownNow();
+            groups.shutdownNow();
         }
     }
+
+    /**
+     * How to build a cell, and on what.
+     *
+     * @param options How to build.
+     * @param groups The workers its groups are built on, shared with the other cells built at once,
+     *     or null for workers of its own.
+     */
+    private record Workers(DagBuilder.@NonNull Options options, ExecutorService groups) {}
 
     /**
      * Build a level 0 cell, or read it from the cache. On a worker.
      *
      * @param job What it is built from.
-     * @param each How to build it, on its share of the threads.
+     * @param each How to build it, and on what.
      * @return The cell.
      */
-    private Cell buildLeaf(@NonNull LeafJob job, DagBuilder.@NonNull Options each) {
+    private Cell buildLeaf(@NonNull LeafJob job, @NonNull Workers each) {
         final Cell loaded = cached(job.key(), job.cacheKey());
         if (loaded != null) {
             return loaded;
         }
         final LodDag dag =
-                DagBuilder.buildCell(
-                        job.inside(), origin, job.box()[0], job.box()[1], stopAt, each);
+                each.groups() == null
+                        ? DagBuilder.buildCell(
+                                job.inside(),
+                                origin,
+                                job.box()[0],
+                                job.box()[1],
+                                stopAt,
+                                each.options())
+                        : DagBuilder.buildCell(
+                                job.inside(),
+                                origin,
+                                job.box()[0],
+                                job.box()[1],
+                                stopAt,
+                                each.options(),
+                                each.groups());
         final Cell cell = new Cell(dag, List.of(), dag.getLeafEdge(), job.positions());
         builtCount.incrementAndGet();
         save(job.key(), job.cacheKey(), cell);
@@ -932,24 +950,35 @@ public final class LodStore {
      * Build a parent cell from its children's tops, or read it from the cache. On a worker.
      *
      * @param job What it is built from.
-     * @param each How to build it, on its share of the threads.
+     * @param each How to build it, and on what.
      * @return The cell.
      */
-    private Cell buildParent(@NonNull ParentJob job, DagBuilder.@NonNull Options each) {
+    private Cell buildParent(@NonNull ParentJob job, @NonNull Workers each) {
         final Cell loaded = cached(job.key(), job.cacheKey());
         if (loaded != null) {
             return loaded;
         }
         final LodDag dag =
-                DagBuilder.buildParent(
-                        job.tops(),
-                        job.volumes(),
-                        job.leafEdge(),
-                        origin,
-                        job.box()[0],
-                        job.box()[1],
-                        stopAt,
-                        each);
+                each.groups() == null
+                        ? DagBuilder.buildParent(
+                                job.tops(),
+                                job.volumes(),
+                                job.leafEdge(),
+                                origin,
+                                job.box()[0],
+                                job.box()[1],
+                                stopAt,
+                                each.options())
+                        : DagBuilder.buildParent(
+                                job.tops(),
+                                job.volumes(),
+                                job.leafEdge(),
+                                origin,
+                                job.box()[0],
+                                job.box()[1],
+                                stopAt,
+                                each.options(),
+                                each.groups());
         final Cell cell = new Cell(dag, List.copyOf(job.inputs()), job.leafEdge(), List.of());
         builtCount.incrementAndGet();
         save(job.key(), job.cacheKey(), cell);
