@@ -69,6 +69,9 @@ public final class Simplifier {
      *     z, then max x, y, z. Empty outside a cell.
      * @param cell The cell's box, min x, y, z then max x, y, z, in the mesh's frame. Empty outside
      *     a cell.
+     * @param borders Edges between locked vertices that other groups meet, packed the same way and
+     *     sorted: a collapse may not take their last faces off, even a sheet's two sides at once.
+     *     Edges on a cell's planes count too.
      */
     public record Options(
             int targetTriangles,
@@ -78,7 +81,8 @@ public final class Simplifier {
             long @NonNull [] keepOpen,
             long @NonNull [] seams,
             int @NonNull [] planes,
-            double @NonNull [] cell) {
+            double @NonNull [] cell,
+            long @NonNull [] borders) {
 
         /**
          * Simplify to a triangle count with no error limit, recording history.
@@ -96,7 +100,8 @@ public final class Simplifier {
                     new long[0],
                     new long[0],
                     new int[0],
-                    new double[0]);
+                    new double[0],
+                    new long[0]);
         }
 
         /**
@@ -116,7 +121,8 @@ public final class Simplifier {
                     sorted,
                     seams,
                     planes,
-                    cell);
+                    cell,
+                    borders);
         }
 
         /**
@@ -134,7 +140,29 @@ public final class Simplifier {
                     keepOpen,
                     edges,
                     planes,
-                    cell);
+                    cell,
+                    borders);
+        }
+
+        /**
+         * The same options, with edges other groups meet.
+         *
+         * @param edges The edges, packed vertex pairs, lower vertex first; sorted here.
+         * @return The options.
+         */
+        public Options meetingAt(long @NonNull [] edges) {
+            final long[] sorted = edges.clone();
+            Arrays.sort(sorted);
+            return new Options(
+                    targetTriangles,
+                    virtualEdgeRadius,
+                    maxError,
+                    recordHistory,
+                    keepOpen,
+                    seams,
+                    planes,
+                    cell,
+                    sorted);
         }
 
         /**
@@ -157,7 +185,8 @@ public final class Simplifier {
                     keepOpen,
                     seams,
                     vertexPlanes,
-                    box);
+                    box,
+                    borders);
         }
     }
 
@@ -670,11 +699,14 @@ public final class Simplifier {
     }
 
     /**
-     * Whether a collapse would take the last face off an edge between two locked vertices: a face
-     * using both ends goes, and with it its edge from the kept vertex to its third corner, unless
-     * the removed vertex's edge to that corner has another face to carry it over. A border shared
+     * Whether a collapse would take the last face off an edge between two locked vertices: faces
+     * using both ends go, and with them their edges from the kept vertex to their third corners,
+     * unless faces on the removed vertex's edge to that corner carry them over. A border shared
      * with another group is such an edge, and losing it leaves a crack next to the other group,
-     * however the boundary around it changed since the locks were set.
+     * however the boundary around it changed since the locks were set. A sheet's two sides are two
+     * faces on the same corners, which go together: where they are all an edge another group or
+     * cell meets has, they stay too. Elsewhere a sheet between locked vertices may go whole, as a
+     * fin or pane resting on locked corners does.
      *
      * @param keep The vertex that stays.
      * @param remove The vertex that goes.
@@ -692,16 +724,41 @@ public final class Simplifier {
             }
             for (int corner = 0; corner < CORNERS; ++corner) {
                 final int y = faces[f * CORNERS + corner];
-                if (y != keep
-                        && y != remove
-                        && locked[y]
-                        && sharedFaces(keep, y) == 1
-                        && sharedFaces(remove, y) == 1) {
+                if (y == keep || y == remove || !locked[y]) {
+                    continue;
+                }
+                // Faces on keep-y after: those there now and those moving over from remove-y,
+                // less those the collapse drops, which used keep, remove and y and counted on both
+                final int onKeep = sharedFaces(keep, y);
+                final int onRemove = sharedFaces(remove, y);
+                if (onKeep == 1 && onRemove == 1) {
+                    return true;
+                }
+                final int dropped = sharedFaces(keep, remove, y);
+                if (onKeep + onRemove - 2 * dropped == 0 && meets(keep, y)) {
                     return true;
                 }
             }
         }
         return false;
+    }
+
+    /**
+     * Whether another group or cell meets an edge: one of the borders given, or one on a plane of
+     * the cell, which its neighbor across meets.
+     *
+     * @param a One end.
+     * @param b The other.
+     * @return True if one does.
+     */
+    private boolean meets(int a, int b) {
+        final int[] planes = options.planes();
+        if (planes.length > 0 && (planes[a] & planes[b]) != 0) {
+            return true;
+        }
+        return Arrays.binarySearch(
+                        options.borders(), LongIntMap.pair(Math.min(a, b), Math.max(a, b)))
+                >= 0;
     }
 
     /**

@@ -105,6 +105,44 @@ class SimplifierTest {
         assertEquals(before, after);
     }
 
+    /**
+     * A two-sided sheet standing on an edge between two locked vertices where another group meets
+     * it keeps a face on that edge, though its two sides' faces there go together in one collapse.
+     */
+    @Test
+    void testSheetKeepsLockedEdge() {
+        final LodMesh.Builder builder = LodMesh.builder(new double[3]);
+        final int a = builder.vertex(0, 0, 0);
+        final int b = builder.vertex(1, 0, 0);
+        final int c = builder.vertex(0, 0.5f, 0);
+        final int d = builder.vertex(1, 0.5f, 0);
+        builder.lock(a);
+        builder.lock(b);
+        // Front, then back
+        builder.triangle(a, b, d, 0);
+        builder.triangle(a, d, c, 0);
+        builder.triangle(a, d, b, 0);
+        builder.triangle(a, c, d, 0);
+        final LodMesh simplified =
+                Simplifier.simplify(
+                                builder.build(),
+                                Simplifier.Options.toCount(0, 0)
+                                        .meetingAt(new long[] {LongIntMap.pair(a, b)}))
+                        .mesh();
+        boolean kept = false;
+        for (int t = 0; t < simplified.getTriangleCount(); ++t) {
+            boolean usesA = false;
+            boolean usesB = false;
+            for (int corner = 0; corner < 3; ++corner) {
+                final int v = simplified.corner(t, corner);
+                usesA |= simplified.position(v, 0) == 0 && simplified.position(v, 1) == 0;
+                usesB |= simplified.position(v, 0) == 1 && simplified.position(v, 1) == 0;
+            }
+            kept |= usesA && usesB;
+        }
+        assertTrue(kept, "No face left on the locked edge");
+    }
+
     /** Simplifying to half gets to half, and no triangle turns over. */
     @Test
     void testHalvesWithoutFlips() {

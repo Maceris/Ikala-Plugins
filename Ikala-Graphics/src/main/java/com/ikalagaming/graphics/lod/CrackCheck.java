@@ -12,6 +12,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.IntPredicate;
 import java.util.function.IntToDoubleFunction;
 
 /**
@@ -33,6 +34,12 @@ import java.util.function.IntToDoubleFunction;
  * beside the cluster shows the edge open as its own level does. Where the cluster meets another
  * cell or group, its own level has the neighbor's border edges, or its finer ones', so a crack
  * there is still found.
+ *
+ * <p>An edge the lowest level that has it uses once, with nothing there touching it, is the input's
+ * own rim, wherever it is drawn: no level closed it by meeting a neighbor along it, so no neighbor
+ * drawn at another level can leave a crack there, only show it open as the input is. That is the
+ * wall's foot in the slab again, seen from the slab: the wall's level can close the foot where the
+ * slab's coarser level comes to rest on it, while the slab is drawn finer.
  *
  * <p>Where parts meet at T-junctions, an edge used once can still be closed: another triangle
  * touches it all along, so the surface goes on past it. Faces that end against the middle of
@@ -168,6 +175,9 @@ public final class CrackCheck {
 
     /** The triangles of the whole of each level, by level. */
     private final List<Surface> levelSurfaces = new ArrayList<>();
+
+    /** The clusters standing at each level, by level. */
+    private final List<List<Integer>> levelClusters = new ArrayList<>();
 
     /**
      * Triangles to find what touches an edge in, numbered by their clusters' keys and their index
@@ -325,6 +335,7 @@ public final class CrackCheck {
                 byLevel.get(level).add(cluster.id());
             }
         }
+        levelClusters.addAll(byLevel);
         for (List<Integer> clusters : byLevel) {
             levelUses.add(Grouping.edgeUses(dag, clusters));
             levelSurfaces.add(new Surface(dag.clusters(), clusters));
@@ -506,18 +517,19 @@ public final class CrackCheck {
                 final Use use = edgeUse.getValue();
                 final int most = allowed.getOrDefault(edgeUse.getKey(), 0);
                 if (use.count == 1) {
-                    if (most == 1) {
-                        // Its level's rim, unless something there touches it
-                        final int level = onceIn.get(edgeUse.getKey());
-                        final Use own = levelUses.get(level).get(edgeUse.getKey());
-                        final boolean along =
-                                levelLines
-                                        .computeIfAbsent(level, l -> lines(levelUses.get(l)))
-                                        .covered(own.from(), own.to());
-                        final Surface surface =
-                                along
-                                        ? null
-                                        : levelSurfaces.computeIfAbsent(
+                    // A rim, unless something there touches it: of its level, or of the input
+                    final IntPredicate rimAt =
+                            level -> {
+                                final Use own = levelUses.get(level).get(edgeUse.getKey());
+                                if (own.count != 1
+                                        || levelLines
+                                                .computeIfAbsent(
+                                                        level, l -> lines(levelUses.get(l)))
+                                                .covered(own.from(), own.to())) {
+                                    return false;
+                                }
+                                return !levelSurfaces
+                                        .computeIfAbsent(
                                                 level,
                                                 l -> {
                                                     final List<Integer> standing =
@@ -529,12 +541,16 @@ public final class CrackCheck {
                                                         }
                                                     }
                                                     return new Surface(clusters, standing);
-                                                });
-                        if (!along
-                                && !surface.touches(
-                                        own.from(), own.to(), own.owner, own.triangle, scratch)) {
-                            continue;
-                        }
+                                                })
+                                        .touches(
+                                                own.from(),
+                                                own.to(),
+                                                own.owner,
+                                                own.triangle,
+                                                scratch);
+                            };
+                    if (most == 1 && rimAt.test(onceIn.get(edgeUse.getKey()))) {
+                        continue;
                     }
                     if (cutLines[0] == null) {
                         cutLines[0] = lines(cutUses);
@@ -580,6 +596,16 @@ public final class CrackCheck {
                                     errorOf,
                                     scratch)) {
                         ++nearCount;
+                        continue;
+                    }
+                    int lowest = Integer.MAX_VALUE;
+                    for (Map.Entry<Integer, Map<Grouping.Edge, Use>> level : levelUses.entrySet()) {
+                        if (level.getKey() < lowest
+                                && level.getValue().containsKey(edgeUse.getKey())) {
+                            lowest = level.getKey();
+                        }
+                    }
+                    if (lowest != Integer.MAX_VALUE && rimAt.test(lowest)) {
                         continue;
                     }
                     ++open;
@@ -1180,7 +1206,7 @@ public final class CrackCheck {
                 } else if (tolerance > 0
                         && cut.near(from, to, owner[0], owner[1], tolerance, errorOf, scratch)) {
                     ++near;
-                } else {
+                } else if (!inputRim(entry.getKey(), from, to, scratch)) {
                     open.add(entry.getKey());
                 }
             } else if (entry.getValue() > mostAllowed(most)) {
@@ -1191,6 +1217,48 @@ public final class CrackCheck {
             overdrawn = drawnTwice(overdrawn, clusters, allowed);
         }
         return new Result(open, overdrawn, clusters.size(), near, covered);
+    }
+
+    /**
+     * Whether an edge is the input's rim: the lowest level that has it uses it once, and nothing
+     * else there touches it (see the class description).
+     *
+     * @param edge The edge.
+     * @param from Its start.
+     * @param to Its end.
+     * @param scratch Room for the queries.
+     * @return True if it is.
+     */
+    private boolean inputRim(
+            Grouping.@NonNull Edge edge,
+            double @NonNull [] from,
+            double @NonNull [] to,
+            TriangleBvh.@NonNull Scratch scratch) {
+        int lowest = 0;
+        while (lowest < levelUses.size() && !levelUses.get(lowest).containsKey(edge)) {
+            ++lowest;
+        }
+        if (lowest == levelUses.size() || levelUses.get(lowest).get(edge) != 1) {
+            return false;
+        }
+        // The triangle there that has it, which touches it without going on past it
+        for (int id : levelClusters.get(lowest)) {
+            final LodDag.Cluster cluster = dag.clusters().get(id);
+            final float[] corners = cluster.corners();
+            for (int t = 0; t < cluster.triangleCount(); ++t) {
+                for (int corner = 0; corner < AXES; ++corner) {
+                    final int p = t * TRIANGLE_VALUES + corner * AXES;
+                    final int q = t * TRIANGLE_VALUES + ((corner + 1) % AXES) * AXES;
+                    if (edge.equals(
+                            Grouping.Edge.of(
+                                    Grouping.Corner.of(corners, p),
+                                    Grouping.Corner.of(corners, q)))) {
+                        return !levelSurfaces.get(lowest).touches(from, to, id, t, scratch);
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     /**

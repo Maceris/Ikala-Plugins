@@ -78,6 +78,35 @@ class CrackCheckLevelsTest {
         assertEquals(0, tiled.openEdges(), tiled.toString());
     }
 
+    /**
+     * A wall's foot open in the input, which a level 2 cluster closes where it comes to rest on it,
+     * is the input's rim: drawn at level 2 beside a level 1 neighbor that keeps clear of it, as a
+     * slab drawn finer than the wall, it is no crack.
+     */
+    @Test
+    void testInputRimClosedAboveIsNoCrack() {
+        final List<LodDag.Cluster> clusters =
+                List.of(
+                        // The wall in the input, its foot open
+                        triangle(0, 0, new float[] {0, 1, 0}),
+                        // What rests on the foot at level 2
+                        triangle(1, 2, new float[] {0, 0, 1}),
+                        // The wall at level 2
+                        triangle(2, 2, new float[] {0.5f, 1, 0}),
+                        // The neighbor drawn finer, clear of the foot
+                        triangle(
+                                3,
+                                1,
+                                new float[] {0, 0, 2},
+                                new float[] {1, 0, 2},
+                                new float[] {0, 0, 3}));
+        final int[] highest = {1, 2, 2, 1};
+        final boolean[] drawn = {false, false, true, true};
+        final CrackCheck.Tiled tiled =
+                CrackCheck.checkTiled(clusters, highest, drawn, COLUMN, List.of());
+        assertEquals(0, tiled.openEdges(), tiled.toString());
+    }
+
     /** The same wall with a level 1 neighbor sharing its foot left out is still a crack. */
     @Test
     void testEdgeClosedAtItsOwnLevelIsACrack() {

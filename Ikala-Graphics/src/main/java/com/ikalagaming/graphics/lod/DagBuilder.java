@@ -1010,13 +1010,13 @@ public final class DagBuilder {
                 }
             }
             final GroupedEdges grouped = groupedEdges(groups);
-            lockTJunctions(owners, grouped, pool);
+            final Set<Grouping.Edge> meetings = lockTJunctions(owners, grouped, pool);
             lockFaceContacts(owners, grouped, pool);
             final List<Grouping.Edge> rim = rim(active, false);
             lockRimNearBorders(owners, rim);
             List<Future<Built>> futures = new ArrayList<>();
             for (int[] group : groups) {
-                futures.add(pool.submit(() -> buildGroup(group, owners, shared, rim)));
+                futures.add(pool.submit(() -> buildGroup(group, owners, shared, rim, meetings)));
             }
             int trianglesIn = 0;
             int trianglesOut = 0;
@@ -1245,8 +1245,10 @@ public final class DagBuilder {
      *
      * @param owners Which group uses each corner; the corners found become -1.
      * @param groups The groups.
+     * @return The edges that share a stretch of their line with another group's, those shared
+     *     exactly too: where groups meet.
      */
-    private void lockTJunctions(
+    private Set<Grouping.Edge> lockTJunctions(
             @NonNull Map<Grouping.Corner, Integer> owners,
             @NonNull GroupedEdges grouped,
             @NonNull ExecutorService pool) {
@@ -1276,7 +1278,7 @@ public final class DagBuilder {
                 future.get();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                return;
+                return Set.of();
             } catch (ExecutionException e) {
                 throw new IllegalStateException("Placing edges failed", e.getCause());
             }
@@ -1284,13 +1286,18 @@ public final class DagBuilder {
         for (int i = 0; i < edges.size(); ++i) {
             index.add(placed[i], groupOf[tags.getInt(i)], -1, -1);
         }
+        final Set<Grouping.Edge> meetings = new HashSet<>();
         for (int i = 0; i < edges.size(); ++i) {
             final float[] edge = edges.get(i);
             if (index.overlapsOther(placed[i], groupOf[tags.getInt(i)])) {
-                owners.put(Grouping.Corner.of(edge, 0), -1);
-                owners.put(Grouping.Corner.of(edge, AXES), -1);
+                final Grouping.Corner a = Grouping.Corner.of(edge, 0);
+                final Grouping.Corner b = Grouping.Corner.of(edge, AXES);
+                owners.put(a, -1);
+                owners.put(b, -1);
+                meetings.add(Grouping.Edge.of(a, b));
             }
         }
+        return meetings;
     }
 
     /**
@@ -1610,6 +1617,52 @@ public final class DagBuilder {
     }
 
     /**
+     * The merged mesh's edges where its group meets others.
+     *
+     * @param merged The merged mesh.
+     * @param meetings The level's edges where groups meet.
+     * @return The edges, as packed vertex pairs of the merged mesh, lower vertex first.
+     */
+    private static long[] meetingsIn(
+            @NonNull LodMesh merged, @NonNull Set<Grouping.Edge> meetings) {
+        final LongIntMap out = new LongIntMap(merged.getTriangleCount() * AXES);
+        final IntArrayList pairs = new IntArrayList();
+        for (int t = 0; t < merged.getTriangleCount(); ++t) {
+            for (int corner = 0; corner < AXES; ++corner) {
+                final int v = merged.corner(t, corner);
+                final int w = merged.corner(t, (corner + 1) % AXES);
+                final long key = LongIntMap.pair(Math.min(v, w), Math.max(v, w));
+                if (out.get(key) == LongIntMap.MISSING
+                        && meetings.contains(
+                                Grouping.Edge.of(cornerOf(merged, v), cornerOf(merged, w)))) {
+                    out.putIfAbsent(key, 0);
+                    pairs.addInt(Math.min(v, w));
+                    pairs.addInt(Math.max(v, w));
+                }
+            }
+        }
+        final long[] keys = new long[pairs.size() / 2];
+        for (int i = 0; i < keys.length; ++i) {
+            keys[i] = LongIntMap.pair(pairs.getInt(2 * i), pairs.getInt(2 * i + 1));
+        }
+        return keys;
+    }
+
+    /**
+     * A merged mesh vertex's corner.
+     *
+     * @param merged The merged mesh.
+     * @param v The vertex.
+     * @return Its corner.
+     */
+    private static Grouping.Corner cornerOf(@NonNull LodMesh merged, int v) {
+        return new Grouping.Corner(
+                Float.floatToIntBits((float) merged.position(v, 0) + 0f),
+                Float.floatToIntBits((float) merged.position(v, 1) + 0f),
+                Float.floatToIntBits((float) merged.position(v, 2) + 0f));
+    }
+
+    /**
      * The merged mesh's vertex at a corner.
      *
      * @param builder The builder.
@@ -1738,14 +1791,17 @@ public final class DagBuilder {
      *
      * @param children The group's clusters.
      * @param owners Which group uses each corner.
+     * @param shared The corners other groups or cells share.
      * @param rim This level's open edges.
+     * @param meetings The level's edges where groups meet, see {@link #lockTJunctions}.
      * @return What it made.
      */
     private Built buildGroup(
             int @NonNull [] children,
             @NonNull Map<Grouping.Corner, Integer> owners,
             @NonNull Set<Grouping.Corner> shared,
-            @NonNull List<Grouping.Edge> rim) {
+            @NonNull List<Grouping.Edge> rim,
+            @NonNull Set<Grouping.Edge> meetings) {
         final long start = System.nanoTime();
         // Children can be of different levels in a parent cell; the group is above the highest
         int level = 0;
@@ -1892,6 +1948,7 @@ public final class DagBuilder {
         Simplifier.Options simplify =
                 Simplifier.Options.toCount(merged.getTriangleCount() / 2, radius)
                         .keepingOpen(keepOpen(builder, merged, rim))
+                        .meetingAt(meetingsIn(merged, meetings))
                         .followingSeams(seams == null ? new long[0] : seams.edges);
         if (cellMin != null) {
             final int[] planes = cellPlanes(merged);
