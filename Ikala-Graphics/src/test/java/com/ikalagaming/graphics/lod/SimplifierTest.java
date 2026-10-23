@@ -174,6 +174,30 @@ class SimplifierTest {
     }
 
     /**
+     * Two locked vertices get no new edge between them along another group's edge, which that group
+     * already has faces beside.
+     */
+    @Test
+    void testNoNewEdgeAlongAnotherGroupsEdge() {
+        final LodMesh.Builder builder = LodMesh.builder(new double[3]);
+        final int a = builder.vertex(0, 0, 0);
+        final int m = builder.vertex(1, 0, 0);
+        final int b = builder.vertex(2, 0, 0);
+        final int c = builder.vertex(1, 0, 1);
+        builder.lock(a);
+        builder.lock(b);
+        builder.triangle(a, c, m, 0);
+        builder.triangle(m, c, b, 0);
+        final LodMesh mesh = builder.build();
+        // Another group's edge runs along the x axis
+        final Simplifier.Options along =
+                Simplifier.Options.toCount(0, 0)
+                        .withOthersAlong(
+                                (p, q) -> p[1] == 0 && p[2] == 0 && q[1] == 0 && q[2] == 0);
+        assertTrue(!joins(Simplifier.simplify(mesh, along).mesh(), 0, 2));
+    }
+
+    /**
      * Whether a triangle has corners at two points on the x axis.
      *
      * @param mesh The mesh.

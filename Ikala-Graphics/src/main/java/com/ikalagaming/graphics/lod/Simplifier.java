@@ -5,6 +5,7 @@ import com.ikalagaming.util.IntArrayList;
 import lombok.NonNull;
 
 import java.util.Arrays;
+import java.util.function.BiPredicate;
 
 /**
  * Simplifies a mesh by collapsing edges, cheapest first, the way Liu, Zhang and Yuksel do in
@@ -75,6 +76,8 @@ public final class Simplifier {
      * @param sharers For each vertex, the other groups that share its corner, sorted; empty for
      *     none, or no array at all when none is known. No collapse may join two locked vertices
      *     another group shares by a new edge.
+     * @param othersAlong Whether a segment, between two positions in the mesh's frame, runs along
+     *     another group's edge: no collapse may join two locked vertices by a new edge there.
      */
     public record Options(
             int targetTriangles,
@@ -86,7 +89,8 @@ public final class Simplifier {
             int @NonNull [] planes,
             double @NonNull [] cell,
             long @NonNull [] borders,
-            int @NonNull [][] sharers) {
+            int @NonNull [][] sharers,
+            @NonNull BiPredicate<double[], double[]> othersAlong) {
 
         /**
          * Simplify to a triangle count with no error limit, recording history.
@@ -106,7 +110,8 @@ public final class Simplifier {
                     new int[0],
                     new double[0],
                     new long[0],
-                    new int[0][]);
+                    new int[0][],
+                    (a, b) -> false);
         }
 
         /**
@@ -128,7 +133,8 @@ public final class Simplifier {
                     planes,
                     cell,
                     borders,
-                    sharers);
+                    sharers,
+                    othersAlong);
         }
 
         /**
@@ -148,7 +154,8 @@ public final class Simplifier {
                     planes,
                     cell,
                     borders,
-                    sharers);
+                    sharers,
+                    othersAlong);
         }
 
         /**
@@ -170,7 +177,8 @@ public final class Simplifier {
                     planes,
                     cell,
                     sorted,
-                    sharers);
+                    sharers,
+                    othersAlong);
         }
 
         /**
@@ -190,7 +198,29 @@ public final class Simplifier {
                     planes,
                     cell,
                     borders,
-                    vertexSharers);
+                    vertexSharers,
+                    othersAlong);
+        }
+
+        /**
+         * The same options, knowing where other groups' edges run.
+         *
+         * @param along Whether a segment runs along another group's edge.
+         * @return The options.
+         */
+        public Options withOthersAlong(@NonNull BiPredicate<double[], double[]> along) {
+            return new Options(
+                    targetTriangles,
+                    virtualEdgeRadius,
+                    maxError,
+                    recordHistory,
+                    keepOpen,
+                    seams,
+                    planes,
+                    cell,
+                    borders,
+                    sharers,
+                    along);
         }
 
         /**
@@ -215,7 +245,8 @@ public final class Simplifier {
                     vertexPlanes,
                     box,
                     borders,
-                    sharers);
+                    sharers,
+                    othersAlong);
         }
     }
 
@@ -519,7 +550,7 @@ public final class Simplifier {
             if (createsKeptOpen(keep, remove)
                     || dropsLockedEdge(keep, remove)
                     || foldsOntoLockedEdge(keep, remove)
-                    || joinsShared(keep, remove)
+                    || joinsOthers(keep, remove)
                     || joinsOnPlane(keep, remove)
                     || leavesCell(keep, chosen)
                     || (manifoldAt(keep) && manifoldAt(remove) && !linkCondition(keep, remove))) {
@@ -969,19 +1000,20 @@ public final class Simplifier {
 
     /**
      * Whether a collapse would join the kept vertex to one of the removed vertex's neighbors by a
-     * new edge between two locked vertices that the same other group shares. That group can make
-     * the same edge between them, and where both are drawn, their faces along it lie over each
+     * new edge between two locked vertices where another group can have it too: both shared with
+     * the same other group, which can make the same edge between them, or along another group's
+     * edge, which that group already has. Where both are drawn, their faces along it lie over each
      * other.
      *
      * @param keep The vertex that stays.
      * @param remove The vertex that goes.
      * @return True if it would.
      */
-    private boolean joinsShared(int keep, int remove) {
-        final int[][] sharers = options.sharers();
-        if (!locked[keep] || sharers.length == 0 || sharers[keep].length == 0) {
+    private boolean joinsOthers(int keep, int remove) {
+        if (!locked[keep]) {
             return false;
         }
+        final int[][] sharers = options.sharers();
         final IntArrayList around = vertexFaces[remove];
         for (int k = 0; k < around.size(); ++k) {
             final int f = around.getInt(k);
@@ -993,12 +1025,25 @@ public final class Simplifier {
                 if (u != remove
                         && locked[u]
                         && !sharesFace(keep, u)
-                        && anyInBoth(sharers[keep], sharers[u])) {
+                        && ((sharers.length > 0 && anyInBoth(sharers[keep], sharers[u]))
+                                || options.othersAlong().test(position(keep), position(u)))) {
                     return true;
                 }
             }
         }
         return false;
+    }
+
+    /**
+     * A vertex's position.
+     *
+     * @param v The vertex.
+     * @return x, y, z, a new array.
+     */
+    private double[] position(int v) {
+        final double[] out = new double[AXES];
+        load(v, out);
+        return out;
     }
 
     /**

@@ -265,6 +265,39 @@ public final class TJunctions {
     }
 
     /**
+     * Whether edges with other tags cover an edge from end to end, running either way.
+     *
+     * @param a Its start, x, y, z.
+     * @param b Its end.
+     * @param tag The tag to look past.
+     * @return True if it is covered.
+     */
+    public boolean coveredByOthers(double @NonNull [] a, double @NonNull [] b, int tag) {
+        final Placed placed = place(a, b);
+        if (placed == null) {
+            return false;
+        }
+        final Sorted on = sortedOn(placed.line());
+        if (on == null) {
+            return false;
+        }
+        double reached = placed.from();
+        for (Segment segment : on.segments()) {
+            if (segment.tag() == tag || segment.to() <= reached + ALONG_SLACK) {
+                continue;
+            }
+            if (segment.from() > reached + ALONG_SLACK) {
+                break;
+            }
+            reached = segment.to();
+            if (reached >= placed.to() - ALONG_SLACK) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Whether an edge shares a stretch of its line with an edge with another tag: they overlap by
      * more than a point.
      *

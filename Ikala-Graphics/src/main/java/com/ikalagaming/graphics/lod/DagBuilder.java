@@ -1010,7 +1010,7 @@ public final class DagBuilder {
                 }
             }
             final GroupedEdges grouped = groupedEdges(groups);
-            final Set<Grouping.Edge> meetings = lockTJunctions(owners, grouped, pool);
+            final Meetings meetings = lockTJunctions(owners, grouped, pool);
             lockFaceContacts(owners, grouped, pool);
             final List<Grouping.Edge> rim = rim(active, false);
             lockRimNearBorders(owners, rim);
@@ -1285,10 +1285,9 @@ public final class DagBuilder {
      *
      * @param owners Which group uses each corner; the corners found become -1.
      * @param groups The groups.
-     * @return The edges that share a stretch of their line with another group's, those shared
-     *     exactly too: where groups meet.
+     * @return Where groups meet.
      */
-    private Set<Grouping.Edge> lockTJunctions(
+    private Meetings lockTJunctions(
             @NonNull Map<Grouping.Corner, Integer> owners,
             @NonNull GroupedEdges grouped,
             @NonNull ExecutorService pool) {
@@ -1318,7 +1317,7 @@ public final class DagBuilder {
                 future.get();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                return Set.of();
+                return new Meetings(Set.of(), index);
             } catch (ExecutionException e) {
                 throw new IllegalStateException("Placing edges failed", e.getCause());
             }
@@ -1337,8 +1336,18 @@ public final class DagBuilder {
                 meetings.add(Grouping.Edge.of(a, b));
             }
         }
-        return meetings;
+        return new Meetings(meetings, index);
     }
+
+    /**
+     * Where a level's groups meet.
+     *
+     * @param edges The edges that share a stretch of their line with another group's, those shared
+     *     exactly too.
+     * @param lines Every edge, filed by its line and tagged with its group's index, to find whether
+     *     a segment runs along another group's edge. Read only once made, from any thread.
+     */
+    private record Meetings(@NonNull Set<Grouping.Edge> edges, @NonNull TJunctions lines) {}
 
     /**
      * Lock where a group's open edge ends against the inside of another group's face, as a slab's
@@ -1862,7 +1871,7 @@ public final class DagBuilder {
      * @param owners Which group uses each corner.
      * @param shared The corners other groups or cells share.
      * @param rim This level's open edges.
-     * @param meetings The level's edges where groups meet, see {@link #lockTJunctions}.
+     * @param meetings Where the level's groups meet, see {@link #lockTJunctions}.
      * @param sharers The groups using each corner more than one uses.
      * @return What it made.
      */
@@ -1872,7 +1881,7 @@ public final class DagBuilder {
             @NonNull Map<Grouping.Corner, Integer> owners,
             @NonNull Set<Grouping.Corner> shared,
             @NonNull List<Grouping.Edge> rim,
-            @NonNull Set<Grouping.Edge> meetings,
+            @NonNull Meetings meetings,
             @NonNull Map<Grouping.Corner, int[]> sharers) {
         final long start = System.nanoTime();
         // Children can be of different levels in a parent cell; the group is above the highest
@@ -2020,8 +2029,9 @@ public final class DagBuilder {
         Simplifier.Options simplify =
                 Simplifier.Options.toCount(merged.getTriangleCount() / 2, radius)
                         .keepingOpen(keepOpen(builder, merged, rim))
-                        .meetingAt(meetingsIn(merged, meetings))
+                        .meetingAt(meetingsIn(merged, meetings.edges()))
                         .sharedWith(sharersOf(merged, index, sharers))
+                        .withOthersAlong((a, b) -> meetings.lines().coveredByOthers(a, b, index))
                         .followingSeams(seams == null ? new long[0] : seams.edges);
         if (cellMin != null) {
             final int[] planes = cellPlanes(merged);
