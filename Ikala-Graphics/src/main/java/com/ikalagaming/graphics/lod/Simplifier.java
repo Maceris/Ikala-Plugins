@@ -72,6 +72,9 @@ public final class Simplifier {
      * @param borders Edges between locked vertices that other groups meet, packed the same way and
      *     sorted: a collapse may not take their last faces off, even a sheet's two sides at once.
      *     Edges on a cell's planes count too.
+     * @param sharers For each vertex, the other groups that share its corner, sorted; empty for
+     *     none, or no array at all when none is known. No collapse may join two locked vertices
+     *     another group shares by a new edge.
      */
     public record Options(
             int targetTriangles,
@@ -82,7 +85,8 @@ public final class Simplifier {
             long @NonNull [] seams,
             int @NonNull [] planes,
             double @NonNull [] cell,
-            long @NonNull [] borders) {
+            long @NonNull [] borders,
+            int @NonNull [][] sharers) {
 
         /**
          * Simplify to a triangle count with no error limit, recording history.
@@ -101,7 +105,8 @@ public final class Simplifier {
                     new long[0],
                     new int[0],
                     new double[0],
-                    new long[0]);
+                    new long[0],
+                    new int[0][]);
         }
 
         /**
@@ -122,7 +127,8 @@ public final class Simplifier {
                     seams,
                     planes,
                     cell,
-                    borders);
+                    borders,
+                    sharers);
         }
 
         /**
@@ -141,7 +147,8 @@ public final class Simplifier {
                     edges,
                     planes,
                     cell,
-                    borders);
+                    borders,
+                    sharers);
         }
 
         /**
@@ -162,7 +169,28 @@ public final class Simplifier {
                     seams,
                     planes,
                     cell,
-                    sorted);
+                    sorted,
+                    sharers);
+        }
+
+        /**
+         * The same options, with the other groups sharing each vertex's corner.
+         *
+         * @param vertexSharers For each vertex, the other groups sharing its corner, sorted.
+         * @return The options.
+         */
+        public Options sharedWith(int @NonNull [][] vertexSharers) {
+            return new Options(
+                    targetTriangles,
+                    virtualEdgeRadius,
+                    maxError,
+                    recordHistory,
+                    keepOpen,
+                    seams,
+                    planes,
+                    cell,
+                    borders,
+                    vertexSharers);
         }
 
         /**
@@ -186,7 +214,8 @@ public final class Simplifier {
                     seams,
                     vertexPlanes,
                     box,
-                    borders);
+                    borders,
+                    sharers);
         }
     }
 
@@ -490,6 +519,7 @@ public final class Simplifier {
             if (createsKeptOpen(keep, remove)
                     || dropsLockedEdge(keep, remove)
                     || foldsOntoLockedEdge(keep, remove)
+                    || joinsShared(keep, remove)
                     || joinsOnPlane(keep, remove)
                     || leavesCell(keep, chosen)
                     || (manifoldAt(keep) && manifoldAt(remove) && !linkCondition(keep, remove))) {
@@ -932,6 +962,63 @@ public final class Simplifier {
                 if (before > 0 && after > before) {
                     return true;
                 }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether a collapse would join the kept vertex to one of the removed vertex's neighbors by a
+     * new edge between two locked vertices that the same other group shares. That group can make
+     * the same edge between them, and where both are drawn, their faces along it lie over each
+     * other.
+     *
+     * @param keep The vertex that stays.
+     * @param remove The vertex that goes.
+     * @return True if it would.
+     */
+    private boolean joinsShared(int keep, int remove) {
+        final int[][] sharers = options.sharers();
+        if (!locked[keep] || sharers.length == 0 || sharers[keep].length == 0) {
+            return false;
+        }
+        final IntArrayList around = vertexFaces[remove];
+        for (int k = 0; k < around.size(); ++k) {
+            final int f = around.getInt(k);
+            if (!faceAlive[f] || uses(f, keep)) {
+                continue;
+            }
+            for (int corner = 0; corner < CORNERS; ++corner) {
+                final int u = faces[f * CORNERS + corner];
+                if (u != remove
+                        && locked[u]
+                        && !sharesFace(keep, u)
+                        && anyInBoth(sharers[keep], sharers[u])) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether two sorted lists have a value in common.
+     *
+     * @param a One.
+     * @param b The other.
+     * @return True if they do.
+     */
+    private static boolean anyInBoth(int @NonNull [] a, int @NonNull [] b) {
+        int i = 0;
+        int j = 0;
+        while (i < a.length && j < b.length) {
+            if (a[i] == b[j]) {
+                return true;
+            }
+            if (a[i] < b[j]) {
+                ++i;
+            } else {
+                ++j;
             }
         }
         return false;

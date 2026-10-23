@@ -143,6 +143,61 @@ class SimplifierTest {
         assertTrue(kept, "No face left on the locked edge");
     }
 
+    /**
+     * Two locked vertices another group shares get no new edge between them, which that group could
+     * make too; without the group they may.
+     */
+    @Test
+    void testNoNewEdgeBetweenSharedCorners() {
+        final LodMesh.Builder builder = LodMesh.builder(new double[3]);
+        final int a = builder.vertex(0, 0, 0);
+        final int m = builder.vertex(1, 0, 0);
+        final int b = builder.vertex(2, 0, 0);
+        final int c = builder.vertex(1, 0, 1);
+        builder.lock(a);
+        builder.lock(b);
+        builder.triangle(a, c, m, 0);
+        builder.triangle(m, c, b, 0);
+        final LodMesh mesh = builder.build();
+        final int[][] sharers = new int[mesh.getVertexCount()][];
+        for (int v = 0; v < sharers.length; ++v) {
+            sharers[v] = mesh.isLocked(v) ? new int[] {1} : new int[0];
+        }
+        assertTrue(joins(Simplifier.simplify(mesh, Simplifier.Options.toCount(0, 0)).mesh(), 0, 2));
+        assertTrue(
+                !joins(
+                        Simplifier.simplify(
+                                        mesh, Simplifier.Options.toCount(0, 0).sharedWith(sharers))
+                                .mesh(),
+                        0,
+                        2));
+    }
+
+    /**
+     * Whether a triangle has corners at two points on the x axis.
+     *
+     * @param mesh The mesh.
+     * @param x0 One point's x.
+     * @param x1 The other's.
+     * @return True if one does.
+     */
+    private static boolean joins(LodMesh mesh, double x0, double x1) {
+        for (int t = 0; t < mesh.getTriangleCount(); ++t) {
+            boolean first = false;
+            boolean second = false;
+            for (int corner = 0; corner < 3; ++corner) {
+                final int v = mesh.corner(t, corner);
+                final boolean onAxis = mesh.position(v, 1) == 0 && mesh.position(v, 2) == 0;
+                first |= onAxis && mesh.position(v, 0) == x0;
+                second |= onAxis && mesh.position(v, 0) == x1;
+            }
+            if (first && second) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Simplifying to half gets to half, and no triangle turns over. */
     @Test
     void testHalvesWithoutFlips() {

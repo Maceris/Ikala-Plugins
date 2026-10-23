@@ -609,30 +609,12 @@ public final class CrackCheck {
                         continue;
                     }
                     ++open;
-                    tempDescribe(
-                            "OPEN",
-                            edgeUse.getKey(),
-                            members,
-                            clusters,
-                            drawn,
-                            highest,
-                            volumes,
-                            most);
                     if (examples.size() < EXAMPLES) {
                         examples.add(middle(edgeUse.getKey()));
                     }
                 } else if (use.count > mostAllowed(most)
                         && (most == 0 || drawnTwice(edgeUse.getKey(), members, clusters, drawn))) {
                     ++overdrawn;
-                    tempDescribe(
-                            "OVER",
-                            edgeUse.getKey(),
-                            members,
-                            clusters,
-                            drawn,
-                            highest,
-                            volumes,
-                            most);
                     if (examples.size() < EXAMPLES) {
                         examples.add(middle(edgeUse.getKey()));
                     }
@@ -649,96 +631,6 @@ public final class CrackCheck {
                 nearCount,
                 coveredCount,
                 examples);
-    }
-
-    /** TEMP: describe a crack. */
-    private static void tempDescribe(
-            String kind,
-            Grouping.Edge edge,
-            List<Integer> members,
-            List<LodDag.Cluster> clusters,
-            boolean[] drawn,
-            int[] highest,
-            List<CoverageVolume> volumes,
-            int most) {
-        final double[] a = position(edge.a());
-        final double[] b = position(edge.b());
-        final StringBuilder out = new StringBuilder();
-        out.append(
-                String.format(
-                        "TEMPCRACK %s (%.3f %.3f %.3f)-(%.3f %.3f %.3f) most %d:",
-                        kind, a[0], a[1], a[2], b[0], b[1], b[2], most));
-        final double[] mid = {(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2};
-        double bestGap = Double.MAX_VALUE;
-        int bestCluster = -1;
-        final double[] q = new double[AXES];
-        for (int i : members) {
-            final LodDag.Cluster c = clusters.get(i);
-            final float[] k = c.corners();
-            int uses = 0;
-            for (int t = 0; t < c.triangleCount(); ++t) {
-                for (int corner = 0; corner < AXES; ++corner) {
-                    final Grouping.Edge e =
-                            Grouping.Edge.of(
-                                    Grouping.Corner.of(k, t * TRIANGLE_VALUES + corner * AXES),
-                                    Grouping.Corner.of(
-                                            k, t * TRIANGLE_VALUES + ((corner + 1) % AXES) * AXES));
-                    if (e.equals(edge)) {
-                        ++uses;
-                    }
-                }
-            }
-            if (uses > 0) {
-                out.append(
-                        String.format(
-                                " [c%d L%d..%d err %.3f sec %d prod %d uses %d %s]",
-                                i,
-                                c.level(),
-                                highest[i],
-                                c.error(),
-                                c.section(),
-                                c.producer(),
-                                uses,
-                                drawn[i] ? "DRAWN" : "-"));
-            } else if (drawn[i]) {
-                for (int t = 0; t < c.triangleCount(); ++t) {
-                    final int at = t * TRIANGLE_VALUES;
-                    Geometry.closestOnTriangle(
-                            mid,
-                            new double[] {k[at], k[at + 1], k[at + 2]},
-                            new double[] {k[at + 3], k[at + 4], k[at + 5]},
-                            new double[] {k[at + 6], k[at + 7], k[at + 8]},
-                            q);
-                    final double d = Math.sqrt(Geometry.distanceSquared(mid, q));
-                    if (d < bestGap) {
-                        bestGap = d;
-                        bestCluster = i;
-                    }
-                }
-            }
-        }
-        if (bestCluster >= 0) {
-            final LodDag.Cluster c = clusters.get(bestCluster);
-            out.append(
-                    String.format(
-                            " nearest other drawn c%d L%d err %.3f sec %d gap %.4f%s",
-                            bestCluster,
-                            c.level(),
-                            c.error(),
-                            c.section(),
-                            bestGap,
-                            volumes != null && volumes.get(bestCluster) != null ? " VOLUME" : ""));
-        }
-        int volumesDrawn = 0;
-        if (volumes != null) {
-            for (int i : members) {
-                if (drawn[i] && volumes.get(i) != null) {
-                    ++volumesDrawn;
-                }
-            }
-        }
-        out.append(" drawn volumes near ").append(volumesDrawn);
-        System.out.println(out);
     }
 
     /**

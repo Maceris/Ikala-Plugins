@@ -1015,8 +1015,16 @@ public final class DagBuilder {
             final List<Grouping.Edge> rim = rim(active, false);
             lockRimNearBorders(owners, rim);
             List<Future<Built>> futures = new ArrayList<>();
-            for (int[] group : groups) {
-                futures.add(pool.submit(() -> buildGroup(group, owners, shared, rim, meetings)));
+            final Map<Grouping.Corner, int[]> sharers = sharers(groups);
+            for (int g = 0; g < groups.length; ++g) {
+                final int[] group = groups[g];
+                final int index = g;
+                futures.add(
+                        pool.submit(
+                                () ->
+                                        buildGroup(
+                                                group, index, owners, shared, rim, meetings,
+                                                sharers)));
             }
             int trianglesIn = 0;
             int trianglesOut = 0;
@@ -1135,6 +1143,38 @@ public final class DagBuilder {
             }
         }
         return owners;
+    }
+
+    /**
+     * The groups using each corner more than one group uses.
+     *
+     * @param groups The groups.
+     * @return Each such corner's groups, sorted.
+     */
+    private Map<Grouping.Corner, int[]> sharers(int @NonNull [][] groups) {
+        final Map<Grouping.Corner, int[]> out = new HashMap<>();
+        for (int g = 0; g < groups.length; ++g) {
+            final int group = g;
+            for (int id : groups[g]) {
+                final float[] corners = dag.clusters().get(id).corners();
+                for (int i = 0; i < corners.length; i += AXES) {
+                    out.merge(
+                            Grouping.Corner.of(corners, i),
+                            new int[] {group},
+                            (a, b) -> {
+                                if (Arrays.binarySearch(a, group) >= 0) {
+                                    return a;
+                                }
+                                final int[] both = Arrays.copyOf(a, a.length + 1);
+                                both[a.length] = group;
+                                Arrays.sort(both);
+                                return both;
+                            });
+                }
+            }
+        }
+        out.values().removeIf(groupsThere -> groupsThere.length < 2);
+        return out;
     }
 
     /**
@@ -1649,6 +1689,34 @@ public final class DagBuilder {
     }
 
     /**
+     * The other groups sharing each merged mesh vertex's corner.
+     *
+     * @param merged The merged mesh.
+     * @param index The group's index in its level.
+     * @param sharers The groups using each corner more than one uses.
+     * @return For each vertex, the other groups, sorted.
+     */
+    private static int[][] sharersOf(
+            @NonNull LodMesh merged, int index, @NonNull Map<Grouping.Corner, int[]> sharers) {
+        final int[][] out = new int[merged.getVertexCount()][];
+        for (int v = 0; v < out.length; ++v) {
+            final int[] there = sharers.get(cornerOf(merged, v));
+            if (there == null) {
+                out[v] = new int[0];
+                continue;
+            }
+            final IntArrayList others = new IntArrayList(there.length);
+            for (int group : there) {
+                if (group != index) {
+                    others.addInt(group);
+                }
+            }
+            out[v] = others.toIntArray();
+        }
+        return out;
+    }
+
+    /**
      * A merged mesh vertex's corner.
      *
      * @param merged The merged mesh.
@@ -1790,18 +1858,22 @@ public final class DagBuilder {
      * Merge, simplify and split one group. On a worker.
      *
      * @param children The group's clusters.
+     * @param index The group's index in its level.
      * @param owners Which group uses each corner.
      * @param shared The corners other groups or cells share.
      * @param rim This level's open edges.
      * @param meetings The level's edges where groups meet, see {@link #lockTJunctions}.
+     * @param sharers The groups using each corner more than one uses.
      * @return What it made.
      */
     private Built buildGroup(
             int @NonNull [] children,
+            int index,
             @NonNull Map<Grouping.Corner, Integer> owners,
             @NonNull Set<Grouping.Corner> shared,
             @NonNull List<Grouping.Edge> rim,
-            @NonNull Set<Grouping.Edge> meetings) {
+            @NonNull Set<Grouping.Edge> meetings,
+            @NonNull Map<Grouping.Corner, int[]> sharers) {
         final long start = System.nanoTime();
         // Children can be of different levels in a parent cell; the group is above the highest
         int level = 0;
@@ -1949,6 +2021,7 @@ public final class DagBuilder {
                 Simplifier.Options.toCount(merged.getTriangleCount() / 2, radius)
                         .keepingOpen(keepOpen(builder, merged, rim))
                         .meetingAt(meetingsIn(merged, meetings))
+                        .sharedWith(sharersOf(merged, index, sharers))
                         .followingSeams(seams == null ? new long[0] : seams.edges);
         if (cellMin != null) {
             final int[] planes = cellPlanes(merged);
