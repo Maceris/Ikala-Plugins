@@ -25,6 +25,7 @@ import com.ikalagaming.graphics.vulkan.stages.InstanceDrawUpdate;
 
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.joml.Quaterniond;
 import org.joml.Quaterniondc;
 import org.joml.Vector3dc;
@@ -54,6 +55,9 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 
@@ -82,10 +86,20 @@ import java.util.function.Function;
  * <p>Adding worlds, publishing batches and setting a world up are safe from any thread. Applying
  * batches, overrides, uploads and the frame's tables happen on the render thread.
  */
+@Slf4j
 public class LodRenderer {
 
     /** Corners in a triangle. */
     private static final int CORNERS = 3;
+
+    /** How many workers make streamed units' meshes. */
+    private static final int STREAM_THREADS = 2;
+
+    /** The most units whose meshes are being made at once, for each world. */
+    private static final int MAX_FETCHING = 32;
+
+    /** The workers that make streamed units' meshes, or null until needed. Render thread. */
+    private ExecutorService streamer;
 
     /** Coordinates in a position. */
     private static final int AXES = 3;
@@ -774,6 +788,18 @@ public class LodRenderer {
 
         /** Units whose meshes are registered, waiting for them to be uploaded. Render thread. */
         final Set<Integer> uploadingUnits = new LinkedHashSet<>();
+
+        /** Units whose meshes a worker is making. Render thread. */
+        final Set<Integer> fetchingUnits = new HashSet<>();
+
+        /** Meshes workers have made, for the render thread to register. */
+        final Queue<Fetched> fetched = new ConcurrentLinkedQueue<>();
+
+        /**
+         * Bumped whenever the units are worked out again, so meshes made for the old ones are
+         * dropped. Render thread.
+         */
+        int streamGeneration;
 
         /** When residency was last worked out. Render thread. */
         long lastResidency;
@@ -2011,6 +2037,10 @@ public class LodRenderer {
         }
         world.loadQueue.clear();
         world.uploadingUnits.clear();
+        // Meshes on their way were made for the old units
+        world.fetchingUnits.clear();
+        world.fetched.clear();
+        world.streamGeneration += 1;
         // Plan again next frame
         world.lastResidency = 0;
     }
@@ -2234,43 +2264,68 @@ public class LodRenderer {
             }
             world.loadQueue.clear();
             for (int unit : residency.toLoad()) {
-                if (!world.uploadingUnits.contains(unit)) {
+                if (!world.uploadingUnits.contains(unit) && !world.fetchingUnits.contains(unit)) {
                     world.loadQueue.add(unit);
                 }
             }
         }
-        // Register the next wanted units' meshes
+        // Register the meshes workers have made, within the budget
         long bytes = 0;
-        while (withinBudget(bytes) && !world.loadQueue.isEmpty()) {
+        Fetched done;
+        while (withinBudget(bytes) && (done = world.fetched.poll()) != null) {
+            world.fetchingUnits.remove(done.unit());
+            if (done.generation() != world.streamGeneration) {
+                // Made for units worked out before
+                continue;
+            }
+            if (done.meshes() == null) {
+                // Its clusters couldn't be read; residency asks for it again
+                continue;
+            }
+            for (int i = 0; i < done.members().size(); ++i) {
+                final Member member = done.members().get(i);
+                final Piece piece = member.piece();
+                if (world.pieces.get(piece.key) != piece || piece.meshes[member.index()] != null) {
+                    // Replaced or loaded meanwhile
+                    continue;
+                }
+                final ClusterMeshes.Mesh mesh = done.meshes().get(i);
+                piece.meshes[member.index()] =
+                        registerDrawn(
+                                state,
+                                world,
+                                piece.clusters[member.index()],
+                                mesh,
+                                piece.shells.get(member.index()));
+                writeEntry(world, piece, member.index());
+                bytes += bytes(mesh);
+            }
+            world.uploadingUnits.add(done.unit());
+        }
+        // Have workers make the next wanted units' meshes: read their clusters the store keeps
+        // only in its cache, and encode them, off this thread
+        while (world.fetchingUnits.size() < MAX_FETCHING && !world.loadQueue.isEmpty()) {
             final int unit = world.loadQueue.poll();
+            if (world.fetchingUnits.contains(unit)) {
+                continue;
+            }
             final List<Member> needed = new ArrayList<>();
-            final List<ClusterFile> paged = new ArrayList<>();
             for (Member member : world.unitByIndex.get(unit).members) {
                 final Piece piece = member.piece();
                 if (piece.meshes[member.index()] == null
                         && (piece.meshTriangles[member.index()] > 0
                                 || isVolume(piece.clusters[member.index()]))) {
                     needed.add(member);
-                    if (piece.clusters[member.index()].paged()) {
-                        paged.add(piece.clusters[member.index()].file());
-                    }
                 }
             }
-            // The unit's clusters the store keeps only in its cache, read together
-            final Iterator<LodDag.Cluster> read = ClusterFile.readAll(paged).iterator();
-            for (Member member : needed) {
-                final Piece piece = member.piece();
-                final LodStore.PieceCluster cluster = piece.clusters[member.index()];
-                // Made again from the cluster, as the builder made it
-                final ClusterMeshes.Mesh mesh =
-                        ClusterMeshes.of(cluster.paged() ? read.next() : cluster.body());
-                piece.meshes[member.index()] =
-                        registerDrawn(
-                                state, world, cluster, mesh, piece.shells.get(member.index()));
-                writeEntry(world, piece, member.index());
-                bytes += bytes(mesh);
+            if (needed.isEmpty()) {
+                world.uploadingUnits.add(unit);
+                continue;
             }
-            world.uploadingUnits.add(unit);
+            world.fetchingUnits.add(unit);
+            final int generation = world.streamGeneration;
+            final Queue<Fetched> into = world.fetched;
+            streamer().execute(() -> into.add(fetch(unit, generation, needed)));
         }
         // Units whose meshes have arrived, then show what can be
         final Iterator<Integer> it = world.uploadingUnits.iterator();
@@ -2302,6 +2357,71 @@ public class LodRenderer {
                     residency.wantedBytes(),
                     residency.totalBytes()
                 };
+    }
+
+    /**
+     * A unit's meshes, made by a worker.
+     *
+     * @param unit The unit.
+     * @param generation The world's stream generation when it was asked for.
+     * @param members The members the meshes are for.
+     * @param meshes Each member's mesh, or null if its clusters couldn't be read.
+     */
+    private record Fetched(
+            int unit, int generation, List<Member> members, List<ClusterMeshes.Mesh> meshes) {}
+
+    /**
+     * Make a unit's meshes: read its clusters the store keeps only in its cache, together, and
+     * encode them as the builder did. On a worker.
+     *
+     * @param unit The unit.
+     * @param generation The world's stream generation.
+     * @param members Its members that need meshes.
+     * @return The meshes.
+     */
+    private static Fetched fetch(int unit, int generation, @NonNull List<Member> members) {
+        try {
+            final List<ClusterFile> paged = new ArrayList<>();
+            for (Member member : members) {
+                final LodStore.PieceCluster cluster = member.piece().clusters[member.index()];
+                if (cluster.paged()) {
+                    paged.add(cluster.file());
+                }
+            }
+            final Iterator<LodDag.Cluster> read = ClusterFile.readAll(paged).iterator();
+            final List<ClusterMeshes.Mesh> meshes = new ArrayList<>(members.size());
+            for (Member member : members) {
+                final LodStore.PieceCluster cluster = member.piece().clusters[member.index()];
+                meshes.add(ClusterMeshes.of(cluster.paged() ? read.next() : cluster.body()));
+            }
+            return new Fetched(unit, generation, members, meshes);
+        } catch (RuntimeException e) {
+            log.warn("A level of detail unit's clusters couldn't be read: {}", e.toString());
+            return new Fetched(unit, generation, members, null);
+        }
+    }
+
+    /**
+     * The workers that make streamed units' meshes, started when first needed.
+     *
+     * @return The workers.
+     */
+    private ExecutorService streamer() {
+        if (streamer == null) {
+            final AtomicInteger count = new AtomicInteger();
+            streamer =
+                    Executors.newFixedThreadPool(
+                            STREAM_THREADS,
+                            runnable -> {
+                                final Thread thread =
+                                        new Thread(
+                                                runnable, "LOD stream " + count.incrementAndGet());
+                                thread.setDaemon(true);
+                                thread.setPriority(Thread.MIN_PRIORITY);
+                                return thread;
+                            });
+        }
+        return streamer;
     }
 
     /**
@@ -2799,6 +2919,7 @@ public class LodRenderer {
                 || (world.uploading == null
                         && world.incoming.isEmpty()
                         && world.loadQueue.isEmpty()
+                        && world.fetchingUnits.isEmpty()
                         && world.uploadingUnits.isEmpty());
     }
 
@@ -3392,6 +3513,10 @@ public class LodRenderer {
      * @param state The Vulkan state.
      */
     public void cleanup(@NonNull VulkanState state) {
+        if (streamer != null) {
+            streamer.shutdownNow();
+            streamer = null;
+        }
         lock.lock();
         try {
             worlds.clear();
