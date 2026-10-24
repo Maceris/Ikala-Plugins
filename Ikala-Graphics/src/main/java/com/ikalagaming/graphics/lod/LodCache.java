@@ -19,6 +19,8 @@ import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -76,6 +78,12 @@ public final class LodCache {
 
     /** Guards the folder size and eviction. */
     private final ReentrantLock lock = new ReentrantLock();
+
+    /**
+     * Files a store reads clusters from on demand (see {@link LodStore#page}), which evicting
+     * leaves alone.
+     */
+    private final Set<Path> pinned = ConcurrentHashMap.newKeySet();
 
     /** Bytes in the folder, once scanned, or -1. Guarded by {@link #lock}. */
     private long folderBytes = -1;
@@ -253,6 +261,9 @@ public final class LodCache {
             if (total <= target) {
                 break;
             }
+            if (pinned.contains(entry.file())) {
+                continue;
+            }
             if (deleteQuietly(entry.file())) {
                 total -= entry.size();
                 removed += entry.size();
@@ -309,6 +320,15 @@ public final class LodCache {
         } catch (IOException e) {
             return false;
         }
+    }
+
+    /**
+     * Keep a cell's file from being evicted, since a store reads its clusters on demand.
+     *
+     * @param file The file.
+     */
+    void pin(@NonNull Path file) {
+        pinned.add(file);
     }
 
     /**

@@ -266,6 +266,31 @@ public final class LodDag {
     }
 
     /**
+     * Drop a cluster's triangles, keeping what it is: its id, level, error, spheres, producer and
+     * section. Its corners, materials, visibility and attributes become empty, so it has no
+     * triangles here; whoever drops them keeps a way to load them again.
+     *
+     * @param id The cluster.
+     */
+    void hollow(int id) {
+        final Cluster c = clusters.get(id);
+        clusters.set(
+                id,
+                new Cluster(
+                        c.id(),
+                        c.level(),
+                        new float[0],
+                        new int[0],
+                        new float[0],
+                        Attributes.NONE,
+                        c.error(),
+                        c.bound(),
+                        c.tight(),
+                        c.producer(),
+                        c.section()));
+    }
+
+    /**
      * Add a group, marking its children as consumed by it.
      *
      * @param group The group.

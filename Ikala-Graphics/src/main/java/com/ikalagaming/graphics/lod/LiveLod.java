@@ -583,7 +583,8 @@ public final class LiveLod implements AutoCloseable {
     }
 
     /**
-     * Turn a built cell into a piece, with a mesh per cluster.
+     * Turn a built cell into a piece, with a mesh per cluster, then keep the cell's triangles in
+     * its cache file only, if it has one (see {@link LodStore#page}).
      *
      * @param key The cell.
      * @return The piece.
@@ -597,7 +598,10 @@ public final class LiveLod implements AutoCloseable {
             shells.add(
                     cluster.volume() == null ? null : CoverageShells.of(cluster.volume(), false));
         }
-        return new Piece(key, store.inputCount(key), clusters, meshes, shells);
+        // With the meshes made, the cell's triangles can stay in its cache file only, and the
+        // piece takes its clusters without them
+        final List<LodStore.PieceCluster> kept = store.page(key) ? store.piece(key) : clusters;
+        return new Piece(key, store.inputCount(key), kept, meshes, shells);
     }
 
     /**

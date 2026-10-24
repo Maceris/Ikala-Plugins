@@ -12,6 +12,7 @@ import lombok.NonNull;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -335,6 +336,52 @@ public final class LodCellFile {
     }
 
     /**
+     * Where each cluster's record lies in a cell file, to read clusters one at a time later.
+     *
+     * @param file The file, written by {@link #encode}.
+     * @return Each cluster's start in bytes from the start of the file, in id order, then where the
+     *     last one ends.
+     * @throws IllegalArgumentException If the file has no cluster section or its records don't add
+     *     up.
+     */
+    static long[] clusterPlaces(@NonNull Path file) {
+        AssetFile.Place place = null;
+        for (AssetFile.Place p : AssetFile.locate(file)) {
+            if (p.tag() == LCLU) {
+                place = p;
+            }
+        }
+        if (place == null) {
+            throw new IllegalArgumentException(file + " has no clusters");
+        }
+        final ByteBuffer in = AssetFile.read(file, place.offset(), Math.toIntExact(place.length()));
+        final int count = count(in.getInt());
+        final long[] starts = new long[count + 1];
+        for (int i = 0; i < count; ++i) {
+            final int at = in.position();
+            starts[i] = place.offset() + at;
+            in.position(at + in.getInt(at));
+        }
+        starts[count] = place.offset() + in.position();
+        if (in.position() > place.length()) {
+            throw new IllegalArgumentException(file + "'s cluster records run past their section");
+        }
+        return starts;
+    }
+
+    /**
+     * Read one cluster from a cell file.
+     *
+     * @param file The file.
+     * @param start Where its record starts, see {@link #clusterPlaces}.
+     * @param end Where it ends.
+     * @return The cluster.
+     */
+    static LodDag.Cluster readCluster(@NonNull Path file, long start, long end) {
+        return decodeCluster(AssetFile.read(file, start, Math.toIntExact(end - start)));
+    }
+
+    /**
      * A required section's data.
      *
      * @param file The file.
@@ -551,7 +598,7 @@ public final class LodCellFile {
      * @param in The data, at the record.
      * @return The cluster.
      */
-    private static LodDag.Cluster decodeCluster(@NonNull ByteBuffer in) {
+    static LodDag.Cluster decodeCluster(@NonNull ByteBuffer in) {
         final int start = in.position();
         final int size = in.getInt();
         final int id = in.getInt();

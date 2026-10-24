@@ -270,6 +270,9 @@ public final class LodStore {
     /** Each built cell's cache key. */
     private final Map<CellKey, String> keys = new HashMap<>();
 
+    /** Cells whose clusters' triangles are kept only in the cache, see {@link #page}. */
+    private final Map<CellKey, Paged> pages = new HashMap<>();
+
     /**
      * How many cells were built rather than read from the cache. -- GETTER -- Cells built.
      *
@@ -317,24 +320,48 @@ public final class LodStore {
      *
      * @param local Its id in the cell's DAG.
      * @param info What the cluster is, without its triangles.
-     * @param body The cluster with its triangles.
+     * @param body The cluster with its triangles, or null where the store keeps them only in its
+     *     cache, see {@link #body()}.
      * @param parentError The error of the group that consumed it, infinity if none has.
      * @param parentBound That group's sphere, or the cluster's own if none has.
      * @param parentCell The cell holding that group, or null if none has.
      * @param parentGroup That group's id in its cell's DAG, or -1 if none has.
      * @param section The section a leaf came from, or null above level 0.
      * @param volume The coverage volume it is, or null if it is triangles.
+     * @param file Where its triangles are in the cache, or null if it holds them.
      */
     public record PieceCluster(
             int local,
             @NonNull ClusterInfo info,
-            LodDag.@NonNull Cluster body,
+            LodDag.Cluster body,
             double parentError,
             double @NonNull [] parentBound,
             CellKey parentCell,
             int parentGroup,
             SectionPos section,
-            CoverageVolume volume) {}
+            CoverageVolume volume,
+            ClusterFile file) {
+
+        /**
+         * The cluster with its triangles, read from the cache if the store dropped them. Reading is
+         * safe from any thread, but slow enough to keep off the render thread.
+         *
+         * @return The cluster.
+         */
+        @Override
+        public LodDag.Cluster body() {
+            return body != null ? body : file.read();
+        }
+
+        /**
+         * Whether its triangles are only in the cache, to be read by {@link #body()}.
+         *
+         * @return True if they are.
+         */
+        public boolean paged() {
+            return body == null;
+        }
+    }
 
     /**
      * Start an empty store.
@@ -740,6 +767,85 @@ public final class LodStore {
     }
 
     /**
+     * A cell whose clusters' triangles, but for its tops', are kept only in its cache file.
+     *
+     * @param cell The cell, as it was when its clusters were dropped.
+     * @param file Its cache file.
+     * @param starts Where each cluster's record starts in the file, then where the last ends.
+     * @param infos What each cluster is.
+     * @param hollow Which clusters' triangles were dropped.
+     */
+    private record Paged(
+            @NonNull Cell cell,
+            java.nio.file.@NonNull Path file,
+            long @NonNull [] starts,
+            @NonNull ClusterInfo @NonNull [] infos,
+            boolean @NonNull [] hollow) {}
+
+    /**
+     * Keep a built cell's clusters' triangles only in its cache file, all but its tops, which its
+     * parent is built from: what the renderer needs of the rest it reads back when it makes their
+     * meshes, see {@link PieceCluster#body()}. The file is kept from eviction. Nothing happens
+     * without a cache, or if the cell's file can't be found or doesn't match it.
+     *
+     * @param key The cell.
+     * @return True if its triangles were dropped.
+     */
+    public boolean page(@NonNull CellKey key) {
+        final Cell cell = cells.get(key);
+        final String cacheKey = keys.get(key);
+        if (cache == null || cell == null || cacheKey == null || paged(key, cell) != null) {
+            return false;
+        }
+        final java.nio.file.Path file = cache.fileOf(cacheKey);
+        final long[] starts;
+        try {
+            starts = LodCellFile.clusterPlaces(file);
+        } catch (RuntimeException e) {
+            return false;
+        }
+        final LodDag dag = cell.dag();
+        if (starts.length != dag.clusters().size() + 1) {
+            return false;
+        }
+        final ClusterInfo[] infos = new ClusterInfo[dag.clusters().size()];
+        final boolean[] hollow = new boolean[infos.length];
+        Arrays.fill(hollow, true);
+        for (int top : cell.tops()) {
+            hollow[top] = false;
+        }
+        cache.pin(file);
+        for (int id = 0; id < infos.length; ++id) {
+            infos[id] = ClusterInfo.of(dag.clusters().get(id));
+            if (hollow[id]) {
+                dag.hollow(id);
+            }
+        }
+        pages.put(key, new Paged(cell, file, starts, infos, hollow));
+        return true;
+    }
+
+    /**
+     * A cell's paging, if it is the cell paged.
+     *
+     * @param key The cell.
+     * @param cell Its data now.
+     * @return How it is paged, or null if it isn't.
+     */
+    private Paged paged(@NonNull CellKey key, @NonNull Cell cell) {
+        final Paged paged = pages.get(key);
+        if (paged == null) {
+            return null;
+        }
+        if (paged.cell() != cell) {
+            // Built again since
+            pages.remove(key);
+            return null;
+        }
+        return paged;
+    }
+
+    /**
      * One of a cell's own clusters with the group that consumed it.
      *
      * @param key The cell.
@@ -748,11 +854,20 @@ public final class LodStore {
      * @return The cluster.
      */
     private PieceCluster pieceCluster(@NonNull CellKey key, @NonNull Cell cell, int local) {
-        final LodDag.Cluster cluster = cell.dag().clusters().get(local);
+        final Paged paged = paged(key, cell);
+        final boolean hollow = paged != null && paged.hollow()[local];
+        final LodDag.Cluster stored = cell.dag().clusters().get(local);
+        final ClusterInfo info = paged != null ? paged.infos()[local] : ClusterInfo.of(stored);
+        final LodDag.Cluster cluster = hollow ? null : stored;
+        final ClusterFile file =
+                hollow
+                        ? new ClusterFile(
+                                paged.file(), paged.starts()[local], paged.starts()[local + 1])
+                        : null;
         final CoverageVolume volume = cell.dag().volumeOf(local);
         final SectionPos section =
-                key.level() == 0 && cluster.section() >= 0
-                        ? cell.sections().get(cluster.section())
+                key.level() == 0 && info.section() >= 0
+                        ? cell.sections().get(info.section())
                         : null;
         // Up the cells until one consumes it
         CellKey at = key;
@@ -763,15 +878,8 @@ public final class LodStore {
             if (group >= 0) {
                 final LodDag.Group g = atCell.dag().groups().get(group);
                 return new PieceCluster(
-                        local,
-                        ClusterInfo.of(cluster),
-                        cluster,
-                        g.error(),
-                        g.bound(),
-                        at,
-                        group,
-                        section,
-                        volume);
+                        local, info, cluster, g.error(), g.bound(), at, group, section, volume,
+                        file);
             }
             final CellKey up = at.parent();
             final Cell upCell = cells.get(up);
@@ -780,14 +888,15 @@ public final class LodStore {
             if (upLocal < 0) {
                 return new PieceCluster(
                         local,
-                        ClusterInfo.of(cluster),
+                        info,
                         cluster,
                         Double.POSITIVE_INFINITY,
-                        cluster.bound(),
+                        info.bound(),
                         null,
                         -1,
                         section,
-                        volume);
+                        volume,
+                        file);
             }
             at = up;
             atCell = upCell;
@@ -1375,7 +1484,14 @@ public final class LodStore {
                     ids[local] = globalIds.get(input.child())[input.cluster()];
                     continue;
                 }
-                final LodDag.Cluster c = dag.clusters().get(local);
+                final Paged paged = paged(entry.getKey(), cell);
+                final LodDag.Cluster c =
+                        paged != null && paged.hollow()[local]
+                                ? LodCellFile.readCluster(
+                                        paged.file(),
+                                        paged.starts()[local],
+                                        paged.starts()[local + 1])
+                                : dag.clusters().get(local);
                 ids[local] = out.clusters().size();
                 out.add(
                         new LodDag.Cluster(

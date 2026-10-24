@@ -6,6 +6,8 @@ import static org.lwjgl.vulkan.VK12.vkCmdDrawIndexedIndirectCount;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.graph.Material;
+import com.ikalagaming.graphics.lod.ClusterBodies;
+import com.ikalagaming.graphics.lod.ClusterFile;
 import com.ikalagaming.graphics.lod.ClusterInfo;
 import com.ikalagaming.graphics.lod.ClusterMeshes;
 import com.ikalagaming.graphics.lod.CoverageBricks;
@@ -953,7 +955,8 @@ public class LodRenderer {
                             consumed ? WHOLE : null,
                             dag.consumer(i),
                             null,
-                            dag.volumeOf(i)));
+                            dag.volumeOf(i),
+                            null));
         }
         publish(
                 state,
@@ -2240,24 +2243,32 @@ public class LodRenderer {
         long bytes = 0;
         while (withinBudget(bytes) && !world.loadQueue.isEmpty()) {
             final int unit = world.loadQueue.poll();
+            final List<Member> needed = new ArrayList<>();
+            final List<ClusterFile> paged = new ArrayList<>();
             for (Member member : world.unitByIndex.get(unit).members) {
                 final Piece piece = member.piece();
                 if (piece.meshes[member.index()] == null
                         && (piece.meshTriangles[member.index()] > 0
                                 || isVolume(piece.clusters[member.index()]))) {
-                    // Made again from the cluster, as the builder made it
-                    final ClusterMeshes.Mesh mesh =
-                            ClusterMeshes.of(piece.clusters[member.index()].body());
-                    piece.meshes[member.index()] =
-                            registerDrawn(
-                                    state,
-                                    world,
-                                    piece.clusters[member.index()],
-                                    mesh,
-                                    piece.shells.get(member.index()));
-                    writeEntry(world, piece, member.index());
-                    bytes += bytes(mesh);
+                    needed.add(member);
+                    if (piece.clusters[member.index()].paged()) {
+                        paged.add(piece.clusters[member.index()].file());
+                    }
                 }
+            }
+            // The unit's clusters the store keeps only in its cache, read together
+            final Iterator<LodDag.Cluster> read = ClusterFile.readAll(paged).iterator();
+            for (Member member : needed) {
+                final Piece piece = member.piece();
+                final LodStore.PieceCluster cluster = piece.clusters[member.index()];
+                // Made again from the cluster, as the builder made it
+                final ClusterMeshes.Mesh mesh =
+                        ClusterMeshes.of(cluster.paged() ? read.next() : cluster.body());
+                piece.meshes[member.index()] =
+                        registerDrawn(
+                                state, world, cluster, mesh, piece.shells.get(member.index()));
+                writeEntry(world, piece, member.index());
+                bytes += bytes(mesh);
             }
             world.uploadingUnits.add(unit);
         }
@@ -2720,7 +2731,7 @@ public class LodRenderer {
         final ByteBuffer entry =
                 ByteBuffer.allocate(LodCullMath.CLUSTER_ENTRY_SIZE).order(ByteOrder.nativeOrder());
         final float[] eye = {(float) world.eye[0], (float) world.eye[1], (float) world.eye[2]};
-        final List<LodDag.Cluster> clusters = new ArrayList<>(count);
+        final List<LodStore.PieceCluster> pieces = new ArrayList<>(count);
         final List<CoverageVolume> volumes = new ArrayList<>(count);
         final int[] highest = new int[count];
         final boolean[] drawn = new boolean[count];
@@ -2730,7 +2741,7 @@ public class LodRenderer {
         for (Piece piece : world.pieces.values()) {
             for (int i = 0; i < piece.clusters.length; ++i, ++k) {
                 final LodStore.PieceCluster cluster = piece.clusters[i];
-                clusters.add(cluster.body());
+                pieces.add(cluster);
                 volumes.add(cluster.volume());
                 highest[k] =
                         cluster.parentCell() == null
@@ -2763,7 +2774,16 @@ public class LodRenderer {
                 }
             }
         }
-        return new Cut(clusters, highest, drawn, missing, world.hidden, triangles, volumes);
+        // Triangles the store keeps only in its cache are read by whoever checks the cut, off this
+        // thread
+        return new Cut(
+                new ClusterBodies(pieces),
+                highest,
+                drawn,
+                missing,
+                world.hidden,
+                triangles,
+                volumes);
     }
 
     /**

@@ -5,9 +5,12 @@ import lombok.NonNull;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -165,6 +168,98 @@ public final class AssetFile {
      */
     public List<Section> sections(int tag) {
         return sections.stream().filter(s -> s.tag() == tag).toList();
+    }
+
+    /**
+     * Where one section's payload lies in a file.
+     *
+     * @param tag The section tag.
+     * @param offset Where its payload starts, in bytes from the start of the file.
+     * @param length Its payload's length in bytes.
+     */
+    public record Place(int tag, long offset, long length) {}
+
+    /**
+     * Where a file's sections lie, from its header and table alone, without reading or checking the
+     * payloads: for reading part of a section later from a file already read and checked whole.
+     *
+     * @param path The file.
+     * @return Each section's place, in table order.
+     * @throws AssetFormatException If the file doesn't start like a container.
+     * @throws UncheckedIOException If the file can't be read.
+     */
+    public static List<Place> locate(@NonNull Path path) {
+        try (FileChannel channel = FileChannel.open(path, StandardOpenOption.READ)) {
+            final ByteBuffer header =
+                    readAt(channel, 0, AssetFormat.HEADER_SIZE, path)
+                            .order(ByteOrder.LITTLE_ENDIAN);
+            final byte[] magic = new byte[AssetFormat.MAGIC.length];
+            header.get(0, magic);
+            if (!Arrays.equals(magic, AssetFormat.MAGIC)) {
+                throw new AssetFormatException(path + " is not an asset container");
+            }
+            final int count = header.getInt(AssetFormat.HEADER_SECTION_COUNT);
+            final int entrySize = header.getInt(AssetFormat.HEADER_TABLE_ENTRY_SIZE);
+            final long tableOffset = header.getLong(AssetFormat.HEADER_TABLE_OFFSET);
+            if (count < 0 || entrySize < AssetFormat.TABLE_ENTRY_SIZE) {
+                throw new AssetFormatException(path + " has a malformed section table");
+            }
+            final ByteBuffer table =
+                    readAt(channel, tableOffset, Math.multiplyExact(count, entrySize), path)
+                            .order(ByteOrder.LITTLE_ENDIAN);
+            final List<Place> places = new ArrayList<>(count);
+            for (int i = 0; i < count; ++i) {
+                final int base = i * entrySize;
+                places.add(
+                        new Place(
+                                table.getInt(base + AssetFormat.ENTRY_TAG),
+                                table.getLong(base + AssetFormat.ENTRY_OFFSET),
+                                table.getLong(base + AssetFormat.ENTRY_LENGTH)));
+            }
+            return places;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Could not read " + path, e);
+        }
+    }
+
+    /**
+     * Read part of a file, without memory mapping it, so it can be replaced or deleted at once.
+     *
+     * @param path The file.
+     * @param offset Where to start, in bytes.
+     * @param length How many bytes.
+     * @return The bytes, little endian, positioned at 0.
+     * @throws AssetFormatException If the file ends before them.
+     * @throws UncheckedIOException If the file can't be read.
+     */
+    public static ByteBuffer read(@NonNull Path path, long offset, int length) {
+        try (FileChannel channel = FileChannel.open(path, StandardOpenOption.READ)) {
+            return readAt(channel, offset, length, path).order(ByteOrder.LITTLE_ENDIAN);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Could not read " + path, e);
+        }
+    }
+
+    /**
+     * Read bytes at an offset.
+     *
+     * @param channel The file.
+     * @param offset Where to start.
+     * @param length How many bytes.
+     * @param path The file's path, for messages.
+     * @return The bytes, positioned at 0.
+     * @throws IOException If reading fails.
+     */
+    private static ByteBuffer readAt(
+            @NonNull FileChannel channel, long offset, int length, @NonNull Path path)
+            throws IOException {
+        final ByteBuffer out = ByteBuffer.allocate(length);
+        while (out.hasRemaining()) {
+            if (channel.read(out, offset + out.position()) < 0) {
+                throw new AssetFormatException(path + " ends before byte " + (offset + length));
+            }
+        }
+        return out.flip();
     }
 
     /**
