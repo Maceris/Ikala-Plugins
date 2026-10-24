@@ -8,10 +8,11 @@ import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * Pieces' clusters with their triangles, read from the cache together the first time any is asked
- * for, by whichever thread asks: for a check of a whole cut, which runs off the render thread.
+ * Pieces' clusters with their triangles, for a check of a whole cut, which runs off the render
+ * thread: as a list, read from the cache together the first time any is asked for, by whichever
+ * thread asks; as a {@link CrackCheck.Source}, a column's at a time, so they are never all held.
  */
-public final class ClusterBodies extends AbstractList<LodDag.Cluster> {
+public final class ClusterBodies extends AbstractList<LodDag.Cluster> implements CrackCheck.Source {
 
     /** The clusters. */
     private final List<LodStore.PieceCluster> pieces;
@@ -39,6 +40,28 @@ public final class ClusterBodies extends AbstractList<LodDag.Cluster> {
     @Override
     public int size() {
         return pieces.size();
+    }
+
+    @Override
+    public double[] tight(int index) {
+        return pieces.get(index).info().tight();
+    }
+
+    @Override
+    public List<LodDag.Cluster> load(@NonNull List<Integer> indices) {
+        final List<ClusterFile> places = new ArrayList<>();
+        for (int i : indices) {
+            if (pieces.get(i).paged()) {
+                places.add(pieces.get(i).file());
+            }
+        }
+        final List<LodDag.Cluster> read = ClusterFile.readAll(places);
+        final List<LodDag.Cluster> out = new ArrayList<>(indices.size());
+        int next = 0;
+        for (int i : indices) {
+            out.add(pieces.get(i).paged() ? read.get(next++) : pieces.get(i).body());
+        }
+        return out;
     }
 
     /**

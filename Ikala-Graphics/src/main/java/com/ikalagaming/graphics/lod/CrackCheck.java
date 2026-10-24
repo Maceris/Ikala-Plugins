@@ -4,6 +4,7 @@ import com.ikalagaming.util.IntArrayList;
 
 import lombok.NonNull;
 
+import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -423,12 +424,14 @@ public final class CrackCheck {
             @NonNull Collection<double[]> excused,
             List<CoverageVolume> volumes,
             double tolerance) {
+        // Clusters whose triangles may be elsewhere are loaded a column at a time
+        final Source source = clusters instanceof Source given ? given : inMemory(clusters);
         // Each column's clusters, by the box around their spheres widened by a column
         final Map<Long, List<Integer>> columns = new HashMap<>();
         int drawnCount = 0;
-        for (int i = 0; i < clusters.size(); ++i) {
+        for (int i = 0; i < source.size(); ++i) {
             drawnCount += drawn[i] ? 1 : 0;
-            final double[] sphere = clusters.get(i).tight();
+            final double[] sphere = source.tight(i);
             final double reach = sphere[SPHERE_VALUES - 1] + column;
             final int x0 = (int) Math.floor((sphere[0] - reach) / column);
             final int x1 = (int) Math.floor((sphere[0] + reach) / column);
@@ -456,7 +459,7 @@ public final class CrackCheck {
                                                             checkColumn(
                                                                     entry.getKey(),
                                                                     entry.getValue(),
-                                                                    clusters,
+                                                                    source,
                                                                     highest,
                                                                     drawn,
                                                                     column,
@@ -478,6 +481,105 @@ public final class CrackCheck {
                     .join();
         } finally {
             pool.shutdown();
+        }
+    }
+
+    /**
+     * The clusters a tiled check looks at: their spheres at once, to put them in columns, and their
+     * triangles a column at a time, so a check of a whole world never holds them all.
+     */
+    public interface Source {
+        /**
+         * How many clusters there are.
+         *
+         * @return The count.
+         */
+        int size();
+
+        /**
+         * A cluster's tight sphere.
+         *
+         * @param index The cluster.
+         * @return x, y, z, radius.
+         */
+        double[] tight(int index);
+
+        /**
+         * Some clusters with their triangles.
+         *
+         * @param indices Which.
+         * @return They, in the same order.
+         */
+        List<LodDag.Cluster> load(@NonNull List<Integer> indices);
+    }
+
+    /**
+     * Clusters already in memory as a source.
+     *
+     * @param clusters The clusters.
+     * @return The source.
+     */
+    private static Source inMemory(@NonNull List<LodDag.Cluster> clusters) {
+        return new Source() {
+            @Override
+            public int size() {
+                return clusters.size();
+            }
+
+            @Override
+            public double[] tight(int index) {
+                return clusters.get(index).tight();
+            }
+
+            @Override
+            public List<LodDag.Cluster> load(@NonNull List<Integer> indices) {
+                final List<LodDag.Cluster> out = new ArrayList<>(indices.size());
+                for (int i : indices) {
+                    out.add(clusters.get(i));
+                }
+                return out;
+            }
+        };
+    }
+
+    /**
+     * One column's clusters by their indices in the whole check; asking for any other is an error.
+     */
+    private static final class ColumnClusters extends AbstractList<LodDag.Cluster> {
+        /** How many clusters the whole check has. */
+        private final int size;
+
+        /** The column's clusters, by index. */
+        private final Map<Integer, LodDag.Cluster> byIndex;
+
+        /**
+         * Keep a column's clusters.
+         *
+         * @param size How many clusters the whole check has.
+         * @param members The column's indices.
+         * @param loaded Their clusters, in the same order.
+         */
+        ColumnClusters(
+                int size, @NonNull List<Integer> members, @NonNull List<LodDag.Cluster> loaded) {
+            this.size = size;
+            byIndex = new HashMap<>(members.size() * 2);
+            for (int i = 0; i < members.size(); ++i) {
+                byIndex.put(members.get(i), loaded.get(i));
+            }
+        }
+
+        @Override
+        public LodDag.Cluster get(int index) {
+            final LodDag.Cluster cluster = byIndex.get(index);
+            if (cluster == null) {
+                throw new IndexOutOfBoundsException("Cluster " + index + " isn't in the column");
+            }
+            return cluster;
+        }
+
+        @Override
+        public int size() {
+            return size;
         }
     }
 
@@ -525,13 +627,16 @@ public final class CrackCheck {
     private static Tiled checkColumn(
             long key,
             @NonNull List<Integer> members,
-            @NonNull List<LodDag.Cluster> clusters,
+            @NonNull Source source,
             int @NonNull [] highest,
             boolean @NonNull [] drawn,
             double column,
             @NonNull Collection<double[]> excused,
             List<CoverageVolume> volumes,
             double tolerance) {
+        // Only the column's own clusters, with their triangles, for as long as it is checked
+        final List<LodDag.Cluster> clusters =
+                new ColumnClusters(source.size(), members, source.load(members));
         final IntToDoubleFunction errorOf = id -> clusters.get(id).error();
         long open = 0;
         long overdrawn = 0;
