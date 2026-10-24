@@ -81,6 +81,9 @@ import java.util.function.Function;
  */
 public class LodRenderer {
 
+    /** Corners in a triangle. */
+    private static final int CORNERS = 3;
+
     /** Coordinates in a position. */
     private static final int AXES = 3;
 
@@ -472,8 +475,15 @@ public class LodRenderer {
         /** Its clusters, with what each gives way to; tops are updated as parents are rebuilt. */
         final LodStore.PieceCluster[] clusters;
 
-        /** Each cluster's mesh data, kept on the CPU. */
-        final List<ClusterMeshes.Mesh> meshData;
+        /**
+         * How many triangles each cluster's mesh has, which may be fewer than the cluster's where
+         * some collapse on the vertex grid. The meshes themselves aren't kept: one streamed out is
+         * made again from its cluster when it comes back.
+         */
+        final int[] meshTriangles;
+
+        /** How many vertices each cluster's mesh has. */
+        final int[] meshVertices;
 
         /** Each cluster's volume's shell, kept on the CPU with its mesh, or null where none. */
         final List<CoverageShells.Shell> shells;
@@ -496,7 +506,12 @@ public class LodRenderer {
             this.inputs = added.inputs();
             this.first = first;
             this.clusters = added.clusters().toArray(new LodStore.PieceCluster[0]);
-            this.meshData = added.meshes();
+            this.meshTriangles = new int[clusters.length];
+            this.meshVertices = new int[clusters.length];
+            for (int i = 0; i < clusters.length; ++i) {
+                meshTriangles[i] = added.meshes().get(i).triangleCount();
+                meshVertices[i] = added.meshes().get(i).vertexCount();
+            }
             this.shells = added.shells();
             this.meshes = meshes;
             this.sections = new LodStore.SectionPos[clusters.length];
@@ -2155,7 +2170,10 @@ public class LodRenderer {
      */
     private static long bytes(@NonNull World world, @NonNull Piece piece, int i) {
         final LodBakes.Baked baked = baked(world, piece.clusters[i]);
-        return bytes(piece.meshData.get(i)) + (baked == null ? 0 : baked.bytes());
+        final long mesh =
+                (long) piece.meshVertices[i] * LodVertex.SIZE
+                        + (long) piece.meshTriangles[i] * CORNERS * Integer.BYTES;
+        return mesh + (baked == null ? 0 : baked.bytes());
     }
 
     /**
@@ -2167,7 +2185,7 @@ public class LodRenderer {
      */
     private boolean isLoaded(@NonNull World world, @NonNull Collection<Member> members) {
         for (Member member : members) {
-            if (member.piece().meshData.get(member.index()).triangleCount() == 0) {
+            if (member.piece().meshTriangles[member.index()] == 0) {
                 continue;
             }
             final MeshHandle mesh = member.piece().meshes[member.index()];
@@ -2222,9 +2240,12 @@ public class LodRenderer {
             final int unit = world.loadQueue.poll();
             for (Member member : world.unitByIndex.get(unit).members) {
                 final Piece piece = member.piece();
-                final ClusterMeshes.Mesh mesh = piece.meshData.get(member.index());
                 if (piece.meshes[member.index()] == null
-                        && (mesh.triangleCount() > 0 || isVolume(piece.clusters[member.index()]))) {
+                        && (piece.meshTriangles[member.index()] > 0
+                                || isVolume(piece.clusters[member.index()]))) {
+                    // Made again from the cluster, as the builder made it
+                    final ClusterMeshes.Mesh mesh =
+                            ClusterMeshes.of(piece.clusters[member.index()].cluster());
                     piece.meshes[member.index()] =
                             registerDrawn(
                                     state,
@@ -2734,7 +2755,7 @@ public class LodRenderer {
                         unitWords)) {
                     continue;
                 }
-                final int meshTriangles = piece.meshData.get(i).triangleCount();
+                final int meshTriangles = piece.meshTriangles[i];
                 final MeshHandle mesh = piece.meshes[i];
                 if (meshTriangles == 0) {
                     drawn[k] = true;
