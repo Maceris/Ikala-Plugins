@@ -82,6 +82,18 @@ public final class LodResidency {
     private final double[] distance;
 
     /**
+     * How much each unit is needed at the last update: how many times the error threshold its group
+     * projects to from the nearest observer, infinity for roots.
+     */
+    private final double[] need;
+
+    /**
+     * The share of the threshold a unit's group had to project over at the last update to be
+     * wanted: {@link #PREFETCH}, or more where the budget allowed only the most needed.
+     */
+    private double cutoff = PREFETCH;
+
+    /**
      * Set up for a set of units.
      *
      * @param units The units, null at free indices.
@@ -100,6 +112,7 @@ public final class LodResidency {
         unwantedSince = new long[n];
         Arrays.fill(unwantedSince, WANTED);
         distance = new double[n];
+        need = new double[n];
         final int[] childCount = new int[n];
         for (Unit unit : units) {
             if (unit == null) {
@@ -207,6 +220,31 @@ public final class LodResidency {
             double thresholdPixels,
             long now,
             boolean streaming) {
+        update(eyes, pixelsPerUnit, thresholdPixels, now, streaming, Long.MAX_VALUE);
+    }
+
+    /**
+     * Work out which units are wanted from where several observers are, as {@link
+     * #update(double[][], double, double, long, boolean)} does, within a byte budget: if every unit
+     * wanted would take more, only the most needed are, those whose groups project the most over
+     * the threshold, and no unit whose parents aren't. The GPU draws the coarser parents of the
+     * rest, as if the threshold were higher there.
+     *
+     * @param eyes The observers, from the world's origin, in its units.
+     * @param pixelsPerUnit Pixels per world unit at distance 1.
+     * @param thresholdPixels The error threshold.
+     * @param now The time, from {@link System#nanoTime()}.
+     * @param streaming Whether to stream; if not, every unit is wanted.
+     * @param budgetBytes The most bytes the wanted units may take.
+     */
+    public void update(
+            double @NonNull [][] eyes,
+            double pixelsPerUnit,
+            double thresholdPixels,
+            long now,
+            boolean streaming,
+            long budgetBytes) {
+        long wantedBytes = 0;
         for (int i = 0; i < units.size(); ++i) {
             final Unit unit = units.get(i);
             if (unit == null) {
@@ -215,7 +253,8 @@ public final class LodResidency {
             }
             final double[] bound = unit.bound();
             double nearest = eyes.length == 0 ? 0 : Double.MAX_VALUE;
-            boolean any = !streaming || Double.isInfinite(unit.error());
+            double most =
+                    !streaming || Double.isInfinite(unit.error()) ? Double.POSITIVE_INFINITY : 0;
             for (double[] eye : eyes) {
                 double sum = 0;
                 for (int axis = 0; axis < AXES; ++axis) {
@@ -223,18 +262,61 @@ public final class LodResidency {
                     sum += d * d;
                 }
                 nearest = Math.min(nearest, Math.max(0, Math.sqrt(sum) - bound[AXES]));
-                any |=
-                        LodCut.projected(unit.error(), bound, eye, pixelsPerUnit)
-                                > thresholdPixels * PREFETCH;
+                most =
+                        Math.max(
+                                most,
+                                LodCut.projected(unit.error(), bound, eye, pixelsPerUnit)
+                                        / thresholdPixels);
             }
             distance[i] = nearest;
-            wanted[i] = any;
-            if (wanted[i]) {
-                unwantedSince[i] = WANTED;
-            } else if (unwantedSince[i] == WANTED) {
-                unwantedSince[i] = now;
+            need[i] = most;
+            if (most > PREFETCH) {
+                wantedBytes += unit.bytes();
             }
         }
+        // Over the budget, the most needed first until it is spent
+        cutoff = PREFETCH;
+        if (wantedBytes > budgetBytes) {
+            final List<Integer> byNeed = new ArrayList<>();
+            for (int i = 0; i < units.size(); ++i) {
+                if (units.get(i) != null && need[i] > PREFETCH) {
+                    byNeed.add(i);
+                }
+            }
+            byNeed.sort(Comparator.comparingDouble((Integer i) -> need[i]).reversed());
+            long spent = 0;
+            for (int i : byNeed) {
+                spent += units.get(i).bytes();
+                if (spent > budgetBytes && !Double.isInfinite(need[i])) {
+                    cutoff = need[i];
+                    break;
+                }
+            }
+        }
+        for (int unit : order) {
+            boolean any =
+                    units.get(unit) != null
+                            && (need[unit] > cutoff || Double.isInfinite(need[unit]));
+            for (int parent : parentsOf(unit)) {
+                any &= wanted[parent];
+            }
+            wanted[unit] = any;
+            if (any) {
+                unwantedSince[unit] = WANTED;
+            } else if (unwantedSince[unit] == WANTED) {
+                unwantedSince[unit] = now;
+            }
+        }
+    }
+
+    /**
+     * How many times the error threshold the budget made the cut at the last update, 1 where
+     * everything wanted fit.
+     *
+     * @return The factor.
+     */
+    public double budgetScale() {
+        return cutoff / PREFETCH;
     }
 
     /**

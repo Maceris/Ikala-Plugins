@@ -92,6 +92,12 @@ public class LodRenderer {
     /** Corners in a triangle. */
     private static final int CORNERS = 3;
 
+    /** Bytes in a mebibyte, for messages. */
+    private static final long BYTES_PER_MIB = 1L << 20;
+
+    /** The budget scale is kept in the residency numbers in thousandths. */
+    private static final int SCALE_PER_UNIT = 1000;
+
     /** How many workers make streamed units' meshes. */
     private static final int STREAM_THREADS = 2;
 
@@ -421,9 +427,11 @@ public class LodRenderer {
      * @param shownUnits Units whose clusters may be drawn.
      * @param loadedBytes Mesh bytes on the GPU.
      * @param wantedBytes Mesh bytes of the units the observer wants.
-     * @param totalBytes Mesh bytes of every unit, all kept on the CPU.
+     * @param totalBytes Mesh bytes of every unit; the store keeps their triangles in its cache.
      * @param loads Units loaded so far.
      * @param evictions Units evicted so far.
+     * @param budgetScale How many times the error threshold the GPU budget made the cut where it
+     *     had to, 1 where everything wanted fit (see {@link LodResidency#budgetScale()}).
      */
     public record LiveStats(
             int pieces,
@@ -439,7 +447,8 @@ public class LodRenderer {
             long wantedBytes,
             long totalBytes,
             long loads,
-            long evictions) {}
+            long evictions,
+            double budgetScale) {}
 
     /** Small integers handed out and taken back, lowest free first. */
     private static final class Slots {
@@ -788,6 +797,21 @@ public class LodRenderer {
 
         /** Units whose meshes are registered, waiting for them to be uploaded. Render thread. */
         final Set<Integer> uploadingUnits = new LinkedHashSet<>();
+
+        /**
+         * Whether the geometry arena or brick table had no room for a mesh, so no more are asked
+         * for until a unit is evicted. Render thread.
+         */
+        boolean full;
+
+        /** Whether the last residency update cut coarser for the budget. Render thread. */
+        boolean overBudget;
+
+        /**
+         * Bytes of meshes first uploads registered, which stop at the budget, leaving the rest to
+         * streaming by need. Render thread.
+         */
+        long firstBytes;
 
         /** Units whose meshes a worker is making. Render thread. */
         final Set<Integer> fetchingUnits = new HashSet<>();
@@ -1498,17 +1522,21 @@ public class LodRenderer {
                 continue;
             }
             final ClusterMeshes.Mesh mesh = pieceMeshes.get(uploading.cluster);
-            // Only what the observer wants now; the rest streams in once the batch is applied
+            // Only what the observer wants now, within the budget; the rest streams in once the
+            // batch is applied
             if ((mesh.triangleCount() > 0 || isVolume(piece.clusters().get(uploading.cluster)))
-                    && isWanted(world, piece.clusters().get(uploading.cluster))) {
+                    && isWanted(world, piece.clusters().get(uploading.cluster))
+                    && world.firstBytes + bytes(mesh)
+                            <= GraphicsManager.getSettings().lodResidentBytes) {
                 uploading.meshes[uploading.piece][uploading.cluster] =
-                        registerDrawn(
+                        tryRegisterDrawn(
                                 state,
                                 world,
                                 piece.clusters().get(uploading.cluster),
                                 mesh,
                                 piece.shells().get(uploading.cluster));
                 bytes += bytes(mesh);
+                world.firstBytes += bytes(mesh);
             }
             uploading.cluster += 1;
         }
@@ -1582,7 +1610,15 @@ public class LodRenderer {
             CoverageShells.Shell shell) {
         final CoverageVolume volume = cluster.volume();
         if (volume == null) {
-            return register(state, world.owner, drawn(world, cluster, mesh));
+            try {
+                return register(state, world.owner, drawn(world, cluster, mesh));
+            } catch (IllegalStateException e) {
+                // A baked cluster took its tile first
+                if (baked(world, cluster) != null) {
+                    bakes.unload(world.id, cluster.info().id());
+                }
+                throw e;
+            }
         }
         // Coverage volumes draw as the boxes of their bricks; a model's name their materials, since
         // its instances may draw it with others
@@ -1620,9 +1656,47 @@ public class LodRenderer {
                         shell != null
                                 ? shell
                                 : CoverageShells.of(volume, world.modelClusters >= 0));
-        final MeshHandle handle = register(state, world.owner, drawn);
+        final MeshHandle handle;
+        try {
+            handle = register(state, world.owner, drawn);
+        } catch (IllegalStateException e) {
+            brickWords.free(first, words);
+            throw e;
+        }
         brickRangeOf.put(handle, new int[] {first, words});
         return handle;
+    }
+
+    /**
+     * Register a cluster's mesh as it is drawn, as {@link #registerDrawn} does, or leave it out if
+     * the geometry arena or the brick table is full: the cluster stays unloaded, its ancestors
+     * drawn in its place, and residency asks for it again. Render thread.
+     *
+     * @param state The Vulkan state.
+     * @param world The world.
+     * @param cluster The cluster.
+     * @param mesh Its mesh as built.
+     * @param shell Its volume's shell as built off the render thread, or null to build it here.
+     * @return Its handle, or null if there was no room.
+     */
+    private MeshHandle tryRegisterDrawn(
+            @NonNull VulkanState state,
+            @NonNull World world,
+            LodStore.@NonNull PieceCluster cluster,
+            ClusterMeshes.@NonNull Mesh mesh,
+            CoverageShells.Shell shell) {
+        try {
+            return registerDrawn(state, world, cluster, mesh, shell);
+        } catch (IllegalStateException e) {
+            if (!world.full) {
+                log.warn(
+                        "No room on the GPU for more level of detail meshes, drawing coarser ones"
+                                + " instead: {}",
+                        e.getMessage());
+            }
+            world.full = true;
+            return null;
+        }
     }
 
     /**
@@ -1846,7 +1920,10 @@ public class LodRenderer {
                 world.residencyNumbers[3],
                 world.residencyNumbers[4],
                 world.loads,
-                world.evictions);
+                world.evictions,
+                world.residencyNumbers[5] == 0
+                        ? 1
+                        : world.residencyNumbers[5] / (double) SCALE_PER_UNIT);
     }
 
     /**
@@ -2257,7 +2334,16 @@ public class LodRenderer {
                     world.pixelsPerUnit,
                     world.thresholdPixels,
                     now,
-                    GraphicsManager.getSettings().lodStreaming);
+                    GraphicsManager.getSettings().lodStreaming,
+                    GraphicsManager.getSettings().lodResidentBytes);
+            if (residency.budgetScale() > 1 && !world.overBudget) {
+                log.info(
+                        "Level of detail is over its {} MiB budget on the GPU; cutting at {}"
+                                + " times the error threshold where needed",
+                        GraphicsManager.getSettings().lodResidentBytes / BYTES_PER_MIB,
+                        String.format("%.1f", residency.budgetScale()));
+            }
+            world.overBudget = residency.budgetScale() > 1;
             for (int unit :
                     residency.toEvict(now, GraphicsManager.getSettings().lodResidentBytes)) {
                 evict(world, unit);
@@ -2282,6 +2368,7 @@ public class LodRenderer {
                 // Its clusters couldn't be read; residency asks for it again
                 continue;
             }
+            boolean complete = true;
             for (int i = 0; i < done.members().size(); ++i) {
                 final Member member = done.members().get(i);
                 final Piece piece = member.piece();
@@ -2291,20 +2378,29 @@ public class LodRenderer {
                 }
                 final ClusterMeshes.Mesh mesh = done.meshes().get(i);
                 piece.meshes[member.index()] =
-                        registerDrawn(
+                        tryRegisterDrawn(
                                 state,
                                 world,
                                 piece.clusters[member.index()],
                                 mesh,
                                 piece.shells.get(member.index()));
+                if (piece.meshes[member.index()] == null) {
+                    // No room: the unit stays unloaded until evicting makes some
+                    complete = false;
+                    continue;
+                }
                 writeEntry(world, piece, member.index());
                 bytes += bytes(mesh);
             }
-            world.uploadingUnits.add(done.unit());
+            if (complete) {
+                world.uploadingUnits.add(done.unit());
+            }
         }
         // Have workers make the next wanted units' meshes: read their clusters the store keeps
         // only in its cache, and encode them, off this thread
-        while (world.fetchingUnits.size() < MAX_FETCHING && !world.loadQueue.isEmpty()) {
+        while (!world.full
+                && world.fetchingUnits.size() < MAX_FETCHING
+                && !world.loadQueue.isEmpty()) {
             final int unit = world.loadQueue.poll();
             if (world.fetchingUnits.contains(unit)) {
                 continue;
@@ -2355,7 +2451,8 @@ public class LodRenderer {
                     residency.shownCount(),
                     residency.loadedBytes(),
                     residency.wantedBytes(),
-                    residency.totalBytes()
+                    residency.totalBytes(),
+                    Math.round(residency.budgetScale() * SCALE_PER_UNIT)
                 };
     }
 
@@ -2448,6 +2545,7 @@ public class LodRenderer {
             }
         }
         world.evictions += 1;
+        world.full = false;
     }
 
     /**

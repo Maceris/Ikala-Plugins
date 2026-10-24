@@ -81,10 +81,12 @@ public class GraphicsSettings {
     public boolean lodStreaming = true;
 
     /**
-     * The most level of detail mesh bytes to keep on the GPU; past it, groups no longer wanted go
-     * at once instead of after a delay.
+     * The most level of detail mesh bytes to keep on the GPU. When the cut wants more, only the
+     * groups most over the error threshold are loaded, and the rest are drawn by their coarser
+     * parents; past it, groups no longer wanted go at once instead of after a delay. Within the
+     * geometry arena's 2 GiB of vertices with room to spare.
      */
-    public long lodResidentBytes = 1L << 30;
+    public long lodResidentBytes = 3L << 29;
 
     /**
      * The folder built level of detail cells are cached in, so an area seen before loads without

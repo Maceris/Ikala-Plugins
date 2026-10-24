@@ -1345,7 +1345,7 @@ public final class GateBenchmark {
             log.info(
                     "Gate benchmark LOD at {} s: {} of {} units shown, {} MiB on the GPU of {} MiB"
                             + " ({} MiB wanted), {} loads, {} evictions; the cut draws {}"
-                            + " triangles",
+                            + " triangles{}",
                     residencyLogged,
                     stats.shownUnits(),
                     stats.units(),
@@ -1354,7 +1354,12 @@ public final class GateBenchmark {
                     String.format("%.1f", stats.wantedBytes() / BYTES_PER_MIB),
                     stats.loads(),
                     stats.evictions(),
-                    graphics.lods().stats().selectedTriangles());
+                    graphics.lods().stats().selectedTriangles(),
+                    stats.budgetScale() > 1
+                            ? String.format(
+                                    ", at %.1f times the threshold for the budget",
+                                    stats.budgetScale())
+                            : "");
         }
     }
 

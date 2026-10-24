@@ -51,6 +51,31 @@ class LodResidencyTest {
     }
 
     /**
+     * Over a byte budget only the most needed units are wanted, those whose groups project the most
+     * over the threshold, and the budget scale says how much coarser the cut is; within it nothing
+     * changes.
+     */
+    @Test
+    void testBudgetKeepsTheMostNeeded() {
+        final LodResidency residency = new LodResidency(tree(), new boolean[4]);
+        residency.update(new double[][] {{0, 0, 0}}, PIXELS, THRESHOLD, 0, true, 70);
+        assertEquals(10 + 20 + 40, residency.wantedBytes());
+        assertEquals(1, residency.budgetScale(), 1e-9);
+        residency.update(new double[][] {{0, 0, 0}}, PIXELS, THRESHOLD, 0, true, 30);
+        assertTrue(residency.isWanted(0));
+        assertTrue(residency.isWanted(1));
+        assertFalse(residency.isWanted(2));
+        assertFalse(residency.isWanted(3), "The leaf, least over the threshold, is left out");
+        assertEquals(10 + 20, residency.wantedBytes());
+        // The leaf projects to 0.01 * 1000 / 8 = 1.25 times the threshold, the new cutoff
+        assertEquals(1.25 / LodResidency.PREFETCH, residency.budgetScale(), 1e-9);
+        // The root is always wanted, whatever the budget
+        residency.update(new double[][] {{0, 0, 0}}, PIXELS, THRESHOLD, 0, true, 0);
+        assertTrue(residency.isWanted(0));
+        assertFalse(residency.isWanted(1));
+    }
+
+    /**
      * With several observers, as a model's instances each see it, a unit is wanted when any of them
      * wants it; with none, only the roots are.
      */
