@@ -5,10 +5,13 @@ import com.ikalagaming.factory.registry.RegistryConstants;
 import com.ikalagaming.factory.world.Block;
 import com.ikalagaming.factory.world.World;
 import com.ikalagaming.factory.world.gen.*;
+import com.ikalagaming.factory.world.gen.density.Arithmetic;
 import com.ikalagaming.factory.world.gen.density.Box;
 import com.ikalagaming.factory.world.gen.density.DensityNode;
+import com.ikalagaming.factory.world.gen.density.Interpolated;
 import com.ikalagaming.factory.world.gen.density.Interval;
 import com.ikalagaming.factory.world.gen.density.Sources;
+import com.ikalagaming.factory.world.gen.density.Styles;
 import com.ikalagaming.factory.world.gen.noise.Noise;
 
 import lombok.NonNull;
@@ -34,6 +37,9 @@ public final class WorldgenCompiler implements FieldReader.Problems {
 
     /** How many numbers a range is written with: its min and max. */
     private static final int RANGE_LENGTH = 2;
+
+    /** How far out of range a faded-out overlay sits, when a world type doesn't say. */
+    public static final double DEFAULT_STYLE_FADE = 64;
 
     /** What a block ID must look like. */
     private static final Pattern BLOCK_ID =
@@ -141,6 +147,7 @@ public final class WorldgenCompiler implements FieldReader.Problems {
                     case NOISE -> noiseFile(file.id(), null, null, null);
                     case DENSITY -> density(file.id(), null);
                     case PARAMETER -> parameter(file.id(), null);
+                    case TERRAIN_STYLE -> terrainStyle(file.id(), null);
                     case BIOME -> biome(file.id(), null);
                     case BLOCK_RULES -> blockRules(file.id(), null);
                     case FLUIDS -> fluidsFile(file.id(), null);
@@ -171,6 +178,16 @@ public final class WorldgenCompiler implements FieldReader.Problems {
                 .filter(e -> e.getValue().equals(origin))
                 .map(Map.Entry::getKey)
                 .findFirst();
+    }
+
+    /**
+     * Record where a node that wasn't read from a density field came from, for tracing.
+     *
+     * @param node The node.
+     * @param origin Its label and field path, like {@code world_type/lotomation:x#styles}.
+     */
+    public void recordOrigin(@NonNull DensityNode node, @NonNull String origin) {
+        origins.putIfAbsent(node, origin);
     }
 
     /**
@@ -312,10 +329,16 @@ public final class WorldgenCompiler implements FieldReader.Problems {
      */
     public DensityNode reference(
             @NonNull String type, @NonNull String id, @NonNull FieldReader from) {
-        final Optional<DensityNode> target =
-                "parameter".equals(type)
-                        ? parameter(id, from).map(Parameter::density)
-                        : density(id, from);
+        Optional<DensityNode> target;
+        if ("parameter".equals(type) && id.startsWith(TerrainStyle.PARAMETER_PREFIX)) {
+            target =
+                    terrainStyle(id.substring(TerrainStyle.PARAMETER_PREFIX.length()), from)
+                            .map(WorldgenCompiler::styleWeight);
+        } else if ("parameter".equals(type)) {
+            target = parameter(id, from).map(Parameter::density);
+        } else {
+            target = density(id, from);
+        }
         if (target.isEmpty()) {
             return new Sources.Constant(0);
         }
@@ -423,6 +446,105 @@ public final class WorldgenCompiler implements FieldReader.Problems {
                     }
                     return new Parameter(id, density, display);
                 });
+    }
+
+    /**
+     * A terrain style's weight as a parameter gives it: clamped to 0 to 1, like {@link Styles} uses
+     * it.
+     *
+     * @param style The style.
+     * @return The clamped weight.
+     */
+    private static DensityNode styleWeight(@NonNull TerrainStyle style) {
+        return new Arithmetic.Clamp(style.weight(), 0, 1);
+    }
+
+    /**
+     * A terrain style file.
+     *
+     * @param id The ID.
+     * @param from The referencing field, or null.
+     * @return The style, if the file is good.
+     */
+    public Optional<TerrainStyle> terrainStyle(@NonNull String id, FieldReader from) {
+        return compileFile(Kind.TERRAIN_STYLE, id, from, root -> buildTerrainStyle(id, root));
+    }
+
+    /**
+     * Build a terrain style.
+     *
+     * @param id The ID.
+     * @param root The file.
+     * @return The style, or null after an error.
+     */
+    private TerrainStyle buildTerrainStyle(@NonNull String id, @NonNull FieldReader root) {
+        // tags is read by later steps
+        root.warnUnknownFields(
+                Set.of("kind", "weight", "density", "op", "priority", "interpolation", "tags"));
+        final FieldReader kindField = root.get("kind");
+        final String kind = kindField.string();
+        final boolean shape = "shape".equals(kind);
+        if (!shape && !"overlay".equals(kind)) {
+            if (!kind.isEmpty()) {
+                kindField.error("WORLDGEN_BAD_STYLE_KIND");
+            }
+            return null;
+        }
+        final DensityNode weight = density(root.get("weight"));
+        DensityNode density = density(root.get("density"));
+
+        Styles.Op op = null;
+        int priority = 0;
+        int[] cell = null;
+        if (shape) {
+            for (String field : List.of("op", "priority", "interpolation")) {
+                if (root.has(field)) {
+                    root.get(field).error("WORLDGEN_OVERLAY_ONLY", field);
+                }
+            }
+        } else {
+            final FieldReader opField = root.get("op");
+            switch (opField.string()) {
+                case "union" -> op = Styles.Op.UNION;
+                case "carve" -> op = Styles.Op.CARVE;
+                case "" -> {
+                    // Missing, already reported
+                }
+                default -> opField.error("WORLDGEN_BAD_STYLE_OP");
+            }
+            priority = root.get("priority").integer(0);
+            if (root.has("interpolation")) {
+                cell = cells(root.get("interpolation"));
+                final double[] size = Arrays.stream(cell).asDoubleStream().toArray();
+                density = new Interpolated(density, size, false, nextSlot());
+            }
+            if (op == null) {
+                return null;
+            }
+        }
+        return new TerrainStyle(id, shape, op, priority, weight, density, cell);
+    }
+
+    /**
+     * Read a sampling grid's cell size along x, y and z.
+     *
+     * @param field The field, a list of three whole numbers of at least 1.
+     * @return The cell sizes; the world default after an error.
+     */
+    private static int[] cells(@NonNull FieldReader field) {
+        int[] result =
+                WorldType.DEFAULT_INTERPOLATION.stream().mapToInt(Integer::intValue).toArray();
+        final double[] values = field.numbers(result.length);
+        for (int i = 0; i < values.length; ++i) {
+            if (values[i] < 1 || values[i] != Math.rint(values[i])) {
+                field.error("WORLDGEN_CELL_SIZE");
+                return WorldType.DEFAULT_INTERPOLATION.stream()
+                        .mapToInt(Integer::intValue)
+                        .toArray();
+            }
+            result[i] = (int) values[i];
+        }
+        return result;
     }
 
     /**
@@ -664,23 +786,34 @@ public final class WorldgenCompiler implements FieldReader.Problems {
                         "parameters",
                         "biomes",
                         "fallback_biome",
+                        "styles",
+                        "fallback_style",
+                        "style_fade",
                         "fluids",
                         "structure_sets",
                         "spawn"));
-        final DensityNode density = density(root.get("density"));
-
-        int[] interpolation =
-                WorldType.DEFAULT_INTERPOLATION.stream().mapToInt(Integer::intValue).toArray();
-        if (root.has("interpolation")) {
-            final FieldReader field = root.get("interpolation");
-            final double[] cells = field.numbers(interpolation.length);
-            for (int i = 0; i < cells.length; ++i) {
-                if (cells[i] < 1 || cells[i] != Math.rint(cells[i])) {
-                    field.error("WORLDGEN_CELL_SIZE");
-                    break;
-                }
-                interpolation[i] = (int) cells[i];
+        final boolean styled = root.has("styles");
+        DensityNode density = null;
+        if (!styled || root.has("density")) {
+            density = density(root.get("density"));
+            if (styled) {
+                root.get("density").warn("WORLDGEN_DENSITY_IGNORED");
             }
+        }
+
+        final int[] interpolation =
+                root.has("interpolation")
+                        ? cells(root.get("interpolation"))
+                        : WorldType.DEFAULT_INTERPOLATION.stream()
+                                .mapToInt(Integer::intValue)
+                                .toArray();
+        if (styled) {
+            final Styles styles = buildStyles(root, interpolation, density);
+            if (styles == null) {
+                return null;
+            }
+            density = styles;
+            recordOrigin(styles, label(Kind.WORLD_TYPE, id) + "#styles");
         }
 
         Box border = WorldType.DEFAULT_BORDER;
@@ -732,6 +865,11 @@ public final class WorldgenCompiler implements FieldReader.Problems {
                         ? fluidsValue(root.get("fluids")).orElse(new Fluids.None())
                         : new Fluids.None();
 
+        // Style weights biomes ask for become parameters too
+        if (density instanceof Styles styles) {
+            addStyleParameters(styles, biomes, parameters, listedParameters);
+        }
+
         // Match each biome's climate names to this world type's parameters
         List<ParameterRange[]> climates = new ArrayList<>();
         for (int b = 0; b < biomes.size(); ++b) {
@@ -767,6 +905,158 @@ public final class WorldgenCompiler implements FieldReader.Problems {
                 fallback.get(),
                 fluids,
                 List.copyOf(climates));
+    }
+
+    /**
+     * Combine the terrain styles a world type lists.
+     *
+     * @param root The world type file.
+     * @param interpolation The world's sampling grid.
+     * @param density The world type's own density, if it gives one, which weights can't read.
+     * @return The combined terrain, or null after an error.
+     */
+    private Styles buildStyles(
+            @NonNull FieldReader root, int @NonNull [] interpolation, DensityNode density) {
+        final FieldReader listField = root.get("styles");
+        List<TerrainStyle> listed = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (FieldReader field : listField.list()) {
+            if (seen.add(field.string())) {
+                terrainStyle(field.string(), field).ifPresent(listed::add);
+            }
+        }
+        final FieldReader fallbackField = root.get("fallback_style");
+        final Optional<TerrainStyle> fallback = terrainStyle(fallbackField.string(), fallbackField);
+        if (fallback.isPresent() && !fallback.get().shape()) {
+            fallbackField.error("WORLDGEN_FALLBACK_NOT_SHAPE", fallback.get().id());
+        }
+        final FieldReader fadeField = root.get("style_fade");
+        final double fade = fadeField.number(DEFAULT_STYLE_FADE);
+        if (fade <= 0) {
+            fadeField.error("WORLDGEN_NOT_POSITIVE");
+        }
+
+        // A weight that reads any style's terrain would make the terrain depend on itself
+        Set<DensityNode> terrain = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (TerrainStyle style : listed) {
+            addUnwrapped(terrain, style.density());
+        }
+        fallback.ifPresent(f -> addUnwrapped(terrain, f.density()));
+        if (density != null) {
+            addUnwrapped(terrain, density);
+        }
+        for (TerrainStyle style : listed) {
+            if (reaches(
+                    style.weight(), terrain, Collections.newSetFromMap(new IdentityHashMap<>()))) {
+                listField.error("WORLDGEN_STYLE_WEIGHT_READS_TERRAIN", style.id());
+            }
+        }
+        if (fallback.isEmpty() || failed.contains(root.getFile())) {
+            return null;
+        }
+
+        List<Styles.Style> shapes = new ArrayList<>();
+        List<TerrainStyle> overlays = new ArrayList<>();
+        for (TerrainStyle style : listed) {
+            if (style.shape()) {
+                shapes.add(style.toStyle());
+            } else {
+                overlays.add(style);
+            }
+        }
+        overlays.sort(
+                Comparator.comparingInt(TerrainStyle::priority).thenComparing(TerrainStyle::id));
+        List<Styles.Style> coarse = new ArrayList<>();
+        List<Styles.Style> fine = new ArrayList<>();
+        for (TerrainStyle overlay : overlays) {
+            final boolean ownGrid =
+                    overlay.cell() != null && !Arrays.equals(overlay.cell(), interpolation);
+            (ownGrid ? fine : coarse).add(overlay.toStyle());
+        }
+        return new Styles(shapes, fallback.get().density(), coarse, fine, fade);
+    }
+
+    /**
+     * Add a node to a set, and what it wraps: the target of a reference and the child of an
+     * interpolation, since those give the same terrain.
+     *
+     * @param set The set.
+     * @param node The node.
+     */
+    private static void addUnwrapped(@NonNull Set<DensityNode> set, @NonNull DensityNode node) {
+        DensityNode at = node;
+        while (true) {
+            set.add(at);
+            if (at instanceof Sources.Ref ref) {
+                at = ref.target();
+            } else if (at instanceof Interpolated) {
+                at = at.children().get(0);
+            } else {
+                return;
+            }
+        }
+    }
+
+    /**
+     * Whether a function reads any of some nodes, directly or through its children.
+     *
+     * @param node The function.
+     * @param targets The nodes.
+     * @param visited Nodes already checked, so shared subtrees are checked once.
+     * @return True if it does.
+     */
+    private static boolean reaches(
+            @NonNull DensityNode node,
+            @NonNull Set<DensityNode> targets,
+            @NonNull Set<DensityNode> visited) {
+        if (targets.contains(node)) {
+            return true;
+        }
+        if (!visited.add(node)) {
+            return false;
+        }
+        for (DensityNode child : node.children()) {
+            if (reaches(child, targets, visited)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Add a parameter for each style weight a biome names in its climate, as {@code style:<id>}, so
+     * only worlds whose biomes use them pay for them.
+     *
+     * @param styles The world's styles.
+     * @param biomes The world's biomes.
+     * @param parameters The parameters, added to.
+     * @param listed The listed parameter IDs, added to.
+     */
+    private static void addStyleParameters(
+            @NonNull Styles styles,
+            @NonNull List<Biome> biomes,
+            @NonNull List<Parameter> parameters,
+            @NonNull List<String> listed) {
+        Map<String, Styles.Style> byName = new HashMap<>();
+        for (Styles.Style style : styles.allStyles()) {
+            byName.put(TerrainStyle.PARAMETER_PREFIX + style.id(), style);
+        }
+        SortedSet<String> wanted = new TreeSet<>();
+        for (Biome biome : biomes) {
+            for (String name : biome.climate().keySet()) {
+                if (byName.containsKey(name) && !listed.contains(name)) {
+                    wanted.add(name);
+                }
+            }
+        }
+        for (String name : wanted) {
+            parameters.add(
+                    new Parameter(
+                            name,
+                            new Arithmetic.Clamp(byName.get(name).weight(), 0, 1),
+                            new Interval(0, 1)));
+            listed.add(name);
+        }
     }
 
     /**
