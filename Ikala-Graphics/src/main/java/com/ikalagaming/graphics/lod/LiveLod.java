@@ -593,7 +593,7 @@ public final class LiveLod implements AutoCloseable {
         final List<ClusterMeshes.Mesh> meshes = new ArrayList<>(clusters.size());
         final List<CoverageShells.Shell> shells = new ArrayList<>(clusters.size());
         for (LodStore.PieceCluster cluster : clusters) {
-            meshes.add(ClusterMeshes.of(cluster.cluster()));
+            meshes.add(ClusterMeshes.of(cluster.body()));
             shells.add(
                     cluster.volume() == null ? null : CoverageShells.of(cluster.volume(), false));
         }

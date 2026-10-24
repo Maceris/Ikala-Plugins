@@ -6,6 +6,7 @@ import static org.lwjgl.vulkan.VK12.vkCmdDrawIndexedIndirectCount;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.graph.Material;
+import com.ikalagaming.graphics.lod.ClusterInfo;
 import com.ikalagaming.graphics.lod.ClusterMeshes;
 import com.ikalagaming.graphics.lod.CoverageBricks;
 import com.ikalagaming.graphics.lod.CoverageShells;
@@ -945,6 +946,7 @@ public class LodRenderer {
             clusterList.add(
                     new LodStore.PieceCluster(
                             i,
+                            ClusterInfo.of(dag.clusters().get(i)),
                             dag.clusters().get(i),
                             dag.parentError(i),
                             dag.parentBound(i),
@@ -1675,7 +1677,7 @@ public class LodRenderer {
      */
     private static LodBakes.Baked baked(
             @NonNull World world, LodStore.@NonNull PieceCluster cluster) {
-        return world.bakes == null ? null : world.bakes.of(cluster.cluster().id());
+        return world.bakes == null ? null : world.bakes.of(cluster.info().id());
     }
 
     /**
@@ -2083,7 +2085,7 @@ public class LodRenderer {
         state.members.add(new Member(piece, i));
         state.bytes += bytes(world, piece, i);
         state.dirty = true;
-        final int producer = cluster.cluster().producer();
+        final int producer = cluster.info().producer();
         if (producer >= 0) {
             final UnitKey made = new UnitKey(piece.key, producer);
             world.unitParents
@@ -2115,7 +2117,7 @@ public class LodRenderer {
                 world.slotChecks.add(own);
             }
         }
-        final int producer = cluster.cluster().producer();
+        final int producer = cluster.info().producer();
         if (producer >= 0) {
             final UnitKey made = new UnitKey(piece.key, producer);
             final Map<UnitKey, Integer> parents = world.unitParents.get(made);
@@ -2193,7 +2195,7 @@ public class LodRenderer {
                 return false;
             }
             final LodStore.PieceCluster cluster = member.piece().clusters[member.index()];
-            if (baked(world, cluster) != null && !bakes.isBaked(world.id, cluster.cluster().id())) {
+            if (baked(world, cluster) != null && !bakes.isBaked(world.id, cluster.info().id())) {
                 return false;
             }
         }
@@ -2245,7 +2247,7 @@ public class LodRenderer {
                                 || isVolume(piece.clusters[member.index()]))) {
                     // Made again from the cluster, as the builder made it
                     final ClusterMeshes.Mesh mesh =
-                            ClusterMeshes.of(piece.clusters[member.index()].cluster());
+                            ClusterMeshes.of(piece.clusters[member.index()].body());
                     piece.meshes[member.index()] =
                             registerDrawn(
                                     state,
@@ -2311,7 +2313,7 @@ public class LodRenderer {
                 writeEntry(world, piece, member.index());
             }
             if (baked(world, piece.clusters[member.index()]) != null) {
-                bakes.unload(world.id, piece.clusters[member.index()].cluster().id());
+                bakes.unload(world.id, piece.clusters[member.index()].info().id());
             }
         }
         world.evictions += 1;
@@ -2353,7 +2355,7 @@ public class LodRenderer {
             return;
         }
         for (LodStore.PieceCluster cluster : piece.clusters) {
-            shadows.addSphere(world.origin, cluster.cluster().tight());
+            shadows.addSphere(world.origin, cluster.info().tight());
         }
     }
 
@@ -2365,8 +2367,7 @@ public class LodRenderer {
      */
     private void invalidate(@NonNull World world, @NonNull Collection<Member> members) {
         for (Member member : members) {
-            shadows.addSphere(
-                    world.origin, member.piece().clusters[member.index()].cluster().tight());
+            shadows.addSphere(world.origin, member.piece().clusters[member.index()].info().tight());
         }
     }
 
@@ -2490,7 +2491,7 @@ public class LodRenderer {
                 piece.clusters[index] = cluster;
                 joinUnits(world, piece, index);
                 writeEntry(world, piece, index);
-                shadows.addSphere(world.origin, cluster.cluster().tight());
+                shadows.addSphere(world.origin, cluster.info().tight());
             }
         }
         invalidateChanged(world, world.batchStale, batch.stale());
@@ -2580,14 +2581,14 @@ public class LodRenderer {
         final LodStore.PieceCluster cluster = piece.clusters[index];
         final MeshHandle mesh = piece.meshes[index];
         final Integer cell = world.cells.get(piece.key);
-        final int producer = cluster.cluster().producer();
+        final int producer = cluster.info().producer();
         final Integer parentCell =
                 cluster.parentCell() == null ? null : world.cells.get(cluster.parentCell());
         final int[] section =
                 cluster.section() == null ? null : world.sections.get(cluster.section());
         LodCullMath.putCluster(
                 out,
-                cluster.cluster(),
+                cluster.info(),
                 cluster.parentError(),
                 cluster.parentBound(),
                 mesh == null ? LodCullMath.NO_MESH : mesh.slot(),
@@ -2602,8 +2603,8 @@ public class LodRenderer {
                                 ? LodCullMath.NONE
                                 : unitSlot(world, new UnitKey(piece.key, producer)),
                         // Counted from the finest: the cell's own level plus the level within it
-                        piece.key.level() + cluster.cluster().level()),
-                (cutOut(cluster.cluster()) ? LodCullMath.FLAG_CUT_OUT : 0)
+                        piece.key.level() + cluster.info().level()),
+                (cutOut(cluster.info()) ? LodCullMath.FLAG_CUT_OUT : 0)
                         | (cluster.volume() != null ? volumeFlags(cluster.volume()) : 0));
     }
 
@@ -2622,16 +2623,11 @@ public class LodRenderer {
     /**
      * Whether any of a cluster's triangles has a material with holes cut out by its texture.
      *
-     * @param cluster The cluster.
+     * @param cluster What the cluster is.
      * @return True if one has.
      */
-    private boolean cutOut(LodDag.@NonNull Cluster cluster) {
-        int last = -1;
+    private boolean cutOut(@NonNull ClusterInfo cluster) {
         for (int material : cluster.materials()) {
-            if (material == last) {
-                continue;
-            }
-            last = material;
             if (cutOut(material)) {
                 return true;
             }
@@ -2712,7 +2708,7 @@ public class LodRenderer {
         int top = 0;
         for (Piece piece : world.pieces.values()) {
             for (LodStore.PieceCluster cluster : piece.clusters) {
-                final LodDag.Cluster c = cluster.cluster();
+                final ClusterInfo c = cluster.info();
                 top = Math.max(top, c.level());
                 if (c.producer() >= 0) {
                     groupLevels.merge(
@@ -2734,7 +2730,7 @@ public class LodRenderer {
         for (Piece piece : world.pieces.values()) {
             for (int i = 0; i < piece.clusters.length; ++i, ++k) {
                 final LodStore.PieceCluster cluster = piece.clusters[i];
-                clusters.add(cluster.cluster());
+                clusters.add(cluster.body());
                 volumes.add(cluster.volume());
                 highest[k] =
                         cluster.parentCell() == null
@@ -2801,7 +2797,7 @@ public class LodRenderer {
                 release(piece.meshes[i]);
             }
             if (baked(world, piece.clusters[i]) != null) {
-                bakes.unload(world.id, piece.clusters[i].cluster().id());
+                bakes.unload(world.id, piece.clusters[i].info().id());
             }
             final LodStore.SectionPos section = piece.sections[i];
             if (section != null) {

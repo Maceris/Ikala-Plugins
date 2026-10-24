@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.vulkan;
 
+import com.ikalagaming.graphics.lod.ClusterInfo;
 import com.ikalagaming.graphics.lod.LodCut;
 import com.ikalagaming.graphics.lod.LodDag;
 
@@ -207,7 +208,7 @@ public final class LodCullMath {
      * Write a cluster's table entry.
      *
      * @param out Where it goes; written with absolute puts from its position.
-     * @param cluster The cluster.
+     * @param cluster What the cluster is.
      * @param parentError Its parent group's error, infinity for a root.
      * @param parentBound Its parent group's sphere.
      * @param meshSlot Its mesh's slot, or {@link #NO_MESH}.
@@ -217,7 +218,7 @@ public final class LodCullMath {
      */
     public static void putCluster(
             @NonNull ByteBuffer out,
-            LodDag.@NonNull Cluster cluster,
+            @NonNull ClusterInfo cluster,
             double parentError,
             double @NonNull [] parentBound,
             int meshSlot,
@@ -262,7 +263,7 @@ public final class LodCullMath {
             int generation) {
         putCluster(
                 out,
-                dag.clusters().get(cluster),
+                ClusterInfo.of(dag.clusters().get(cluster)),
                 dag.parentError(cluster),
                 dag.parentBound(cluster),
                 meshSlot,

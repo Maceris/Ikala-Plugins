@@ -234,7 +234,7 @@ class LodStoreTest {
         for (LodStore.CellKey key : store.cellKeys()) {
             for (LodStore.PieceCluster piece : store.piece(key)) {
                 final LodDag.Cluster cluster = dag.clusters().get(id);
-                assertArrayEquals(cluster.corners(), piece.cluster().corners(), "" + id);
+                assertArrayEquals(cluster.corners(), piece.body().corners(), "" + id);
                 assertEquals(dag.parentError(id), piece.parentError(), 0, "" + id);
                 assertArrayEquals(dag.parentBound(id), piece.parentBound(), 0, "" + id);
                 assertEquals(dag.consumer(id) < 0, piece.parentCell() == null, "" + id);

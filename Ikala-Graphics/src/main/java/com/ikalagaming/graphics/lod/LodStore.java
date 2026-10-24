@@ -316,7 +316,8 @@ public final class LodStore {
      * leaf came from.
      *
      * @param local Its id in the cell's DAG.
-     * @param cluster The cluster.
+     * @param info What the cluster is, without its triangles.
+     * @param body The cluster with its triangles.
      * @param parentError The error of the group that consumed it, infinity if none has.
      * @param parentBound That group's sphere, or the cluster's own if none has.
      * @param parentCell The cell holding that group, or null if none has.
@@ -326,7 +327,8 @@ public final class LodStore {
      */
     public record PieceCluster(
             int local,
-            LodDag.@NonNull Cluster cluster,
+            @NonNull ClusterInfo info,
+            LodDag.@NonNull Cluster body,
             double parentError,
             double @NonNull [] parentBound,
             CellKey parentCell,
@@ -761,7 +763,15 @@ public final class LodStore {
             if (group >= 0) {
                 final LodDag.Group g = atCell.dag().groups().get(group);
                 return new PieceCluster(
-                        local, cluster, g.error(), g.bound(), at, group, section, volume);
+                        local,
+                        ClusterInfo.of(cluster),
+                        cluster,
+                        g.error(),
+                        g.bound(),
+                        at,
+                        group,
+                        section,
+                        volume);
             }
             final CellKey up = at.parent();
             final Cell upCell = cells.get(up);
@@ -770,6 +780,7 @@ public final class LodStore {
             if (upLocal < 0) {
                 return new PieceCluster(
                         local,
+                        ClusterInfo.of(cluster),
                         cluster,
                         Double.POSITIVE_INFINITY,
                         cluster.bound(),

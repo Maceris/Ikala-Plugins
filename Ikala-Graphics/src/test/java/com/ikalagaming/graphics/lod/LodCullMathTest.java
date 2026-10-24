@@ -264,7 +264,7 @@ class LodCullMathTest {
                 entries.position(at * LodCullMath.CLUSTER_ENTRY_SIZE);
                 LodCullMath.putCluster(
                         entries,
-                        piece.cluster(),
+                        piece.info(),
                         piece.parentError(),
                         piece.parentBound(),
                         0,
@@ -278,7 +278,7 @@ class LodCullMathTest {
                                 section,
                                 LodCullMath.NONE,
                                 LodCullMath.NONE,
-                                piece.cluster().level()),
+                                piece.info().level()),
                         0);
                 ++at;
             }
@@ -390,7 +390,7 @@ class LodCullMathTest {
         int at = 0;
         for (LodStore.CellKey key : store.cellKeys()) {
             for (LodStore.PieceCluster piece : store.piece(key)) {
-                final int producer = piece.cluster().producer();
+                final int producer = piece.info().producer();
                 final Integer child = producer < 0 ? null : slots.get(new Key(key, producer));
                 if (child != null) {
                     parents.get(child).add(own.get(at)[0]);
@@ -398,7 +398,7 @@ class LodCullMathTest {
                 entries.position(at * LodCullMath.CLUSTER_ENTRY_SIZE);
                 LodCullMath.putCluster(
                         entries,
-                        piece.cluster(),
+                        piece.info(),
                         piece.parentError(),
                         piece.parentBound(),
                         0,
@@ -410,7 +410,7 @@ class LodCullMathTest {
                                 LodCullMath.NONE,
                                 own.get(at)[0],
                                 child == null ? LodCullMath.NONE : child,
-                                piece.cluster().level()),
+                                piece.info().level()),
                         0);
                 ++at;
             }
