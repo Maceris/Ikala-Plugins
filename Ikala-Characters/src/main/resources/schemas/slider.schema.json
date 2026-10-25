@@ -39,6 +39,11 @@
         "max": {
           "type": "number",
           "description": "The scale at 1, above 0."
+        },
+        "axes": {
+          "type": "string",
+          "description": "For shape ops, the bone's local axes to scale, like \"xz\" for girth around a bone that points along y.",
+          "default": "xyz"
         }
       },
       "required": [

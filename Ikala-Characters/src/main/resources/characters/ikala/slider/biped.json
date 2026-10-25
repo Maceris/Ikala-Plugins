@@ -1,0 +1,21 @@
+// Starter sliders for the biped. Body plans pick these up by ID pattern.
+[
+  {"id": "ikala:slider/biped/height", "group": "body", "label": "Height", "ops": [{"bones": ["spine", "chest", "neck"], "type": "length", "min": 0.85, "max": 1.15}, {"bones": ["shin.L", "shin.R", "foot.L", "foot.R", "thigh.L", "thigh.R"], "type": "length", "min": 0.85, "max": 1.15}], "ranges": {"player": [-1, 1], "npc": [-2, 2]}},
+  {"id": "ikala:slider/biped/leg_length", "group": "body", "label": "Leg length", "ops": [{"bones": ["shin.L", "shin.R", "foot.L", "foot.R"], "type": "length", "min": 0.85, "max": 1.15}]},
+  {"id": "ikala:slider/biped/arm_length", "group": "body", "label": "Arm length", "ops": [{"bones": ["forearm.L", "forearm.R", "hand.L", "hand.R"], "type": "length", "min": 0.88, "max": 1.12}]},
+  {"id": "ikala:slider/biped/neck_length", "group": "body", "label": "Neck length", "ops": [{"bones": ["head"], "type": "length", "min": 0.7, "max": 1.5}]},
+  {"id": "ikala:slider/biped/shoulder_width", "group": "body", "label": "Shoulder width", "ops": [{"bones": ["upperarm.L", "upperarm.R"], "type": "length", "min": 0.8, "max": 1.25}]},
+  {"id": "ikala:slider/biped/physique", "group": "body", "label": "Physique", "ops": [{"bones": ["girth.chest", "girth.waist", "girth.hips", "girth.upperarm.L", "girth.upperarm.R", "girth.forearm.L", "girth.forearm.R", "girth.thigh.L", "girth.thigh.R", "girth.shin.L", "girth.shin.R"], "type": "shape", "min": 0.8, "max": 1.35, "axes": "xz"}], "ranges": {"player": [-1, 1], "npc": [-2, 2]}},
+  {"id": "ikala:slider/biped/chest", "group": "body", "label": "Chest", "ops": [{"bones": ["girth.chest"], "type": "shape", "min": 0.85, "max": 1.25, "axes": "xz"}]},
+  {"id": "ikala:slider/biped/waist", "group": "body", "label": "Waist", "ops": [{"bones": ["girth.waist"], "type": "shape", "min": 0.8, "max": 1.3, "axes": "xz"}]},
+  {"id": "ikala:slider/biped/hips", "group": "body", "label": "Hips", "ops": [{"bones": ["girth.hips"], "type": "shape", "min": 0.85, "max": 1.25, "axes": "xz"}]},
+  {"id": "ikala:slider/biped/bust", "group": "body", "label": "Bust", "ops": [{"bones": ["bust.L", "bust.R"], "type": "shape", "min": 0.7, "max": 1.5}]},
+  {"id": "ikala:slider/biped/belly", "group": "body", "label": "Belly", "ops": [{"bones": ["belly"], "type": "shape", "min": 0.8, "max": 1.6}]},
+  {"id": "ikala:slider/biped/muscle", "group": "body", "label": "Muscle", "ops": [{"bones": ["muscle.upperarm.L", "muscle.upperarm.R", "muscle.thigh.L", "muscle.thigh.R"], "type": "shape", "min": 0.85, "max": 1.4, "axes": "xz"}]},
+  {"id": "ikala:slider/biped/head_size", "group": "face", "label": "Head size", "ops": [{"bones": ["face.cranium"], "type": "shape", "min": 0.85, "max": 1.2}]},
+  {"id": "ikala:slider/biped/brow", "group": "face", "label": "Brow", "vector": true, "ops": [{"bones": ["face.brow"], "type": "shape", "min": 0.7, "max": 1.4}]},
+  {"id": "ikala:slider/biped/cheeks", "group": "face", "label": "Cheeks", "vector": true, "ops": [{"bones": ["face.cheek.L", "face.cheek.R"], "type": "shape", "min": 0.7, "max": 1.4}]},
+  {"id": "ikala:slider/biped/nose", "group": "face", "label": "Nose", "vector": true, "ops": [{"bones": ["face.nose"], "type": "shape", "min": 0.6, "max": 1.6}]},
+  {"id": "ikala:slider/biped/chin", "group": "face", "label": "Chin", "vector": true, "ops": [{"bones": ["face.chin"], "type": "shape", "min": 0.7, "max": 1.4}]},
+  {"id": "ikala:slider/biped/jaw", "group": "face", "label": "Jaw", "ops": [{"bones": ["face.jaw"], "type": "shape", "min": 0.75, "max": 1.35, "axes": "xz"}]}
+]

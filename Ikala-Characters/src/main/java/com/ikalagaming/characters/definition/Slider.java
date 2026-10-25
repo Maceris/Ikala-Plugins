@@ -82,9 +82,42 @@ public record Slider(
             @Doc("The bones to scale.") List<String> bones,
             @Doc("How the bones are scaled.") OpType type,
             @Doc("The scale at -1, above 0.") float min,
-            @Doc("The scale at 1, above 0.") float max) {
+            @Doc("The scale at 1, above 0.") float max,
+            @Doc(
+                            "For shape ops, the bone's local axes to scale, like \"xz\" for girth"
+                                    + " around a bone that points along y.")
+                    @Default("\"xyz\"")
+                    String axes) {
         /** The field listing the bones. */
         public static final String FIELD_BONES = "bones";
+
+        /** The field for the axes. */
+        public static final String FIELD_AXES = "axes";
+
+        /** The smallest scale an op produces, so values past the range can't flip a bone. */
+        public static final float MIN_SCALE = 0.05f;
+
+        /**
+         * The scale for a slider value, 1 at 0, min at -1 and max at 1, continuing in a straight
+         * line past those for NPC ranges.
+         *
+         * @param value The slider value.
+         * @return The scale, at least {@link #MIN_SCALE}.
+         */
+        public float scale(float value) {
+            float scale = value < 0 ? 1 + (1 - min) * value : 1 + (max - 1) * value;
+            return Math.max(MIN_SCALE, scale);
+        }
+
+        /**
+         * Whether a shape op scales an axis.
+         *
+         * @param axis 0 for x, 1 for y, 2 for z.
+         * @return Whether that axis is scaled.
+         */
+        public boolean scalesAxis(int axis) {
+            return axes.indexOf("xyz".charAt(axis)) >= 0;
+        }
     }
 
     /**
@@ -110,6 +143,21 @@ public record Slider(
             }
             if (op.min() <= 0 || op.max() <= 0) {
                 checks.error(path, "Scales must be above 0, so the bones don't vanish or flip");
+            }
+            String axesPath = JsonPath.field(path, Op.FIELD_AXES);
+            if (op.axes().isEmpty()
+                    || !op.axes().matches("[xyz]+")
+                    || op.axes().chars().distinct().count() != op.axes().length()) {
+                checks.error(axesPath, "Axes are some of x, y and z, each once, like \"xz\"");
+            }
+            if (op.type() == OpType.LENGTH) {
+                if (!"xyz".equals(op.axes())) {
+                    checks.error(axesPath, "Only shape ops pick axes; length scales the offset");
+                }
+                if (vector) {
+                    checks.error(
+                            path, "Vector sliders only have shape ops, since length has one axis");
+                }
             }
         }
         for (String context : ranges.keySet()) {

@@ -1,0 +1,103 @@
+// The standard biped: humans, zombies, skeletons, robots, goblins, elves and ogres.
+{
+  "id": "ikala:biped",
+  "rig": "ikala:rig/biped",
+  "variants": [
+    {"id": "male"},
+    {"id": "female"},
+    {"id": "neutral"},
+    {"id": "huge"},
+    {"id": "small"}
+  ],
+  "slots": [
+    {"id": "head", "bones": ["head", "jaw", "eye.L", "eye.R", "brow.L", "brow.R", "lid.upper.L", "lid.upper.R", "lid.lower.L", "lid.lower.R", "mouth.corner.L", "mouth.corner.R", "lip.upper", "lip.lower", "face.brow", "face.cheek.L", "face.cheek.R", "face.nose", "face.chin", "face.cranium", "face.jaw"], "seams": ["neck"]},
+    {"id": "torso", "bones": ["spine", "chest", "neck", "clavicle.L", "clavicle.R", "girth.chest", "girth.waist", "bust.L", "bust.R", "belly"], "seams": ["neck", "shoulder.L", "shoulder.R", "waist"]},
+    {"id": "pelvis", "bones": ["hips", "girth.hips"], "seams": ["waist", "hip.L", "hip.R"]},
+    {"id": "upperArm.L", "bones": ["upperarm.L", "girth.upperarm.L", "muscle.upperarm.L"], "seams": ["shoulder.L", "elbow.L"], "mirrorOf": "upperArm.R"},
+    {"id": "lowerArm.L", "bones": ["forearm.L", "girth.forearm.L"], "seams": ["elbow.L", "wrist.L"], "mirrorOf": "lowerArm.R"},
+    {"id": "hand.L", "bones": ["hand.L", "thumb.01.L", "thumb.02.L", "thumb.03.L", "fingers.01.L", "fingers.02.L"], "seams": ["wrist.L"], "mirrorOf": "hand.R"},
+    {"id": "upperLeg.L", "bones": ["thigh.L", "girth.thigh.L", "muscle.thigh.L"], "seams": ["hip.L", "knee.L"], "mirrorOf": "upperLeg.R"},
+    {"id": "lowerLeg.L", "bones": ["shin.L", "girth.shin.L"], "seams": ["knee.L", "ankle.L"], "mirrorOf": "lowerLeg.R"},
+    {"id": "foot.L", "bones": ["foot.L", "toe.L"], "seams": ["ankle.L"], "mirrorOf": "foot.R"},
+    {"id": "upperArm.R", "bones": ["upperarm.R", "girth.upperarm.R", "muscle.upperarm.R"], "seams": ["shoulder.R", "elbow.R"], "mirrorOf": "upperArm.L"},
+    {"id": "lowerArm.R", "bones": ["forearm.R", "girth.forearm.R"], "seams": ["elbow.R", "wrist.R"], "mirrorOf": "lowerArm.L"},
+    {"id": "hand.R", "bones": ["hand.R", "thumb.01.R", "thumb.02.R", "thumb.03.R", "fingers.01.R", "fingers.02.R"], "seams": ["wrist.R"], "mirrorOf": "hand.L"},
+    {"id": "upperLeg.R", "bones": ["thigh.R", "girth.thigh.R", "muscle.thigh.R"], "seams": ["hip.R", "knee.R"], "mirrorOf": "upperLeg.L"},
+    {"id": "lowerLeg.R", "bones": ["shin.R", "girth.shin.R"], "seams": ["knee.R", "ankle.R"], "mirrorOf": "lowerLeg.L"},
+    {"id": "foot.R", "bones": ["foot.R", "toe.R"], "seams": ["ankle.R"], "mirrorOf": "foot.L"}
+  ],
+  "layers": [
+    {"id": "hair", "covers": ["head"], "order": 10},
+    {"id": "facialHair", "covers": ["head"], "order": 10},
+    {"id": "shirt", "covers": ["torso", "upperArm.L", "upperArm.R", "lowerArm.L", "lowerArm.R"], "order": 10},
+    {"id": "pants", "covers": ["pelvis", "upperLeg.L", "upperLeg.R", "lowerLeg.L", "lowerLeg.R"], "order": 10},
+    {"id": "gloves", "covers": ["hand.L", "hand.R"], "order": 20},
+    {"id": "boots", "covers": ["foot.L", "foot.R", "lowerLeg.L", "lowerLeg.R"], "order": 20},
+    {"id": "jacket", "covers": ["torso", "upperArm.L", "upperArm.R", "lowerArm.L", "lowerArm.R"], "order": 20},
+    {"id": "belt", "covers": ["pelvis"], "order": 25},
+    {"id": "shoulderPads.L", "covers": ["upperArm.L"], "order": 30},
+    {"id": "shoulderPads.R", "covers": ["upperArm.R"], "order": 30},
+    {"id": "helmet", "covers": ["head"], "order": 30}
+  ],
+  "sockets": [
+    {"id": "head_top", "bone": "socket.head_top", "type": "head_top"},
+    {"id": "face", "bone": "socket.face", "type": "face"},
+    {"id": "back", "bone": "socket.back", "type": "back.large"},
+    {"id": "hip_back", "bone": "socket.hip_back", "type": "hip"},
+    {"id": "belt_front", "bone": "socket.belt_front", "type": "hip"},
+    {"id": "chest_emblem", "bone": "socket.chest_emblem", "type": "emblem"},
+    {"id": "aura_center", "bone": "socket.aura_center", "type": "aura"},
+    {"id": "shoulder.L", "bone": "socket.shoulder.L", "type": "shoulder"},
+    {"id": "grip.L", "bone": "socket.grip.L", "type": "grip.1h"},
+    {"id": "forearm_mount.L", "bone": "socket.forearm_mount.L", "type": "forearm"},
+    {"id": "shoulder.R", "bone": "socket.shoulder.R", "type": "shoulder"},
+    {"id": "grip.R", "bone": "socket.grip.R", "type": "grip.1h"},
+    {"id": "forearm_mount.R", "bone": "socket.forearm_mount.R", "type": "forearm"}
+  ],
+  "extensions": [
+    {"id": "cape", "root": "chest", "bones": ["cape.01", "cape.02", "cape.03", "cape.04"]},
+    {"id": "wing.L", "root": "chest", "bones": ["wing.01.L", "wing.02.L", "wing.03.L", "wing.04.L"]},
+    {"id": "wing.R", "root": "chest", "bones": ["wing.01.R", "wing.02.R", "wing.03.R", "wing.04.R"]},
+    {"id": "tail", "root": "hips", "bones": ["tail.01", "tail.02", "tail.03", "tail.04", "tail.05", "tail.06"]}
+  ],
+  "sliders": [
+    "ikala:slider/biped/*"
+  ],
+  "regions": [
+    "scalp",
+    "face",
+    "ears",
+    "neck",
+    "chest",
+    "belly",
+    "back",
+    "hips",
+    "upperarm.L",
+    "forearm.L",
+    "hand.L",
+    "thigh.L",
+    "calf.L",
+    "foot.L",
+    "upperarm.R",
+    "forearm.R",
+    "hand.R",
+    "thigh.R",
+    "calf.R",
+    "foot.R"
+  ],
+  "boneGroups": {
+    "upperBody": ["spine", "chest", "neck", "head", "clavicle.L", "upperarm.L", "forearm.L", "hand.L", "clavicle.R", "upperarm.R", "forearm.R", "hand.R"],
+    "lowerBody": ["hips", "thigh.L", "shin.L", "foot.L", "toe.L", "thigh.R", "shin.R", "foot.R", "toe.R"],
+    "head": ["neck", "head", "jaw"],
+    "arm.L": ["clavicle.L", "upperarm.L", "forearm.L", "hand.L", "thumb.01.L", "thumb.02.L", "thumb.03.L", "fingers.01.L", "fingers.02.L"],
+    "arm.R": ["clavicle.R", "upperarm.R", "forearm.R", "hand.R", "thumb.01.R", "thumb.02.R", "thumb.03.R", "fingers.01.R", "fingers.02.R"]
+  },
+  "ik": {
+    "feet": [{"chain": ["thigh.L", "shin.L", "foot.L"]}, {"chain": ["thigh.R", "shin.R", "foot.R"]}],
+    "lookAt": [{"bone": "head", "weight": 0.6}, {"bone": "neck", "weight": 0.25}, {"bone": "chest", "weight": 0.15}]
+  },
+  "collision": {
+    "capsuleFromBones": ["root", "head"],
+    "radiusScale": 0.2
+  }
+}

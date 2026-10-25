@@ -1,6 +1,7 @@
 package com.ikalagaming.characters;
 
 import com.ikalagaming.characters.data.Problem;
+import com.ikalagaming.characters.registry.BuiltInContent;
 import com.ikalagaming.characters.registry.CharacterLoader;
 import com.ikalagaming.characters.registry.CharacterRegistry;
 import com.ikalagaming.characters.registry.ContentSource;
@@ -91,14 +92,30 @@ public class CharacterPlugin extends Plugin {
                 }
             }
         }
-        CharacterLoader.Result result = CharacterLoader.load(sources);
+        CharacterLoader.Result result = loadWithBuiltIn(sources);
         logProblems(result.problems());
         registry = result.registry();
         log.info(
-                "Loaded {} character definitions from {} folders, content hash {}",
+                "Loaded {} character definitions from the plugin and {} folders, content hash {}",
                 registry.size(),
                 sources.size(),
                 registry.getContentHash().substring(0, 12));
+    }
+
+    /**
+     * Load the built-in definitions and other sources, or just the others if the built-in ones
+     * can't be read.
+     *
+     * @param sources The other sources.
+     * @return The registry and problems.
+     */
+    private static CharacterLoader.Result loadWithBuiltIn(List<ContentSource> sources) {
+        try {
+            return BuiltInContent.loadWith(sources);
+        } catch (IOException e) {
+            log.error("Couldn't read the built-in character definitions", e);
+            return CharacterLoader.load(sources);
+        }
     }
 
     /**
@@ -153,7 +170,8 @@ public class CharacterPlugin extends Plugin {
                     log.info("Usage: character validate namespace=folder");
                     return;
                 }
-                CharacterLoader.Result result = CharacterLoader.load(List.of(parseSource(rest)));
+                // Content builds on the built-in plans, so check it along with them
+                CharacterLoader.Result result = loadWithBuiltIn(List.of(parseSource(rest)));
                 logProblems(result.problems());
                 log.info(
                         "{} usable definitions, {} problems",
