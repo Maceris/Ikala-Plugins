@@ -24,16 +24,20 @@ import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
+import java.util.function.BiConsumer;
 
 /**
  * Volume bricks, which stand in for sections' cut out and translucent blocks past {@link
@@ -206,6 +210,13 @@ public class VolumeBricks {
                             @NonNull Collection<LodStore.SectionPos> candidates) {
                         return List.of();
                     }
+
+                    @Override
+                    public long changesSince(
+                            long version,
+                            @NonNull BiConsumer<LodStore.SectionPos, Boolean> visitor) {
+                        return 0;
+                    }
                 };
 
         /**
@@ -222,7 +233,38 @@ public class VolumeBricks {
          * @return Those that are, in the candidates' order.
          */
         List<LodStore.SectionPos> among(@NonNull Collection<LodStore.SectionPos> candidates);
+
+        /**
+         * The sections that entered or left these since a version, oldest first.
+         *
+         * @param version The version last seen.
+         * @param visitor What to do with each section and whether it entered.
+         * @return The version now, or -1 if the changes since aren't all known, so the sections
+         *     must be looked at whole.
+         */
+        long changesSince(long version, @NonNull BiConsumer<LodStore.SectionPos, Boolean> visitor);
     }
+
+    /**
+     * What one set of sections is known to hold of the slotted ones, kept up with the set's changes
+     * and the slots' instead of looked up for every slot each time either changes.
+     */
+    private static final class Tracked {
+        /** Whether each slot's section is in the set. */
+        final boolean[] in = new boolean[VolumeMath.SLOTS];
+
+        /** Slots given to another section since, whose section must be looked up. */
+        final BitSet moved = new BitSet(VolumeMath.SLOTS);
+
+        /** The set's version last taken, or -1 to look at it whole. */
+        long version = -1;
+    }
+
+    /** What each set of sections drawn from is known to hold, by the set. */
+    private final Map<Members, Tracked> tracked = new IdentityHashMap<>();
+
+    /** Each slot's section, or null for a free one. */
+    private final LodStore.SectionPos[] slotPositions = new LodStore.SectionPos[VolumeMath.SLOTS];
 
     /** The sections the draw order was sorted from. */
     private Members sortedFrom;
@@ -579,8 +621,7 @@ public class VolumeBricks {
                 waitingChanged = true;
                 return;
             }
-            slots.put(position, free.poll());
-            slotsChanged = true;
+            take(position);
             withoutSlot.remove(position);
         }
         uploads.put(position, brick);
@@ -698,9 +739,7 @@ public class VolumeBricks {
         if (brick == null) {
             return;
         }
-        slots.put(position, free.poll());
-        slotsChanged = true;
-        ++slotVersion;
+        take(position);
         uploads.put(position, brick);
     }
 
@@ -858,6 +897,10 @@ public class VolumeBricks {
             filled[slot] = false;
             slotsChanged = true;
             ++slotVersion;
+            slotPositions[slot] = null;
+            for (Tracked set : tracked.values()) {
+                set.moved.set(slot);
+            }
             free.add(slot);
         }
     }
@@ -976,17 +1019,69 @@ public class VolumeBricks {
      * @return Each one with a filled slot and its slot, no distance, in no order.
      */
     private List<Draw> filledIn(@NonNull Members sections) {
-        final List<LodStore.SectionPos> candidates = new ArrayList<>(slots.size());
-        for (Map.Entry<LodStore.SectionPos, Integer> entry : slots.entrySet()) {
-            if (filled[entry.getValue()]) {
-                candidates.add(entry.getKey());
+        final Tracked set = tracked.computeIfAbsent(sections, key -> new Tracked());
+        final long version =
+                set.version < 0
+                        ? -1
+                        : sections.changesSince(
+                                set.version,
+                                (position, entered) -> {
+                                    final Integer slot = slots.get(position);
+                                    if (slot != null) {
+                                        set.in[slot] = entered;
+                                    }
+                                });
+        if (version < 0) {
+            // Looked at whole: every slotted section
+            Arrays.fill(set.in, false);
+            set.moved.clear();
+            final long now = sections.version();
+            for (LodStore.SectionPos position : sections.among(slots.keySet())) {
+                set.in[slots.get(position)] = true;
+            }
+            set.version = now;
+        } else {
+            set.version = version;
+            if (!set.moved.isEmpty()) {
+                // Only the slots given to another section since
+                final List<LodStore.SectionPos> movedTo = new ArrayList<>();
+                for (int slot = set.moved.nextSetBit(0);
+                        slot >= 0;
+                        slot = set.moved.nextSetBit(slot + 1)) {
+                    set.in[slot] = false;
+                    if (slotPositions[slot] != null) {
+                        movedTo.add(slotPositions[slot]);
+                    }
+                }
+                set.moved.clear();
+                for (LodStore.SectionPos position : sections.among(movedTo)) {
+                    set.in[slots.get(position)] = true;
+                }
             }
         }
         final List<Draw> out = new ArrayList<>();
-        for (LodStore.SectionPos position : sections.among(candidates)) {
-            out.add(new Draw(position, slots.get(position), 0));
+        for (int slot = 0; slot < VolumeMath.SLOTS; ++slot) {
+            if (set.in[slot] && filled[slot] && slotPositions[slot] != null) {
+                out.add(new Draw(slotPositions[slot], slot, 0));
+            }
         }
         return out;
+    }
+
+    /**
+     * Give a section a free slot, noting which section the slot is for now.
+     *
+     * @param position The section.
+     */
+    private void take(LodStore.@NonNull SectionPos position) {
+        final int slot = free.poll();
+        slots.put(position, slot);
+        slotPositions[slot] = position;
+        slotsChanged = true;
+        ++slotVersion;
+        for (Tracked set : tracked.values()) {
+            set.moved.set(slot);
+        }
     }
 
     /**

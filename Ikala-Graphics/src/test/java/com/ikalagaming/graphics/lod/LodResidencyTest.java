@@ -76,6 +76,60 @@ class LodResidencyTest {
     }
 
     /**
+     * The budget's cutoff, found by bucketing needs, picks the same units as taking them all the
+     * most needed first: every unit over the cutoff, and none past the budget.
+     */
+    @Test
+    void testBudgetCutoffMatchesSortingAll() {
+        final java.util.Random random = new java.util.Random(7);
+        final List<LodResidency.Unit> units = new ArrayList<>();
+        for (int i = 0; i < 2000; ++i) {
+            units.add(
+                    new LodResidency.Unit(
+                            // Some share an error and a distance, so their needs tie
+                            i % 7 == 0 ? 0.5 : random.nextDouble() * 2,
+                            new double[] {i % 7 == 0 ? 50 : random.nextDouble() * 4000, 0, 0, 1},
+                            1 + random.nextInt(1000),
+                            new int[0]));
+        }
+        final double[] eye = {0, 0, 0};
+        final double[] needs = new double[units.size()];
+        long all = 0;
+        for (int i = 0; i < needs.length; ++i) {
+            needs[i] =
+                    LodCut.projected(units.get(i).error(), units.get(i).bound(), eye, PIXELS)
+                            / THRESHOLD;
+            all += needs[i] > LodResidency.PREFETCH ? units.get(i).bytes() : 0;
+        }
+        final List<Integer> byNeed = new ArrayList<>();
+        for (int i = 0; i < needs.length; ++i) {
+            if (needs[i] > LodResidency.PREFETCH) {
+                byNeed.add(i);
+            }
+        }
+        byNeed.sort((a, b) -> Double.compare(needs[b], needs[a]));
+        for (long budget : new long[] {all / 2, all / 10, all - 1, 1000, 0}) {
+            double cutoff = LodResidency.PREFETCH;
+            long spent = 0;
+            for (int i : byNeed) {
+                spent += units.get(i).bytes();
+                if (spent > budget) {
+                    cutoff = needs[i];
+                    break;
+                }
+            }
+            final LodResidency residency = new LodResidency(units, new boolean[units.size()]);
+            residency.update(new double[][] {eye}, PIXELS, THRESHOLD, 0, true, budget);
+            for (int i = 0; i < needs.length; ++i) {
+                assertEquals(
+                        needs[i] > cutoff,
+                        residency.isWanted(i),
+                        "Budget " + budget + " unit " + i);
+            }
+        }
+    }
+
+    /**
      * With several observers, as a model's instances each see it, a unit is wanted when any of them
      * wants it; with none, only the roots are.
      */

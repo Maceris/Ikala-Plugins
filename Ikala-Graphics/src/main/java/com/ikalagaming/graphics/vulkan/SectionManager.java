@@ -61,6 +61,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BiConsumer;
 import java.util.function.IntPredicate;
 
 /**
@@ -394,15 +395,18 @@ public class SectionManager {
     /** Sections removed, whose bricks go. Guarded by {@link #lock}. */
     private final Set<LodStore.SectionPos> volumeRemovals = new HashSet<>();
 
-    /** Counts the changes to {@link #bricked}, a step for every update that changed it. */
-    private volatile long brickedVersion;
+    /**
+     * What entered and left {@link #bricked}: the sets change most frames while the observer moves,
+     * a few sections at a time, and the bricks keep up with just those. Guarded by {@link #lock}.
+     */
+    private final SectionLog brickedLog = new SectionLog();
 
     /** The sections whose bricks are drawn, for the bricks to pick theirs from. */
     private final VolumeBricks.Members volumeMembers =
             new VolumeBricks.Members() {
                 @Override
                 public long version() {
-                    return brickedVersion;
+                    return brickedLog.count();
                 }
 
                 @Override
@@ -410,23 +414,31 @@ public class SectionManager {
                         @NonNull Collection<LodStore.SectionPos> candidates) {
                     return membersAmong(bricked, candidates);
                 }
+
+                @Override
+                public long changesSince(
+                        long version, @NonNull BiConsumer<LodStore.SectionPos, Boolean> visitor) {
+                    lock.lock();
+                    try {
+                        return brickedLog.since(version, visitor);
+                    } finally {
+                        lock.unlock();
+                    }
+                }
             };
 
     /** The sections whose bricks are drawn. Guarded by {@link #lock}. */
     private final Set<LodStore.SectionPos> bricked = new LinkedHashSet<>();
 
-    /** Whether {@link #bricked} changed since {@link #brickedVersion} last counted. */
-    private boolean brickedChanged;
-
-    /** Counts the changes to {@link #standIn}, a step for every update that changed it. */
-    private volatile long standInVersion;
+    /** What entered and left {@link #standIn}. Guarded by {@link #lock}. */
+    private final SectionLog standInLog = new SectionLog();
 
     /** The sections whose bricks stand in for meshes off the GPU, for the bricks to pick from. */
     private final VolumeBricks.Members standInMembers =
             new VolumeBricks.Members() {
                 @Override
                 public long version() {
-                    return standInVersion;
+                    return standInLog.count();
                 }
 
                 @Override
@@ -434,13 +446,21 @@ public class SectionManager {
                         @NonNull Collection<LodStore.SectionPos> candidates) {
                     return membersAmong(standIn, candidates);
                 }
+
+                @Override
+                public long changesSince(
+                        long version, @NonNull BiConsumer<LodStore.SectionPos, Boolean> visitor) {
+                    lock.lock();
+                    try {
+                        return standInLog.since(version, visitor);
+                    } finally {
+                        lock.unlock();
+                    }
+                }
             };
 
     /** The sections whose bricks stand in for meshes off the GPU. Guarded by {@link #lock}. */
     private final Set<LodStore.SectionPos> standIn = new LinkedHashSet<>();
-
-    /** Whether {@link #standIn} changed since {@link #standInVersion} last counted. */
-    private boolean standInChanged;
 
     /** How many triangles the resident bakes have, less those bricks stood in for last frame. */
     private volatile long placedTriangles;
@@ -1779,16 +1799,6 @@ public class SectionManager {
             }
             lastChecked = again.size();
             queuedChecks = checks.size();
-            // Counted rather than copied: they can be tens of thousands, and change most frames
-            // while the observer moves
-            if (brickedChanged) {
-                ++brickedVersion;
-                brickedChanged = false;
-            }
-            if (standInChanged) {
-                ++standInVersion;
-                standInChanged = false;
-            }
             placedTriangles = placedTotal;
         } finally {
             lock.unlock();
@@ -1905,7 +1915,7 @@ public class SectionManager {
         } else {
             bricked.remove(section.position);
         }
-        brickedChanged = true;
+        brickedLog.record(section.position, drawn);
     }
 
     /**
@@ -2202,7 +2212,7 @@ public class SectionManager {
         } else {
             standIn.remove(section.position);
         }
-        standInChanged = true;
+        standInLog.record(section.position, stands);
         if (current != null) {
             shadows.addSection(current.origin());
         }
@@ -2577,6 +2587,7 @@ public class SectionManager {
             behind.clear();
             overriding.clear();
             bricked.clear();
+            brickedLog.reset();
         } finally {
             lock.unlock();
         }

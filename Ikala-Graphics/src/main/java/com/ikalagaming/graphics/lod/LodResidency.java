@@ -43,6 +43,21 @@ public final class LodResidency {
     /** Values in a sphere: x, y, z, radius. */
     private static final int SPHERE_VALUES = AXES + 1;
 
+    /** Buckets of need an octave for the budget's cutoff, as a power of two. */
+    private static final int BUCKET_BITS = 5;
+
+    /** Buckets of need an octave for the budget's cutoff. */
+    static final int BUCKETS_PER_OCTAVE = 1 << BUCKET_BITS;
+
+    /** Buckets of need for the budget's cutoff: 64 octaves over {@link #PREFETCH}. */
+    static final int BUCKETS = 64 * BUCKETS_PER_OCTAVE;
+
+    /** How far a double's bits are shifted to keep its exponent and its top mantissa bits. */
+    private static final int BUCKET_SHIFT = 52 - BUCKET_BITS;
+
+    /** {@link #PREFETCH}'s bits so shifted, the first bucket. */
+    private static final long PREFETCH_KEY = Double.doubleToRawLongBits(PREFETCH) >>> BUCKET_SHIFT;
+
     /** Not unwanted yet. */
     private static final long WANTED = -1;
 
@@ -80,6 +95,9 @@ public final class LodResidency {
 
     /** How many bytes all the units take. */
     private final long total;
+
+    /** Bytes of units in each bucket of need, while the budget's cutoff is worked out. */
+    private final long[] bucketBytes = new long[BUCKETS];
 
     /** Each unit's children: the units whose parents include it. */
     private final int[][] children;
@@ -313,21 +331,7 @@ public final class LodResidency {
         // Over the budget, the most needed first until it is spent
         cutoff = PREFETCH;
         if (wantedBytes > budgetBytes) {
-            final List<Integer> byNeed = new ArrayList<>();
-            for (int i = 0; i < units.size(); ++i) {
-                if (units.get(i) != null && need[i] > PREFETCH) {
-                    byNeed.add(i);
-                }
-            }
-            byNeed.sort(Comparator.comparingDouble((Integer i) -> need[i]).reversed());
-            long spent = 0;
-            for (int i : byNeed) {
-                spent += bytes[i];
-                if (spent > budgetBytes && !Double.isInfinite(need[i])) {
-                    cutoff = need[i];
-                    break;
-                }
-            }
+            cutoff = cutoffFor(budgetBytes);
         }
         for (int unit : order) {
             boolean any =
@@ -343,6 +347,72 @@ public final class LodResidency {
                 unwantedSince[unit] = now;
             }
         }
+    }
+
+    /**
+     * The need a unit must be over to be wanted within a budget: taking the units the most needed
+     * first, with the roots before all, the need of the first one past the budget. The units are
+     * put in buckets by need in one pass, and only the bucket the budget runs out in is sorted:
+     * tens of thousands of units are planned several times a second.
+     *
+     * @param budgetBytes The most bytes the wanted units may take.
+     * @return The cutoff, or {@link #PREFETCH} if no finite need runs past the budget.
+     */
+    private double cutoffFor(long budgetBytes) {
+        Arrays.fill(bucketBytes, 0);
+        long spent = 0;
+        double highest = 0;
+        for (int i = 0; i < need.length; ++i) {
+            if (units.get(i) == null || !(need[i] > PREFETCH)) {
+                continue;
+            }
+            if (Double.isInfinite(need[i])) {
+                spent += bytes[i];
+            } else {
+                bucketBytes[bucketOf(need[i])] += bytes[i];
+                highest = Math.max(highest, need[i]);
+            }
+        }
+        if (spent > budgetBytes) {
+            // The roots alone take it all
+            return highest > 0 ? highest : PREFETCH;
+        }
+        for (int bucket = BUCKETS - 1; bucket >= 0; --bucket) {
+            if (spent + bucketBytes[bucket] <= budgetBytes) {
+                spent += bucketBytes[bucket];
+                continue;
+            }
+            // The budget runs out in this bucket: its units, the most needed first
+            final List<Integer> inBucket = new ArrayList<>();
+            for (int i = 0; i < need.length; ++i) {
+                if (units.get(i) != null
+                        && need[i] > PREFETCH
+                        && !Double.isInfinite(need[i])
+                        && bucketOf(need[i]) == bucket) {
+                    inBucket.add(i);
+                }
+            }
+            inBucket.sort(Comparator.comparingDouble((Integer i) -> need[i]).reversed());
+            for (int i : inBucket) {
+                spent += bytes[i];
+                if (spent > budgetBytes) {
+                    return need[i];
+                }
+            }
+        }
+        return PREFETCH;
+    }
+
+    /**
+     * Which bucket a need over {@link #PREFETCH} goes in: {@link #BUCKETS_PER_OCTAVE} an octave up
+     * from it, from the bits of the double, which grow with it, the highest taking all above.
+     *
+     * @param need The need.
+     * @return The bucket.
+     */
+    static int bucketOf(double need) {
+        final long key = Double.doubleToRawLongBits(need) >>> BUCKET_SHIFT;
+        return (int) Math.min(BUCKETS - 1, Math.max(0, key - PREFETCH_KEY));
     }
 
     /**
