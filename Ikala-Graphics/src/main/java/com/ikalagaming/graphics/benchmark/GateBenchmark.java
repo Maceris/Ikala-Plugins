@@ -826,6 +826,12 @@ public final class GateBenchmark {
                     GraphicsManager.getSettings().lodCacheMaxBytes =
                             (long) (Long.parseLong(lodCacheMb.trim()) * BYTES_PER_MIB);
                 }
+                // Another GPU budget for level of detail, in MiB, to test cutting coarser for it
+                final String lodBudgetMb = System.getProperty(PROPERTY + ".lodBudgetMb");
+                if (lodBudgetMb != null) {
+                    GraphicsManager.getSettings().lodResidentBytes =
+                            (long) (Long.parseLong(lodBudgetMb.trim()) * BYTES_PER_MIB);
+                }
                 // Whether far level of detail blends its materials' looks, for comparisons
                 final String average = System.getProperty(PROPERTY + ".average");
                 if (average != null) {

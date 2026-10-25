@@ -68,7 +68,7 @@ class LodResidencyTest {
         assertFalse(residency.isWanted(3), "The leaf, least over the threshold, is left out");
         assertEquals(10 + 20, residency.wantedBytes());
         // The leaf projects to 0.01 * 1000 / 8 = 1.25 times the threshold, the new cutoff
-        assertEquals(1.25 / LodResidency.PREFETCH, residency.budgetScale(), 1e-9);
+        assertEquals(1.25, residency.budgetScale(), 1e-9);
         // The root is always wanted, whatever the budget
         residency.update(new double[][] {{0, 0, 0}}, PIXELS, THRESHOLD, 0, true, 0);
         assertTrue(residency.isWanted(0));

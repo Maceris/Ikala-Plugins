@@ -662,6 +662,14 @@ public final class DagBuilder {
     /** Corners on the input's open border, never moved. */
     private final Set<Grouping.Corner> openBorder = new HashSet<>();
 
+    /**
+     * Faces' corners that an edge of another group rested on, with what the group that simplified
+     * the edge away is drawn by. Until that group is drawn too, the edge may still be, so a face's
+     * corners stay locked in later groups too, not only the level the contact was found, until a
+     * group is sure to give way no sooner. Written between levels only.
+     */
+    private final Map<Grouping.Corner, Resting> heldContacts = new HashMap<>();
+
     /** The leaves' average edge length, which virtual edge radii scale from. */
     private double leafEdge;
 
@@ -1076,7 +1084,9 @@ public final class DagBuilder {
             }
             final GroupedEdges grouped = groupedEdges(groups);
             final Meetings meetings = lockTJunctions(owners, grouped, pool);
-            lockFaceContacts(owners, grouped, pool);
+            final Map<Grouping.Corner, Set<Integer>> contacts =
+                    lockFaceContacts(owners, grouped, pool);
+            final List<List<double[]>> mustHold = lockHeldContacts(owners, groups);
             final List<Grouping.Edge> rim = rim(active, false);
             lockRimNearBorders(owners, rim);
             List<Future<Built>> futures = new ArrayList<>();
@@ -1084,12 +1094,13 @@ public final class DagBuilder {
             for (int g = 0; g < groups.length; ++g) {
                 final int[] group = groups[g];
                 final int index = g;
+                final List<double[]> hold = mustHold.get(g);
                 futures.add(
                         pool.submit(
                                 () ->
                                         buildGroup(
                                                 group, index, owners, shared, rim, meetings,
-                                                sharers)));
+                                                sharers, hold)));
             }
             int trianglesIn = 0;
             int trianglesOut = 0;
@@ -1111,6 +1122,15 @@ public final class DagBuilder {
                 trianglesIn += built.trianglesIn();
                 trianglesOut += built.trianglesOut();
                 add(built, next);
+            }
+            for (Map.Entry<Grouping.Corner, Set<Integer>> contact : contacts.entrySet()) {
+                for (int g : contact.getValue()) {
+                    final Built resting = builts.get(g);
+                    heldContacts.merge(
+                            contact.getKey(),
+                            new Resting(resting.error(), resting.bound()),
+                            Resting::with);
+                }
             }
             active = next.toIntArray();
             ++round;
@@ -1418,7 +1438,9 @@ public final class DagBuilder {
      * Lock where a group's open edge ends against the inside of another group's face, as a slab's
      * side does against a wall: the face's corners, so the face stays where the edge meets it, and
      * the edge's ends, so the edge stays on the face. Where the edge runs along one of the face's
-     * edges instead, {@link #lockTJunctions} keeps it.
+     * edges instead, {@link #lockTJunctions} keeps it. The face's corners stay locked at later
+     * levels as well, see {@link #lockHeldContacts}: the resting edge's group may still be drawn
+     * after the edge is simplified away.
      *
      * <p>The open edges are searched on the workers, a run of them each, and what they find is
      * locked in edge order, so the result doesn't depend on how they were split.
@@ -1426,11 +1448,13 @@ public final class DagBuilder {
      * @param owners Which group uses each corner; the corners found become -1.
      * @param groups The groups.
      * @param pool The workers.
+     * @return Each face corner found, with the groups of the edges resting on it.
      */
-    private void lockFaceContacts(
+    private Map<Grouping.Corner, Set<Integer>> lockFaceContacts(
             @NonNull Map<Grouping.Corner, Integer> owners,
             @NonNull GroupedEdges grouped,
             @NonNull ExecutorService pool) {
+        final Map<Grouping.Corner, Set<Integer>> faces = new HashMap<>();
         final int[] active = grouped.active();
         final int[] groupOf = grouped.groupOf();
         // Every triangle of the level, with its cluster's index in active
@@ -1453,7 +1477,7 @@ public final class DagBuilder {
         final IntArrayList triangles = grouped.triangles();
         final List<float[]> edges = grouped.edges();
         final int runs = Math.max(1, Math.min(edges.size(), options.threads() * RUNS_PER_THREAD));
-        final List<Future<List<Grouping.Corner>>> futures = new ArrayList<>(runs);
+        final List<Future<List<Contact>>> futures = new ArrayList<>(runs);
         for (int run = 0; run < runs; ++run) {
             final int from = (int) ((long) edges.size() * run / runs);
             final int to = (int) ((long) edges.size() * (run + 1) / runs);
@@ -1464,20 +1488,122 @@ public final class DagBuilder {
                                             from, to, edges, open, tags, triangles, tree, all,
                                             clusterOf, groupOf)));
         }
-        for (Future<List<Grouping.Corner>> future : futures) {
-            final List<Grouping.Corner> found;
+        for (Future<List<Contact>> future : futures) {
+            final List<Contact> found;
             try {
                 found = future.get();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                return;
+                return faces;
             } catch (ExecutionException e) {
                 throw new IllegalStateException("Finding face contacts failed", e.getCause());
             }
-            for (Grouping.Corner corner : found) {
-                owners.put(corner, -1);
+            for (Contact contact : found) {
+                owners.put(contact.corner(), -1);
+                if (contact.restingGroup() >= 0) {
+                    faces.computeIfAbsent(contact.corner(), k -> new HashSet<>())
+                            .add(contact.restingGroup());
+                }
             }
         }
+        return faces;
+    }
+
+    /**
+     * A corner a face contact locks.
+     *
+     * @param corner The corner.
+     * @param restingGroup For a corner of the face, the group of the edge resting on it; -1 for the
+     *     edge's own ends.
+     */
+    private record Contact(Grouping.@NonNull Corner corner, int restingGroup) {}
+
+    /**
+     * What a group that simplified a resting edge away is drawn by: its error and sphere, or for
+     * several such groups, the largest error and a sphere around all of theirs.
+     *
+     * @param error The error.
+     * @param bound The sphere, x, y, z, radius.
+     */
+    private record Resting(double error, double @NonNull [] bound) {
+        /**
+         * This and another together.
+         *
+         * @param other The other.
+         * @return The largest error and a sphere around both.
+         */
+        Resting with(@NonNull Resting other) {
+            return new Resting(
+                    Math.max(error, other.error), Clusters.enclose(List.of(bound, other.bound)));
+        }
+
+        /**
+         * Whether a sphere holds this one's.
+         *
+         * @param other The sphere, x, y, z, radius.
+         * @return True if so.
+         */
+        boolean heldBy(double @NonNull [] other) {
+            double sum = 0;
+            for (int axis = 0; axis < AXES; ++axis) {
+                final double d = bound[axis] - other[axis];
+                sum += d * d;
+            }
+            return Math.sqrt(sum) + bound[AXES] <= other[AXES];
+        }
+    }
+
+    /**
+     * Lock the faces' corners that earlier levels' contacts hold, in groups with less error than
+     * the group that simplified the resting edge away, and let the rest go. A group projects to its
+     * error from its sphere, so one with no less error and a sphere around the resting group's
+     * gives way no sooner from anywhere: a group let go has its sphere grown to hold the resting
+     * group's where it doesn't already.
+     *
+     * @param owners Which group uses each corner; the corners held become -1.
+     * @param groups This level's groups.
+     * @return For each group, the spheres its own must hold too.
+     */
+    private List<List<double[]>> lockHeldContacts(
+            @NonNull Map<Grouping.Corner, Integer> owners, int @NonNull [][] groups) {
+        final List<List<double[]>> hold = new ArrayList<>(groups.length);
+        for (int g = 0; g < groups.length; ++g) {
+            hold.add(new ArrayList<>());
+        }
+        if (heldContacts.isEmpty()) {
+            return hold;
+        }
+        // A group's error is at least its children's, and its sphere holds theirs
+        final double[] childErrors = new double[groups.length];
+        final double[][] childBounds = new double[groups.length][];
+        for (int g = 0; g < groups.length; ++g) {
+            final List<double[]> spheres = new ArrayList<>(groups[g].length);
+            for (int id : groups[g]) {
+                childErrors[g] = Math.max(childErrors[g], dag.clusters().get(id).error());
+                spheres.add(dag.clusters().get(id).bound());
+            }
+            childBounds[g] = Clusters.enclose(spheres);
+        }
+        final Iterator<Map.Entry<Grouping.Corner, Resting>> it = heldContacts.entrySet().iterator();
+        while (it.hasNext()) {
+            final Map.Entry<Grouping.Corner, Resting> held = it.next();
+            final Integer owner = owners.get(held.getKey());
+            if (owner == null) {
+                // The face is gone
+                it.remove();
+            } else if (owner >= 0) {
+                final Resting resting = held.getValue();
+                if (childErrors[owner] < resting.error()) {
+                    owners.put(held.getKey(), -1);
+                } else {
+                    if (!resting.heldBy(childBounds[owner])) {
+                        hold.get(owner).add(resting.bound());
+                    }
+                    it.remove();
+                }
+            }
+        }
+        return hold;
     }
 
     /**
@@ -1496,7 +1622,7 @@ public final class DagBuilder {
      * @param groupOf Each active cluster's group.
      * @return The corners to lock, in edge order.
      */
-    private static List<Grouping.Corner> faceContacts(
+    private static List<Contact> faceContacts(
             int from,
             int to,
             @NonNull List<float[]> edges,
@@ -1507,7 +1633,7 @@ public final class DagBuilder {
             float @NonNull [] all,
             int @NonNull [] clusterOf,
             int @NonNull [] groupOf) {
-        final List<Grouping.Corner> found = new ArrayList<>();
+        final List<Contact> found = new ArrayList<>();
         final TriangleBvh.Scratch scratch = new TriangleBvh.Scratch();
         final double touch = TJunctions.TOUCH * TJunctions.TOUCH;
         final double[] point = new double[AXES];
@@ -1534,13 +1660,16 @@ public final class DagBuilder {
                 contact = true;
                 for (int corner = 0; corner < AXES; ++corner) {
                     found.add(
-                            Grouping.Corner.of(
-                                    all, scratch.triangle * TRIANGLE_VALUES + corner * AXES));
+                            new Contact(
+                                    Grouping.Corner.of(
+                                            all,
+                                            scratch.triangle * TRIANGLE_VALUES + corner * AXES),
+                                    groupOf[mine]));
                 }
             }
             if (contact) {
-                found.add(Grouping.Corner.of(edge, 0));
-                found.add(Grouping.Corner.of(edge, AXES));
+                found.add(new Contact(Grouping.Corner.of(edge, 0), -1));
+                found.add(new Contact(Grouping.Corner.of(edge, AXES), -1));
             }
         }
         return found;
@@ -1938,6 +2067,8 @@ public final class DagBuilder {
      * @param rim This level's open edges.
      * @param meetings Where the level's groups meet, see {@link #lockTJunctions}.
      * @param sharers The groups using each corner more than one uses.
+     * @param hold Spheres the group's own must hold besides its children's and outputs', see {@link
+     *     #lockHeldContacts}.
      * @return What it made.
      */
     private Built buildGroup(
@@ -1947,7 +2078,8 @@ public final class DagBuilder {
             @NonNull Set<Grouping.Corner> shared,
             @NonNull List<Grouping.Edge> rim,
             @NonNull Meetings meetings,
-            @NonNull Map<Grouping.Corner, int[]> sharers) {
+            @NonNull Map<Grouping.Corner, int[]> sharers,
+            @NonNull List<double[]> hold) {
         final long start = System.nanoTime();
         // Children can be of different levels in a parent cell; the group is above the highest
         int level = 0;
@@ -2268,6 +2400,7 @@ public final class DagBuilder {
                 bakeTiles = Arrays.copyOf(bakeTiles, bakeTiles.length + 1);
             }
         }
+        spheres.addAll(hold);
         final double[] bound = Clusters.enclose(spheres);
         final int[] edgeCounts = countEdges(merged);
         return new Built(

@@ -311,12 +311,13 @@ public final class LodResidency {
 
     /**
      * How many times the error threshold the budget made the cut at the last update, 1 where
-     * everything wanted fit.
+     * everything wanted fit: a group whose error projects under the cutoff has no children on the
+     * GPU, so it is drawn whatever the threshold, while one under the threshold is drawn anyway.
      *
      * @return The factor.
      */
     public double budgetScale() {
-        return cutoff / PREFETCH;
+        return Math.max(1, cutoff);
     }
 
     /**
