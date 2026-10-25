@@ -1,6 +1,7 @@
 package com.ikalagaming.characters;
 
 import com.ikalagaming.characters.data.Problem;
+import com.ikalagaming.characters.demo.CharacterPreview;
 import com.ikalagaming.characters.demo.SkinnedDemo;
 import com.ikalagaming.characters.registry.BuiltInContent;
 import com.ikalagaming.characters.registry.CharacterLoader;
@@ -19,6 +20,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -45,6 +47,9 @@ public class CharacterPlugin extends Plugin {
 
     /** The skinned tube demo, which {@code character demo} turns on and off. */
     private final SkinnedDemo demo = new SkinnedDemo(PLUGIN_NAME);
+
+    /** Shows imported characters, for {@code character show} and {@code character hide}. */
+    private final CharacterPreview preview = new CharacterPreview(PLUGIN_NAME, this::getRegistry);
 
     /** The definitions currently loaded, replaced whole on each reload. */
     private volatile CharacterRegistry registry = CharacterRegistry.EMPTY;
@@ -77,6 +82,7 @@ public class CharacterPlugin extends Plugin {
         // Unloading also removes the plugin's commands, but they shouldn't run while disabled
         PluginManager.getInstance().unregisterCommand(CHARACTER_COMMAND);
         demo.stop();
+        preview.hide();
         registry = CharacterRegistry.EMPTY;
         return true;
     }
@@ -160,6 +166,29 @@ public class CharacterPlugin extends Plugin {
     }
 
     /**
+     * Show a character from a glTF file. The console splits on spaces, so the words are put back
+     * together into the file's path, except a last word that isn't a glTF file, which names the
+     * clip to play.
+     *
+     * @param words The words after {@code show}.
+     */
+    private void show(List<String> words) {
+        if (words.isEmpty()) {
+            log.info("Usage: character show <file.glb> [clip]");
+            return;
+        }
+        String last = words.get(words.size() - 1).toLowerCase(Locale.ROOT);
+        boolean clipGiven = words.size() > 1 && !last.endsWith(".glb") && !last.endsWith(".gltf");
+        String clip = clipGiven ? words.get(words.size() - 1) : null;
+        String file = String.join(" ", clipGiven ? words.subList(0, words.size() - 1) : words);
+        try {
+            preview.show(Path.of(file), clip);
+        } catch (IOException | IllegalArgumentException e) {
+            log.error("Couldn't show {}: {}", file, e.getMessage());
+        }
+    }
+
+    /**
      * Handle the character command.
      *
      * @param args The arguments that were typed after the command.
@@ -170,6 +199,8 @@ public class CharacterPlugin extends Plugin {
         String rest = args.size() < 2 ? "" : String.join(" ", args.subList(1, args.size()));
         switch (action) {
             case "reload" -> reload();
+            case "show" -> show(args.subList(1, args.size()));
+            case "hide" -> preview.hide();
             case "demo" -> {
                 if (demo.isRunning()) {
                     demo.stop();
@@ -204,8 +235,8 @@ public class CharacterPlugin extends Plugin {
             }
             default ->
                     log.info(
-                            "Usage: character reload | demo | validate namespace=folder | schemas"
-                                    + " <output folder>");
+                            "Usage: character reload | demo | show <file> [clip] | hide | validate"
+                                    + " namespace=folder | schemas <output folder>");
         }
     }
 }

@@ -21,3 +21,20 @@ later, writing to the asset editor's `test_content` folder, which isn't in git:
 ```
 blender -b --factory-startup --python tools/blender/mannequin.py -- --rig src/main/resources/characters/ikala/rig/biped.json --out ../../Ikala-Asset-Editor/test_content/characters/mannequin
 ```
+
+## Test characters from Blender
+
+`tools/blender/export_rpg.py` exports one of the modular RPG characters (System G6,
+credit optional) as glTF, scaled to a 2 m standing height, with every part,
+clip and texture:
+
+```
+blender -b human_male.blend --python tools/blender/export_rpg.py -- --out ../../Ikala-Asset-Editor/test_content/characters/rpg_human --name rpg_male
+```
+
+## Previewing characters
+
+In the editor, with a 3D scene open, `character show <file.glb> [clip]` reads a
+character from glTF and shows it where the camera looks at the ground, playing
+the clip (idle by default). A skeleton with the same bones as a loaded rig, like
+the mannequin's, takes that rig's definition. `character hide` removes it.
