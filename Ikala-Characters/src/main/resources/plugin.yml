@@ -8,8 +8,8 @@ authors: [maceris]
 main-class: com.ikalagaming.characters.CharacterPlugin
 # Plugins this needs, which are enabled first. It fails to load if one is missing.
 # Only classes from the plugins listed here and in soft-dependencies are visible.
-dependencies: []
+dependencies: [Ikala-Graphics, Random]
 # Plugins this uses if they are present, which are also enabled first
 soft-dependencies: []
 # Shared library jars from the libs folder, by name without a version, like lwjgl-glfw
-libraries: []
+libraries: [joml]

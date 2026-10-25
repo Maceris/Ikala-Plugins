@@ -59,15 +59,18 @@ configurations {
 
 dependencies {
 	compileOnly project(':Ikala-Core')
-	/*
-	 * A third party library is used with implementation for compiling and tests, and library so it
-	 * goes in the libs folder, and is listed in plugin.yml libraries without its version:
-	 * implementation "com.opencsv:opencsv:${openCSVVersion}"
-	 * library "com.opencsv:opencsv:${openCSVVersion}"
-	 */
+	compileOnly project(':Ikala-Graphics')
+	compileOnly project(':Random')
+	// Ikala-Core includes Gson, so it is there at runtime without shipping it again
+	compileOnly "com.google.code.gson:gson:${gsonVersion}"
+
+	// Graphics loads JOML as a shared library, listed in plugin.yml
+	implementation "org.joml:joml:${jomlVersion}"
 
 	// Testing
 	testImplementation project(':Ikala-Core')
+	testImplementation project(':Random')
+	testImplementation "com.google.code.gson:gson:${gsonVersion}"
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
 	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 	
