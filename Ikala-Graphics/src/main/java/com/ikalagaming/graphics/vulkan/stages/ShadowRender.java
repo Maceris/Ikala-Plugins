@@ -275,7 +275,7 @@ public class ShadowRender implements RenderStage {
                     vulkanState.sections == null
                                     || scene == null
                                     || !GraphicsManager.getSettings().volumeShadows
-                            ? List.of()
+                            ? VolumeBricks.Members.NONE
                             : vulkanState.sections.getStandInSections(),
                     scene == null ? new Vector3d() : scene.getCamera().getPosition());
         }

@@ -40,6 +40,9 @@ public final class LodResidency {
     /** Coordinates in a position. */
     private static final int AXES = 3;
 
+    /** Values in a sphere: x, y, z, radius. */
+    private static final int SPHERE_VALUES = AXES + 1;
+
     /** Not unwanted yet. */
     private static final long WANTED = -1;
 
@@ -59,6 +62,24 @@ public final class LodResidency {
 
     /** The units, null at free indices. */
     private final List<Unit> units;
+
+    /**
+     * Each unit's bytes, error and sphere side by side, 0 at free indices: every update reads them
+     * all, and tens of thousands of units' records are scattered over the heap.
+     */
+    private final long[] bytes;
+
+    /** Each unit's error, see {@link #bytes}. */
+    private final double[] errors;
+
+    /** Each unit's sphere, x, y, z, radius each, see {@link #bytes}. */
+    private final double[] spheres;
+
+    /** How many units there are, leaving out free indices. */
+    private final int present;
+
+    /** How many bytes all the units take. */
+    private final long total;
 
     /** Each unit's children: the units whose parents include it. */
     private final int[][] children;
@@ -104,9 +125,24 @@ public final class LodResidency {
         this.units = Collections.unmodifiableList(new ArrayList<>(units));
         final int n = units.size();
         this.loaded = loaded.clone();
+        bytes = new long[n];
+        errors = new double[n];
+        spheres = new double[n * SPHERE_VALUES];
+        int count = 0;
+        long sum = 0;
         for (int i = 0; i < n; ++i) {
-            this.loaded[i] &= units.get(i) != null;
+            final Unit unit = units.get(i);
+            this.loaded[i] &= unit != null;
+            if (unit != null) {
+                bytes[i] = unit.bytes();
+                errors[i] = unit.error();
+                System.arraycopy(unit.bound(), 0, spheres, i * SPHERE_VALUES, SPHERE_VALUES);
+                ++count;
+                sum += unit.bytes();
+            }
         }
+        present = count;
+        total = sum;
         this.shown = new boolean[n];
         wanted = new boolean[n];
         unwantedSince = new long[n];
@@ -245,16 +281,16 @@ public final class LodResidency {
             boolean streaming,
             long budgetBytes) {
         long wantedBytes = 0;
+        final double[] bound = new double[SPHERE_VALUES];
         for (int i = 0; i < units.size(); ++i) {
-            final Unit unit = units.get(i);
-            if (unit == null) {
+            if (units.get(i) == null) {
                 wanted[i] = false;
                 continue;
             }
-            final double[] bound = unit.bound();
+            System.arraycopy(spheres, i * SPHERE_VALUES, bound, 0, SPHERE_VALUES);
+            final double error = errors[i];
             double nearest = eyes.length == 0 ? 0 : Double.MAX_VALUE;
-            double most =
-                    !streaming || Double.isInfinite(unit.error()) ? Double.POSITIVE_INFINITY : 0;
+            double most = !streaming || Double.isInfinite(error) ? Double.POSITIVE_INFINITY : 0;
             for (double[] eye : eyes) {
                 double sum = 0;
                 for (int axis = 0; axis < AXES; ++axis) {
@@ -265,13 +301,13 @@ public final class LodResidency {
                 most =
                         Math.max(
                                 most,
-                                LodCut.projected(unit.error(), bound, eye, pixelsPerUnit)
+                                LodCut.projected(error, bound, eye, pixelsPerUnit)
                                         / thresholdPixels);
             }
             distance[i] = nearest;
             need[i] = most;
             if (most > PREFETCH) {
-                wantedBytes += unit.bytes();
+                wantedBytes += bytes[i];
             }
         }
         // Over the budget, the most needed first until it is spent
@@ -286,7 +322,7 @@ public final class LodResidency {
             byNeed.sort(Comparator.comparingDouble((Integer i) -> need[i]).reversed());
             long spent = 0;
             for (int i : byNeed) {
-                spent += units.get(i).bytes();
+                spent += bytes[i];
                 if (spent > budgetBytes && !Double.isInfinite(need[i])) {
                     cutoff = need[i];
                     break;
@@ -469,11 +505,7 @@ public final class LodResidency {
      * @return The count.
      */
     public int count() {
-        int count = 0;
-        for (Unit unit : units) {
-            count += unit != null ? 1 : 0;
-        }
-        return count;
+        return present;
     }
 
     /**
@@ -483,8 +515,8 @@ public final class LodResidency {
      */
     public long loadedBytes() {
         long sum = 0;
-        for (int i = 0; i < units.size(); ++i) {
-            sum += loaded[i] ? units.get(i).bytes() : 0;
+        for (int i = 0; i < bytes.length; ++i) {
+            sum += loaded[i] ? bytes[i] : 0;
         }
         return sum;
     }
@@ -529,8 +561,8 @@ public final class LodResidency {
      */
     public long wantedBytes() {
         long sum = 0;
-        for (int i = 0; i < units.size(); ++i) {
-            sum += wanted[i] ? units.get(i).bytes() : 0;
+        for (int i = 0; i < bytes.length; ++i) {
+            sum += wanted[i] ? bytes[i] : 0;
         }
         return sum;
     }
@@ -541,11 +573,7 @@ public final class LodResidency {
      * @return The bytes.
      */
     public long totalBytes() {
-        long sum = 0;
-        for (Unit unit : units) {
-            sum += unit != null ? unit.bytes() : 0;
-        }
-        return sum;
+        return total;
     }
 
     /**

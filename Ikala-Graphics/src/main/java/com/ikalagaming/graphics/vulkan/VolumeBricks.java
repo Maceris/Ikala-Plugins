@@ -24,6 +24,7 @@ import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -31,6 +32,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.PriorityQueue;
 import java.util.Set;
 
 /**
@@ -185,8 +187,48 @@ public class VolumeBricks {
      */
     private static final double RESORT_DISTANCE = 4;
 
-    /** The sections the draw order was sorted from, the same list while they don't change. */
-    private List<LodStore.SectionPos> sortedFrom;
+    /**
+     * Some sections, such as those drawn as volumes: which they are now, picked from others, and a
+     * version that changes whenever they do. Far out they can be many more than fit the atlas, so
+     * the bricks pick theirs from their own slots rather than look up every one.
+     */
+    public interface Members {
+        /** No sections. */
+        Members NONE =
+                new Members() {
+                    @Override
+                    public long version() {
+                        return 0;
+                    }
+
+                    @Override
+                    public List<LodStore.SectionPos> among(
+                            @NonNull Collection<LodStore.SectionPos> candidates) {
+                        return List.of();
+                    }
+                };
+
+        /**
+         * A number that changes whenever the sections do.
+         *
+         * @return The version.
+         */
+        long version();
+
+        /**
+         * Which of some sections are among these.
+         *
+         * @param candidates The sections.
+         * @return Those that are, in the candidates' order.
+         */
+        List<LodStore.SectionPos> among(@NonNull Collection<LodStore.SectionPos> candidates);
+    }
+
+    /** The sections the draw order was sorted from. */
+    private Members sortedFrom;
+
+    /** Their version when it was. */
+    private long sortedVersion;
 
     /**
      * One brick to draw.
@@ -202,6 +244,23 @@ public class VolumeBricks {
 
     /** Whether a slot was taken, filled or given back since the draws were sorted. */
     private boolean slotsChanged = true;
+
+    /**
+     * Counts every slot taken, filled or given back, so lists made from the slots know to change.
+     */
+    private long slotVersion;
+
+    /** The sections the shadow list was made from. */
+    private Members shadowsFrom;
+
+    /** Their version when it was. */
+    private long shadowsVersion;
+
+    /** The {@link #slotVersion} the shadow list was made at. */
+    private long shadowsAt = -1;
+
+    /** The bricks casting shadows, with no order. */
+    private List<Draw> shadows = List.of();
 
     /** Where the camera was when the draw order was sorted, or null. */
     private Vector3d sortedAt;
@@ -560,8 +619,9 @@ public class VolumeBricks {
         balancedAt = new Vector3d(camera);
         waitingChanged = false;
         framesSinceBalance = 0;
-        final List<LodStore.SectionPos> waiting = new ArrayList<>(withoutSlot);
-        waiting.sort(Comparator.comparingDouble(position -> distanceSquared(position, camera)));
+        // No more than MAX_SWAPS move, so only that many of the nearest waiting and the farthest
+        // slotted are needed, out of what can be tens of thousands
+        final List<LodStore.SectionPos> waiting = extremes(withoutSlot, camera, MAX_SWAPS, false);
         int next = 0;
         int moves = 0;
         while (next < waiting.size() && !free.isEmpty() && moves < MAX_SWAPS) {
@@ -571,11 +631,7 @@ public class VolumeBricks {
         if (next >= waiting.size() || moves >= MAX_SWAPS) {
             return;
         }
-        final List<LodStore.SectionPos> slotted = new ArrayList<>(slots.keySet());
-        slotted.sort(
-                Comparator.comparingDouble(
-                                (LodStore.SectionPos position) -> distanceSquared(position, camera))
-                        .reversed());
+        final List<LodStore.SectionPos> slotted = extremes(slots.keySet(), camera, MAX_SWAPS, true);
         for (int far = 0; far < slotted.size() && next < waiting.size() && moves < MAX_SWAPS; ) {
             final LodStore.SectionPos near = waiting.get(next);
             final LodStore.SectionPos out = slotted.get(far);
@@ -595,6 +651,43 @@ public class VolumeBricks {
     }
 
     /**
+     * The sections nearest the camera, or farthest from it, each distance worked out once.
+     *
+     * @param sections The sections.
+     * @param camera The camera's position.
+     * @param most How many at most.
+     * @param farthest Whether the farthest rather than the nearest.
+     * @return They, nearest first, or farthest first.
+     */
+    private static List<LodStore.SectionPos> extremes(
+            @NonNull Collection<LodStore.SectionPos> sections,
+            @NonNull Vector3dc camera,
+            int most,
+            boolean farthest) {
+        // Keyed so that the heap's head is the one to drop first: the farthest of the nearest kept
+        final double sign = farthest ? -1 : 1;
+        final PriorityQueue<Draw> kept =
+                new PriorityQueue<>(
+                        most + 1, Comparator.comparingDouble(Draw::distance).reversed());
+        for (LodStore.SectionPos position : sections) {
+            final double key = sign * distanceSquared(position, camera);
+            if (kept.size() < most) {
+                kept.add(new Draw(position, 0, key));
+            } else if (key < kept.peek().distance()) {
+                kept.poll();
+                kept.add(new Draw(position, 0, key));
+            }
+        }
+        final List<Draw> ordered = new ArrayList<>(kept);
+        ordered.sort(Comparator.comparingDouble(Draw::distance));
+        final List<LodStore.SectionPos> out = new ArrayList<>(ordered.size());
+        for (Draw draw : ordered) {
+            out.add(draw.position());
+        }
+        return out;
+    }
+
+    /**
      * Give a section without a slot a free one, and queue its brick to be copied in.
      *
      * @param position The section.
@@ -607,6 +700,7 @@ public class VolumeBricks {
         }
         slots.put(position, free.poll());
         slotsChanged = true;
+        ++slotVersion;
         uploads.put(position, brick);
     }
 
@@ -643,6 +737,7 @@ public class VolumeBricks {
             final int slot = slots.get(entry.getKey());
             filled[slot] = true;
             slotsChanged = true;
+            ++slotVersion;
             out.add(new Upload(entry.getKey(), slot, entry.getValue()));
         }
         return out;
@@ -762,14 +857,15 @@ public class VolumeBricks {
         if (slot != null) {
             filled[slot] = false;
             slotsChanged = true;
+            ++slotVersion;
             free.add(slot);
         }
     }
 
     /**
      * Write this frame's draw list: every voxelized brick of the given sections, its corner
-     * relative to the camera, nearest first. The order is kept while the sections are the same list
-     * and the camera stays within {@link #RESORT_DISTANCE} of where it was sorted for.
+     * relative to the camera, nearest first. The order is kept while the sections stay the same and
+     * the camera stays within {@link #RESORT_DISTANCE} of where it was sorted for.
      *
      * @param frame The frame in flight.
      * @param state The Vulkan state.
@@ -780,38 +876,37 @@ public class VolumeBricks {
     public int writeDraws(
             int frame,
             @NonNull VulkanState state,
-            @NonNull List<LodStore.SectionPos> sections,
+            @NonNull Members sections,
             @NonNull Vector3dc camera) {
         final SharedBuffer buffer = drawLists[frame];
-        buffer.ensureCapacity((long) Math.max(1, sections.size()) * DRAW_SIZE, state);
+        buffer.ensureCapacity((long) Math.max(1, slots.size()) * DRAW_SIZE, state);
         final ByteBuffer out =
                 MemoryUtil.memByteBuffer(
-                        buffer.allocationInfo.pMappedData(),
-                        Math.max(1, sections.size()) * DRAW_SIZE);
+                        buffer.allocationInfo.pMappedData(), Math.max(1, slots.size()) * DRAW_SIZE);
         final double size = VolumeMath.BRICK * VolumeMath.VOXEL_SIZE;
         // Nearest first, so the depth pass writes the near faces before the far boxes behind them,
         // which the depth test then drops before their shaders run
         final double half = size / 2;
         // Only filled bricks are sorted, each distance worked out once: the sections drawn as
         // volumes change most frames while the camera moves, and are many more than fit the atlas
+        final long version = sections.version();
         if (sections != sortedFrom
+                || version != sortedVersion
                 || slotsChanged
                 || sortedAt == null
                 || sortedAt.distance(camera) > RESORT_DISTANCE) {
             final List<Draw> draws = new ArrayList<>();
-            for (LodStore.SectionPos position : sections) {
-                final Integer slot = slots.get(position);
-                if (slot == null || !filled[slot]) {
-                    continue;
-                }
+            for (Draw draw : filledIn(sections)) {
+                final LodStore.SectionPos position = draw.position();
                 final double dx = position.x() * size + half - camera.x();
                 final double dy = position.y() * size + half - camera.y();
                 final double dz = position.z() * size + half - camera.z();
-                draws.add(new Draw(position, slot, dx * dx + dy * dy + dz * dz));
+                draws.add(new Draw(position, draw.slot(), dx * dx + dy * dy + dz * dz));
             }
             draws.sort(Comparator.comparingDouble(Draw::distance));
             sorted = draws;
             sortedFrom = sections;
+            sortedVersion = version;
             sortedAt = new Vector3d(camera);
             slotsChanged = false;
         }
@@ -832,7 +927,8 @@ public class VolumeBricks {
     /**
      * Write this frame's shadow list: the filled brick of each of the given sections, its corner
      * relative to the camera, in the draw list's layout. Each is walked along the sun into every
-     * shadow map drawn this frame, which clip what is outside them.
+     * shadow map drawn this frame, which clip what is outside them. Which bricks those are is kept
+     * while the sections and the slots stay the same.
      *
      * @param frame The frame in flight.
      * @param state The Vulkan state.
@@ -843,30 +939,54 @@ public class VolumeBricks {
     public int writeShadowDraws(
             int frame,
             @NonNull VulkanState state,
-            @NonNull List<LodStore.SectionPos> sections,
+            @NonNull Members sections,
             @NonNull Vector3dc camera) {
         final SharedBuffer buffer = shadowLists[frame];
-        buffer.ensureCapacity((long) Math.max(1, sections.size()) * DRAW_SIZE, state);
+        buffer.ensureCapacity((long) Math.max(1, slots.size()) * DRAW_SIZE, state);
         final ByteBuffer out =
                 MemoryUtil.memByteBuffer(
-                        buffer.allocationInfo.pMappedData(),
-                        Math.max(1, sections.size()) * DRAW_SIZE);
+                        buffer.allocationInfo.pMappedData(), Math.max(1, slots.size()) * DRAW_SIZE);
         final double size = VolumeMath.BRICK * VolumeMath.VOXEL_SIZE;
+        final long version = sections.version();
+        if (sections != shadowsFrom || version != shadowsVersion || shadowsAt != slotVersion) {
+            shadows = filledIn(sections);
+            shadowsFrom = sections;
+            shadowsVersion = version;
+            shadowsAt = slotVersion;
+        }
         int count = 0;
-        for (LodStore.SectionPos position : sections) {
-            final Integer slot = slots.get(position);
-            if (slot == null || !filled[slot]) {
-                continue;
-            }
+        for (Draw draw : shadows) {
+            final LodStore.SectionPos position = draw.position();
             final int base = count * DRAW_SIZE;
             out.putFloat(base, (float) (position.x() * size - camera.x()));
             out.putFloat(base + Float.BYTES, (float) (position.y() * size - camera.y()));
             out.putFloat(base + 2 * Float.BYTES, (float) (position.z() * size - camera.z()));
-            out.putInt(base + 3 * Float.BYTES, slot);
+            out.putInt(base + 3 * Float.BYTES, draw.slot());
             ++count;
         }
         shadowCounts[frame] = count;
         return count;
+    }
+
+    /**
+     * Which of some sections have a filled slot, picked from the filled slots: far out, many more
+     * sections stand in as bricks than fit the atlas.
+     *
+     * @param sections The sections.
+     * @return Each one with a filled slot and its slot, no distance, in no order.
+     */
+    private List<Draw> filledIn(@NonNull Members sections) {
+        final List<LodStore.SectionPos> candidates = new ArrayList<>(slots.size());
+        for (Map.Entry<LodStore.SectionPos, Integer> entry : slots.entrySet()) {
+            if (filled[entry.getValue()]) {
+                candidates.add(entry.getKey());
+            }
+        }
+        final List<Draw> out = new ArrayList<>();
+        for (LodStore.SectionPos position : sections.among(candidates)) {
+            out.add(new Draw(position, slots.get(position), 0));
+        }
+        return out;
     }
 
     /**

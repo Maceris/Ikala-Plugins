@@ -121,7 +121,7 @@ public class VolumeUpload implements RenderStage {
             int renderConfig) {
         final VolumeBricks bricks = state.volumeBricks;
         if (state.sections == null || scene == null) {
-            bricks.writeDraws(state.frameIndex, state, List.of(), new Vector3d());
+            bricks.writeDraws(state.frameIndex, state, VolumeBricks.Members.NONE, new Vector3d());
             return;
         }
         publishMaterials(state, scene.getMaterialCache());
@@ -151,7 +151,7 @@ public class VolumeUpload implements RenderStage {
                 state.frameIndex,
                 state,
                 GraphicsManager.getSettings().volumeDistance <= 0
-                        ? List.of()
+                        ? VolumeBricks.Members.NONE
                         : state.sections.getVolumeSections(),
                 scene.getCamera().getPosition());
     }

@@ -38,6 +38,7 @@ import org.lwjgl.system.MemoryUtil;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumMap;
@@ -393,28 +394,52 @@ public class SectionManager {
     /** Sections removed, whose bricks go. Guarded by {@link #lock}. */
     private final Set<LodStore.SectionPos> volumeRemovals = new HashSet<>();
 
-    /**
-     * Sections whose bricks stand in for some or all of their cut out and translucent blocks, a new
-     * list whenever they change, so the same list means the same sections.
-     */
-    private volatile List<LodStore.SectionPos> volumeSections = List.of();
+    /** Counts the changes to {@link #bricked}, a step for every update that changed it. */
+    private volatile long brickedVersion;
+
+    /** The sections whose bricks are drawn, for the bricks to pick theirs from. */
+    private final VolumeBricks.Members volumeMembers =
+            new VolumeBricks.Members() {
+                @Override
+                public long version() {
+                    return brickedVersion;
+                }
+
+                @Override
+                public List<LodStore.SectionPos> among(
+                        @NonNull Collection<LodStore.SectionPos> candidates) {
+                    return membersAmong(bricked, candidates);
+                }
+            };
 
     /** The sections whose bricks are drawn. Guarded by {@link #lock}. */
     private final Set<LodStore.SectionPos> bricked = new LinkedHashSet<>();
 
-    /** Whether {@link #bricked} changed since {@link #volumeSections} was made. */
+    /** Whether {@link #bricked} changed since {@link #brickedVersion} last counted. */
     private boolean brickedChanged;
 
-    /**
-     * Sections whose bricks stand in for some of their cut out and translucent meshes off the GPU,
-     * so cast their shadows, a new list whenever they change.
-     */
-    private volatile List<LodStore.SectionPos> standInSections = List.of();
+    /** Counts the changes to {@link #standIn}, a step for every update that changed it. */
+    private volatile long standInVersion;
+
+    /** The sections whose bricks stand in for meshes off the GPU, for the bricks to pick from. */
+    private final VolumeBricks.Members standInMembers =
+            new VolumeBricks.Members() {
+                @Override
+                public long version() {
+                    return standInVersion;
+                }
+
+                @Override
+                public List<LodStore.SectionPos> among(
+                        @NonNull Collection<LodStore.SectionPos> candidates) {
+                    return membersAmong(standIn, candidates);
+                }
+            };
 
     /** The sections whose bricks stand in for meshes off the GPU. Guarded by {@link #lock}. */
     private final Set<LodStore.SectionPos> standIn = new LinkedHashSet<>();
 
-    /** Whether {@link #standIn} changed since {@link #standInSections} was made. */
+    /** Whether {@link #standIn} changed since {@link #standInVersion} last counted. */
     private boolean standInChanged;
 
     /** How many triangles the resident bakes have, less those bricks stood in for last frame. */
@@ -1747,12 +1772,14 @@ public class SectionManager {
             }
             lastChecked = again.size();
             queuedChecks = checks.size();
+            // Counted rather than copied: they can be tens of thousands, and change most frames
+            // while the observer moves
             if (brickedChanged) {
-                volumeSections = List.copyOf(bricked);
+                ++brickedVersion;
                 brickedChanged = false;
             }
             if (standInChanged) {
-                standInSections = List.copyOf(standIn);
+                ++standInVersion;
                 standInChanged = false;
             }
             placedTriangles = placedTotal;
@@ -2261,18 +2288,42 @@ public class SectionManager {
      *
      * @return The sections.
      */
-    public List<LodStore.SectionPos> getVolumeSections() {
-        return volumeSections;
+    public VolumeBricks.Members getVolumeSections() {
+        return volumeMembers;
     }
 
     /**
      * The sections whose volume bricks stand in for some of their cut out and translucent meshes
-     * off the GPU, so cast their shadows. The same list while they stay the same.
+     * off the GPU, so cast their shadows.
      *
      * @return The sections.
      */
-    public List<LodStore.SectionPos> getStandInSections() {
-        return standInSections;
+    public VolumeBricks.Members getStandInSections() {
+        return standInMembers;
+    }
+
+    /**
+     * Which of some sections are in one of the sets of sections, under the lock.
+     *
+     * @param set The set.
+     * @param candidates The sections.
+     * @return Those in it, in the candidates' order.
+     */
+    private List<LodStore.SectionPos> membersAmong(
+            @NonNull Set<LodStore.SectionPos> set,
+            @NonNull Collection<LodStore.SectionPos> candidates) {
+        final List<LodStore.SectionPos> out = new ArrayList<>();
+        lock.lock();
+        try {
+            for (LodStore.SectionPos position : candidates) {
+                if (set.contains(position)) {
+                    out.add(position);
+                }
+            }
+        } finally {
+            lock.unlock();
+        }
+        return out;
     }
 
     /**
