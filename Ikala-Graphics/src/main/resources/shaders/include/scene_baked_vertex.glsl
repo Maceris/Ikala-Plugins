@@ -27,6 +27,10 @@ layout(location = 6) flat out uint outMaterialIdx;
 layout(location = 7) flat out uvec4 outRemaps;
 // A seed per triangle for a shell's threshold, see scene_lod.vert; no shells here
 layout(location = 8) flat out uint outShellSeed;
+// No tint: scene.frag reads these only for skinned meshes, see scene_skinned.vert, but Vulkan
+// wants every input it declares written
+layout(location = 9) flat out uvec4 outTint;
+layout(location = 10) flat out uint outTintMask;
 
 layout(set = SCENE_SET, binding = 0) uniform Uniforms {
     mat4 projectionMatrix;
@@ -69,6 +73,8 @@ void main()
     outMaterialIdx = materialFlags.x;
     outRemaps = uvec4(0xFFFFFFFFu);
     outShellSeed = 0u;
+    outTint = uvec4(0xFFFFFFFFu);
+    outTintMask = 0u;
 
     mat4 modelMatrix = modelMatrices[instance.x];
     mat4 modelViewMatrix = viewMatrix * modelMatrix;

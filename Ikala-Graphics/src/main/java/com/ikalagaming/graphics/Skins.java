@@ -38,6 +38,8 @@ import java.util.List;
  */
 @Slf4j
 public final class Skins {
+    /** How many tint colors an instance has, which its parts' tint masks map their channels to. */
+    public static final int TINT_SLOTS = 8;
 
     /** The context these belong to. */
     private final GraphicsContext context;
@@ -223,6 +225,45 @@ public final class Skins {
         if (registry != null && !registry.setHiddenRegions(owner(), instance, regions)) {
             ignored(registry, instance, "hide regions of");
         }
+    }
+
+    /**
+     * Change an instance's tint colors, which its parts' tint masks map their channels to; see
+     * {@link SkinnedPart}. Instances start with every slot white, which changes nothing.
+     *
+     * @param instance The instance.
+     * @param colors sRGB colors, three floats from 0 to 1 per slot, for up to {@value #TINT_SLOTS}
+     *     slots; slots past the end go white.
+     * @throws IllegalArgumentException If there are more than {@value #TINT_SLOTS} colors, or the
+     *     array isn't whole colors.
+     */
+    public void setTints(SkinnedInstanceHandle instance, float @NonNull [] colors) {
+        if (colors.length % 3 != 0 || colors.length > 3 * TINT_SLOTS) {
+            throw new IllegalArgumentException(
+                    "Tints are three floats per slot, for up to " + TINT_SLOTS + " slots");
+        }
+        int[] packed = new int[colors.length / 3];
+        for (int t = 0; t < packed.length; ++t) {
+            packed[t] =
+                    channel(colors[3 * t])
+                            | channel(colors[3 * t + 1]) << 8
+                            | channel(colors[3 * t + 2]) << 16
+                            | 0xFF << 24;
+        }
+        SkinnedRegistry registry = registryOrNull();
+        if (registry != null && !registry.setTints(owner(), instance, packed)) {
+            ignored(registry, instance, "tint");
+        }
+    }
+
+    /**
+     * A color channel as a byte.
+     *
+     * @param value The channel, 0 to 1.
+     * @return The byte, 0 to 255.
+     */
+    private static int channel(float value) {
+        return Math.round(Math.clamp(value, 0, 1) * 255);
     }
 
     /**

@@ -62,6 +62,10 @@ layout(location = 7) flat out uvec4 outRemaps;
 // A seed per triangle for a shell's threshold, so stacked layers don't share one: the index of the
 // triangle's first vertex, which flat outputs take. gl_PrimitiveID would need geometry shaders.
 layout(location = 8) flat out uint outShellSeed;
+// No tint: scene.frag reads these only for skinned meshes, see scene_skinned.vert, but Vulkan
+// wants every input it declares written
+layout(location = 9) flat out uvec4 outTint;
+layout(location = 10) flat out uint outTintMask;
 
 layout(std430, set = 0, binding = 2) readonly buffer Materials {
     Material materials[];
@@ -214,6 +218,8 @@ void main()
     }
     outRemaps = uvec4(0xFFFFFFFFu);
     outShellSeed = uint(gl_VertexIndex);
+    outTint = uvec4(0xFFFFFFFFu);
+    outTintMask = 0u;
     for (uint i = 0u; instanced && i < world.model.w; ++i) {
         outRemaps[i] = (world.remapFrom[i] & 0xFFFFu) | (world.remapTo[i] << 16);
     }

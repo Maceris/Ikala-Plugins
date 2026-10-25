@@ -1,6 +1,8 @@
 package com.ikalagaming.graphics.vulkan;
 
 import com.ikalagaming.graphics.SkinnedPart;
+import com.ikalagaming.graphics.Skins;
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.vulkan.stages.InstanceDrawUpdate;
 
@@ -24,15 +26,17 @@ import java.util.function.ToIntFunction;
  * <ul>
  *   <li>Each instance is {@value #INSTANCE_SIZE} bytes: its model matrix relative to the camera,
  *       the index of its first palette matrix, counted in matrices from the start of the buffer,
- *       and its hidden regions' mask as two halves.
+ *       its hidden regions' mask as two halves, a padding word, and its {@value Skins#TINT_SLOTS}
+ *       tint colors, packed sRGB with red in the low byte.
  *   <li>Palettes start at the next multiple of {@value #MATRIX_SIZE} bytes after the instances, so
  *       the whole buffer can be read as matrices too.
  * </ul>
  *
- * <p>The draws buffer holds a {@value #DRAW_SIZE} byte record per drawn part: its instance and its
- * material. Each draw command's first instance is its record's index. Scene commands come first,
- * for the instances the camera can see; shadow commands start at {@link Counts#shadowFirst()}, for
- * every instance that casts shadows, seen or not.
+ * <p>The draws buffer holds a {@value #DRAW_SIZE} byte record per drawn part: its instance, its
+ * material, its packed tint slots and its tint mask's bindless index, 0 for none. Each draw
+ * command's first instance is its record's index. Scene commands come first, for the instances the
+ * camera can see; shadow commands start at {@link Counts#shadowFirst()}, for every instance that
+ * casts shadows, seen or not.
  *
  * @author Ches Burks
  */
@@ -41,7 +45,8 @@ public final class SkinnedPacker {
     public static final int MATRIX_SIZE = 16 * Float.BYTES;
 
     /** The size of one instance in the data buffer, in bytes. */
-    public static final int INSTANCE_SIZE = MATRIX_SIZE + 4 * Integer.BYTES;
+    public static final int INSTANCE_SIZE =
+            MATRIX_SIZE + 4 * Integer.BYTES + Skins.TINT_SLOTS * Integer.BYTES;
 
     /** The size of one draw record, in bytes. */
     public static final int DRAW_SIZE = 4 * Integer.BYTES;
@@ -125,6 +130,7 @@ public final class SkinnedPacker {
      * @param registry The instances.
      * @param locator Finds the meshes.
      * @param materials Turns a material into its index in the materials buffer.
+     * @param textures Turns a texture into its bindless index.
      * @param camera The camera's world position, the origin of render space.
      * @param scenePlanes The frustum planes to cull the scene against, in render space, see {@link
      *     FrustumPlanes}.
@@ -135,6 +141,7 @@ public final class SkinnedPacker {
             @NonNull SkinnedRegistry registry,
             @NonNull Locator locator,
             @NonNull ToIntFunction<Material> materials,
+            @NonNull ToIntFunction<TextureHandle> textures,
             @NonNull Vector3dc camera,
             float @NonNull [] scenePlanes,
             @NonNull Buffers buffers) {
@@ -142,7 +149,14 @@ public final class SkinnedPacker {
         registry.read(
                 entries ->
                         result[0] =
-                                pack(entries, locator, materials, camera, scenePlanes, buffers));
+                                pack(
+                                        entries,
+                                        locator,
+                                        materials,
+                                        textures,
+                                        camera,
+                                        scenePlanes,
+                                        buffers));
         return result[0];
     }
 
@@ -152,6 +166,7 @@ public final class SkinnedPacker {
      * @param entries The instances.
      * @param locator Finds the meshes.
      * @param materials Turns a material into its index in the materials buffer.
+     * @param textures Turns a texture into its bindless index.
      * @param camera The camera's world position.
      * @param scenePlanes The frustum planes to cull the scene against.
      * @param buffers Where to pack.
@@ -161,6 +176,7 @@ public final class SkinnedPacker {
             @NonNull List<SkinnedRegistry.Entry> entries,
             @NonNull Locator locator,
             @NonNull ToIntFunction<Material> materials,
+            @NonNull ToIntFunction<TextureHandle> textures,
             @NonNull Vector3dc camera,
             float @NonNull [] scenePlanes,
             @NonNull Buffers buffers) {
@@ -212,6 +228,9 @@ public final class SkinnedPacker {
             data.putInt(base + Integer.BYTES, (int) entry.hiddenRegions);
             data.putInt(base + 2 * Integer.BYTES, (int) (entry.hiddenRegions >>> 32));
             data.putInt(base + 3 * Integer.BYTES, 0);
+            for (int t = 0; t < Skins.TINT_SLOTS; ++t) {
+                data.putInt(base + (4 + t) * Integer.BYTES, entry.tints[t]);
+            }
             final int paletteFloats = entry.boneCount * SkinnedRegistry.MATRIX_FLOATS;
             final int paletteByte = paletteMatrix * MATRIX_SIZE;
             for (int f = 0; f < paletteFloats; ++f) {
@@ -226,8 +245,10 @@ public final class SkinnedPacker {
                 drawRecords.putInt(draw * DRAW_SIZE, instance);
                 drawRecords.putInt(
                         draw * DRAW_SIZE + Integer.BYTES, materials.applyAsInt(part.material()));
-                drawRecords.putInt(draw * DRAW_SIZE + 2 * Integer.BYTES, 0);
-                drawRecords.putInt(draw * DRAW_SIZE + 3 * Integer.BYTES, 0);
+                drawRecords.putInt(draw * DRAW_SIZE + 2 * Integer.BYTES, part.tintSlots());
+                drawRecords.putInt(
+                        draw * DRAW_SIZE + 3 * Integer.BYTES,
+                        part.tintMask() == null ? 0 : textures.applyAsInt(part.tintMask()));
                 final int indexCount = part.mesh().mesh().indexCount();
                 if (seen[i]) {
                     writeCommand(commands, sceneCommands++, indexCount, location, draw);

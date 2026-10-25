@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.vulkan;
 
 import com.ikalagaming.graphics.SkinnedInstanceHandle;
 import com.ikalagaming.graphics.SkinnedPart;
+import com.ikalagaming.graphics.Skins;
 
 import lombok.NonNull;
 import org.joml.Quaternionf;
@@ -12,6 +13,7 @@ import org.joml.Vector3f;
 import org.joml.Vector3fc;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
@@ -29,6 +31,9 @@ public final class SkinnedRegistry {
 
     /** Floats per bone in a palette: one column-major 4x4 matrix. */
     public static final int MATRIX_FLOATS = 16;
+
+    /** A packed tint color that changes nothing. */
+    private static final int WHITE = 0xFFFF_FFFF;
 
     /** One instance's state. */
     public static final class Entry {
@@ -67,6 +72,9 @@ public final class SkinnedRegistry {
 
         /** Whether it casts shadows. */
         boolean castsShadows = true;
+
+        /** Its tint colors, packed sRGB with red in the low byte, white until set. */
+        final int[] tints = white();
 
         /**
          * Its world position.
@@ -400,6 +408,43 @@ public final class SkinnedRegistry {
         } finally {
             lock.unlock();
         }
+    }
+
+    /**
+     * Change an instance's tint colors.
+     *
+     * @param owner The plugin changing it.
+     * @param handle The handle.
+     * @param tints Up to {@value Skins#TINT_SLOTS} colors, packed sRGB with red in the low byte;
+     *     slots past the end go white.
+     * @return False if the handle is null, stale or someone else's.
+     */
+    public boolean setTints(
+            @NonNull String owner, SkinnedInstanceHandle handle, int @NonNull [] tints) {
+        lock.lock();
+        try {
+            Entry entry = find(owner, handle);
+            if (entry == null) {
+                return false;
+            }
+            for (int t = 0; t < Skins.TINT_SLOTS; ++t) {
+                entry.tints[t] = t < tints.length ? tints[t] : WHITE;
+            }
+            return true;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Tint colors that change nothing.
+     *
+     * @return White in every slot.
+     */
+    private static int[] white() {
+        int[] tints = new int[Skins.TINT_SLOTS];
+        Arrays.fill(tints, WHITE);
+        return tints;
     }
 
     /**

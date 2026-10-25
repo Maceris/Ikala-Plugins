@@ -162,6 +162,7 @@ public final class SkinnedRenderer {
                         registry,
                         part -> meshes.locate(part.mesh().mesh()),
                         materials::getMaterialIndex,
+                        state.textureRegistry::slotOrDefault,
                         camera,
                         planes,
                         new SkinnedPacker.Buffers() {

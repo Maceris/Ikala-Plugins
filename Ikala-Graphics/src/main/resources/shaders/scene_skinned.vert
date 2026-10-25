@@ -23,6 +23,9 @@ layout(location = 6) flat out uint outMaterialIdx;
 // No material remaps or shells here, see scene_lod.vert
 layout(location = 7) flat out uvec4 outRemaps;
 layout(location = 8) flat out uint outShellSeed;
+// The part's tint colors, one per mask channel, and its tint mask, see skinning.glsl
+layout(location = 9) flat out uvec4 outTint;
+layout(location = 10) flat out uint outTintMask;
 
 layout(set = 0, binding = 0) uniform Uniforms {
     mat4 projectionMatrix;
@@ -43,6 +46,8 @@ void main()
     outRemaps = uvec4(0xFFFFFFFFu);
     outShellSeed = 0u;
     outTextCoord = texCoord;
+    outTint = tintColors(instance, draw.z);
+    outTintMask = draw.w;
 
     if (regionHidden(instance)) {
         gl_Position = HIDDEN_POSITION;

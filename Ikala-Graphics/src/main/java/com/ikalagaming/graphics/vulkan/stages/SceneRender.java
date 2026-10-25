@@ -51,6 +51,9 @@ public class SceneRender implements RenderStage {
     /** The constant_id of {@code VOLUME_FADE} in {@code scene.frag}. */
     private static final int VOLUME_FADE_CONSTANT_ID = 2;
 
+    /** The constant_id of {@code TINTED} in {@code scene.frag}. */
+    private static final int TINTED_CONSTANT_ID = 3;
+
     /** The vertex formats the scene pipelines read. */
     private enum VertexFormat {
         /** The full format of models, MeshData. */
@@ -1342,6 +1345,7 @@ public class SceneRender implements RenderStage {
             boolean alphaTest,
             boolean triplanar,
             boolean volumeFade,
+            boolean tinted,
             @NonNull MemoryStack stack) {
         final int count = shader.shaderModules.length;
         VkPipelineShaderStageCreateInfo.Buffer stages =
@@ -1349,17 +1353,19 @@ public class SceneRender implements RenderStage {
         for (int i = 0; i < count; ++i) {
             stages.get(i).set(shader.shaderStages.get(i));
         }
-        VkSpecializationMapEntry.Buffer entries = VkSpecializationMapEntry.calloc(3, stack);
+        VkSpecializationMapEntry.Buffer entries = VkSpecializationMapEntry.calloc(4, stack);
         entries.get(0).constantID(ALPHA_TEST_CONSTANT_ID).offset(0).size(Integer.BYTES);
         entries.get(1).constantID(TRIPLANAR_CONSTANT_ID).offset(Integer.BYTES).size(Integer.BYTES);
         entries.get(2)
                 .constantID(VOLUME_FADE_CONSTANT_ID)
                 .offset(2 * Integer.BYTES)
                 .size(Integer.BYTES);
-        final ByteBuffer data = stack.malloc(3 * Integer.BYTES);
+        entries.get(3).constantID(TINTED_CONSTANT_ID).offset(3 * Integer.BYTES).size(Integer.BYTES);
+        final ByteBuffer data = stack.malloc(4 * Integer.BYTES);
         data.putInt(0, alphaTest ? 1 : 0);
         data.putInt(Integer.BYTES, triplanar ? 1 : 0);
         data.putInt(2 * Integer.BYTES, volumeFade ? 1 : 0);
+        data.putInt(3 * Integer.BYTES, tinted ? 1 : 0);
         VkSpecializationInfo specialization =
                 VkSpecializationInfo.calloc(stack).pMapEntries(entries).pData(data);
         for (int i = 0; i < count; ++i) {
@@ -1502,6 +1508,7 @@ public class SceneRender implements RenderStage {
                                     alphaTest,
                                     format == VertexFormat.LOD,
                                     alphaTest && format == VertexFormat.BAKED,
+                                    format == VertexFormat.SKINNED,
                                     stack))
                     .pVertexInputState(vertexInputStateCreateInfo)
                     .pInputAssemblyState(inputAssemblyState)

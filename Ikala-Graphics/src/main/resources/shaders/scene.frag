@@ -19,6 +19,10 @@ layout(location = 6) flat in uint outMaterialIdx;
 layout(location = 7) flat in uvec4 outRemaps;
 // A seed per triangle for a shell's threshold, its first vertex's index, see scene_lod.vert
 layout(location = 8) flat in uint outShellSeed;
+// Tint colors, packed sRGB, one per tint mask channel, white for none; read only when TINTED
+layout(location = 9) flat in uvec4 outTint;
+// The tint mask's bindless index, or 0 for none; read only when TINTED
+layout(location = 10) flat in uint outTintMask;
 
 // Whether to drop pixels the texture's alpha cuts out. Off for baked opaque geometry, so the
 // depth test can run before the shader.
@@ -37,6 +41,9 @@ layout(constant_id = 1) const bool TRIPLANAR = false;
 // Whether these are sections' baked cut out blocks, which hand over to their volume bricks with
 // distance, see volume_fade.glsl
 layout(constant_id = 2) const bool VOLUME_FADE = false;
+// Whether the surface takes its instance's tint colors, for skinned meshes, see scene_skinned.vert;
+// the other scene vertex shaders don't write the tint, so only the skinned pipeline sets this
+layout(constant_id = 3) const bool TINTED = false;
 
 // After the level of detail tables' addresses, which only scene_lod.vert reads: where the hand
 // over to volume bricks starts and how long it is, in meters, and the frame number for its dither
@@ -208,6 +215,19 @@ void main() {
         // colors sRGB encoded, as material colors are given
         baseColor = sampleTexture(material.textureIndex);
         baseColor.rgb = linearToSRGB(baseColor.rgb);
+    }
+    if (TINTED && outTint != uvec4(0xFFFFFFFFu)) {
+        // Each mask channel lets its tint color in, multiplied in linear light; without a mask the
+        // red channel's color covers the whole surface
+        vec4 mask = outTintMask > 0u
+            ? texture(bindlessTextures[nonuniformEXT(outTintMask)], outTextCoord)
+            : vec4(1.0, 0.0, 0.0, 0.0);
+        vec3 linear = sRGBToLinear(baseColor.rgb);
+        for (int c = 0; c < 4; ++c) {
+            vec3 tint = sRGBToLinear(unpackUnorm4x8(outTint[c]).rgb);
+            linear *= mix(vec3(1.0), tint, mask[c]);
+        }
+        baseColor.rgb = linearToSRGB(linear);
     }
     if (ALPHA_TEST && averaged && outBitangent.z > 0.5) {
         // A coverage volume's shell covers as much of the pixel as its volume stops light, by a
