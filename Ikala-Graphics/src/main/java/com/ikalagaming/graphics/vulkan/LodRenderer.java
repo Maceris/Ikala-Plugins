@@ -2456,7 +2456,7 @@ public class LodRenderer {
         }
         for (int unit : residency.toShow()) {
             if (setUnitBit(world.unitSlotOf[unit], true)) {
-                invalidate(world, world.unitByIndex.get(unit).members);
+                invalidateSwap(world, world.unitByIndex.get(unit).members);
             }
         }
         // Drawn once the first cut is all there, or once it has waited long enough
@@ -2551,7 +2551,7 @@ public class LodRenderer {
      */
     private void evict(@NonNull World world, int unit) {
         if (setUnitBit(world.unitSlotOf[unit], false)) {
-            invalidate(world, world.unitByIndex.get(unit).members);
+            invalidateSwap(world, world.unitByIndex.get(unit).members);
         }
         for (Member member : world.unitByIndex.get(unit).members) {
             final Piece piece = member.piece();
@@ -2618,6 +2618,19 @@ public class LodRenderer {
     private void invalidate(@NonNull World world, @NonNull Collection<Member> members) {
         for (Member member : members) {
             shadows.addSphere(world.origin, member.piece().clusters[member.index()].info().tight());
+        }
+    }
+
+    /**
+     * Report where a unit shown or hidden by streaming is, for cached shadow maps: only a swap
+     * between its clusters and their coarser parents, within the parents' error.
+     *
+     * @param world The world.
+     * @param members The unit's clusters.
+     */
+    private void invalidateSwap(@NonNull World world, @NonNull Collection<Member> members) {
+        for (Member member : members) {
+            shadows.addSwap(world.origin, member.piece().clusters[member.index()].info().tight());
         }
     }
 

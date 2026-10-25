@@ -274,9 +274,13 @@ public class InstanceDrawUpdate implements RenderStage {
 
         // Culling needs the cascades before the shadow stage draws them, and the cache needs to
         // know what changed before it decides what to draw again
+        // Swaps between levels of detail of a surface aren't drawn into the sun's cached cascades:
+        // what they hold is within the error of either, and streaming makes several a frame
         vulkanState.shadowInvalidation.drain(
-                (min, max) -> {
-                    vulkanState.sunShadows.invalidate(min, max);
+                (min, max, swap) -> {
+                    if (!swap) {
+                        vulkanState.sunShadows.invalidate(min, max);
+                    }
                     vulkanState.skyOcclusion.invalidate(min, max);
                     vulkanState.pointShadows.invalidate(min, max);
                     vulkanState.occupancy.invalidate(min, max);
