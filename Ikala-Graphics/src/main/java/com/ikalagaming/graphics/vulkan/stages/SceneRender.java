@@ -247,7 +247,7 @@ public class SceneRender implements RenderStage {
                 Scene scene,
                 @NonNull SceneTarget sceneTarget,
                 @NonNull VulkanState state,
-                int renderConfig) {
+                RenderConfig renderConfig) {
             renderLate(scene, sceneTarget, state, renderConfig);
         }
 
@@ -379,7 +379,7 @@ public class SceneRender implements RenderStage {
             Scene scene,
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState vulkanState,
-            int renderConfig) {
+            RenderConfig renderConfig) {
         final VkCommandBuffer commandBuffer =
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
         final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
@@ -418,7 +418,7 @@ public class SceneRender implements RenderStage {
             Scene scene,
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState vulkanState,
-            int renderConfig) {
+            RenderConfig renderConfig) {
         final VkCommandBuffer commandBuffer =
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
         final GBuffer gBuffer = vulkanState.perFrameData[vulkanState.frameIndex].gBuffer;
@@ -453,7 +453,7 @@ public class SceneRender implements RenderStage {
             @NonNull VkCommandBuffer commandBuffer,
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState state,
-            int renderConfig,
+            RenderConfig renderConfig,
             int loadOp,
             int list,
             boolean listedModels,
@@ -533,7 +533,7 @@ public class SceneRender implements RenderStage {
     private void drawModels(
             @NonNull VkCommandBuffer commandBuffer,
             @NonNull VulkanState state,
-            int renderConfig,
+            RenderConfig renderConfig,
             int width,
             int height,
             int list,
@@ -541,7 +541,7 @@ public class SceneRender implements RenderStage {
             boolean skinned,
             @NonNull MemoryStack stack) {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
-        final boolean wireframe = RenderConfig.sceneIsWireframe(renderConfig);
+        final boolean wireframe = GraphicsManager.getScene().getDebugVisualizers().isWireframe();
 
         // A negative height flips y so the projection matrices work the same as in OpenGL
         VkViewport.Buffer viewports = VkViewport.calloc(1, stack);

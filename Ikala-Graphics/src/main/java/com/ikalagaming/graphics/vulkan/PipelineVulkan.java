@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.vulkan;
 
+import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
@@ -13,7 +14,7 @@ public class PipelineVulkan {
     private final RenderStage[] renderStages;
 
     /** The render config that was used to build this pipeline. */
-    private final int renderConfig;
+    private final RenderConfig renderConfig;
 
     /**
      * Run each render stage in order.

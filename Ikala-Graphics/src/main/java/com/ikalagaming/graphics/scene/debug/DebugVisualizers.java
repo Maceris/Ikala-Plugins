@@ -103,6 +103,15 @@ public class DebugVisualizers {
     private volatile boolean occlusionDisabled;
 
     /**
+     * Draw standard meshes, sections and level of detail clusters as wireframes. Unlike the other
+     * visualizers, this shows whether or not the debug stage runs.
+     *
+     * @param wireframe Whether to draw wireframes.
+     * @return Whether wireframes are drawn.
+     */
+    private volatile boolean wireframe;
+
+    /**
      * Tint each pixel by how many lights its cluster lists, from blue for a few to red for {@link
      * #HEAT_MAP_FULL} or more. Drawn by the light stage, so {@link #anyEnabled()} ignores it.
      *

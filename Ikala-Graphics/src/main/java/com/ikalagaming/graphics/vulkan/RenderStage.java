@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.vulkan;
 
+import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
@@ -72,7 +73,7 @@ public interface RenderStage {
             Scene scene,
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState state,
-            int renderConfig);
+            RenderConfig renderConfig);
 
     /**
      * What the stage is called in frame timings.

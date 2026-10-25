@@ -15,6 +15,7 @@ import static org.lwjgl.vulkan.VK13.*;
 import com.ikalagaming.graphics.*;
 import com.ikalagaming.graphics.BufferHolder;
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.bake.BakeSources;
 import com.ikalagaming.graphics.bake.BakedVertex;
@@ -242,7 +243,7 @@ public class VulkanInstance {
     /** Tracks the state and handles. */
     private final VulkanState state = new VulkanState();
 
-    private int renderConfig;
+    private RenderConfig renderConfig;
     private PipelineVulkan pipeline;
     private TextureLoaderVulkan textureLoader;
     private ShaderMap shaderMap;
@@ -828,7 +829,7 @@ public class VulkanInstance {
      * @return The current pipeline configuration.
      * @see RenderConfig
      */
-    public int getPipelineConfig() {
+    public RenderConfig getPipelineConfig() {
         return renderConfig;
     }
 
@@ -977,7 +978,7 @@ public class VulkanInstance {
     public void initializePipelines(int width, int height) {
         pipelineManager = new PipelineManagerVulkan(width, height, shaderMap, state);
         log.trace("Created pipeline manager");
-        renderConfig = RenderConfig.builder().withGui().build();
+        renderConfig = RenderConfig.GUI;
         pipeline = pipelineManager.getPipeline(renderConfig);
         log.trace("Built initial pipeline");
     }
@@ -1740,10 +1741,6 @@ public class VulkanInstance {
      */
     public void render(
             @NonNull Scene scene, @NonNull Window sceneWindow, @NonNull Map<Window, DrawData> gui) {
-        if (pipeline == PipelineManagerVulkan.ERROR_PIPELINE) {
-            return;
-        }
-
         for (Presentation presentation : state.presentations.values()) {
             if (presentation.shouldRegenerateSwapchain()) {
                 regenerateSwapchain(presentation, presentation.getWindow() == sceneWindow);
@@ -2213,14 +2210,17 @@ public class VulkanInstance {
      * @param config The configuration specifying the pipeline to switch to.
      * @see RenderConfig
      */
-    public void swapPipeline(final int config) {
+    public void swapPipeline(@NonNull RenderConfig config) {
         checkError(vkDeviceWaitIdle(state.device.logical));
+        final boolean worldReturns = config.world() && !renderConfig.world();
         renderConfig = config;
         pipeline = pipelineManager.getPipeline(config);
-        // The new pipeline may not have drawn shadows while things changed
-        state.sunShadows.invalidateAll();
-        state.skyOcclusion.invalidateAll();
-        state.pointShadows.invalidateAll();
+        if (worldReturns) {
+            // Shadows weren't drawn while the world was off, so the caches missed what changed
+            state.sunShadows.invalidateAll();
+            state.skyOcclusion.invalidateAll();
+            state.pointShadows.invalidateAll();
+        }
     }
 
     /**

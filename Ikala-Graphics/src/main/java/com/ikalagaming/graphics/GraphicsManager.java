@@ -440,7 +440,7 @@ public class GraphicsManager {
     private static void render() {
         // The GUI is built before rendering starts, since it can create and close windows
         Map<Window, DrawData> gui = Map.of();
-        if (RenderConfig.hasGuiStage(renderInstance.getPipelineConfig())) {
+        if (renderInstance.getPipelineConfig().gui()) {
             final IkIO io = IkGui.getIO();
             windowManager.drawGui((int) io.displaySize.x, (int) io.displaySize.y);
             // Creates, moves and closes the windows of IkGui viewports
@@ -718,7 +718,7 @@ public class GraphicsManager {
      * @return The current pipeline config.
      * @see RenderConfig
      */
-    public static int getPipelineConfig() {
+    public static RenderConfig getPipelineConfig() {
         return renderInstance.getPipelineConfig();
     }
 
@@ -737,7 +737,7 @@ public class GraphicsManager {
      * @param config The configuration specifying the pipeline to switch to.
      * @see RenderConfig
      */
-    public static void swapPipeline(final int config) {
+    public static void swapPipeline(@NonNull RenderConfig config) {
         renderInstance.swapPipeline(config);
     }
 

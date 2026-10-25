@@ -121,7 +121,7 @@ public final class LodPrototype {
     private volatile boolean open;
 
     /** The pipeline before opening. */
-    private int previousPipeline;
+    private RenderConfig previousPipeline;
 
     /** The sun before opening. */
     private DirectionalLight previousSun;
@@ -185,14 +185,7 @@ public final class LodPrototype {
         previousSun = scene.getSceneLights().getDirLight();
         previousAmbient = scene.getSceneLights().getAmbientLight();
         // The debug stage draws the panel's bounds and locked edge overlays
-        GraphicsManager.swapPipeline(
-                RenderConfig.builder()
-                        .withAnimation()
-                        .withScene()
-                        .withSkybox()
-                        .withGui()
-                        .withDebug()
-                        .build());
+        GraphicsManager.swapPipeline(RenderConfig.WORLD.withDebug(true));
         scene.getSceneLights()
                 .setDirLight(new DirectionalLight(SUN_COLOR, SUN_DIRECTION, SUN_INTENSITY));
         scene.getSceneLights()
@@ -357,7 +350,8 @@ public final class LodPrototype {
      * @param ambient The ambient light.
      * @param pipeline The pipeline configuration.
      */
-    private static void restoreScene(DirectionalLight sun, AmbientLight ambient, int pipeline) {
+    private static void restoreScene(
+            DirectionalLight sun, AmbientLight ambient, RenderConfig pipeline) {
         final Scene scene = GraphicsManager.getScene();
         if (scene != null && sun != null) {
             scene.getSceneLights().setDirLight(sun);
@@ -383,7 +377,7 @@ public final class LodPrototype {
         panel = null;
         final DirectionalLight sun = previousSun;
         final AmbientLight ambient = previousAmbient;
-        final int pipeline = previousPipeline;
+        final RenderConfig pipeline = previousPipeline;
         GraphicsManager.getUiManager()
                 .post(
                         () -> {

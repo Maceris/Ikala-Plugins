@@ -153,7 +153,7 @@ public class SceneView {
     private boolean entered;
 
     /** The pipeline before entering. */
-    private int previousPipeline;
+    private RenderConfig previousPipeline;
 
     /** The sun before entering. */
     private DirectionalLight previousSun;
@@ -313,14 +313,7 @@ public class SceneView {
         previousPosition.set(scene.getCamera().getPosition());
         previousRotation.set(scene.getCamera().getRotation());
         // The debug stage draws the selection's outline
-        GraphicsManager.swapPipeline(
-                RenderConfig.builder()
-                        .withAnimation()
-                        .withScene()
-                        .withSkybox()
-                        .withGui()
-                        .withDebug()
-                        .build());
+        GraphicsManager.swapPipeline(RenderConfig.WORLD.withDebug(true));
         scene.getSceneLights()
                 .setDirLight(new DirectionalLight(SUN_COLOR, SUN_DIRECTION, SUN_INTENSITY));
         scene.getSceneLights()

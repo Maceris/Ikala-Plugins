@@ -4,6 +4,7 @@ import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
@@ -147,7 +148,7 @@ public class DebugRender implements RenderStage {
             Scene scene,
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState vulkanState,
-            int renderConfig) {
+            RenderConfig renderConfig) {
         final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
 
         depthTested.clear();

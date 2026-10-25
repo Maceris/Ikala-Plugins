@@ -167,7 +167,7 @@ final class LabPreview implements AutoCloseable {
     private volatile boolean looking;
 
     /** The pipeline before looking. Render thread. */
-    private int previousPipeline;
+    private RenderConfig previousPipeline;
 
     /** The sun before looking. Render thread. */
     private DirectionalLight previousSun;
@@ -570,8 +570,7 @@ final class LabPreview implements AutoCloseable {
         }
         looking = true;
         previousPipeline = GraphicsManager.getPipelineConfig();
-        GraphicsManager.swapPipeline(
-                previousPipeline | RenderConfig.SCENE_ENABLED_MASK | RenderConfig.GUI_ENABLED_MASK);
+        GraphicsManager.swapPipeline(previousPipeline.withWorld(true).withGui(true));
         previousSun = scene.getSceneLights().getDirLight();
         previousAmbient = scene.getSceneLights().getAmbientLight();
         scene.getSceneLights()
@@ -640,7 +639,8 @@ final class LabPreview implements AutoCloseable {
      * @param ambient The ambient light.
      * @param pipeline The pipeline configuration.
      */
-    private static void restoreScene(DirectionalLight sun, AmbientLight ambient, int pipeline) {
+    private static void restoreScene(
+            DirectionalLight sun, AmbientLight ambient, RenderConfig pipeline) {
         final Scene scene = GraphicsManager.getScene();
         if (scene != null && sun != null) {
             scene.getSceneLights().setDirLight(sun);
@@ -841,7 +841,7 @@ final class LabPreview implements AutoCloseable {
             GraphicsManager.getUiManager().setSurfacesHidden(false);
             final DirectionalLight sun = previousSun;
             final AmbientLight ambient = previousAmbient;
-            final int pipeline = previousPipeline;
+            final RenderConfig pipeline = previousPipeline;
             GraphicsManager.getUiManager().post(() -> restoreScene(sun, ambient, pipeline));
         }
         blockMeshes.removeMaterials();

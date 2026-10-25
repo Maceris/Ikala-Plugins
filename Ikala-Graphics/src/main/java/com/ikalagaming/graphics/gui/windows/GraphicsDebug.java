@@ -200,7 +200,7 @@ public class GraphicsDebug extends GuiWindow {
     private final List<TextureHandle> lodTextures = new ArrayList<>();
 
     /** The pipeline before the level of detail world, to put back. */
-    private int lodPreviousPipeline;
+    private RenderConfig lodPreviousPipeline;
 
     /** The sun before the level of detail world, to put back. */
     private DirectionalLight lodPreviousSun;
@@ -402,29 +402,12 @@ public class GraphicsDebug extends GuiWindow {
             }
 
             if (IkGui.collapsingHeader("Render Config Info")) {
-                int config = GraphicsManager.getPipelineConfig();
+                RenderConfig config = GraphicsManager.getPipelineConfig();
                 final String flagString = "%12s - %s";
-                IkGui.text(String.format(flagString, "Error", RenderConfig.hasError(config)));
-                IkGui.text(
-                        String.format(
-                                flagString, "Animation", RenderConfig.hasAnimationStage(config)));
-                IkGui.text(
-                        String.format(flagString, "Shadow", RenderConfig.hasShadowStage(config)));
-                IkGui.text(String.format(flagString, "Scene", RenderConfig.hasSceneStage(config)));
-                IkGui.text(
-                        String.format(flagString, "Skybox", RenderConfig.hasSkyboxStage(config)));
-                IkGui.text(
-                        String.format(flagString, "Filter", RenderConfig.hasFilterStage(config)));
-                IkGui.text(String.format(flagString, "Gui", RenderConfig.hasGuiStage(config)));
-                IkGui.text(
-                        String.format(
-                                flagString,
-                                "Transparency",
-                                RenderConfig.hasTransparencyPass(config)));
-                IkGui.text(
-                        String.format(
-                                flagString, "Wireframe", RenderConfig.sceneIsWireframe(config)));
-                IkGui.text(String.format(flagString, "Debug", RenderConfig.hasDebugStage(config)));
+                IkGui.text(String.format(flagString, "World", config.world()));
+                IkGui.text(String.format(flagString, "Filters", config.filters()));
+                IkGui.text(String.format(flagString, "Debug", config.debug()));
+                IkGui.text(String.format(flagString, "Gui", config.gui()));
             }
 
             if (IkGui.collapsingHeader("Camera")) {
@@ -443,8 +426,7 @@ public class GraphicsDebug extends GuiWindow {
             }
 
             if (IkGui.collapsingHeader("Scene Controls")) {
-                boolean renderingScene =
-                        RenderConfig.hasSceneStage(GraphicsManager.getPipelineConfig());
+                boolean renderingScene = GraphicsManager.getPipelineConfig().world();
 
                 if (!renderingScene) {
                     IkGui.beginDisabled();
@@ -552,9 +534,9 @@ public class GraphicsDebug extends GuiWindow {
             visualizers.setOcclusionDisabled(disableOcclusion.getState());
         }
         if (changed && visualizers.anyEnabled()) {
-            final int config = GraphicsManager.getPipelineConfig();
-            if (!RenderConfig.hasDebugStage(config)) {
-                GraphicsManager.swapPipeline(RenderConfig.builder(config).withDebug().build());
+            final RenderConfig config = GraphicsManager.getPipelineConfig();
+            if (!config.debug()) {
+                GraphicsManager.swapPipeline(config.withDebug(true));
             }
         }
     }
@@ -575,18 +557,16 @@ public class GraphicsDebug extends GuiWindow {
         final FilterView view = FilterView.values()[filterView.get()];
         renderer.setFilterView(view);
 
-        final int config = GraphicsManager.getPipelineConfig();
+        final RenderConfig config = GraphicsManager.getPipelineConfig();
         if (view != FilterView.DEFAULT) {
-            // The filter needs something to run over, or the config is an error
-            if (!RenderConfig.hasFilterStage(config)
-                    && (RenderConfig.hasSceneStage(config)
-                            || RenderConfig.hasSkyboxStage(config))) {
-                GraphicsManager.swapPipeline(RenderConfig.builder(config).withFilter().build());
+            // The filter needs the world to run over
+            if (!config.filters() && config.world()) {
+                GraphicsManager.swapPipeline(config.withFilters(true));
                 addedFilterStage = true;
             }
         } else if (addedFilterStage) {
-            if (RenderConfig.hasFilterStage(config)) {
-                GraphicsManager.swapPipeline(RenderConfig.builder(config).withoutFilter().build());
+            if (config.filters()) {
+                GraphicsManager.swapPipeline(config.withFilters(false));
             }
             addedFilterStage = false;
         }
@@ -601,14 +581,7 @@ public class GraphicsDebug extends GuiWindow {
             return true;
         }
         if (wireframeEnabled.checkResult()) {
-            int oldConfig = GraphicsManager.getPipelineConfig();
-            RenderConfig.ConfigBuilder builder = RenderConfig.builder(oldConfig);
-            if (wireframeEnabled.getState()) {
-                builder.withWireframe();
-            } else {
-                builder.withoutWireframe();
-            }
-            GraphicsManager.swapPipeline(builder.build());
+            scene.getDebugVisualizers().setWireframe(wireframeEnabled.getState());
         }
         handleDebugInput(scene);
         handleFilterInput();
@@ -644,8 +617,7 @@ public class GraphicsDebug extends GuiWindow {
         super.updateValues(scene);
 
         fogEnabled.setState(scene.getFog().isActive());
-        int config = GraphicsManager.getPipelineConfig();
-        wireframeEnabled.setState(RenderConfig.sceneIsWireframe(config));
+        wireframeEnabled.setState(scene.getDebugVisualizers().isWireframe());
         final VulkanInstance renderer = GraphicsManager.getRenderInstance();
         if (renderer != null) {
             filterView.set(renderer.getFilterView().ordinal());
@@ -1078,14 +1050,7 @@ public class GraphicsDebug extends GuiWindow {
         final int columns = lodColumns[0];
         lodPreviousPipeline = GraphicsManager.getPipelineConfig();
         // The debug stage draws the bounds and locked edge overlays
-        GraphicsManager.swapPipeline(
-                RenderConfig.builder()
-                        .withAnimation()
-                        .withScene()
-                        .withSkybox()
-                        .withGui()
-                        .withDebug()
-                        .build());
+        GraphicsManager.swapPipeline(RenderConfig.WORLD.withDebug(true));
         lodPreviousSun = scene.getSceneLights().getDirLight();
         lodPreviousAmbient = scene.getSceneLights().getAmbientLight();
         scene.getSceneLights()

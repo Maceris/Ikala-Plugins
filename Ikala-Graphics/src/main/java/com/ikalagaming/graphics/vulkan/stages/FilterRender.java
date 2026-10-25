@@ -120,14 +120,14 @@ public class FilterRender implements RenderStage {
             Scene scene,
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState vulkanState,
-            int renderConfig) {
+            RenderConfig renderConfig) {
         final VkCommandBuffer commandBuffer =
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
         final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
         final TextureInfoVulkan source = frameData.preFilterTexture;
         final TextureInfoVulkan target = frameData.finalTexture;
-        final boolean hasScene = RenderConfig.hasSceneStage(renderConfig);
-        final boolean sourceRendered = hasScene || RenderConfig.hasSkyboxStage(renderConfig);
+        final boolean hasScene = renderConfig.world();
+        final boolean sourceRendered = hasScene;
 
         final int width = Math.min(sceneTarget.width(), vulkanState.realSize.width());
         final int height = Math.min(sceneTarget.height(), vulkanState.realSize.height());

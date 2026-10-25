@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.vulkan.stages;
 import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
+import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.LodRenderer;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
@@ -111,7 +112,7 @@ public class LodCull implements RenderStage {
             Scene scene,
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState state,
-            int renderConfig) {
+            RenderConfig renderConfig) {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
         if (!LodRenderer.hasDraws(frameData)
                 || (phase == ShaderBindings.Cull.PHASE_LATE && !frameData.occlusion)) {

@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.vulkan.stages;
 import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
+import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.DepthPyramid;
 import com.ikalagaming.graphics.vulkan.DepthPyramidMath;
@@ -103,7 +104,7 @@ public class DepthPyramidBuild implements RenderStage {
             Scene scene,
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState state,
-            int renderConfig) {
+            RenderConfig renderConfig) {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
         if (!frameData.buildPyramid) {
             return;

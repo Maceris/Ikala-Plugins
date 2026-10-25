@@ -102,11 +102,11 @@ public class SkyboxRender implements RenderStage {
             Scene scene,
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState vulkanState,
-            int renderConfig) {
+            RenderConfig renderConfig) {
         final VkCommandBuffer commandBuffer =
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
         final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
-        final boolean hasScene = RenderConfig.hasSceneStage(renderConfig);
+        final boolean hasScene = renderConfig.world();
         // Linear light, like the light stage, tone mapped after
         final TextureInfoVulkan target = frameData.sceneColor;
         final TextureInfoVulkan depth = frameData.gBuffer.depth();

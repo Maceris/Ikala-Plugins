@@ -114,7 +114,7 @@ public class ToneMap implements RenderStage {
             Scene scene,
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState state,
-            int renderConfig) {
+            RenderConfig renderConfig) {
         final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
         // The anti-aliased color if that stage ran, which leaves the scene color ready to read
@@ -122,9 +122,7 @@ public class ToneMap implements RenderStage {
                 frameData.taaApplied ? frameData.taaColor : frameData.sceneColor;
         frameData.taaApplied = false;
         final TextureInfoVulkan target =
-                RenderConfig.hasFilterStage(renderConfig)
-                        ? frameData.preFilterTexture
-                        : frameData.finalTexture;
+                renderConfig.runsFilters() ? frameData.preFilterTexture : frameData.finalTexture;
         final int width = Math.min(sceneTarget.width(), state.realSize.width());
         final int height = Math.min(sceneTarget.height(), state.realSize.height());
 

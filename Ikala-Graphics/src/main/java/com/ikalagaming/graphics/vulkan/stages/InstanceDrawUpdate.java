@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.vulkan.stages;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.MeshKind;
+import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
@@ -266,7 +267,7 @@ public class InstanceDrawUpdate implements RenderStage {
             Scene scene,
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState vulkanState,
-            int renderConfig) {
+            RenderConfig renderConfig) {
         final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
         final InstanceTable instances = vulkanState.instances;
         frameData.modelDrawInfo.clear();

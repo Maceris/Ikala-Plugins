@@ -81,7 +81,7 @@ final class LabLod implements AutoCloseable {
     private volatile boolean showing;
 
     /** The pipeline before showing. */
-    private int previousPipeline;
+    private RenderConfig previousPipeline;
 
     /** The sun before showing. */
     private DirectionalLight previousSun;
@@ -137,10 +137,7 @@ final class LabLod implements AutoCloseable {
         }
         // The debug stage draws the panel's bounds and locked edge overlays
         GraphicsManager.swapPipeline(
-                previousPipeline
-                        | RenderConfig.SCENE_ENABLED_MASK
-                        | RenderConfig.GUI_ENABLED_MASK
-                        | RenderConfig.DEBUG_ENABLED_MASK);
+                previousPipeline.withWorld(true).withGui(true).withDebug(true));
         scene.getSceneLights()
                 .setDirLight(new DirectionalLight(SUN_COLOR, SUN_DIRECTION, SUN_INTENSITY));
         scene.getSceneLights()
@@ -317,7 +314,8 @@ final class LabLod implements AutoCloseable {
      * @param ambient The ambient light.
      * @param pipeline The pipeline configuration.
      */
-    private static void restoreScene(DirectionalLight sun, AmbientLight ambient, int pipeline) {
+    private static void restoreScene(
+            DirectionalLight sun, AmbientLight ambient, RenderConfig pipeline) {
         final Scene scene = GraphicsManager.getScene();
         if (scene != null && sun != null) {
             scene.getSceneLights().setDirLight(sun);
@@ -342,7 +340,7 @@ final class LabLod implements AutoCloseable {
         panel = null;
         final DirectionalLight sun = previousSun;
         final AmbientLight ambient = previousAmbient;
-        final int pipeline = previousPipeline;
+        final RenderConfig pipeline = previousPipeline;
         GraphicsManager.getUiManager()
                 .post(
                         () -> {

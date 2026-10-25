@@ -6,6 +6,7 @@ import static org.lwjgl.vulkan.VK13.*;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.MeshKind;
+import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.Sections;
 import com.ikalagaming.graphics.bake.BakedVertex;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
@@ -270,7 +271,7 @@ public class ShadowRender implements RenderStage {
             Scene scene,
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState vulkanState,
-            int renderConfig) {
+            RenderConfig renderConfig) {
         final VkCommandBuffer commandBuffer =
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
         final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];

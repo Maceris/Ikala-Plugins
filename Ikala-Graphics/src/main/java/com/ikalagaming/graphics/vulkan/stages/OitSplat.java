@@ -4,6 +4,7 @@ import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.graph.VolumeMath;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.OitVolume;
@@ -124,7 +125,7 @@ public class OitSplat implements RenderStage {
             Scene scene,
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState state,
-            int renderConfig) {
+            RenderConfig renderConfig) {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
         frameData.voxelTransparency =
                 scene != null && scene.getDebugVisualizers().isVoxelTransparency();

@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.vulkan.stages;
 import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
+import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.LodBakes;
 import com.ikalagaming.graphics.vulkan.RenderStage;
@@ -98,7 +99,7 @@ public class LodBake implements RenderStage {
             Scene scene,
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState state,
-            int renderConfig) {
+            RenderConfig renderConfig) {
         final LodBakes bakes = state.lodBakes;
         if (bakes == null || !bakes.hasJobs()) {
             return;

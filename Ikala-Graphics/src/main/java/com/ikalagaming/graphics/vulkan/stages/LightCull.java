@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.vulkan.stages;
 import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
+import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.scene.Projection;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.LightRegistry;
@@ -114,7 +115,7 @@ public class LightCull implements RenderStage {
             Scene scene,
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState state,
-            int renderConfig) {
+            RenderConfig renderConfig) {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
         final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
 

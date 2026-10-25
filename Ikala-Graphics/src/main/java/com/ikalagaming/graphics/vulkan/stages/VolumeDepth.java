@@ -4,6 +4,7 @@ import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.graph.VolumeMath;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
@@ -117,7 +118,7 @@ public class VolumeDepth implements RenderStage {
             Scene scene,
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState state,
-            int renderConfig) {
+            RenderConfig renderConfig) {
         final VolumeBricks bricks = state.volumeBricks;
         final int count = bricks.drawCount(state.frameIndex);
         final int width = Math.min(sceneTarget.width(), state.realSize.width());

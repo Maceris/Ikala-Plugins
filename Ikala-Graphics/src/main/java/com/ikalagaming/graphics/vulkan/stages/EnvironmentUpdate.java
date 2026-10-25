@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.vulkan.stages;
 import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
+import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
@@ -130,7 +131,7 @@ public class EnvironmentUpdate implements RenderStage {
             Scene scene,
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState state,
-            int renderConfig) {
+            RenderConfig renderConfig) {
         if (scene == null || state.environment == null) {
             return;
         }

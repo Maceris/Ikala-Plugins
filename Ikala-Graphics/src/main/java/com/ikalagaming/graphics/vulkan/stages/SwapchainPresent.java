@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.vulkan.stages;
 import static org.lwjgl.vulkan.VK13.*;
 import static org.lwjgl.vulkan.VK13.vkCmdPipelineBarrier2;
 
+import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.Presentation;
 import com.ikalagaming.graphics.vulkan.RenderStage;
@@ -36,7 +37,7 @@ public class SwapchainPresent implements RenderStage {
             Scene scene,
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState vulkanState,
-            int renderConfig) {
+            RenderConfig renderConfig) {
         final VkCommandBuffer commandBuffer =
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
 

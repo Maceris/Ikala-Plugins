@@ -71,10 +71,6 @@ public class PipelineManagerVulkan {
      */
     public static final int OIT_EXTINCTION_FORMAT = VK_FORMAT_R16G16_SFLOAT;
 
-    /** Fallback pipeline that does nothing. */
-    public static final PipelineVulkan ERROR_PIPELINE =
-            new PipelineVulkan(new RenderStage[0], RenderConfig.ERROR_MASK);
-
     /** The texture we store the font atlas on. */
     private TextureHandle fontAtlas;
 
@@ -82,7 +78,7 @@ public class PipelineManagerVulkan {
     private QuadMesh quadMesh;
 
     /** The map from config value to the associated renderer. */
-    private final Map<Integer, PipelineVulkan> renderers;
+    private final Map<RenderConfig, PipelineVulkan> renderers;
 
     /** Model used for rendering the skybox. */
     private SkyboxModel skybox;
@@ -337,10 +333,8 @@ public class PipelineManagerVulkan {
      * @param configuration The pipeline configuration.
      * @return True if the final image is drawn and copied.
      */
-    public static boolean drawsFinalImage(final int configuration) {
-        return RenderConfig.hasSceneStage(configuration)
-                || RenderConfig.hasSkyboxStage(configuration)
-                || RenderConfig.hasFilterStage(configuration);
+    public static boolean drawsFinalImage(@NonNull RenderConfig configuration) {
+        return configuration.world();
     }
 
     /**
@@ -352,14 +346,17 @@ public class PipelineManagerVulkan {
         return stageGuiRender;
     }
 
-    private PipelineVulkan buildPipeline(final int configuration) {
+    /**
+     * Put together the stages a configuration runs. The world is everything from culling to tone
+     * mapping: animation, shadows, the scene, lighting, the sky and transparency.
+     *
+     * @param configuration What to draw.
+     * @return The pipeline.
+     */
+    private PipelineVulkan buildPipeline(@NonNull RenderConfig configuration) {
         List<RenderStage> stages = new ArrayList<>();
-        if (RenderConfig.hasError(configuration)) {
-            log.error("Error in pipeline config");
-            return ERROR_PIPELINE;
-        }
-
-        if (RenderConfig.hasSceneStage(configuration)) {
+        final boolean world = configuration.world();
+        if (world) {
             // Bakes first, so what they write is drawn this frame
             stages.add(stageLodBake);
             stages.add(stageInstanceDrawUpdate);
@@ -367,14 +364,9 @@ public class PipelineManagerVulkan {
             stages.add(stageInstanceTransform);
             stages.add(stageInstanceCull);
             stages.add(stageLodCull);
-        }
-        if (RenderConfig.hasAnimationStage(configuration)) {
+            // Animated models' poses, then the shadows they and everything else cast
             stages.add(stageAnimationRender);
-        }
-        if (RenderConfig.hasShadowStage(configuration)) {
             stages.add(stageShadowRender);
-        }
-        if (RenderConfig.hasSceneStage(configuration)) {
             // Draw what was visible last frame, test the rest against what that drew, draw those
             stages.add(stageSceneRender);
             stages.add(stageDepthPyramidBuild);
@@ -384,11 +376,8 @@ public class PipelineManagerVulkan {
             stages.add(stageLightCull);
             stages.add(stageEnvironmentUpdate);
             stages.add(stageLightRender);
-        }
-        if (RenderConfig.hasSkyboxStage(configuration)) {
+            // The sky the world is lit by, behind it
             stages.add(stageSkyboxRender);
-        }
-        if (RenderConfig.hasSceneStage(configuration)) {
             // Translucent geometry, over the sky too, in any order: what is in front of each
             // surface first, then the surfaces weighted by it
             // Distant cut out and translucent blocks as volumes
@@ -402,17 +391,13 @@ public class PipelineManagerVulkan {
             stages.add(stageOitResolve);
             // Blends this frame into the ones before, in linear light
             stages.add(stageTaa);
-        }
-        if (RenderConfig.hasSceneStage(configuration)
-                || RenderConfig.hasSkyboxStage(configuration)) {
             // From linear light to the image shown, before filters, debug lines and the GUI
             stages.add(stageToneMap);
         }
-        if (RenderConfig.hasFilterStage(configuration)) {
+        if (configuration.runsFilters()) {
             stages.add(stageFilterRender);
         }
-        if (RenderConfig.hasDebugStage(configuration)
-                && RenderConfig.hasSceneStage(configuration)) {
+        if (configuration.drawsDebug()) {
             // After filters so they don't distort the lines, depth tested against the scene
             stages.add(stageDebugRender);
         }
@@ -1151,7 +1136,7 @@ public class PipelineManagerVulkan {
         return new GBuffer(textures, depth, width, height);
     }
 
-    public PipelineVulkan getPipeline(final int configuration) {
+    public PipelineVulkan getPipeline(@NonNull RenderConfig configuration) {
         return renderers.computeIfAbsent(configuration, this::buildPipeline);
     }
 

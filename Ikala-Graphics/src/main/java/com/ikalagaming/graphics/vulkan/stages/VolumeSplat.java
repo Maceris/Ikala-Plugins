@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.vulkan.stages;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.graph.VolumeMath;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
@@ -116,7 +117,7 @@ public class VolumeSplat implements RenderStage {
             Scene scene,
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState state,
-            int renderConfig) {
+            RenderConfig renderConfig) {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
         final VolumeBricks bricks = state.volumeBricks;
         final int count = bricks.drawCount(state.frameIndex);

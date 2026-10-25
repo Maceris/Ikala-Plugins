@@ -144,7 +144,7 @@ public class MainMenu {
     private void loadSphereDemo() {
         Scene scene = GraphicsManager.getScene();
         // What going back to the menu puts back
-        final int previousPipeline = GraphicsManager.getPipelineConfig();
+        final RenderConfig previousPipeline = GraphicsManager.getPipelineConfig();
         final DirectionalLight previousSun = scene.getSceneLights().getDirLight();
         final AmbientLight previousAmbient = scene.getSceneLights().getAmbientLight();
 
@@ -382,9 +382,7 @@ public class MainMenu {
                         4f,
                         lightRange);
 
-        var pipeline =
-                RenderConfig.builder().withAnimation().withScene().withSkybox().withGui().build();
-        GraphicsManager.swapPipeline(pipeline);
+        GraphicsManager.swapPipeline(RenderConfig.WORLD);
         scene.getCamera().setPosition(5.12f, 6.75f, 10.42f);
         scene.getCamera().setRotation(0.94f, 6.28f);
 

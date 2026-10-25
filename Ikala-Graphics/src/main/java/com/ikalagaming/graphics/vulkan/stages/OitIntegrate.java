@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.vulkan.stages;
 import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
+import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.OitVolume;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
@@ -96,7 +97,7 @@ public class OitIntegrate implements RenderStage {
             Scene scene,
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState state,
-            int renderConfig) {
+            RenderConfig renderConfig) {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
         final int width = Math.min(sceneTarget.width(), state.realSize.width());
         final int height = Math.min(sceneTarget.height(), state.realSize.height());

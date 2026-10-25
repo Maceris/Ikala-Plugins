@@ -141,9 +141,7 @@ public class SinglePlayer extends GuiWindow {
         GraphicsManager.forPlugin(FactoryClientPlugin.PLUGIN_NAME)
                 .lights()
                 .point(new Vector3d(2.0, 1.1, 0.0), new Vector3f(1.0f, 0.0f, 0.0f), 1.0f);
-        var pipeline =
-                RenderConfig.builder().withAnimation().withScene().withSkybox().withGui().build();
-        GraphicsManager.swapPipeline(pipeline);
+        GraphicsManager.swapPipeline(RenderConfig.WORLD);
         GraphicsManager.getScene().getCamera().setPosition(1.86f, 2.43f, 2.33f);
         GraphicsManager.getScene().getCamera().setRotation(0.64f, 5.62f);
 
