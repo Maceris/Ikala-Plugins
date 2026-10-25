@@ -1,5 +1,6 @@
 package com.ikalagaming.characters.view;
 
+import com.ikalagaming.characters.definition.Palette;
 import com.ikalagaming.characters.gltf.ImportedCharacter;
 
 import lombok.NonNull;
@@ -154,6 +155,21 @@ public record PartSlots(@NonNull List<Slot> slots) {
                         ? name.substring(prefix.length())
                         : name;
         return rest.replace('_', ' ');
+    }
+
+    /**
+     * The palette channel that colors a slot's parts, until parts come from definitions that say:
+     * hair takes the hair color, the body parts every character wears take the skin color, and
+     * whatever can be taken off takes the costume's primary color.
+     *
+     * @param slot The slot.
+     * @return The channel, one of {@link Palette#STANDARD_CHANNELS}.
+     */
+    public static String channelOf(@NonNull Slot slot) {
+        if (HAIR.equals(slot.id())) {
+            return Palette.HAIR;
+        }
+        return slot.optional() ? Palette.PRIMARY : Palette.SKIN;
     }
 
     /**

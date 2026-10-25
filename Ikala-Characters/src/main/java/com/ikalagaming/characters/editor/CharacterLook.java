@@ -3,6 +3,7 @@ package com.ikalagaming.characters.editor;
 import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.data.Range;
 import com.ikalagaming.characters.definition.BodyPlan;
+import com.ikalagaming.characters.definition.Palette;
 import com.ikalagaming.characters.definition.Slider;
 import com.ikalagaming.characters.view.PartSlots;
 import com.ikalagaming.random.SeededRandom;
@@ -16,6 +17,7 @@ import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * What a character in the editor looks like: the part in each slot and each slider's value, with a
@@ -45,8 +47,10 @@ final class CharacterLook {
      * @param choices Each slot's choice.
      * @param values Each slider's values, by ID.
      * @param variant Which variant of the body plan, or -1 for none.
+     * @param colors Each palette channel's color code, for the channels colored.
      */
-    record Snapshot(int[] choices, Map<Id, float[]> values, int variant) {}
+    record Snapshot(
+            int[] choices, Map<Id, float[]> values, int variant, Map<String, Integer> colors) {}
 
     /** The slots. */
     private final PartSlots slots;
@@ -66,6 +70,12 @@ final class CharacterLook {
     /** Which variant the body is, or -1 if the plan has none. */
     private int variant = -1;
 
+    /** The palette channels the slots' parts take, in the order editors list them. */
+    private final List<String> channels;
+
+    /** Each palette channel's color code; channels left out keep the parts' own colors. */
+    private final Map<String, Integer> colors = new LinkedHashMap<>();
+
     /** Earlier looks, the latest first. */
     private final Deque<Snapshot> history = new ArrayDeque<>();
 
@@ -84,9 +94,31 @@ final class CharacterLook {
             @NonNull PartSlots slots,
             @NonNull List<Slider> sliders,
             @NonNull List<BodyPlan.Variant> variants) {
+        this(slots, sliders, variants, List.of());
+    }
+
+    /**
+     * Start a look with the slots' initial parts and the sliders where the first variant starts
+     * them, or at 0, offering more palette channels than the slots' own, like those tint masks use.
+     *
+     * @param slots The slots.
+     * @param sliders The sliders.
+     * @param variants The body plan's variants, which may be none.
+     * @param moreChannels Palette channels to offer besides the slots' own.
+     */
+    CharacterLook(
+            @NonNull PartSlots slots,
+            @NonNull List<Slider> sliders,
+            @NonNull List<BodyPlan.Variant> variants,
+            @NonNull List<String> moreChannels) {
         this.slots = slots;
         this.sliders = List.copyOf(sliders);
         this.variants = List.copyOf(variants);
+        List<String> used = new ArrayList<>(moreChannels);
+        for (PartSlots.Slot slot : slots.slots()) {
+            used.add(PartSlots.channelOf(slot));
+        }
+        channels = Palette.STANDARD_CHANNELS.stream().filter(used::contains).toList();
         choices = new int[slots.slots().size()];
         for (int i = 0; i < choices.length; ++i) {
             choices[i] = slots.slots().get(i).initial();
@@ -130,6 +162,75 @@ final class CharacterLook {
         remember();
         variant = chosen;
         startSliders();
+        ++version;
+    }
+
+    /**
+     * The palette channels the slots' parts take.
+     *
+     * @return The channels, in the order editors list them.
+     */
+    List<String> channels() {
+        return channels;
+    }
+
+    /**
+     * A palette channel's color.
+     *
+     * @param channel The channel.
+     * @return Its color code, or null if its parts keep their own colors.
+     */
+    Integer color(@NonNull String channel) {
+        return colors.get(channel);
+    }
+
+    /**
+     * Color a palette channel, remembering the look before to undo.
+     *
+     * @param channel The channel.
+     * @param code The color code, or null for the parts' own colors.
+     */
+    void setColor(@NonNull String channel, Integer code) {
+        if (Objects.equals(colors.get(channel), code)) {
+            return;
+        }
+        remember();
+        putColor(channel, code);
+    }
+
+    /**
+     * Color a palette channel without remembering the look before, for a drag that remembered it
+     * when it started; see {@link #push}.
+     *
+     * @param channel The channel.
+     * @param code The color code.
+     */
+    void dragColor(@NonNull String channel, int code) {
+        putColor(channel, code);
+    }
+
+    /**
+     * Change a channel's color.
+     *
+     * @param channel The channel.
+     * @param code The color code, or null to remove it.
+     */
+    private void putColor(String channel, Integer code) {
+        if (code == null) {
+            colors.remove(channel);
+        } else {
+            colors.put(channel, code);
+        }
+        ++version;
+    }
+
+    /** Give every channel back the parts' own colors. */
+    void resetColors() {
+        if (colors.isEmpty()) {
+            return;
+        }
+        remember();
+        colors.clear();
         ++version;
     }
 
@@ -288,7 +389,7 @@ final class CharacterLook {
     Snapshot snapshot() {
         Map<Id, float[]> copied = new LinkedHashMap<>();
         values.forEach((id, value) -> copied.put(id, value.clone()));
-        return new Snapshot(choices.clone(), copied, variant);
+        return new Snapshot(choices.clone(), copied, variant, new LinkedHashMap<>(colors));
     }
 
     /** Remember the look now, to undo the next change. */
@@ -330,6 +431,8 @@ final class CharacterLook {
         System.arraycopy(last.choices(), 0, choices, 0, choices.length);
         last.values().forEach((id, value) -> values.put(id, value.clone()));
         variant = last.variant();
+        colors.clear();
+        colors.putAll(last.colors());
         ++version;
         return true;
     }
@@ -359,6 +462,9 @@ final class CharacterLook {
                 double picked = random.nextDouble(range.min(), range.max());
                 value[axis] = (float) (middle + (picked - middle) * RANDOM_SPREAD);
             }
+        }
+        for (String channel : channels) {
+            colors.put(channel, Swatches.random(channel, random));
         }
         ++version;
     }

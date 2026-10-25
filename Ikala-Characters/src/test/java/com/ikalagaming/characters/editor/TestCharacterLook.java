@@ -1,8 +1,10 @@
 package com.ikalagaming.characters.editor;
 
+import com.ikalagaming.characters.data.ColorCode;
 import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.data.Range;
 import com.ikalagaming.characters.definition.BodyPlan;
+import com.ikalagaming.characters.definition.Palette;
 import com.ikalagaming.characters.definition.Slider;
 import com.ikalagaming.characters.view.PartSlots;
 import com.ikalagaming.random.SeededRandom;
@@ -117,6 +119,33 @@ class TestCharacterLook {
         look.undo();
         Assertions.assertEquals(0, look.variant());
         Assertions.assertEquals(0, look.values().get(HEIGHT)[0]);
+    }
+
+    /** Channels come from the slots, and colors can be set, dragged, undone and reset. */
+    @Test
+    void testColors() {
+        CharacterLook look = look();
+        // The fixed body and head take skin, the helmet the primary color
+        Assertions.assertEquals(List.of(Palette.SKIN, Palette.PRIMARY), look.channels());
+        Assertions.assertNull(look.color(Palette.SKIN));
+
+        look.setColor(Palette.SKIN, ColorCode.of(3, 6, 40));
+        look.push(look.snapshot());
+        look.dragColor(Palette.PRIMARY, ColorCode.of(40, 15, 63));
+        look.dragColor(Palette.PRIMARY, ColorCode.of(41, 15, 63));
+        Assertions.assertEquals(ColorCode.of(41, 15, 63), look.color(Palette.PRIMARY));
+
+        // The drag undoes in one step
+        look.undo();
+        Assertions.assertNull(look.color(Palette.PRIMARY));
+        Assertions.assertEquals(ColorCode.of(3, 6, 40), look.color(Palette.SKIN));
+
+        look.randomize(new SeededRandom(5), Slider.CONTEXT_PLAYER);
+        Assertions.assertNotNull(look.color(Palette.PRIMARY));
+        look.resetColors();
+        Assertions.assertNull(look.color(Palette.SKIN));
+        look.undo();
+        Assertions.assertNotNull(look.color(Palette.SKIN));
     }
 
     /** Clearing empties what can be empty and puts the rest back; randomizing stays in range. */

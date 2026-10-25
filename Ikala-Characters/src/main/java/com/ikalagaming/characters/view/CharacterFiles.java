@@ -10,9 +10,12 @@ import com.ikalagaming.characters.retarget.Retargeter;
 import lombok.NonNull;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -22,6 +25,9 @@ import java.util.Set;
  * @author Ches Burks
  */
 public final class CharacterFiles {
+    /** What a glTF file's tint mask folder's name ends with. */
+    public static final String MASK_FOLDER_SUFFIX = "_masks";
+
     /**
      * Read a character, putting it on the loaded rig with exactly its bones if there is one.
      *
@@ -33,7 +39,7 @@ public final class CharacterFiles {
      */
     public static ImportedCharacter read(@NonNull Path file, @NonNull CharacterRegistry registry)
             throws IOException {
-        ImportedCharacter character = GltfImporter.read(file);
+        ImportedCharacter character = withTintMasks(file, GltfImporter.read(file));
         Rig definition = matchingRig(character.rig(), registry);
         return definition == null ? character : character.onRig(definition);
     }
@@ -53,7 +59,7 @@ public final class CharacterFiles {
     public static ImportedCharacter readRetargeted(
             @NonNull Path file, @NonNull Path referenceFile, @NonNull CharacterRegistry registry)
             throws IOException {
-        ImportedCharacter source = GltfImporter.read(file);
+        ImportedCharacter source = withTintMasks(file, GltfImporter.read(file));
         RigMap map = coveringMap(source.rig(), registry);
         if (map == null) {
             throw new IllegalArgumentException("No loaded rig map covers the skeleton's bones");
@@ -77,7 +83,7 @@ public final class CharacterFiles {
     public static ImportedCharacter readAny(
             @NonNull Path file, @NonNull Path referenceFile, @NonNull CharacterRegistry registry)
             throws IOException {
-        ImportedCharacter character = GltfImporter.read(file);
+        ImportedCharacter character = withTintMasks(file, GltfImporter.read(file));
         Rig definition = matchingRig(character.rig(), registry);
         if (definition != null) {
             return character.onRig(definition);
@@ -89,6 +95,51 @@ public final class CharacterFiles {
         Rig target = registry.get(Rig.class, map.rig());
         ImportedCharacter reference = GltfImporter.read(referenceFile).onRig(target);
         return Retargeter.retarget(character, map, target, reference.rest());
+    }
+
+    /**
+     * The folder beside a glTF file that holds its tint masks: the file's name without its
+     * extension, then {@value #MASK_FOLDER_SUFFIX}, like {@code rpg_male_masks} for {@code
+     * rpg_male.glb}. glTF has no place for tint masks, and exporters drop images nothing uses.
+     *
+     * @param file The glTF file.
+     * @return The folder.
+     */
+    public static Path maskFolder(@NonNull Path file) {
+        String name = file.getFileName().toString();
+        int dot = name.lastIndexOf('.');
+        return file.resolveSibling((dot > 0 ? name.substring(0, dot) : name) + MASK_FOLDER_SUFFIX);
+    }
+
+    /**
+     * Give a character the tint masks beside its file: for each base color image, a PNG in the mask
+     * folder with the image's name, like {@code rpg_male_masks/human_male_armor.png}.
+     *
+     * @param file The glTF file.
+     * @param character The character read from it.
+     * @return The character with its masks, or as it was if it has none.
+     * @throws IOException If a mask can't be read.
+     */
+    static ImportedCharacter withTintMasks(Path file, ImportedCharacter character)
+            throws IOException {
+        Path folder = maskFolder(file);
+        if (!Files.isDirectory(folder)) {
+            return character;
+        }
+        Map<Integer, ImportedCharacter.ImageData> masks = new HashMap<>();
+        for (int i = 0; i < character.images().size(); ++i) {
+            String name = character.images().get(i).name();
+            int dot = name.lastIndexOf('.');
+            String stem = dot > 0 ? name.substring(0, dot) : name;
+            Path mask = folder.resolve(stem + ".png");
+            if (Files.isRegularFile(mask)) {
+                masks.put(
+                        i,
+                        new ImportedCharacter.ImageData(
+                                stem + MASK_FOLDER_SUFFIX, "image/png", Files.readAllBytes(mask)));
+            }
+        }
+        return character.withTintMasks(masks);
     }
 
     /**

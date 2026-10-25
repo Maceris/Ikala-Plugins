@@ -5,8 +5,8 @@ import com.ikalagaming.characters.data.Doc;
 import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.data.JsonPath;
 
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeSet;
 
 /**
@@ -25,9 +25,30 @@ public record Palette(
     /** The field for the colors. */
     public static final String FIELD_COLORS = "colors";
 
-    /** The channels every plan has. Plans can add more. */
-    public static final Set<String> STANDARD_CHANNELS =
-            Set.of("skin", "eyes", "hair", "primary", "secondary", "tertiary", "accent");
+    /** The skin channel. */
+    public static final String SKIN = "skin";
+
+    /** The eye channel. */
+    public static final String EYES = "eyes";
+
+    /** The hair channel. */
+    public static final String HAIR = "hair";
+
+    /** The costume's main channel. */
+    public static final String PRIMARY = "primary";
+
+    /** The costume's second channel. */
+    public static final String SECONDARY = "secondary";
+
+    /** The costume's third channel. */
+    public static final String TERTIARY = "tertiary";
+
+    /** The costume's accent channel. */
+    public static final String ACCENT = "accent";
+
+    /** The channels every plan has, in the order editors list them. Plans can add more. */
+    public static final List<String> STANDARD_CHANNELS =
+            List.of(SKIN, EYES, HAIR, PRIMARY, SECONDARY, TERTIARY, ACCENT);
 
     @Override
     public void check(Checks checks) {

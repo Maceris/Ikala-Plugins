@@ -1,7 +1,9 @@
 package com.ikalagaming.characters.editor;
 
+import com.ikalagaming.characters.data.ColorCode;
 import com.ikalagaming.characters.data.Range;
 import com.ikalagaming.characters.definition.BodyPlan;
+import com.ikalagaming.characters.definition.Palette;
 import com.ikalagaming.characters.definition.Slider;
 import com.ikalagaming.characters.demo.CharacterPreview;
 import com.ikalagaming.characters.gltf.ImportedCharacter;
@@ -24,6 +26,7 @@ import com.ikalagaming.graphics.gui.data.IkIO;
 import com.ikalagaming.graphics.gui.data.Viewport;
 import com.ikalagaming.graphics.gui.enums.Condition;
 import com.ikalagaming.graphics.gui.enums.MouseButton;
+import com.ikalagaming.graphics.gui.flags.ColorEditFlags;
 import com.ikalagaming.graphics.gui.flags.SelectableFlags;
 import com.ikalagaming.graphics.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.gui.util.Color;
@@ -48,6 +51,7 @@ import org.joml.Vector4f;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -216,6 +220,12 @@ public final class CharacterEditor {
     /** The face table's column headings, for sliders with width, height and depth values. */
     private static final String[] AXES = {"Width", "Height", "Depth"};
 
+    /** The gap between swatches, in pixels, small so a row of them fits the panel. */
+    private static final float SWATCH_GAP = 2;
+
+    /** No swatch hovered. */
+    private static final int NO_SWATCH = -1;
+
     /** Milliseconds per second, for IkGui's frame time. */
     private static final double MILLISECONDS = 1000;
 
@@ -302,6 +312,21 @@ public final class CharacterEditor {
 
     /** Its slots sorted into the body's regions. */
     private PartCategories categories;
+
+    /** The palette channel the Colors tab shows, or null before one is picked. */
+    private String colorChannel;
+
+    /** The color picker's color, sRGB. */
+    private final float[] picker = {0.5f, 0.5f, 0.5f};
+
+    /** The look's version when the parts were last colored, or -1 to color them again. */
+    private int shownColorVersion = -1;
+
+    /** The channel last previewed, or null. */
+    private String shownPreviewChannel;
+
+    /** The swatch last previewed. */
+    private int shownPreviewCode;
 
     /** Whether the Body tab is showing, rather than the Costume tab. */
     private boolean bodyTab = true;
@@ -503,7 +528,14 @@ public final class CharacterEditor {
         regions = prepared.regions();
         categories = PartCategories.of(character, slots);
         List<Slider> found = findSliders(character);
-        look = new CharacterLook(slots, found, plan == null ? List.of() : plan.variants());
+        // Masks color their green and blue by the costume's secondary and accent colors
+        List<String> maskChannels =
+                character.materials().stream().anyMatch(data -> data.tintMask() >= 0)
+                        ? List.of(Palette.SECONDARY, Palette.ACCENT)
+                        : List.of();
+        look =
+                new CharacterLook(
+                        slots, found, plan == null ? List.of() : plan.variants(), maskChannels);
         beforeEditVersion = -1;
         editing = false;
         lastWorn = look.worn(CharacterLook.NO_PREVIEW, 0);
@@ -513,13 +545,15 @@ public final class CharacterEditor {
                         plugin,
                         character,
                         regions.regions(),
+                        partChannels(slots, character.parts().size()),
                         new Vector3d(CharacterStage.origin()),
                         new Quaternionf(),
                         lastWorn);
         shown.setHiddenRegions(regions.hidden(lastWorn));
+        shownColorVersion = -1;
         characterName.set(character.name());
         if (!applySliders()) {
-            look = new CharacterLook(slots, List.of(), List.of());
+            look = new CharacterLook(slots, List.of(), List.of(), maskChannels);
             slidersTitle.set("No sliders: the skeleton lacks their bones");
         }
         openCategory = Math.min(openCategory, categories.categories().size() - 1);
@@ -936,7 +970,8 @@ public final class CharacterEditor {
     }
 
     /**
-     * Draw the sliders, grouped as they say, inside the slider panel. A drag is one change to undo.
+     * Draw the look panel: a Scales tab with the sliders and a Colors tab with the palette
+     * channels. A drag of a slider or the color picker is one change to undo.
      *
      * @param frame The UI frame.
      */
@@ -949,6 +984,34 @@ public final class CharacterEditor {
             beforeEdit = look.snapshot();
             beforeEditVersion = look.version();
         }
+        int hovered = NO_SWATCH;
+        if (IkGui.beginTabBar("##look-tabs")) {
+            if (IkGui.beginTabItem("Scales")) {
+                drawScales();
+                IkGui.endTabItem();
+            }
+            if (IkGui.beginTabItem("Colors")) {
+                hovered = drawColors();
+                IkGui.endTabItem();
+            }
+            IkGui.endTabBar();
+        }
+        if (editing && !IkGui.isAnyItemActive()) {
+            editing = false;
+        }
+        showColors(hovered == NO_SWATCH ? null : colorChannel, hovered);
+    }
+
+    /** Remember the look before a drag for undo, once, when the drag starts changing it. */
+    private void startEdit() {
+        if (!editing) {
+            look.push(beforeEdit);
+            editing = true;
+        }
+    }
+
+    /** Draw the sliders, grouped as they say. */
+    private void drawScales() {
         String group = null;
         boolean changed = false;
         for (Slider slider : look.sliders()) {
@@ -970,16 +1033,184 @@ public final class CharacterEditor {
             }
         }
         if (changed) {
-            if (!editing) {
-                look.push(beforeEdit);
-                editing = true;
-            }
+            startEdit();
             look.touch();
             applySliders();
         }
-        if (editing && !IkGui.isAnyItemActive()) {
-            editing = false;
+    }
+
+    /**
+     * Draw the Colors tab: the palette channels the parts take, the chosen channel's swatches,
+     * which preview on the character while hovered, and a picker that snaps to the colors a design
+     * can hold.
+     *
+     * @return The color code of the swatch hovered, or {@link #NO_SWATCH}.
+     */
+    private int drawColors() {
+        List<String> channels = look.channels();
+        if (channels.isEmpty()) {
+            IkGui.textDisabled("Nothing to color");
+            return NO_SWATCH;
         }
+        if (colorChannel == null || !channels.contains(colorChannel)) {
+            colorChannel = channels.get(0);
+        }
+        float swatch = IkGui.getFrameHeight();
+        for (String channel : channels) {
+            Integer code = look.color(channel);
+            IkGui.colorButton(
+                    "##channel-" + channel, rgba(code), ColorEditFlags.NO_TOOLTIP, swatch, swatch);
+            IkGui.sameLine();
+            String name = channel.substring(0, 1).toUpperCase(Locale.ROOT) + channel.substring(1);
+            String text = code == null ? name + "  (the parts' own colors)" : name;
+            if (IkGui.selectable(text + "##" + channel, channel.equals(colorChannel))) {
+                colorChannel = channel;
+            }
+        }
+        IkGui.separatorText(colorChannel);
+
+        int hovered = NO_SWATCH;
+        List<Integer> swatches = Swatches.forChannel(colorChannel);
+        // A fixed size: sizing them to the panel's width made a scrollbar come and go each frame
+        float size = swatch;
+        for (int i = 0; i < swatches.size(); ++i) {
+            if (i % Swatches.COLUMNS != 0) {
+                IkGui.sameLine(0, SWATCH_GAP);
+            }
+            int code = swatches.get(i);
+            if (IkGui.colorButton(
+                    "##swatch" + i, rgba(code), ColorEditFlags.NO_TOOLTIP, size, size)) {
+                changeLook(changed -> changed.setColor(colorChannel, code));
+            }
+            if (IkGui.isItemHovered()) {
+                hovered = code;
+            }
+        }
+
+        // The picker snaps to the colors a design can hold
+        Integer current = look.color(colorChannel);
+        if (current != null) {
+            ColorCode.decode(current, picker);
+        }
+        IkGui.spacing();
+        if (IkGui.colorPicker3(
+                "##picker",
+                picker,
+                ColorEditFlags.NO_SIDE_PREVIEW
+                        | ColorEditFlags.NO_INPUTS
+                        | ColorEditFlags.NO_ALPHA)) {
+            startEdit();
+            look.dragColor(colorChannel, ColorCode.encode(picker[0], picker[1], picker[2]));
+        }
+        if (current != null) {
+            IkGui.textDisabled(
+                    String.format(
+                            Locale.ROOT, "%s, code %04x", ColorCode.toColor(current), current));
+        }
+        if (IkGui.button("Use the parts' own colors")) {
+            changeLook(changed -> changed.setColor(colorChannel, null));
+        }
+        if (channelUntinted(colorChannel)) {
+            IkGui.textWrapped(
+                    "These parts are painted textures without tint masks, so they keep their own"
+                            + " colors.");
+        }
+        return hovered;
+    }
+
+    /**
+     * Whether no part whose own channel this is takes tints, so choosing its color shows nothing.
+     *
+     * @param channel The palette channel.
+     * @return True if none does.
+     */
+    private boolean channelUntinted(String channel) {
+        boolean any = false;
+        for (PartSlots.Slot slot : look.slots().slots()) {
+            if (!PartSlots.channelOf(slot).equals(channel)) {
+                continue;
+            }
+            for (List<Integer> option : slot.options()) {
+                for (int part : option) {
+                    if (shown.isTinted(part)) {
+                        return false;
+                    }
+                    any = true;
+                }
+            }
+        }
+        return any;
+    }
+
+    /**
+     * Each part's own palette channel, as its position in the standard channels.
+     *
+     * @param slots The parts sorted into slots.
+     * @param partCount How many parts there are.
+     * @return The channels, by part.
+     */
+    private static int[] partChannels(PartSlots slots, int partCount) {
+        int[] channels = new int[partCount];
+        Arrays.fill(channels, -1);
+        for (PartSlots.Slot slot : slots.slots()) {
+            int channel = Palette.STANDARD_CHANNELS.indexOf(PartSlots.channelOf(slot));
+            for (List<Integer> option : slot.options()) {
+                for (int part : option) {
+                    channels[part] = channel;
+                }
+            }
+        }
+        return channels;
+    }
+
+    /**
+     * A color code as IkGui's RGBA, or a mid gray for the parts' own colors.
+     *
+     * @param code The code, or null.
+     * @return The color.
+     */
+    private static float[] rgba(Integer code) {
+        float[] color = {0.5f, 0.5f, 0.5f, 1};
+        if (code != null) {
+            ColorCode.decode(code, color);
+        }
+        return color;
+    }
+
+    /**
+     * Color the parts by their channels, with one channel previewing a swatch, if that changes what
+     * is shown.
+     *
+     * @param previewChannel The channel to preview, or null.
+     * @param previewCode The swatch's color code.
+     */
+    private void showColors(String previewChannel, int previewCode) {
+        if (shown == null
+                || look.version() == shownColorVersion
+                        && Objects.equals(previewChannel, shownPreviewChannel)
+                        && previewCode == shownPreviewCode) {
+            return;
+        }
+        shownColorVersion = look.version();
+        shownPreviewChannel = previewChannel;
+        shownPreviewCode = previewCode;
+        // One tint per standard channel; channels without a color stay white, changing nothing
+        List<String> channels = Palette.STANDARD_CHANNELS;
+        float[] tints = new float[3 * channels.size()];
+        Arrays.fill(tints, 1);
+        float[] rgb = new float[3];
+        for (int c = 0; c < channels.size(); ++c) {
+            String channel = channels.get(c);
+            Integer code =
+                    channel.equals(previewChannel)
+                            ? Integer.valueOf(previewCode)
+                            : look.color(channel);
+            if (code != null) {
+                ColorCode.decode(code, rgb);
+                System.arraycopy(rgb, 0, tints, 3 * c, 3);
+            }
+        }
+        shown.setTints(tints);
     }
 
     /**

@@ -92,13 +92,49 @@ public record ImportedCharacter(
      * @param image The index of its base color image, or -1 for none.
      * @param metallic The metallic factor.
      * @param roughness The roughness factor.
+     * @param tintMask The index of its tint mask image, or -1 for none. glTF has no tint masks, so
+     *     they are found beside the file; see {@link #withTintMasks}.
      */
     public record MaterialData(
             @NonNull String name,
             float @NonNull [] baseColor,
             int image,
             float metallic,
-            float roughness) {}
+            float roughness,
+            int tintMask) {}
+
+    /**
+     * The same character with tint masks for some of its base color images.
+     *
+     * @param masks Mask images, by the index of the base color image each goes with.
+     * @return The character, its materials pointing at the masks, which are added to its images.
+     */
+    public ImportedCharacter withTintMasks(@NonNull Map<Integer, ImageData> masks) {
+        if (masks.isEmpty()) {
+            return this;
+        }
+        List<ImageData> allImages = new ArrayList<>(images);
+        Map<Integer, Integer> added = new HashMap<>();
+        for (Map.Entry<Integer, ImageData> mask : masks.entrySet()) {
+            added.put(mask.getKey(), allImages.size());
+            allImages.add(mask.getValue());
+        }
+        List<MaterialData> masked = new ArrayList<>();
+        for (MaterialData material : materials) {
+            Integer mask = added.get(material.image());
+            masked.add(
+                    mask == null
+                            ? material
+                            : new MaterialData(
+                                    material.name(),
+                                    material.baseColor(),
+                                    material.image(),
+                                    material.metallic(),
+                                    material.roughness(),
+                                    mask));
+        }
+        return new ImportedCharacter(name, rig, rest, parts, clips, masked, allImages);
+    }
 
     /**
      * An encoded image, like a PNG.

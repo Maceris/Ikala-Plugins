@@ -1,5 +1,6 @@
 package com.ikalagaming.characters.view;
 
+import com.ikalagaming.characters.definition.Palette;
 import com.ikalagaming.characters.gltf.ImportedCharacter;
 import com.ikalagaming.characters.pose.Clip;
 import com.ikalagaming.characters.pose.Pose;
@@ -30,7 +31,9 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -81,6 +84,12 @@ public final class ShownCharacter implements AutoCloseable {
     /** Each part's material, by the part's index, or null. */
     private final List<Material> partMaterials = new ArrayList<>();
 
+    /** Each part's tint mask, by the part's index, or null. */
+    private final List<TextureHandle> partMasks = new ArrayList<>();
+
+    /** Which tint slot each part's mask channels take, packed, by the part's index. */
+    private final List<Integer> partSlots = new ArrayList<>();
+
     /** The loaded textures. */
     private final List<TextureHandle> textures = new ArrayList<>();
 
@@ -117,7 +126,7 @@ public final class ShownCharacter implements AutoCloseable {
             @NonNull Vector3d position,
             @NonNull Quaternionf facing,
             @NonNull Collection<Integer> shown) {
-        this(plugin, character, null, position, facing, shown);
+        this(plugin, character, null, null, position, facing, shown);
     }
 
     /**
@@ -128,6 +137,8 @@ public final class ShownCharacter implements AutoCloseable {
      * @param character The character.
      * @param regions Each part's mask region per vertex, or null for a part never hidden; null for
      *     no regions at all.
+     * @param channels Each part's own palette channel, as its position in {@link
+     *     Palette#STANDARD_CHANNELS}, or -1 for none; null for no tinting. See {@link #tintSlots}.
      * @param position Where its root stands.
      * @param facing Which way it faces; characters face +Z.
      * @param shown The indices of the parts to show.
@@ -136,6 +147,7 @@ public final class ShownCharacter implements AutoCloseable {
             @NonNull String plugin,
             @NonNull ImportedCharacter character,
             List<int[]> regions,
+            int[] channels,
             @NonNull Vector3d position,
             @NonNull Quaternionf facing,
             @NonNull Collection<Integer> shown) {
@@ -146,26 +158,30 @@ public final class ShownCharacter implements AutoCloseable {
         var graphics = GraphicsManager.forPlugin(plugin);
         Skins skins = graphics.skins();
 
+        // Tint masks hold weights, not colors, so they load linear
+        Set<Integer> maskImages = new HashSet<>();
+        for (ImportedCharacter.MaterialData data : character.materials()) {
+            if (data.tintMask() >= 0) {
+                maskImages.add(data.tintMask());
+            }
+        }
         List<TextureHandle> imageTextures = new ArrayList<>();
-        for (ImportedCharacter.ImageData image : character.images()) {
-            TextureHandle texture = decode(graphics.textures(), image);
+        for (int i = 0; i < character.images().size(); ++i) {
+            ImportedCharacter.ImageData image = character.images().get(i);
+            TextureHandle texture =
+                    decode(
+                            graphics.textures(),
+                            image,
+                            maskImages.contains(i) ? Format.R8G8B8A8_UNORM : Format.R8G8B8A8_SRGB);
             imageTextures.add(texture);
             if (texture != null) {
                 textures.add(texture);
             }
         }
+        // Parts share their file's materials; colors come from the instance's tints
         List<Material> byIndex = new ArrayList<>();
         for (ImportedCharacter.MaterialData data : character.materials()) {
-            Material material = new Material();
-            float[] color = data.baseColor();
-            // Materials hold sRGB colors, glTF's factors are linear
-            material.getBaseColor()
-                    .set(encode(color[0]), encode(color[1]), encode(color[2]), color[3]);
-            material.setMetallic(data.metallic());
-            material.setRoughness(data.roughness());
-            if (data.image() >= 0 && data.image() < imageTextures.size()) {
-                material.setTexture(imageTextures.get(data.image()));
-            }
+            Material material = material(data, imageTextures);
             GraphicsManager.getScene().getMaterialCache().addMaterial(material);
             materials.add(material);
             byIndex.add(material);
@@ -181,10 +197,18 @@ public final class ShownCharacter implements AutoCloseable {
                             part.indices(),
                             part.min(),
                             part.max()));
-            partMaterials.add(
-                    part.material() >= 0 && part.material() < byIndex.size()
-                            ? byIndex.get(part.material())
-                            : null);
+            boolean known = part.material() >= 0 && part.material() < byIndex.size();
+            Material material = known ? byIndex.get(part.material()) : null;
+            int maskImage = known ? character.materials().get(part.material()).tintMask() : -1;
+            TextureHandle mask =
+                    maskImage >= 0 && maskImage < imageTextures.size()
+                            ? imageTextures.get(maskImage)
+                            : null;
+            partMaterials.add(material);
+            partMasks.add(mask);
+            boolean textured = material != null && material.getTexture() != null;
+            int channel = channels == null ? -1 : channels[p];
+            partSlots.add(tintSlots(channel, mask != null, textured));
         }
         instance = skins.place(skeleton.size(), position, facing, 1);
         showParts(shown);
@@ -207,7 +231,12 @@ public final class ShownCharacter implements AutoCloseable {
     public void showParts(@NonNull Collection<Integer> shown) {
         List<SkinnedPart> parts = new ArrayList<>();
         for (int index : shown) {
-            parts.add(new SkinnedPart(meshes.get(index), partMaterials.get(index)));
+            parts.add(
+                    new SkinnedPart(
+                            meshes.get(index),
+                            partMaterials.get(index),
+                            partMasks.get(index),
+                            partSlots.get(index)));
         }
         GraphicsManager.forPlugin(plugin).skins().setParts(instance, parts);
     }
@@ -219,6 +248,72 @@ public final class ShownCharacter implements AutoCloseable {
      */
     public void setHiddenRegions(long hidden) {
         GraphicsManager.forPlugin(plugin).skins().setHiddenRegions(instance, hidden);
+    }
+
+    /**
+     * Which tint slot each of a part's mask channels takes, slots being positions in {@link
+     * Palette#STANDARD_CHANNELS}. A part with a mask takes its own channel in red, the costume's
+     * secondary color in green and its accent in blue. A part without one takes its own channel all
+     * over if it is untextured; a textured part without a mask isn't tinted, since one color over a
+     * painted texture only muddies it.
+     *
+     * @param channel The part's own channel's slot, or -1 for none.
+     * @param masked Whether it has a tint mask.
+     * @param textured Whether its material has a texture.
+     * @return The packed slots, see {@link SkinnedPart#slots}.
+     */
+    static int tintSlots(int channel, boolean masked, boolean textured) {
+        if (channel < 0) {
+            return SkinnedPart.NO_TINT;
+        }
+        if (masked) {
+            return SkinnedPart.slots(
+                    channel,
+                    Palette.STANDARD_CHANNELS.indexOf(Palette.SECONDARY),
+                    Palette.STANDARD_CHANNELS.indexOf(Palette.ACCENT),
+                    -1);
+        }
+        return textured ? SkinnedPart.NO_TINT : SkinnedPart.slots(channel, -1, -1, -1);
+    }
+
+    /**
+     * Whether a part takes tint colors at all, see {@link #tintSlots}.
+     *
+     * @param part The part's index.
+     * @return True if some channel of it is tinted.
+     */
+    public boolean isTinted(int part) {
+        return partSlots.get(part) != SkinnedPart.NO_TINT;
+    }
+
+    /**
+     * Change the tint colors, one per palette channel in {@link Palette#STANDARD_CHANNELS} order.
+     *
+     * @param colors sRGB colors, three floats from 0 to 1 per channel; white changes nothing.
+     */
+    public void setTints(float @NonNull [] colors) {
+        GraphicsManager.forPlugin(plugin).skins().setTints(instance, colors);
+    }
+
+    /**
+     * Make a material from the file's.
+     *
+     * @param data The file's material.
+     * @param imageTextures The loaded images, by index, null where one couldn't be decoded.
+     * @return The material.
+     */
+    private static Material material(
+            ImportedCharacter.MaterialData data, List<TextureHandle> imageTextures) {
+        Material material = new Material();
+        float[] color = data.baseColor();
+        // Materials hold sRGB colors, glTF's factors are linear
+        material.getBaseColor().set(encode(color[0]), encode(color[1]), encode(color[2]), color[3]);
+        material.setMetallic(data.metallic());
+        material.setRoughness(data.roughness());
+        if (data.image() >= 0 && data.image() < imageTextures.size()) {
+            material.setTexture(imageTextures.get(data.image()));
+        }
+        return material;
     }
 
     /**
@@ -328,9 +423,11 @@ public final class ShownCharacter implements AutoCloseable {
      *
      * @param textureApi The textures API.
      * @param image The image.
+     * @param format The format to load it as: sRGB for colors, unsigned normalized for masks.
      * @return The texture, or null if it can't be decoded.
      */
-    private static TextureHandle decode(Textures textureApi, ImportedCharacter.ImageData image) {
+    private static TextureHandle decode(
+            Textures textureApi, ImportedCharacter.ImageData image, Format format) {
         BufferedImage decoded;
         try {
             decoded = ImageIO.read(new ByteArrayInputStream(image.bytes()));
@@ -356,7 +453,7 @@ public final class ShownCharacter implements AutoCloseable {
             }
         }
         pixels.flip();
-        return textureApi.load(pixels, Format.R8G8B8A8_SRGB, width, height, TextureWrap.REPEAT);
+        return textureApi.load(pixels, format, width, height, TextureWrap.REPEAT);
     }
 
     /**

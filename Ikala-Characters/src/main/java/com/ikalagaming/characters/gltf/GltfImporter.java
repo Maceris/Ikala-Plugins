@@ -619,7 +619,8 @@ public final class GltfImporter {
                             pbr.has("metallicFactor") ? pbr.get("metallicFactor").getAsFloat() : 1,
                             pbr.has("roughnessFactor")
                                     ? pbr.get("roughnessFactor").getAsFloat()
-                                    : 1));
+                                    : 1,
+                            -1));
         }
         return materials;
     }
