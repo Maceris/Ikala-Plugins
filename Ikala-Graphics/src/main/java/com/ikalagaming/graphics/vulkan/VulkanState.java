@@ -49,6 +49,9 @@ public class VulkanState {
     /** Level of detail worlds, their clusters and their draws. */
     public LodRenderer lods = null;
 
+    /** Skinned meshes and their posed instances, see {@link SkinnedRenderer}. */
+    public SkinnedRenderer skins = null;
+
     /** The pages level of detail bakes go into, and the bakes waiting for the GPU. */
     public LodBakes lodBakes = null;
 

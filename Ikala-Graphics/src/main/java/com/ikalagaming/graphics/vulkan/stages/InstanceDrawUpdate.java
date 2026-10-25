@@ -362,7 +362,9 @@ public class InstanceDrawUpdate implements RenderStage {
         }
 
         frameData.dynamicShadowCasters =
-                !listed.isEmpty() || hasStandardInstances(snapshot.models());
+                !listed.isEmpty()
+                        || hasStandardInstances(snapshot.models())
+                        || vulkanState.skins.hasShadowDraws(vulkanState.frameIndex);
 
         // Lay out the listed models after the culled lists
         final int culledCommands = culledCommandCount(meshSlots, bakedSlots);

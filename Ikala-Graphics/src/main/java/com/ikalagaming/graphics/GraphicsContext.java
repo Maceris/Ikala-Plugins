@@ -65,6 +65,9 @@ public final class GraphicsContext {
     /** The level of detail API. */
     private final Lods lods;
 
+    /** The skins API, see {@link #skins()}. */
+    private final Skins skins;
+
     /** Debug shape drawing for this context. */
     private final DebugDraw debug;
 
@@ -90,6 +93,7 @@ public final class GraphicsContext {
         lights = new Lights(this);
         sections = new Sections(this);
         lods = new Lods(this);
+        skins = new Skins(this);
         debug = new DebugDraw(this);
         ui = new UI(this, GraphicsManager::getUiManager);
         closed = false;
@@ -159,6 +163,18 @@ public final class GraphicsContext {
     public Lods lods() {
         checkOpen();
         return lods;
+    }
+
+    /**
+     * Register skinned meshes and place posed instances of them, like characters, owned by this
+     * plugin.
+     *
+     * @return The skins API for this plugin.
+     * @throws IllegalStateException If the plugin was unloaded.
+     */
+    public Skins skins() {
+        checkOpen();
+        return skins;
     }
 
     /**

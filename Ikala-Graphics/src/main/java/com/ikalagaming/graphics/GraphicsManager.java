@@ -20,6 +20,7 @@ import com.ikalagaming.graphics.vulkan.DeletionQueue;
 import com.ikalagaming.graphics.vulkan.GeometryArena;
 import com.ikalagaming.graphics.vulkan.InstanceTable;
 import com.ikalagaming.graphics.vulkan.LodRenderer;
+import com.ikalagaming.graphics.vulkan.SkinnedRenderer;
 import com.ikalagaming.graphics.vulkan.TextureRegistry;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
 import com.ikalagaming.launcher.Launcher;
@@ -373,6 +374,16 @@ public class GraphicsManager {
         LodRenderer lods = renderInstance.getState().lods;
         if (lods != null) {
             lods.removeAllOwnedBy(context.getOwnerKey());
+        }
+        SkinnedRenderer skins = renderInstance.getState().skins;
+        if (skins != null) {
+            int removed = skins.removeAllOwnedBy(context.getOwnerKey());
+            if (removed > 0) {
+                log.debug(
+                        "Removed {} skinned instances and meshes owned by {}",
+                        removed,
+                        context.getOwnerKey());
+            }
         }
         GeometryArena bakedGeometry = renderInstance.getState().bakedGeometry;
         if (bakedGeometry != null) {

@@ -186,7 +186,10 @@ public class ShadowRender implements RenderStage {
             final @NonNull ShaderVulkan bakedCutoutShader,
             final @NonNull ShaderVulkan pointShader,
             final @NonNull ShaderVulkan pointBakedShader,
-            final @NonNull ShaderVulkan scrollShader) {
+            final @NonNull ShaderVulkan scrollShader,
+            final @NonNull ShaderVulkan skinnedShader) {
+        this.skinnedShader = skinnedShader;
+        this.skinnedPipeline = VK_NULL_HANDLE;
         this.bakedShader = bakedShader;
         this.lodShader = lodShader;
         this.lodCutoutShader = lodCutoutShader;
@@ -218,12 +221,14 @@ public class ShadowRender implements RenderStage {
         lodPipeline = createPipeline(vulkanState, lodShader, false, true, false);
         lodCutoutPipeline = createPipeline(vulkanState, lodCutoutShader, false, true, true);
         volumePipeline = createVolumePipeline(vulkanState);
-        brickPipeline = createPipeline(vulkanState, brickShader, false, false, false, false, true);
+        brickPipeline =
+                createPipeline(vulkanState, brickShader, false, false, false, false, true, false);
         cutoutPipeline = createPipeline(vulkanState, cutoutShader, false, false, true);
         bakedCutoutPipeline = createPipeline(vulkanState, bakedCutoutShader, true, false, true);
         pointPipeline = createPipeline(vulkanState, pointShader, false, false, false);
         pointBakedPipeline = createPipeline(vulkanState, pointBakedShader, true, false, false);
         scrollPipeline = createScrollPipeline(vulkanState);
+        skinnedPipeline = createSkinnedPipeline(vulkanState);
     }
 
     @Override
@@ -252,6 +257,8 @@ public class ShadowRender implements RenderStage {
         pointBakedPipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, scrollPipeline, null);
         scrollPipeline = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, skinnedPipeline, null);
+        skinnedPipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);
         pipelineLayout = VK_NULL_HANDLE;
         vkDestroyDescriptorSetLayout(vulkanState.device.logical, descriptorSetLayout, null);
@@ -867,10 +874,12 @@ public class ShadowRender implements RenderStage {
                     statics && state.volumeBricks != null
                             ? state.volumeBricks.shadowCount(state.frameIndex)
                             : 0;
+            final boolean skinned = listed && state.skins.hasShadowDraws(state.frameIndex);
             if (frameData.meshSlotCount + frameData.bakedSlotCount > 0
                     || !frameData.modelDrawInfo.isEmpty()
                     || LodRenderer.hasDraws(frameData)
-                    || bricks > 0) {
+                    || bricks > 0
+                    || skinned) {
                 // Not flipped, so the light stage can use the shadow map coordinates as is
                 VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
                 viewports.get(0).width(size).height(size).minDepth(0).maxDepth(1);
@@ -1001,6 +1010,17 @@ public class ShadowRender implements RenderStage {
                 if (listed) {
                     SceneRender.drawListedModels(
                             commandBuffer, state, frameData, vertexBuffers, vertexOffsets);
+                }
+                // Skinned instances with what moves, drawn every frame; their buffers' addresses
+                // go where level of detail's tables do, after the cascade's matrix
+                if (skinned) {
+                    vkCmdBindPipeline(
+                            commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, skinnedPipeline);
+                    state.skins.drawShadows(
+                            commandBuffer,
+                            state.frameIndex,
+                            pipelineLayout,
+                            ShaderBindings.Shadow.PUSH_CONSTANT_LOD_WORLDS_OFFSET);
                 }
             }
 
@@ -1153,7 +1173,7 @@ public class ShadowRender implements RenderStage {
     }
 
     private long createVolumePipeline(@NonNull VulkanState state) {
-        return createPipeline(state, volumeShader, false, true, false, true, false);
+        return createPipeline(state, volumeShader, false, true, false, true, false, false);
     }
 
     private void createPipelineLayout(@NonNull VulkanState state) {
@@ -1240,6 +1260,23 @@ public class ShadowRender implements RenderStage {
         }
     }
 
+    /** The shader for skinned meshes. */
+    @NonNull private final ShaderVulkan skinnedShader;
+
+    /** VkPipeline for skinned meshes, VK_NULL_HANDLE if not set up. */
+    private long skinnedPipeline;
+
+    /**
+     * Create the skinned mesh pipeline: the standard one, reading SkinnedVertex's stride and its
+     * skinning attributes too.
+     *
+     * @param state The Vulkan state.
+     * @return The VkPipeline.
+     */
+    private long createSkinnedPipeline(@NonNull VulkanState state) {
+        return createPipeline(state, skinnedShader, false, false, false, false, false, true);
+    }
+
     /**
      * Create a shadow pipeline.
      *
@@ -1257,7 +1294,7 @@ public class ShadowRender implements RenderStage {
             boolean baked,
             boolean lod,
             boolean cutout) {
-        return createPipeline(state, shader, baked, lod, cutout, false, false);
+        return createPipeline(state, shader, baked, lod, cutout, false, false, false);
     }
 
     /**
@@ -1272,6 +1309,8 @@ public class ShadowRender implements RenderStage {
      * @param brick Whether it walks sections' volume bricks, whose boxes come from the vertex index
      *     with no vertex buffer, their faces toward the light drawn, and no depth bias, since the
      *     walk writes the depth.
+     * @param skinned Whether it reads skinned vertices: the position, then the bones, weights and
+     *     region the shader skins with.
      * @return The VkPipeline.
      */
     private long createPipeline(
@@ -1281,7 +1320,8 @@ public class ShadowRender implements RenderStage {
             boolean lod,
             boolean cutout,
             boolean volume,
-            boolean brick) {
+            boolean brick,
+            boolean skinned) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
 
@@ -1290,7 +1330,7 @@ public class ShadowRender implements RenderStage {
             // Level of detail's cut outs also take the texture coordinates' bits whole, where a
             // coverage volume shell's corner keeps its straight in coverage, and the normal's,
             // where it keeps its grazing coverage, see Attributes.shellNormal
-            final int attributeCount = cutout ? (lod ? 5 : baked ? 3 : 2) : 1;
+            final int attributeCount = cutout ? (lod ? 5 : baked ? 3 : 2) : skinned ? 4 : 1;
             VkVertexInputAttributeDescription.Buffer vertexAttributes =
                     volume
                             ? SceneRender.volumeVertexAttributes(stack)
@@ -1343,15 +1383,39 @@ public class ShadowRender implements RenderStage {
                 }
             }
 
+            if (skinned) {
+                // See skinning.glsl
+                final int[] formats = {
+                    VK_FORMAT_R16G16B16A16_UINT, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R32_UINT
+                };
+                final int[] offsets = {
+                    SkinnedVertex.JOINTS_OFFSET,
+                    SkinnedVertex.WEIGHTS_OFFSET,
+                    SkinnedVertex.REGION_OFFSET
+                };
+                for (int i = 0; i < formats.length; ++i) {
+                    vertexAttributes
+                            .get(1 + i)
+                            .binding(0)
+                            .location(SceneRender.SKINNED_FIRST_LOCATION + i)
+                            .format(formats[i])
+                            .offset(offsets[i]);
+                }
+            }
+
             VkVertexInputBindingDescription.Buffer vertexBindings =
                     VkVertexInputBindingDescription.calloc(1, stack);
             vertexBindings
                     .get(0)
                     .binding(0)
                     .stride(
-                            lod
-                                    ? LodVertex.SIZE
-                                    : (baked ? BakedVertex.SIZE : MeshData.VERTEX_SIZE_IN_BYTES))
+                            skinned
+                                    ? SkinnedVertex.SIZE
+                                    : lod
+                                            ? LodVertex.SIZE
+                                            : (baked
+                                                    ? BakedVertex.SIZE
+                                                    : MeshData.VERTEX_SIZE_IN_BYTES))
                     .inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
 
             VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo =

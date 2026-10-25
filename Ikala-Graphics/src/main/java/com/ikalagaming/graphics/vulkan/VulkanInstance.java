@@ -330,6 +330,7 @@ public class VulkanInstance {
         state.geometry.cleanup(state);
         state.bakedGeometry.cleanup(state);
         state.lods.cleanup(state);
+        state.skins.cleanup(state);
         state.bakeSources.clear();
         state.sections.cleanup();
         state.frameTimings.cleanup(state);
@@ -352,6 +353,7 @@ public class VulkanInstance {
         state.geometry = null;
         state.bakedGeometry = null;
         state.lods = null;
+        state.skins = null;
         state.bakeSources = null;
         state.sections = null;
         state.frameTimings = null;
@@ -946,6 +948,7 @@ public class VulkanInstance {
         state.pointShadows = new PointShadows();
         state.lodBakes = new LodBakes();
         state.lods = new LodRenderer(state);
+        state.skins = new SkinnedRenderer(state);
         state.bakeSources = new BakeSources();
         state.sections = new SectionManager(state.shadowInvalidation);
         state.instances = new InstanceTable(state);
@@ -1465,6 +1468,21 @@ public class VulkanInstance {
                         ShaderVulkan.Type.FRAGMENT,
                         ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(RenderStage.Type.SCENE_VOLUME, new ShaderVulkan(volumeModules, state));
+
+        // Skinned meshes, moved by their bones, then shaded as meshes are
+        List<ShaderVulkan.ShaderModuleData> skinnedModules = new ArrayList<>();
+        skinnedModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/scene_skinned.vert",
+                        ShaderVulkan.Type.VERTEX,
+                        ShaderVulkan.Location.BUNDLED));
+        skinnedModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/scene.frag",
+                        ShaderVulkan.Type.FRAGMENT,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(
+                RenderStage.Type.SCENE_SKINNED, new ShaderVulkan(skinnedModules, state));
     }
 
     /**
@@ -1504,6 +1522,15 @@ public class VulkanInstance {
                         ShaderVulkan.Type.VERTEX,
                         ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(RenderStage.Type.SHADOW_LOD, new ShaderVulkan(lodModules, state));
+
+        List<ShaderVulkan.ShaderModuleData> skinnedModules = new ArrayList<>();
+        skinnedModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/shadow_skinned.vert",
+                        ShaderVulkan.Type.VERTEX,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(
+                RenderStage.Type.SHADOW_SKINNED, new ShaderVulkan(skinnedModules, state));
 
         // Level of detail clusters with cut out materials, alpha tested as cut out meshes are
         List<ShaderVulkan.ShaderModuleData> lodCutoutModules = new ArrayList<>();
@@ -1837,6 +1864,7 @@ public class VulkanInstance {
         state.instances.record(state, commandBuffer, scene.getMaterialCache());
         state.geometry.record(state, commandBuffer);
         state.lods.record(state, commandBuffer);
+        state.skins.record(state, commandBuffer);
         // Before the shadows, the first to draw them
         state.lods.prepare(
                 state,
@@ -1845,6 +1873,12 @@ public class VulkanInstance {
                 scene.getObserver(),
                 target.height(),
                 scene.getDebugVisualizers().getLodColors());
+        // Before the shadows too, and cheap: skinned instances are culled on the CPU
+        state.skins.prepare(
+                state,
+                scene.getCamera().getPosition(),
+                scene.getObserver(),
+                scene.getMaterialCache());
         state.frameTimings.mark(commandBuffer, state.frameIndex, "Uploads");
 
         // This will record the command buffer

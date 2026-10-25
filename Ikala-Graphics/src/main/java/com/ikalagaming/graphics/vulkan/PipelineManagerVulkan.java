@@ -233,7 +233,8 @@ public class PipelineManagerVulkan {
                         shaders.getShader(RenderStage.Type.SCENE),
                         shaders.getShader(RenderStage.Type.SCENE_BAKED),
                         shaders.getShader(RenderStage.Type.SCENE_LOD),
-                        shaders.getShader(RenderStage.Type.SCENE_VOLUME));
+                        shaders.getShader(RenderStage.Type.SCENE_VOLUME),
+                        shaders.getShader(RenderStage.Type.SCENE_SKINNED));
         stageSceneRender.initialize(state);
         stageGuiRender = new GuiRender(shaders.getShader(RenderStage.Type.GUI), fontAtlas);
         stageGuiRender.initialize(state);
@@ -250,7 +251,8 @@ public class PipelineManagerVulkan {
                         shaders.getShader(RenderStage.Type.SHADOW_BAKED_CUTOUT),
                         shaders.getShader(RenderStage.Type.POINT_SHADOW),
                         shaders.getShader(RenderStage.Type.POINT_SHADOW_BAKED),
-                        shaders.getShader(RenderStage.Type.SHADOW_SCROLL));
+                        shaders.getShader(RenderStage.Type.SHADOW_SCROLL),
+                        shaders.getShader(RenderStage.Type.SHADOW_SKINNED));
         stageShadowRender.initialize(state);
         stageLightCull = new LightCull(shaders.getShader(RenderStage.Type.LIGHT_CULL));
         stageLightCull.initialize(state);

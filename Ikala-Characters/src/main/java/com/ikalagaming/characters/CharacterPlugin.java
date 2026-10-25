@@ -1,6 +1,7 @@
 package com.ikalagaming.characters;
 
 import com.ikalagaming.characters.data.Problem;
+import com.ikalagaming.characters.demo.SkinnedDemo;
 import com.ikalagaming.characters.registry.BuiltInContent;
 import com.ikalagaming.characters.registry.CharacterLoader;
 import com.ikalagaming.characters.registry.CharacterRegistry;
@@ -42,6 +43,9 @@ public class CharacterPlugin extends Plugin {
     /** The most problems logged by a load, so a broken folder doesn't flood the console. */
     private static final int MAX_LOGGED_PROBLEMS = 50;
 
+    /** The skinned tube demo, which {@code character demo} turns on and off. */
+    private final SkinnedDemo demo = new SkinnedDemo(PLUGIN_NAME);
+
     /** The definitions currently loaded, replaced whole on each reload. */
     private volatile CharacterRegistry registry = CharacterRegistry.EMPTY;
 
@@ -72,6 +76,7 @@ public class CharacterPlugin extends Plugin {
     public boolean onDisable() {
         // Unloading also removes the plugin's commands, but they shouldn't run while disabled
         PluginManager.getInstance().unregisterCommand(CHARACTER_COMMAND);
+        demo.stop();
         registry = CharacterRegistry.EMPTY;
         return true;
     }
@@ -165,6 +170,13 @@ public class CharacterPlugin extends Plugin {
         String rest = args.size() < 2 ? "" : String.join(" ", args.subList(1, args.size()));
         switch (action) {
             case "reload" -> reload();
+            case "demo" -> {
+                if (demo.isRunning()) {
+                    demo.stop();
+                } else {
+                    demo.start();
+                }
+            }
             case "validate" -> {
                 if (parseSource(rest) == null) {
                     log.info("Usage: character validate namespace=folder");
@@ -192,7 +204,7 @@ public class CharacterPlugin extends Plugin {
             }
             default ->
                     log.info(
-                            "Usage: character reload | validate namespace=folder | schemas"
+                            "Usage: character reload | demo | validate namespace=folder | schemas"
                                     + " <output folder>");
         }
     }

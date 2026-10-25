@@ -60,7 +60,9 @@ public class SceneRender implements RenderStage {
         /** Level of detail clusters, LodVertex. */
         LOD,
         /** Coverage volume bricks' boxes, LodVertex as CoverageBricks writes it. */
-        VOLUME
+        VOLUME,
+        /** Skinned meshes, SkinnedVertex. */
+        SKINNED
     }
 
     /** The size of a material in the materials buffer, in bytes. */
@@ -224,6 +226,12 @@ public class SceneRender implements RenderStage {
     /** VkPipeline for drawing baked sections as wireframes. */
     private long bakedWireframe;
 
+    /** The shader for skinned meshes. */
+    @NonNull private final ShaderVulkan skinnedShader;
+
+    /** VkPipeline for skinned meshes, alpha tested like standard meshes. */
+    private long skinnedPipeline;
+
     /**
      * The late half of the scene pass, which shares this stage's pipelines and descriptor sets, so
      * it is only initialized and cleaned up through this stage. -- GETTER -- The late half.
@@ -280,12 +288,16 @@ public class SceneRender implements RenderStage {
      * @param bakedShader The shader for baked sections.
      * @param lodShader The shader for level of detail clusters.
      * @param volumeShader The shader for coverage volumes' bricks.
+     * @param skinnedShader The shader for skinned meshes.
      */
     public SceneRender(
             final @NonNull ShaderVulkan shader,
             final @NonNull ShaderVulkan bakedShader,
             final @NonNull ShaderVulkan lodShader,
-            final @NonNull ShaderVulkan volumeShader) {
+            final @NonNull ShaderVulkan volumeShader,
+            final @NonNull ShaderVulkan skinnedShader) {
+        this.skinnedShader = skinnedShader;
+        this.skinnedPipeline = VK_NULL_HANDLE;
         this.shader = shader;
         this.bakedShader = bakedShader;
         this.lodShader = lodShader;
@@ -326,6 +338,8 @@ public class SceneRender implements RenderStage {
         this.volumePipeline =
                 createPipeline(vulkanState, volumeShader, VertexFormat.VOLUME, false, false);
         this.lodWireframe = createPipeline(vulkanState, lodShader, VertexFormat.LOD, true, false);
+        this.skinnedPipeline =
+                createPipeline(vulkanState, skinnedShader, VertexFormat.SKINNED, false, true);
     }
 
     @Override
@@ -350,6 +364,8 @@ public class SceneRender implements RenderStage {
         volumePipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, lodWireframe, null);
         lodWireframe = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, skinnedPipeline, null);
+        skinnedPipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, pipeline, null);
         pipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);
@@ -480,8 +496,21 @@ public class SceneRender implements RenderStage {
         final boolean anyListed = listedModels && !frameData.modelDrawInfo.isEmpty();
         final boolean anyCulled = frameData.meshSlotCount + frameData.bakedSlotCount > 0;
         final boolean anyLod = LodRenderer.hasDraws(frameData);
-        if ((anyCulled || anyListed || anyLod) && width > 0 && height > 0) {
-            drawModels(commandBuffer, state, renderConfig, width, height, list, anyListed, stack);
+        // Skinned instances in the early half, so they are in the depth the pyramid is built from
+        final boolean anySkinned =
+                list == InstanceDrawUpdate.LIST_SCENE_EARLY
+                        && state.skins.hasSceneDraws(state.frameIndex);
+        if ((anyCulled || anyListed || anyLod || anySkinned) && width > 0 && height > 0) {
+            drawModels(
+                    commandBuffer,
+                    state,
+                    renderConfig,
+                    width,
+                    height,
+                    list,
+                    anyListed,
+                    anySkinned,
+                    stack);
         }
 
         vkCmdEndRendering(commandBuffer);
@@ -498,6 +527,7 @@ public class SceneRender implements RenderStage {
      * @param height The height to render in pixels.
      * @param list Which visible list to draw.
      * @param listedModels Whether to also draw the animated models.
+     * @param skinned Whether to also draw the skinned instances.
      * @param stack The stack to allocate on.
      */
     private void drawModels(
@@ -508,6 +538,7 @@ public class SceneRender implements RenderStage {
             int height,
             int list,
             boolean listedModels,
+            boolean skinned,
             @NonNull MemoryStack stack) {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
         final boolean wireframe = RenderConfig.sceneIsWireframe(renderConfig);
@@ -627,6 +658,17 @@ public class SceneRender implements RenderStage {
         }
         if (listedModels) {
             drawListedModels(commandBuffer, state, frameData, vertexBuffers, vertexOffsets);
+        }
+
+        // Skinned instances, culled on the CPU, from their own geometry buffers; their buffers'
+        // addresses go where level of detail's tables do. Never wireframe.
+        if (skinned) {
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, skinnedPipeline);
+            state.skins.drawScene(
+                    commandBuffer,
+                    state.frameIndex,
+                    pipelineLayout,
+                    ShaderBindings.Scene.PUSH_CONSTANT_LOD_WORLDS_OFFSET);
         }
     }
 
@@ -1139,6 +1181,42 @@ public class SceneRender implements RenderStage {
      * @param stack The stack to allocate on.
      * @return The attributes, read from binding 0.
      */
+    static VkVertexInputAttributeDescription.Buffer skinnedVertexAttributes(
+            @NonNull MemoryStack stack) {
+        VkVertexInputAttributeDescription.Buffer standard = vertexAttributes(false, stack);
+        VkVertexInputAttributeDescription.Buffer attributes =
+                VkVertexInputAttributeDescription.calloc(standard.capacity() + 3, stack);
+        for (int i = 0; i < standard.capacity(); ++i) {
+            attributes.get(i).set(standard.get(i));
+        }
+        // See skinning.glsl: bones, weights and region, at locations 5 to 7
+        final int[] formats = {
+            VK_FORMAT_R16G16B16A16_UINT, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R32_UINT
+        };
+        final int[] offsets = {
+            SkinnedVertex.JOINTS_OFFSET, SkinnedVertex.WEIGHTS_OFFSET, SkinnedVertex.REGION_OFFSET
+        };
+        for (int i = 0; i < formats.length; ++i) {
+            attributes
+                    .get(standard.capacity() + i)
+                    .binding(0)
+                    .location(SKINNED_FIRST_LOCATION + i)
+                    .format(formats[i])
+                    .offset(offsets[i]);
+        }
+        return attributes;
+    }
+
+    /** The location of the first skinning attribute, the bones, see skinning.glsl. */
+    static final int SKINNED_FIRST_LOCATION = 5;
+
+    /**
+     * The vertex attributes of the standard or baked vertex format.
+     *
+     * @param baked Whether it is the baked format.
+     * @param stack The stack to allocate on.
+     * @return The attributes.
+     */
     static VkVertexInputAttributeDescription.Buffer vertexAttributes(
             boolean baked, @NonNull MemoryStack stack) {
         if (baked) {
@@ -1315,6 +1393,7 @@ public class SceneRender implements RenderStage {
                     switch (format) {
                         case LOD -> lodVertexAttributes(stack);
                         case VOLUME -> volumeVertexAttributes(stack);
+                        case SKINNED -> skinnedVertexAttributes(stack);
                         default -> vertexAttributes(format == VertexFormat.BAKED, stack);
                     };
             VkVertexInputBindingDescription.Buffer vertexBindings =
@@ -1327,6 +1406,7 @@ public class SceneRender implements RenderStage {
                                 case STANDARD -> MeshData.VERTEX_SIZE_IN_BYTES;
                                 case BAKED -> BakedVertex.SIZE;
                                 case LOD, VOLUME -> LodVertex.SIZE;
+                                case SKINNED -> SkinnedVertex.SIZE;
                             })
                     .inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
 
