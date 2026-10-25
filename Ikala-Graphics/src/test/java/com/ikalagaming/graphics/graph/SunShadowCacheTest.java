@@ -340,6 +340,36 @@ class SunShadowCacheTest {
     }
 
     @Test
+    void boxesFarApartAreDrawnOnSeparateFrames() {
+        Frames frames = new Frames();
+        Camera camera = camera(0, 30, 0, 0.3f, 0);
+        frames.plan(camera, SUN);
+        frames.cache.invalidate(new double[] {2, 22, 2}, new double[] {6, 26, 6});
+        frames.cache.invalidate(new double[] {-12, 22, 10}, new double[] {-8, 26, 14});
+        long total = 0;
+        int parts = 0;
+        int[] around = {Integer.MAX_VALUE, Integer.MAX_VALUE, 0, 0};
+        for (int frame = 0; frame < 3; ++frame) {
+            CascadeShadowSplit cascade = frames.plan(camera, SUN)[1];
+            if (cascade.getRedraw() == SunShadowCache.Redraw.PART) {
+                ++parts;
+                int[] rect = cascade.getRedrawRect();
+                total += (long) (rect[2] - rect[0]) * (rect[3] - rect[1]);
+                around[0] = Math.min(around[0], rect[0]);
+                around[1] = Math.min(around[1], rect[1]);
+                around[2] = Math.max(around[2], rect[2]);
+                around[3] = Math.max(around[3], rect[3]);
+            } else {
+                assertEquals(SunShadowCache.Redraw.NONE, cascade.getRedraw());
+            }
+        }
+        // One part each, together much less than the rectangle around both
+        assertEquals(2, parts);
+        long both = (long) (around[2] - around[0]) * (around[3] - around[1]);
+        assertTrue(total * 2 < both, "Parts " + total + " around both " + both);
+    }
+
+    @Test
     void turnedOffEveryCascadeIsFittedAndDrawnWhole() {
         Frames frames = new Frames();
         Camera camera = camera(0, 30, 0, 0.3f, 0);

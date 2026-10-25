@@ -12,7 +12,9 @@ import org.joml.Vector3f;
 import org.joml.Vector3fc;
 import org.joml.Vector4d;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * Keeps the sun's far shadow cascades in place in the world, so what doesn't move (baked sections
@@ -34,8 +36,10 @@ import java.util.Arrays;
  * about one cascade a frame.
  *
  * <p>Things that change inside a cached cascade, such as an edited section, are reported with
- * {@link #invalidate} as boxes in the world. Each frame the texels they cover are drawn again, in
- * one rectangle per cascade.
+ * {@link #invalidate} as boxes in the world. The texels they cover wait as a few rectangles per
+ * cascade, those close together merged, and each frame the oldest is drawn again, with whatever
+ * near it fits in without drawing much more: changes scattered over the map are drawn over a few
+ * frames rather than as one rectangle around them all.
  *
  * <p>Render thread only.
  */
@@ -94,6 +98,15 @@ public class SunShadowCache {
     /** Values in a redraw rectangle. */
     private static final int RECT_VALUES = 4;
 
+    /** The most rectangles a cascade keeps waiting; past it, two are merged into one. */
+    static final int MAX_PENDING = 32;
+
+    /**
+     * How much bigger than the two apart the rectangle around two may be for them to be drawn as
+     * one.
+     */
+    static final double MERGE_SLACK = 1.25;
+
     /** Corners of a box. */
     private static final int BOX_CORNERS = 8;
 
@@ -133,8 +146,11 @@ public class SunShadowCache {
     /** Each cascade's placement; unused for those that aren't cached. */
     private final Placement[] placements;
 
-    /** Each cascade's texels to draw again, min x, min y, max x, max y; empty while max <= min. */
-    private final int[][] dirty;
+    /**
+     * Each cascade's texels waiting to be drawn again, oldest first, as rectangles min x, min y,
+     * max x, max y, the max exclusive.
+     */
+    private final List<List<int[]>> pending;
 
     /** Whether each cascade was drawn with an older sun step than the current one. */
     private final boolean[] sunBehind;
@@ -157,7 +173,10 @@ public class SunShadowCache {
     /** Make an empty cache, which draws every cascade whole the first frame. */
     public SunShadowCache() {
         placements = new Placement[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
-        dirty = new int[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT][RECT_VALUES];
+        pending = new ArrayList<>(CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT);
+        for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
+            pending.add(new ArrayList<>());
+        }
         sunBehind = new boolean[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
         for (int i = 0; i < placements.length; ++i) {
             placements[i] = new Placement();
@@ -207,8 +226,103 @@ public class SunShadowCache {
             if (rect == null) {
                 continue;
             }
-            addRect(dirty[i], rect);
+            addPending(pending.get(i), rect);
         }
+    }
+
+    /**
+     * Add a rectangle to those waiting: merged into one that it fits with, or kept apart, the two
+     * that fit best merged once there are too many.
+     *
+     * @param waiting The rectangles waiting.
+     * @param rect The rectangle.
+     */
+    static void addPending(@NonNull List<int[]> waiting, int @NonNull [] rect) {
+        for (int[] other : waiting) {
+            if (fits(other, rect)) {
+                addRect(other, rect);
+                return;
+            }
+        }
+        waiting.add(rect.clone());
+        if (waiting.size() <= MAX_PENDING) {
+            return;
+        }
+        int bestA = 0;
+        int bestB = 1;
+        long bestGrowth = Long.MAX_VALUE;
+        for (int a = 0; a < waiting.size(); ++a) {
+            for (int b = a + 1; b < waiting.size(); ++b) {
+                final long growth =
+                        area(union(waiting.get(a), waiting.get(b)))
+                                - area(waiting.get(a))
+                                - area(waiting.get(b));
+                if (growth < bestGrowth) {
+                    bestGrowth = growth;
+                    bestA = a;
+                    bestB = b;
+                }
+            }
+        }
+        addRect(waiting.get(bestA), waiting.remove(bestB));
+    }
+
+    /**
+     * Take this frame's rectangle from those waiting: the oldest, with every other that fits with
+     * it.
+     *
+     * @param waiting The rectangles waiting, not empty.
+     * @param out Where the rectangle goes.
+     */
+    static void takePending(@NonNull List<int[]> waiting, int @NonNull [] out) {
+        final int[] rect = waiting.remove(0);
+        boolean grew = true;
+        while (grew) {
+            grew = false;
+            for (int k = 0; k < waiting.size(); ++k) {
+                if (fits(rect, waiting.get(k))) {
+                    addRect(rect, waiting.remove(k));
+                    grew = true;
+                    break;
+                }
+            }
+        }
+        System.arraycopy(rect, 0, out, 0, RECT_VALUES);
+    }
+
+    /**
+     * Whether two rectangles are drawn as one: the rectangle around both is little bigger than the
+     * two apart.
+     *
+     * @param a A rectangle.
+     * @param b Another.
+     * @return True if so.
+     */
+    static boolean fits(int @NonNull [] a, int @NonNull [] b) {
+        return area(union(a, b)) <= MERGE_SLACK * (area(a) + area(b));
+    }
+
+    /**
+     * The rectangle around two.
+     *
+     * @param a A rectangle.
+     * @param b Another.
+     * @return A new rectangle around both.
+     */
+    static int[] union(int @NonNull [] a, int @NonNull [] b) {
+        return new int[] {
+            Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])
+        };
+    }
+
+    /**
+     * A rectangle's area.
+     *
+     * @param rect The rectangle.
+     * @return Its area in texels.
+     */
+    static long area(int @NonNull [] rect) {
+        return (long) Math.max(0, rect[2] - rect[0]) * Math.max(0, rect[3] - rect[1]);
     }
 
     /**
@@ -344,16 +458,21 @@ public class SunShadowCache {
                     cascade.scroll[0] = shift[0];
                     cascade.scroll[1] = shift[1];
                     stripOf(shift, placement.mapSize, cascade.redrawRect);
-                    // What was waiting to be drawn again moved with the map: drawn next frame
-                    shiftRect(dirty[i], shift, placement.mapSize);
+                    // What was waiting to be drawn again moved with the map: drawn from next frame
+                    final List<int[]> waiting = pending.get(i);
+                    for (int k = waiting.size() - 1; k >= 0; --k) {
+                        shiftRect(waiting.get(k), shift, placement.mapSize);
+                        if (area(waiting.get(k)) == 0) {
+                            waiting.remove(k);
+                        }
+                    }
                 } else {
-                    clear(dirty[i]);
+                    pending.get(i).clear();
                     cascade.redraw = Redraw.ALL;
                 }
-            } else if (dirty[i][2] > dirty[i][0] && dirty[i][3] > dirty[i][1]) {
+            } else if (!pending.get(i).isEmpty()) {
                 cascade.redraw = Redraw.PART;
-                System.arraycopy(dirty[i], 0, cascade.redrawRect, 0, RECT_VALUES);
-                clear(dirty[i]);
+                takePending(pending.get(i), cascade.redrawRect);
             } else {
                 cascade.redraw = Redraw.NONE;
             }
