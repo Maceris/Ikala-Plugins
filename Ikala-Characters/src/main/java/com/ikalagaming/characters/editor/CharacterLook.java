@@ -2,6 +2,7 @@ package com.ikalagaming.characters.editor;
 
 import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.data.Range;
+import com.ikalagaming.characters.definition.BodyPlan;
 import com.ikalagaming.characters.definition.Slider;
 import com.ikalagaming.characters.view.PartSlots;
 import com.ikalagaming.random.SeededRandom;
@@ -43,8 +44,9 @@ final class CharacterLook {
      *
      * @param choices Each slot's choice.
      * @param values Each slider's values, by ID.
+     * @param variant Which variant of the body plan, or -1 for none.
      */
-    record Snapshot(int[] choices, Map<Id, float[]> values) {}
+    record Snapshot(int[] choices, Map<Id, float[]> values, int variant) {}
 
     /** The slots. */
     private final PartSlots slots;
@@ -58,6 +60,12 @@ final class CharacterLook {
     /** Each slider's values, by ID. */
     private final Map<Id, float[]> values = new LinkedHashMap<>();
 
+    /** The body plan's variants, like male and female. */
+    private final List<BodyPlan.Variant> variants;
+
+    /** Which variant the body is, or -1 if the plan has none. */
+    private int variant = -1;
+
     /** Earlier looks, the latest first. */
     private final Deque<Snapshot> history = new ArrayDeque<>();
 
@@ -65,20 +73,102 @@ final class CharacterLook {
     private int version;
 
     /**
-     * Start a look with the slots' initial parts and every slider at 0.
+     * Start a look with the slots' initial parts and the sliders where the first variant starts
+     * them, or at 0.
      *
      * @param slots The slots.
      * @param sliders The sliders.
+     * @param variants The body plan's variants, which may be none.
      */
-    CharacterLook(@NonNull PartSlots slots, @NonNull List<Slider> sliders) {
+    CharacterLook(
+            @NonNull PartSlots slots,
+            @NonNull List<Slider> sliders,
+            @NonNull List<BodyPlan.Variant> variants) {
         this.slots = slots;
         this.sliders = List.copyOf(sliders);
+        this.variants = List.copyOf(variants);
         choices = new int[slots.slots().size()];
         for (int i = 0; i < choices.length; ++i) {
             choices[i] = slots.slots().get(i).initial();
         }
         for (Slider slider : sliders) {
             values.put(slider.id(), new float[slider.vector() ? 3 : 1]);
+        }
+        if (!variants.isEmpty()) {
+            variant = 0;
+            startSliders();
+        }
+    }
+
+    /**
+     * The body plan's variants.
+     *
+     * @return The variants.
+     */
+    List<BodyPlan.Variant> variants() {
+        return variants;
+    }
+
+    /**
+     * Which variant the body is.
+     *
+     * @return Its position in {@link #variants()}, or -1 if there are none.
+     */
+    int variant() {
+        return variant;
+    }
+
+    /**
+     * Make the body another variant, starting the sliders where it says.
+     *
+     * @param chosen The variant's position in {@link #variants()}.
+     */
+    void chooseVariant(int chosen) {
+        if (chosen == variant) {
+            return;
+        }
+        remember();
+        variant = chosen;
+        startSliders();
+        ++version;
+    }
+
+    /**
+     * The values a slider may take: its own range for the context, narrowed by the variant's.
+     *
+     * @param slider The slider.
+     * @param context The context, like "player".
+     * @return The range.
+     */
+    Range range(@NonNull Slider slider, @NonNull String context) {
+        Range own = slider.range(context);
+        BodyPlan.SliderSetting setting = setting(slider);
+        if (setting == null || setting.range() == null) {
+            return own;
+        }
+        return new Range(
+                Math.max(own.min(), setting.range().min()),
+                Math.min(own.max(), setting.range().max()));
+    }
+
+    /**
+     * The variant's setting for a slider.
+     *
+     * @param slider The slider.
+     * @return The setting, or null if it has none.
+     */
+    private BodyPlan.SliderSetting setting(Slider slider) {
+        if (variant < 0 || variants.get(variant).sliders() == null) {
+            return null;
+        }
+        return variants.get(variant).sliders().get(slider.id().toString());
+    }
+
+    /** Put every slider where the variant starts it, or at 0. */
+    private void startSliders() {
+        for (Slider slider : sliders) {
+            BodyPlan.SliderSetting setting = setting(slider);
+            Arrays.fill(values.get(slider.id()), setting == null ? 0 : setting.initial());
         }
     }
 
@@ -198,7 +288,7 @@ final class CharacterLook {
     Snapshot snapshot() {
         Map<Id, float[]> copied = new LinkedHashMap<>();
         values.forEach((id, value) -> copied.put(id, value.clone()));
-        return new Snapshot(choices.clone(), copied);
+        return new Snapshot(choices.clone(), copied, variant);
     }
 
     /** Remember the look now, to undo the next change. */
@@ -239,6 +329,7 @@ final class CharacterLook {
         }
         System.arraycopy(last.choices(), 0, choices, 0, choices.length);
         last.values().forEach((id, value) -> values.put(id, value.clone()));
+        variant = last.variant();
         ++version;
         return true;
     }
@@ -260,10 +351,13 @@ final class CharacterLook {
             choices[i] = empty ? EMPTY : random.nextInt(slot.options().size());
         }
         for (Slider slider : sliders) {
-            Range range = slider.range(context);
+            Range range = range(slider, context);
             float[] value = values.get(slider.id());
+            // Toward the middle of the range, so random bodies aren't all extremes
+            float middle = (range.min() + range.max()) / 2;
             for (int axis = 0; axis < value.length; ++axis) {
-                value[axis] = (float) (random.nextDouble(range.min(), range.max()) * RANDOM_SPREAD);
+                double picked = random.nextDouble(range.min(), range.max());
+                value[axis] = (float) (middle + (picked - middle) * RANDOM_SPREAD);
             }
         }
         ++version;
@@ -279,10 +373,10 @@ final class CharacterLook {
         ++version;
     }
 
-    /** Put every slider back to 0. */
+    /** Put every slider back where the variant starts it, or to 0. */
     void resetSliders() {
         remember();
-        values.values().forEach(value -> Arrays.fill(value, 0));
+        startSliders();
         ++version;
     }
 }

@@ -14,5 +14,5 @@ content:
     - { type: button, id: previous, text: "<", width: 28, onClick: previous-clip }
     - { type: button, id: play, text: "{clip.play}", width: 64, onClick: toggle-play }
     - { type: button, id: next, text: ">", width: 28, onClick: next-clip }
-    - { type: label, id: name, text: "{clip.name}", width: 260 }
+    - { type: label, id: name, text: "{clip.name}", width: 420 }
     - { type: label, id: position, text: "{clip.position}", width: 70 }

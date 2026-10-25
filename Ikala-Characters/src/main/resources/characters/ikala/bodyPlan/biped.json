@@ -2,12 +2,13 @@
 {
   "id": "ikala:biped",
   "rig": "ikala:rig/biped",
+  // Each variant starts its sliders where it says; the rest start at 0
   "variants": [
-    {"id": "male"},
-    {"id": "female"},
+    {"id": "male", "sliders": {"ikala:slider/biped/shoulder_width": {"initial": 0.2}, "ikala:slider/biped/chest": {"initial": 0.15}, "ikala:slider/biped/bust": {"initial": -1}, "ikala:slider/biped/jaw": {"initial": 0.2}}},
+    {"id": "female", "sliders": {"ikala:slider/biped/height": {"initial": -0.2}, "ikala:slider/biped/shoulder_width": {"initial": -0.3}, "ikala:slider/biped/waist": {"initial": -0.3}, "ikala:slider/biped/hips": {"initial": 0.3}, "ikala:slider/biped/bust": {"initial": 0.3}, "ikala:slider/biped/jaw": {"initial": -0.2}}},
     {"id": "neutral"},
-    {"id": "huge"},
-    {"id": "small"}
+    {"id": "huge", "sliders": {"ikala:slider/biped/height": {"initial": 0.9}, "ikala:slider/biped/physique": {"initial": 0.9}, "ikala:slider/biped/muscle": {"initial": 0.8}, "ikala:slider/biped/shoulder_width": {"initial": 0.8}}},
+    {"id": "small", "sliders": {"ikala:slider/biped/height": {"initial": -0.9}, "ikala:slider/biped/leg_length": {"initial": -0.5}, "ikala:slider/biped/head_size": {"initial": 0.4}}}
   ],
   "slots": [
     {"id": "head", "bones": ["head", "jaw", "eye.L", "eye.R", "brow.L", "brow.R", "lid.upper.L", "lid.upper.R", "lid.lower.L", "lid.lower.R", "mouth.corner.L", "mouth.corner.R", "lip.upper", "lip.lower", "face.brow", "face.cheek.L", "face.cheek.R", "face.nose", "face.chin", "face.cranium", "face.jaw"], "seams": ["neck"]},

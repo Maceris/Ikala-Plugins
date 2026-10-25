@@ -2,6 +2,7 @@ package com.ikalagaming.characters.editor;
 
 import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.data.Range;
+import com.ikalagaming.characters.definition.BodyPlan;
 import com.ikalagaming.characters.definition.Slider;
 import com.ikalagaming.characters.view.PartSlots;
 import com.ikalagaming.random.SeededRandom;
@@ -53,7 +54,15 @@ class TestCharacterLook {
                         false,
                         List.of(),
                         Map.of(Slider.CONTEXT_PLAYER, new Range(-1, 1)));
-        return new CharacterLook(slots, List.of(height));
+        BodyPlan.Variant tall =
+                new BodyPlan.Variant(
+                        "tall",
+                        List.of(),
+                        Map.of(
+                                HEIGHT.toString(),
+                                new BodyPlan.SliderSetting(0.5f, new Range(0, 1))));
+        BodyPlan.Variant plain = new BodyPlan.Variant("plain", List.of(), Map.of());
+        return new CharacterLook(slots, List.of(height), List.of(plain, tall));
     }
 
     /** Choosing and stepping change what is worn, and each change can be undone. */
@@ -83,6 +92,31 @@ class TestCharacterLook {
         Assertions.assertTrue(look.undo());
         Assertions.assertEquals(List.of(0, 1), look.worn(CharacterLook.NO_PREVIEW, 0));
         Assertions.assertFalse(look.undo());
+    }
+
+    /** A variant starts its sliders and narrows their ranges, and choosing one can be undone. */
+    @Test
+    void testVariants() {
+        CharacterLook look = look();
+        Assertions.assertEquals(0, look.variant());
+        Assertions.assertEquals(0, look.values().get(HEIGHT)[0]);
+
+        look.chooseVariant(1);
+        Assertions.assertEquals(0.5f, look.values().get(HEIGHT)[0]);
+        Slider height = look.sliders().get(0);
+        Assertions.assertEquals(new Range(0, 1), look.range(height, Slider.CONTEXT_PLAYER));
+
+        // Randomizing stays in the variant's range
+        look.randomize(new SeededRandom(3), Slider.CONTEXT_PLAYER);
+        Assertions.assertTrue(look.values().get(HEIGHT)[0] >= 0);
+        look.resetSliders();
+        Assertions.assertEquals(0.5f, look.values().get(HEIGHT)[0]);
+
+        look.undo();
+        look.undo();
+        look.undo();
+        Assertions.assertEquals(0, look.variant());
+        Assertions.assertEquals(0, look.values().get(HEIGHT)[0]);
     }
 
     /** Clearing empties what can be empty and puts the rest back; randomizing stays in range. */

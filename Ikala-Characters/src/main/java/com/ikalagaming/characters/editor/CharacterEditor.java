@@ -5,7 +5,10 @@ import com.ikalagaming.characters.definition.BodyPlan;
 import com.ikalagaming.characters.definition.Slider;
 import com.ikalagaming.characters.demo.CharacterPreview;
 import com.ikalagaming.characters.gltf.ImportedCharacter;
+import com.ikalagaming.characters.pose.Pose;
+import com.ikalagaming.characters.pose.PoseSolver;
 import com.ikalagaming.characters.pose.Proportions;
+import com.ikalagaming.characters.pose.Skeleton;
 import com.ikalagaming.characters.registry.CharacterRegistry;
 import com.ikalagaming.characters.view.CharacterFiles;
 import com.ikalagaming.characters.view.PartCategories;
@@ -16,10 +19,14 @@ import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.component.GuiWindow;
+import com.ikalagaming.graphics.gui.data.DrawList;
 import com.ikalagaming.graphics.gui.data.IkIO;
+import com.ikalagaming.graphics.gui.data.Viewport;
 import com.ikalagaming.graphics.gui.enums.Condition;
 import com.ikalagaming.graphics.gui.enums.MouseButton;
+import com.ikalagaming.graphics.gui.flags.SelectableFlags;
 import com.ikalagaming.graphics.gui.flags.WindowFlags;
+import com.ikalagaming.graphics.gui.util.Color;
 import com.ikalagaming.graphics.scene.Camera;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.ui.Immediate;
@@ -32,9 +39,11 @@ import com.ikalagaming.random.SeededRandom;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3d;
 import org.joml.Vector3f;
+import org.joml.Vector4f;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -42,6 +51,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -170,6 +180,42 @@ public final class CharacterEditor {
     /** The room IkGui leaves between items on a row, in pixels, give or take. */
     private static final float ROW_SPACING = 12;
 
+    /** How tall a variant's card is, in rows of text. */
+    private static final float CARD_ROWS = 1.6f;
+
+    /** Floats per vertex in a part's vertices. */
+    private static final int VERTEX_FLOATS = 14;
+
+    /** Bone weights per vertex. */
+    private static final int INFLUENCES = 4;
+
+    /** How many variant cards go on a row. */
+    private static final int CARDS_PER_ROW = 3;
+
+    /** How far to the side of the character the ruler stands, in meters. */
+    private static final double RULER_OFFSET = 0.8;
+
+    /** How tall the ruler is, in meters. */
+    private static final float RULER_HEIGHT = 2.5f;
+
+    /** The distance between the ruler's small marks, in meters. */
+    private static final float RULER_STEP = 0.25f;
+
+    /** How long the ruler's marks are, in pixels; every other one is twice as long. */
+    private static final float RULER_MARK = 6;
+
+    /** The ruler's color. */
+    private static final int RULER_COLOR = Color.rgba(1.0f, 1.0f, 1.0f, 0.8f);
+
+    /** The color of the line at the character's height. */
+    private static final int HEIGHT_COLOR = Color.rgba(1.0f, 0.75f, 0.2f, 0.95f);
+
+    /** Meters per inch, for showing heights in feet and inches too. */
+    private static final double METERS_PER_INCH = 0.0254;
+
+    /** The face table's column headings, for sliders with width, height and depth values. */
+    private static final String[] AXES = {"Width", "Height", "Depth"};
+
     /** Milliseconds per second, for IkGui's frame time. */
     private static final double MILLISECONDS = 1000;
 
@@ -256,6 +302,12 @@ public final class CharacterEditor {
 
     /** Its slots sorted into the body's regions. */
     private PartCategories categories;
+
+    /** Whether the Body tab is showing, rather than the Costume tab. */
+    private boolean bodyTab = true;
+
+    /** How tall the character is with the sliders as they are, in meters. */
+    private float characterHeight;
 
     /** Which category is open, or -1 for none. */
     private int openCategory = -1;
@@ -450,7 +502,8 @@ public final class CharacterEditor {
         PartSlots slots = prepared.slots();
         regions = prepared.regions();
         categories = PartCategories.of(character, slots);
-        look = new CharacterLook(slots, findSliders(character));
+        List<Slider> found = findSliders(character);
+        look = new CharacterLook(slots, found, plan == null ? List.of() : plan.variants());
         beforeEditVersion = -1;
         editing = false;
         lastWorn = look.worn(CharacterLook.NO_PREVIEW, 0);
@@ -466,7 +519,7 @@ public final class CharacterEditor {
         shown.setHiddenRegions(regions.hidden(lastWorn));
         characterName.set(character.name());
         if (!applySliders()) {
-            look = new CharacterLook(slots, List.of());
+            look = new CharacterLook(slots, List.of(), List.of());
             slidersTitle.set("No sliders: the skeleton lacks their bones");
         }
         openCategory = Math.min(openCategory, categories.categories().size() - 1);
@@ -509,8 +562,8 @@ public final class CharacterEditor {
     }
 
     /**
-     * Draw the part panel's categories, one open at a time, with a dropdown and arrows for each
-     * slot that has a choice. The dropdown previews the hovered choice on the character.
+     * Draw the character panel: a Body tab choosing the body's variant, with its height and a ruler
+     * beside it, and a Costume tab with the parts.
      *
      * @param frame The UI frame.
      */
@@ -519,6 +572,76 @@ public final class CharacterEditor {
             IkGui.textDisabled("Loading...");
             return;
         }
+        boolean body = bodyTab;
+        if (IkGui.beginTabBar("##character-tabs")) {
+            if (IkGui.beginTabItem("Body")) {
+                body = true;
+                drawBody();
+                IkGui.endTabItem();
+            }
+            if (IkGui.beginTabItem("Costume")) {
+                body = false;
+                drawCostume();
+                IkGui.endTabItem();
+            }
+            IkGui.endTabBar();
+        }
+        if (body != bodyTab) {
+            bodyTab = body;
+            frameOpenCategory();
+            // The Body tab stands the character at rest, so the ruler reads its height true
+            playClip(clipIndex);
+        }
+        if (bodyTab) {
+            showWorn(CharacterLook.NO_PREVIEW, 0);
+            drawRuler();
+        }
+    }
+
+    /** Draw the Body tab: a card for each variant of the body plan, and the character's height. */
+    private void drawBody() {
+        List<BodyPlan.Variant> variants = look.variants();
+        if (variants.isEmpty()) {
+            IkGui.textDisabled("The rig has no body plan with variants");
+        }
+        float spacing = IkGui.getStyle().variable.itemSpacing.x;
+        float cardWidth =
+                (IkGui.getContentRegionAvailableX() - (CARDS_PER_ROW - 1) * spacing)
+                        / CARDS_PER_ROW;
+        for (int v = 0; v < variants.size(); ++v) {
+            if (v % CARDS_PER_ROW != 0) {
+                IkGui.sameLine();
+            }
+            String name = variants.get(v).id();
+            String label = name.substring(0, 1).toUpperCase(Locale.ROOT) + name.substring(1);
+            if (IkGui.selectable(
+                    label + "##variant" + v,
+                    look.variant() == v,
+                    SelectableFlags.NONE,
+                    cardWidth,
+                    IkGui.getFrameHeight() * CARD_ROWS)) {
+                final int chosen = v;
+                changeLook(changed -> changed.chooseVariant(chosen));
+            }
+        }
+        IkGui.spacing();
+        double inches = characterHeight / METERS_PER_INCH;
+        long feet = (long) Math.floor(inches / 12);
+        long rest = Math.round(inches - feet * 12);
+        if (rest == 12) {
+            ++feet;
+            rest = 0;
+        }
+        IkGui.textUnformatted(
+                String.format(
+                        Locale.ROOT, "Height: %.2f m (%d' %d\")", characterHeight, feet, rest));
+    }
+
+    /**
+     * Draw the Costume tab: the slot categories, one open at a time, with a dropdown and arrows for
+     * each slot that has a choice. The dropdown previews the hovered choice on the character.
+     */
+    private void drawCostume() {
         int previewSlot = CharacterLook.NO_PREVIEW;
         int previewChoice = 0;
         List<PartCategories.Category> list = categories.categories();
@@ -606,7 +729,7 @@ public final class CharacterEditor {
         }
         Vector3f min;
         Vector3f max;
-        if (openCategory >= 0) {
+        if (!bodyTab && openCategory >= 0) {
             PartCategories.Category category = categories.categories().get(openCategory);
             min = category.min();
             max = category.max();
@@ -661,14 +784,155 @@ public final class CharacterEditor {
             return look != null && look.sliders().isEmpty();
         }
         try {
-            shown.setProportions(
+            Proportions proportions =
                     Proportions.fromSliders(
-                            shown.getSkeleton(), plan, look.sliders(), look.values(), 1));
+                            shown.getSkeleton(), plan, look.sliders(), look.values(), 1);
+            shown.setProportions(proportions);
+            characterHeight = heightWith(proportions);
             return true;
         } catch (IllegalArgumentException e) {
             log.warn("The sliders don't fit {}: {}", shown.getCharacter().name(), e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * How tall the character stands at rest with some proportions: the top of its body parts,
+     * skinned as the renderer skins them, leaving out what can be taken off, like helmets.
+     *
+     * @param proportions The proportions.
+     * @return The height, in meters.
+     */
+    private float heightWith(Proportions proportions) {
+        Skeleton skeleton = shown.getSkeleton();
+        PoseSolver solver = new PoseSolver(skeleton);
+        solver.solve(new Pose(skeleton), proportions);
+        float[] palette = new float[skeleton.size() * Skeleton.MATRIX_FLOATS];
+        solver.writePalette(proportions, palette, 0);
+        Matrix4f[] matrices = new Matrix4f[skeleton.size()];
+        for (int b = 0; b < matrices.length; ++b) {
+            matrices[b] = new Matrix4f().set(palette, b * Skeleton.MATRIX_FLOATS);
+        }
+        List<ImportedCharacter.Part> parts = shown.getCharacter().parts();
+        Vector3f rest = new Vector3f();
+        Vector3f moved = new Vector3f();
+        Vector3f sum = new Vector3f();
+        float top = 0;
+        for (int s = 0; s < look.slots().slots().size(); ++s) {
+            PartSlots.Slot slot = look.slots().slots().get(s);
+            int choice = look.choice(s);
+            if (slot.optional() || choice == CharacterLook.EMPTY) {
+                continue;
+            }
+            for (int index : slot.options().get(choice)) {
+                ImportedCharacter.Part part = parts.get(index);
+                float[] v = part.vertices();
+                for (int vertex = 0; vertex < v.length / VERTEX_FLOATS; ++vertex) {
+                    rest.set(
+                            v[vertex * VERTEX_FLOATS],
+                            v[vertex * VERTEX_FLOATS + 1],
+                            v[vertex * VERTEX_FLOATS + 2]);
+                    sum.zero();
+                    for (int i = 0; i < INFLUENCES; ++i) {
+                        float weight = part.weights()[vertex * INFLUENCES + i];
+                        if (weight > 0) {
+                            matrices[part.joints()[vertex * INFLUENCES + i]].transformPosition(
+                                    rest, moved);
+                            sum.fma(weight, moved);
+                        }
+                    }
+                    top = Math.max(top, sum.y);
+                }
+            }
+        }
+        return top;
+    }
+
+    /** Draw a ruler in meters beside the character, with a line at its height, over the stage. */
+    private void drawRuler() {
+        Scene scene = GraphicsManager.getScene();
+        Camera camera = scene.getCamera();
+        // The view matrix only turns; positions are taken from the camera's
+        Matrix4f viewProjection =
+                new Matrix4f(scene.getProjection().getProjectionMatrix())
+                        .mul(camera.getViewMatrix());
+        Vector3d base = new Vector3d(CharacterStage.origin());
+        // Beside the character, on the side the camera sees
+        Vector3f right = camera.getInvViewMatrix().transformDirection(new Vector3f(1, 0, 0));
+        Vector3d foot = new Vector3d(base).add(-right.x * RULER_OFFSET, 0, -right.z * RULER_OFFSET);
+        float[] bottom = toScreen(viewProjection, camera, foot, 0);
+        float[] top = toScreen(viewProjection, camera, foot, RULER_HEIGHT);
+        if (bottom == null || top == null) {
+            return;
+        }
+        DrawList draw = IkGui.getBackgroundDrawList();
+        int fontSize = IkGui.getFontSize();
+        draw.addLine(bottom[0], bottom[1], top[0], top[1], RULER_COLOR, 2);
+        int marks = Math.round(RULER_HEIGHT / RULER_STEP);
+        for (int m = 0; m <= marks; ++m) {
+            float height = m * RULER_STEP;
+            float[] at = toScreen(viewProjection, camera, foot, height);
+            if (at == null) {
+                continue;
+            }
+            boolean major = m % 2 == 0;
+            float length = major ? 2 * RULER_MARK : RULER_MARK;
+            draw.addLine(at[0] - length, at[1], at[0], at[1], RULER_COLOR, 2);
+            if (major) {
+                String label = String.format(Locale.ROOT, "%.1f m", height);
+                float width = IkGui.calcTextSize(label).x;
+                draw.addText(
+                        fontSize,
+                        at[0] - length - width - 4,
+                        at[1] - fontSize / 2f,
+                        RULER_COLOR,
+                        label,
+                        0);
+            }
+        }
+        float[] mark = toScreen(viewProjection, camera, foot, characterHeight);
+        float[] head = toScreen(viewProjection, camera, base, characterHeight);
+        if (mark != null && head != null) {
+            draw.addLine(mark[0], mark[1], head[0], head[1], HEIGHT_COLOR, 2);
+        }
+    }
+
+    /**
+     * Where a point shows on the screen.
+     *
+     * @param viewProjection The camera's projection times its turn.
+     * @param camera The camera.
+     * @param ground The point on the ground below it, in world space.
+     * @param height How far above the ground it is.
+     * @return The x and y in pixels, or null if it is behind the camera.
+     */
+    private static float[] toScreen(
+            Matrix4f viewProjection, Camera camera, Vector3d ground, float height) {
+        Vector4f clip =
+                viewProjection.transform(
+                        new Vector4f(
+                                (float) (ground.x - camera.getPosition().x),
+                                (float) (ground.y + height - camera.getPosition().y),
+                                (float) (ground.z - camera.getPosition().z),
+                                1));
+        if (clip.w <= 1e-4f) {
+            return null;
+        }
+        float x = clip.x / clip.w;
+        float y = clip.y / clip.w;
+        // The projection's y may point either way; higher points must come out higher on screen
+        Vector4f up =
+                viewProjection.transform(
+                        new Vector4f(
+                                camera.getInvViewMatrix().transformDirection(new Vector3f(0, 1, 0)),
+                                0));
+        float sign = up.y >= 0 ? -1 : 1;
+        // IkGui draws in desktop coordinates, so start from where the window's inside is
+        Viewport viewport = IkGui.getMainViewport();
+        return new float[] {
+            viewport.position.x + (x + 1) / 2 * viewport.size.x,
+            viewport.position.y + (sign * y + 1) / 2 * viewport.size.y
+        };
     }
 
     /**
@@ -692,8 +956,11 @@ public final class CharacterEditor {
             if (!sliderGroup.equals(group)) {
                 group = sliderGroup;
                 IkGui.separatorText(group);
+                if (hasVectors(group)) {
+                    drawAxisHeadings();
+                }
             }
-            Range range = slider.range(SLIDER_CONTEXT);
+            Range range = look.range(slider, SLIDER_CONTEXT);
             float[] value = look.values().get(slider.id());
             String label = Objects.requireNonNullElse(slider.label(), slider.id().toString());
             if (slider.vector()) {
@@ -712,6 +979,33 @@ public final class CharacterEditor {
         }
         if (editing && !IkGui.isAnyItemActive()) {
             editing = false;
+        }
+    }
+
+    /**
+     * Whether any slider in a group has width, height and depth values.
+     *
+     * @param group The group.
+     * @return True if one does.
+     */
+    private boolean hasVectors(String group) {
+        return look.sliders().stream()
+                .anyMatch(slider -> slider.vector() && groupOf(slider).equals(group));
+    }
+
+    /** Write Width, Height and Depth over the three columns of the sliders below. */
+    private void drawAxisHeadings() {
+        float start = IkGui.getCursorPosX();
+        float spacing = IkGui.getStyle().variable.itemInnerSpacing.x;
+        float column = (IkGui.calcItemWidth() - 2 * spacing) / AXES.length;
+        for (int axis = 0; axis < AXES.length; ++axis) {
+            float textWidth = IkGui.calcTextSize(AXES[axis]).x;
+            float x = start + axis * (column + spacing) + (column - textWidth) / 2;
+            if (axis > 0) {
+                IkGui.sameLine();
+            }
+            IkGui.setCursorPosX(x);
+            IkGui.textDisabled(AXES[axis]);
         }
     }
 
@@ -744,9 +1038,10 @@ public final class CharacterEditor {
         }
         clipIndex = Math.floorMod(index, clips.size());
         ImportedCharacter.ClipData clip = clips.get(clipIndex);
-        shown.play(clip);
+        // The Body tab stands the character at rest, so the ruler reads its height true
+        shown.play(bodyTab ? null : clip);
         shown.setPlaying(playing);
-        clipName.set(clip.name());
+        clipName.set(bodyTab ? clip.name() + " (plays on the Costume tab)" : clip.name());
         clipPosition.set((clipIndex + 1) + " / " + clips.size());
     }
 
