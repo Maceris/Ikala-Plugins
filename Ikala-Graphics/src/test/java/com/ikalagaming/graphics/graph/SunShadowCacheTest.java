@@ -120,7 +120,22 @@ class SunShadowCacheTest {
                     continue;
                 }
                 Vector3f texel = texelOf(cascades[i], moved, ground);
-                if (cascades[i].getRedraw() == SunShadowCache.Redraw.ALL) {
+                if (cascades[i].getRedraw() == SunShadowCache.Redraw.SCROLL) {
+                    moves[i] += 1;
+                    // Shifted by just as far as the ground moved in the map, at the same depth
+                    int[] scroll = cascades[i].getScroll();
+                    assertEquals(
+                            before[i].x + scroll[0],
+                            texel.x,
+                            0.02,
+                            "Cascade " + i + " step " + step);
+                    assertEquals(
+                            before[i].y + scroll[1],
+                            texel.y,
+                            0.02,
+                            "Cascade " + i + " step " + step);
+                    assertEquals(before[i].z, texel.z, 1e-5, "Cascade " + i + " step " + step);
+                } else if (cascades[i].getRedraw() == SunShadowCache.Redraw.ALL) {
                     moves[i] += 1;
                     // Moved by whole texels, so the world stays on the same grid
                     float dx = texel.x - before[i].x;
@@ -138,6 +153,89 @@ class SunShadowCacheTest {
         // 100 meters: the middle cascade moves now and then, the far one less often
         assertTrue(moves[1] > 0 && moves[1] < 100, "Middle moved " + moves[1]);
         assertTrue(moves[2] < moves[1], "Far moved " + moves[2]);
+    }
+
+    @Test
+    void walkingShiftsTheMapsAlongInsteadOfDrawingThemWhole() {
+        Frames frames = new Frames();
+        frames.plan(camera(0, 30, 0, 0.3f, 1.1f), SUN);
+        int[] scrolls = new int[SunShadowCache.CACHED.length];
+        int[] wholes = new int[SunShadowCache.CACHED.length];
+        for (int step = 1; step <= 800; ++step) {
+            Camera moved = camera(step * 0.25, 30 + step * 0.01, step * 0.1, 0.3f, 1.1f);
+            CascadeShadowSplit[] cascades = frames.plan(moved, SUN);
+            for (int i = 0; i < cascades.length; ++i) {
+                if (!SunShadowCache.CACHED[i]) {
+                    continue;
+                }
+                CascadeShadowSplit cascade = cascades[i];
+                if (cascade.getRedraw() == SunShadowCache.Redraw.ALL) {
+                    wholes[i] += 1;
+                } else if (cascade.getRedraw() == SunShadowCache.Redraw.SCROLL) {
+                    scrolls[i] += 1;
+                    // The strip is the texels the shift brought in from outside the map, along
+                    // one side
+                    int[] scroll = cascade.getScroll();
+                    int[] rect = cascade.getRedrawRect();
+                    int size = cascade.getMapSize();
+                    assertTrue((scroll[0] == 0) != (scroll[1] == 0), "Along one axis");
+                    long area = (long) (rect[2] - rect[0]) * (rect[3] - rect[1]);
+                    assertEquals((long) Math.abs(scroll[0] + scroll[1]) * size, area);
+                    if (scroll[0] > 0) {
+                        assertEquals(0, rect[0]);
+                    } else if (scroll[0] < 0) {
+                        assertEquals(size, rect[2]);
+                    } else if (scroll[1] > 0) {
+                        assertEquals(0, rect[1]);
+                    } else {
+                        assertEquals(size, rect[3]);
+                    }
+                    assertFalse(cascade.isStaticCulledAway());
+                }
+            }
+        }
+        // 200 meters: the cascades move many times, and are drawn whole only now and then
+        for (int i = 0; i < scrolls.length; ++i) {
+            if (SunShadowCache.CACHED[i]) {
+                assertTrue(scrolls[i] > 0, "Cascade " + i + " never shifted");
+                assertTrue(
+                        wholes[i] * 4 < scrolls[i],
+                        "Cascade " + i + ": " + wholes[i] + " whole, " + scrolls[i] + " shifted");
+            }
+        }
+    }
+
+    @Test
+    void aChangedBoxIsDrawnAfterAShift() {
+        Frames frames = new Frames();
+        frames.plan(camera(0, 30, 0, 0.3f, 1.1f), SUN);
+        double[] min = {2, 22, 2};
+        double[] max = {10, 30, 10};
+        // Walk until the middle cascade shifts, with the box changed just before
+        for (int step = 1; step <= 400; ++step) {
+            frames.cache.invalidate(min, max);
+            Camera moved = camera(step * 0.25, 30, step * 0.1, 0.3f, 1.1f);
+            CascadeShadowSplit[] cascades = frames.plan(moved, SUN);
+            if (cascades[1].getRedraw() != SunShadowCache.Redraw.SCROLL) {
+                continue;
+            }
+            // The box waits a frame, then is drawn where it now is in the map
+            CascadeShadowSplit[] next = frames.plan(moved, SUN);
+            assertEquals(SunShadowCache.Redraw.PART, next[1].getRedraw());
+            int[] rect = next[1].getRedrawRect();
+            for (int c = 0; c < 8; ++c) {
+                Vector3d corner =
+                        new Vector3d(
+                                (c & 1) == 0 ? min[0] : max[0],
+                                (c & 2) == 0 ? min[1] : max[1],
+                                (c & 4) == 0 ? min[2] : max[2]);
+                Vector3f texel = texelOf(next[1], moved, corner);
+                assertTrue(texel.x >= rect[0] && texel.x <= rect[2], "Corner " + c);
+                assertTrue(texel.y >= rect[1] && texel.y <= rect[3], "Corner " + c);
+            }
+            return;
+        }
+        throw new AssertionError("The middle cascade never shifted");
     }
 
     @Test

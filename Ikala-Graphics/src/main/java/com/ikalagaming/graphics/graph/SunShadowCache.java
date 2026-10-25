@@ -21,9 +21,13 @@ import java.util.Arrays;
  *
  * <p>A cached cascade is a sphere around the camera, not around its slice of the view, so turning
  * never moves it. Its center is the camera's position snapped to a grid a quarter of its reach wide
- * in the light's view, and the sphere is that much bigger than the reach, so the slice always fits
+ * across the light, and the sphere is that much bigger than the reach, so the slice always fits
  * while the camera stays within a step. When the camera crosses into another step, the cascade
- * moves and its map is drawn again whole.
+ * moves by whole texels: its map is shifted along, see {@link Redraw#SCROLL}, and only the strip it
+ * uncovers is drawn. Along the light the center is snapped to a grid {@link #ALONG_LIGHT_STEPS}
+ * times coarser, the map reaching that much further both ways, so the map's depths stay put while
+ * the camera walks; crossing that grid, or both grids across the light at once, draws the map again
+ * whole.
  *
  * <p>The sun's direction is taken in steps of {@link #SUN_STEP_DEGREES}. When it moves a step, the
  * cascades are drawn again with the new direction one a frame, nearest first, so a moving sun costs
@@ -43,6 +47,12 @@ public class SunShadowCache {
         NONE,
         /** The texels in the cascade's redraw rectangle. */
         PART,
+        /**
+         * The map's contents shifted by the cascade's scroll, in texels, as the cascade moved
+         * across the light by whole texels, then the texels in its redraw rectangle, the strip the
+         * shift uncovered.
+         */
+        SCROLL,
         /** The whole map. */
         ALL
     }
@@ -67,6 +77,13 @@ public class SunShadowCache {
 
     /** How many steps of the snapping grid a cached cascade's reach spans. */
     static final int RECENTER_STEPS = 4;
+
+    /**
+     * How many steps across the light one step along it is. The map reaches half a step further
+     * each way along the light, so a few times the cascade's reach keeps it from being drawn again
+     * whole as the camera walks, for some loss of depth precision.
+     */
+    static final int ALONG_LIGHT_STEPS = 16;
 
     /**
      * Texels added around a changed box before it is drawn again: the light stage's filter reads
@@ -131,6 +148,9 @@ public class SunShadowCache {
     /** Parts of cascades drawn since the cache was made. */
     private long partRedraws;
 
+    /** Cascades shifted along since the cache was made. */
+    private long scrolls;
+
     /** Texels drawn again since the cache was made, by whole cascades and parts. */
     private long texelsRedrawn;
 
@@ -149,9 +169,10 @@ public class SunShadowCache {
      *
      * @param fullRedraws Whole cascades drawn.
      * @param partRedraws Parts of cascades drawn.
-     * @param texelsRedrawn Texels drawn again, by whole cascades and parts.
+     * @param scrolls Cascades shifted along, each drawing the strip it uncovered.
+     * @param texelsRedrawn Texels drawn again, by whole cascades, parts and strips.
      */
-    public record Stats(long fullRedraws, long partRedraws, long texelsRedrawn) {}
+    public record Stats(long fullRedraws, long partRedraws, long scrolls, long texelsRedrawn) {}
 
     /**
      * What the cache has done since it was made.
@@ -159,7 +180,7 @@ public class SunShadowCache {
      * @return The numbers.
      */
     public Stats stats() {
-        return new Stats(fullRedraws, partRedraws, texelsRedrawn);
+        return new Stats(fullRedraws, partRedraws, scrolls, texelsRedrawn);
     }
 
     /** Forget what every map holds, so each is drawn whole next frame. */
@@ -312,12 +333,23 @@ public class SunShadowCache {
                             || !wanted.direction.equals(placement.direction)
                             || wanted.radius != placement.radius;
             if (moved) {
+                final int[] shift =
+                        scrollable(placement, wanted) ? shiftOf(placement, wanted) : null;
                 copy(wanted, placement);
                 placement.valid = true;
                 sunBehind[i] = !placement.direction.equals(sun);
                 sunRedrawn |= catchUp;
-                clear(dirty[i]);
-                cascade.redraw = Redraw.ALL;
+                if (shift != null) {
+                    cascade.redraw = Redraw.SCROLL;
+                    cascade.scroll[0] = shift[0];
+                    cascade.scroll[1] = shift[1];
+                    stripOf(shift, placement.mapSize, cascade.redrawRect);
+                    // What was waiting to be drawn again moved with the map: drawn next frame
+                    shiftRect(dirty[i], shift, placement.mapSize);
+                } else {
+                    clear(dirty[i]);
+                    cascade.redraw = Redraw.ALL;
+                }
             } else if (dirty[i][2] > dirty[i][0] && dirty[i][3] > dirty[i][1]) {
                 cascade.redraw = Redraw.PART;
                 System.arraycopy(dirty[i], 0, cascade.redrawRect, 0, RECT_VALUES);
@@ -410,15 +442,18 @@ public class SunShadowCache {
         final Vector3d up = upFor(direction);
         final Matrix4d rotation = new Matrix4d().lookAlong(direction, up);
         final Vector3d center = rotation.transformPosition(new Vector3d(cameraPosition));
+        // The light's view looks along -z, so z is along the light
+        final double along = grid * ALONG_LIGHT_STEPS;
         center.set(
                 Math.rint(center.x / grid) * grid,
                 Math.rint(center.y / grid) * grid,
-                Math.rint(center.z / grid) * grid);
+                Math.rint(center.z / along) * along);
         rotation.invert(new Matrix4d()).transformPosition(center);
         placement.center.set(center);
 
-        final double back = placement.extent + CascadeShadowSplit.CASTER_REACH;
-        placement.depth = back + placement.extent;
+        // Half a step along the light further each way, for a camera anywhere in the step
+        final double back = placement.extent + CascadeShadowSplit.CASTER_REACH + along / 2;
+        placement.depth = back + placement.extent + along / 2;
         // Right handed, as the fitted cascades are, see CascadeShadowSplit
         placement.viewFromCenter.setLookAt(
                 -direction.x() * back,
@@ -442,6 +477,110 @@ public class SunShadowCache {
                         true)
                 .mul(placement.viewFromCenter);
         return placement;
+    }
+
+    /**
+     * Whether a cascade can move to a new placement by shifting its map: drawn the same way, the
+     * light's direction, the sphere and the map's size unchanged, and the center moved only across
+     * the light, so every depth in the map stays as it is.
+     *
+     * @param from Where it is.
+     * @param to Where it goes.
+     * @return True if its map can be shifted along.
+     */
+    static boolean scrollable(@NonNull Placement from, @NonNull Placement to) {
+        if (!from.valid
+                || !from.direction.equals(to.direction)
+                || from.radius != to.radius
+                || from.mapSize != to.mapSize) {
+            return false;
+        }
+        final double along = new Vector3d(to.center).sub(from.center).dot(from.direction);
+        return Math.abs(along) < from.texelSize / 2;
+    }
+
+    /**
+     * How far a cascade's map shifts as it moves to a new placement, in texels, if it moves along
+     * one axis of the map by less than its width: crossing both axes' steps at once uncovers two
+     * strips, drawn whole instead.
+     *
+     * @param from Where it is.
+     * @param to Where it goes, {@link #scrollable} from it.
+     * @return The shift in x and y, one of them 0, or null if it can't be shifted.
+     */
+    static int[] shiftOf(@NonNull Placement from, @NonNull Placement to) {
+        final double[] before = texelOf(from, from.center);
+        final double[] after = texelOf(to, from.center);
+        final int[] shift = {
+            (int) Math.rint(after[0] - before[0]), (int) Math.rint(after[1] - before[1])
+        };
+        if ((shift[0] != 0) == (shift[1] != 0)
+                || Math.abs(shift[0]) >= from.mapSize
+                || Math.abs(shift[1]) >= from.mapSize) {
+            return null;
+        }
+        return shift;
+    }
+
+    /**
+     * Where a world point is in a cascade's map, in texels, x and y as in {@link #rectOf}.
+     *
+     * @param placement The cascade.
+     * @param point The world point.
+     * @return Its texel coordinates, not rounded.
+     */
+    static double[] texelOf(@NonNull Placement placement, @NonNull Vector3dc point) {
+        final Vector4d at =
+                new Vector4d(point, 1)
+                        .sub(placement.center.x, placement.center.y, placement.center.z, 0);
+        placement.fromCenter.transform(at);
+        return new double[] {
+            (at.x / at.w * 0.5 + 0.5) * placement.mapSize,
+            (at.y / at.w * 0.5 + 0.5) * placement.mapSize
+        };
+    }
+
+    /**
+     * The strip a shift uncovers: the texels whose contents come from outside the map before it.
+     *
+     * @param shift The shift in x and y, one of them 0.
+     * @param mapSize The map's width and height, in texels.
+     * @param rect Where the strip goes, min x, min y, max x, max y, the max exclusive.
+     */
+    static void stripOf(int @NonNull [] shift, int mapSize, int @NonNull [] rect) {
+        rect[0] = 0;
+        rect[1] = 0;
+        rect[2] = mapSize;
+        rect[3] = mapSize;
+        if (shift[0] > 0) {
+            rect[2] = shift[0];
+        } else if (shift[0] < 0) {
+            rect[0] = mapSize + shift[0];
+        } else if (shift[1] > 0) {
+            rect[3] = shift[1];
+        } else {
+            rect[1] = mapSize + shift[1];
+        }
+    }
+
+    /**
+     * Move a rectangle of a map along with the map's contents, clipped to the map.
+     *
+     * @param rect The rectangle, empty while max <= min, emptied if it leaves the map.
+     * @param shift The shift in x and y.
+     * @param mapSize The map's width and height, in texels.
+     */
+    static void shiftRect(int @NonNull [] rect, int @NonNull [] shift, int mapSize) {
+        if (rect[2] <= rect[0] || rect[3] <= rect[1]) {
+            return;
+        }
+        rect[0] = Math.max(0, rect[0] + shift[0]);
+        rect[1] = Math.max(0, rect[1] + shift[1]);
+        rect[2] = Math.min(mapSize, rect[2] + shift[0]);
+        rect[3] = Math.min(mapSize, rect[3] + shift[1]);
+        if (rect[2] <= rect[0] || rect[3] <= rect[1]) {
+            clear(rect);
+        }
     }
 
     /**
@@ -487,7 +626,7 @@ public class SunShadowCache {
                 cascade.staticCullMatrix.set(cascade.getProjViewMatrix());
                 cascade.staticCulledAway = false;
             }
-            case PART -> {
+            case PART, SCROLL -> {
                 // An orthographic box around just the texels drawn again
                 final int[] rect = cascade.redrawRect;
                 final double texel = 2 * placement.extent / placement.mapSize;
@@ -553,6 +692,11 @@ public class SunShadowCache {
             }
             case PART -> {
                 partRedraws += 1;
+                final int[] rect = cascade.redrawRect;
+                texelsRedrawn += (long) (rect[2] - rect[0]) * (rect[3] - rect[1]);
+            }
+            case SCROLL -> {
+                scrolls += 1;
                 final int[] rect = cascade.redrawRect;
                 texelsRedrawn += (long) (rect[2] - rect[0]) * (rect[3] - rect[1]);
             }

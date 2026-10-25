@@ -1549,6 +1549,20 @@ public class VulkanInstance {
                         ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(RenderStage.Type.SHADOW_BRICK, new ShaderVulkan(brickModules, state));
 
+        // A cached sun cascade's map shifted along as it moves across the light
+        List<ShaderVulkan.ShaderModuleData> scrollModules = new ArrayList<>();
+        scrollModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/shadow_scroll.vert",
+                        ShaderVulkan.Type.VERTEX,
+                        ShaderVulkan.Location.BUNDLED));
+        scrollModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/shadow_scroll.frag",
+                        ShaderVulkan.Type.FRAGMENT,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(RenderStage.Type.SHADOW_SCROLL, new ShaderVulkan(scrollModules, state));
+
         // Cut out meshes, whose textures cut holes in their shadows as in the surface
         List<ShaderVulkan.ShaderModuleData> cutoutModules = new ArrayList<>();
         cutoutModules.add(

@@ -126,6 +126,15 @@ public class ShadowRender implements RenderStage {
     /** VkPipeline for baked sections in a point light shadow face. */
     private long pointBakedPipeline;
 
+    /** The shader that shifts a cached cascade's map along. */
+    @NonNull private final ShaderVulkan scrollShader;
+
+    /** VkPipeline that shifts a cached cascade's map along. */
+    private long scrollPipeline;
+
+    /** Vertices of the triangle over a map that shifts it along. */
+    private static final int SCROLL_VERTICES = 3;
+
     /**
      * Where a standard vertex's texture coordinates are: after its position, normal, tangent and
      * bitangent, see MeshData.
@@ -165,6 +174,7 @@ public class ShadowRender implements RenderStage {
      * @param bakedCutoutShader The shader for baked sections' cut out meshes, alpha tested.
      * @param pointShader The shader for standard meshes in point light shadow faces.
      * @param pointBakedShader The shader for baked sections in point light shadow faces.
+     * @param scrollShader The shader that shifts a cached cascade's map along.
      */
     public ShadowRender(
             final @NonNull ShaderVulkan bakedShader,
@@ -175,7 +185,8 @@ public class ShadowRender implements RenderStage {
             final @NonNull ShaderVulkan cutoutShader,
             final @NonNull ShaderVulkan bakedCutoutShader,
             final @NonNull ShaderVulkan pointShader,
-            final @NonNull ShaderVulkan pointBakedShader) {
+            final @NonNull ShaderVulkan pointBakedShader,
+            final @NonNull ShaderVulkan scrollShader) {
         this.bakedShader = bakedShader;
         this.lodShader = lodShader;
         this.lodCutoutShader = lodCutoutShader;
@@ -186,6 +197,8 @@ public class ShadowRender implements RenderStage {
         this.bakedCutoutShader = bakedCutoutShader;
         this.pointShader = pointShader;
         this.pointBakedShader = pointBakedShader;
+        this.scrollShader = scrollShader;
+        this.scrollPipeline = VK_NULL_HANDLE;
         this.bakedPipeline = VK_NULL_HANDLE;
         this.lodPipeline = VK_NULL_HANDLE;
         this.lodCutoutPipeline = VK_NULL_HANDLE;
@@ -210,6 +223,7 @@ public class ShadowRender implements RenderStage {
         bakedCutoutPipeline = createPipeline(vulkanState, bakedCutoutShader, true, false, true);
         pointPipeline = createPipeline(vulkanState, pointShader, false, false, false);
         pointBakedPipeline = createPipeline(vulkanState, pointBakedShader, true, false, false);
+        scrollPipeline = createScrollPipeline(vulkanState);
     }
 
     @Override
@@ -236,6 +250,8 @@ public class ShadowRender implements RenderStage {
         pointPipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, pointBakedPipeline, null);
         pointBakedPipeline = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, scrollPipeline, null);
+        scrollPipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);
         pipelineLayout = VK_NULL_HANDLE;
         vkDestroyDescriptorSetLayout(vulkanState.device.logical, descriptorSetLayout, null);
@@ -310,6 +326,11 @@ public class ShadowRender implements RenderStage {
                     endWriting(commandBuffer, map, stack);
                     continue;
                 }
+                if (cascade.getRedraw() == SunShadowCache.Redraw.SCROLL) {
+                    // Moved across the light: what it holds shifts along, then the strip it
+                    // uncovered is drawn below
+                    scrollMap(commandBuffer, vulkanState, map, cascade.getScroll(), stack);
+                }
                 if (cascade.getRedraw() != SunShadowCache.Redraw.NONE) {
                     // What doesn't move, kept from frame to frame, so it is drawn over
                     beginWriting(commandBuffer, map, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, stack);
@@ -318,9 +339,9 @@ public class ShadowRender implements RenderStage {
                             vulkanState,
                             map,
                             cascade.getMapSize(),
-                            cascade.getRedraw() == SunShadowCache.Redraw.PART
-                                    ? cascade.getRedrawRect()
-                                    : null,
+                            cascade.getRedraw() == SunShadowCache.Redraw.ALL
+                                    ? null
+                                    : cascade.getRedrawRect(),
                             list,
                             pushConstants,
                             true,
@@ -588,6 +609,137 @@ public class ShadowRender implements RenderStage {
             }
             vkCmdEndRendering(commandBuffer);
         }
+    }
+
+    /**
+     * Shift a cached cascade's map along by whole texels: copy it, then draw each texel back from
+     * where its contents were in the copy, the far plane where that is outside the map. Leaves the
+     * map ready to be read, or drawn into again.
+     *
+     * @param commandBuffer The command buffer to record into.
+     * @param state The Vulkan state.
+     * @param map The map, ready to be read.
+     * @param shift The shift in texels, x then y: a texel's contents come from where it is less
+     *     this.
+     * @param stack The stack to allocate on.
+     */
+    private void scrollMap(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull VulkanState state,
+            @NonNull TextureInfoVulkan map,
+            int @NonNull [] shift,
+            @NonNull MemoryStack stack) {
+        final TextureInfoVulkan copy = state.perFrameData[state.frameIndex].cascadeScrollCopy;
+        final int size = SunShadowCache.STATIC_MAP_SIZE;
+        // Once earlier frames are done reading the map, and the last shift is done with the copy
+        transitionShadowMaps(
+                commandBuffer,
+                new TextureInfoVulkan[] {map},
+                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                VK_ACCESS_2_NONE,
+                VK_PIPELINE_STAGE_2_COPY_BIT,
+                VK_ACCESS_2_TRANSFER_READ_BIT,
+                VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                stack);
+        transitionShadowMaps(
+                commandBuffer,
+                new TextureInfoVulkan[] {copy},
+                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                VK_ACCESS_2_NONE,
+                VK_PIPELINE_STAGE_2_COPY_BIT,
+                VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                stack);
+        VkImageCopy.Buffer region = VkImageCopy.calloc(1, stack);
+        region.get(0)
+                .srcSubresource(
+                        layers -> layers.aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT).layerCount(1));
+        region.get(0)
+                .dstSubresource(
+                        layers -> layers.aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT).layerCount(1));
+        region.get(0).extent().set(size, size, 1);
+        vkCmdCopyImage(
+                commandBuffer,
+                map.texture,
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                copy.texture,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                region);
+        transitionShadowMaps(
+                commandBuffer,
+                new TextureInfoVulkan[] {copy},
+                VK_PIPELINE_STAGE_2_COPY_BIT,
+                VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
+                stack);
+        transitionShadowMaps(
+                commandBuffer,
+                new TextureInfoVulkan[] {map},
+                VK_PIPELINE_STAGE_2_COPY_BIT,
+                VK_ACCESS_2_NONE,
+                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
+                        | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                stack);
+
+        // Every texel is written, so what the map held is no longer needed
+        VkRenderingAttachmentInfo depthAttachment =
+                VkRenderingAttachmentInfo.calloc(stack)
+                        .sType$Default()
+                        .imageView(map.view)
+                        .imageLayout(VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL)
+                        .loadOp(VK_ATTACHMENT_LOAD_OP_DONT_CARE)
+                        .storeOp(VK_ATTACHMENT_STORE_OP_STORE);
+        VkRenderingInfo renderingInfo =
+                VkRenderingInfo.calloc(stack)
+                        .sType$Default()
+                        .renderArea(area -> area.extent().set(size, size))
+                        .layerCount(1)
+                        .pDepthAttachment(depthAttachment);
+        vkCmdBeginRendering(commandBuffer, renderingInfo);
+        VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
+        viewports.get(0).width(size).height(size).minDepth(0).maxDepth(1);
+        vkCmdSetViewport(commandBuffer, 0, viewports);
+        VkRect2D.Buffer scissors = VkRect2D.calloc(1, stack);
+        scissors.get(0).extent().set(size, size);
+        vkCmdSetScissor(commandBuffer, 0, scissors);
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, scrollPipeline);
+        vkCmdBindDescriptorSets(
+                commandBuffer,
+                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                pipelineLayout,
+                0,
+                stack.longs(
+                        descriptorSets[state.frameIndex],
+                        state.bindlessTextures.getDescriptorSet()),
+                null);
+        final ByteBuffer constants = stack.malloc(ShaderBindings.Shadow.VOLUME_PUSH_CONSTANTS_SIZE);
+        constants.putInt(0, copy.bindlessIndex);
+        constants.putInt(
+                ShaderBindings.Shadow.PUSH_CONSTANT_SCROLL_SHIFT_OFFSET
+                        - ShaderBindings.Shadow.PUSH_CONSTANT_SCROLL_SOURCE_OFFSET,
+                shift[0]);
+        constants.putInt(
+                ShaderBindings.Shadow.PUSH_CONSTANT_SCROLL_SHIFT_OFFSET
+                        - ShaderBindings.Shadow.PUSH_CONSTANT_SCROLL_SOURCE_OFFSET
+                        + Integer.BYTES,
+                shift[1]);
+        vkCmdPushConstants(
+                commandBuffer,
+                pipelineLayout,
+                VK_SHADER_STAGE_FRAGMENT_BIT,
+                ShaderBindings.Shadow.PUSH_CONSTANT_SCROLL_SOURCE_OFFSET,
+                constants);
+        vkCmdDraw(commandBuffer, SCROLL_VERTICES, 1, 0, 0);
+        vkCmdEndRendering(commandBuffer);
+        endWriting(commandBuffer, map, stack);
     }
 
     /**
@@ -922,6 +1074,84 @@ public class ShadowRender implements RenderStage {
      * @param state The Vulkan state.
      * @return The VkPipeline.
      */
+    /**
+     * Create the pipeline that shifts a cached cascade's map along: one triangle over the map from
+     * the vertex index, writing every texel's depth, whatever was there.
+     *
+     * @param state The Vulkan state.
+     * @return The VkPipeline.
+     */
+    private long createScrollPipeline(@NonNull VulkanState state) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            LongBuffer longOutput = stack.callocLong(1);
+            VkPipelineVertexInputStateCreateInfo vertexInputState =
+                    VkPipelineVertexInputStateCreateInfo.calloc(stack).sType$Default();
+            VkPipelineInputAssemblyStateCreateInfo inputAssemblyState =
+                    VkPipelineInputAssemblyStateCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+            VkPipelineViewportStateCreateInfo viewportState =
+                    VkPipelineViewportStateCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .viewportCount(1)
+                            .scissorCount(1);
+            VkPipelineDynamicStateCreateInfo dynamicState =
+                    VkPipelineDynamicStateCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .pDynamicStates(
+                                    stack.ints(
+                                            VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR));
+            VkPipelineDepthStencilStateCreateInfo depthStencilState =
+                    VkPipelineDepthStencilStateCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .depthTestEnable(true)
+                            .depthWriteEnable(true)
+                            .depthCompareOp(VK_COMPARE_OP_ALWAYS);
+            VkPipelineRenderingCreateInfo renderingCreateInfo =
+                    VkPipelineRenderingCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .depthAttachmentFormat(PipelineManagerVulkan.DEPTH_FORMAT);
+            VkPipelineColorBlendStateCreateInfo colorBlendState =
+                    VkPipelineColorBlendStateCreateInfo.calloc(stack).sType$Default();
+            VkPipelineRasterizationStateCreateInfo rasterizationState =
+                    VkPipelineRasterizationStateCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .polygonMode(VK_POLYGON_MODE_FILL)
+                            .cullMode(VK_CULL_MODE_NONE)
+                            .lineWidth(1.0f);
+            VkPipelineMultisampleStateCreateInfo multisampleState =
+                    VkPipelineMultisampleStateCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .rasterizationSamples(VK_SAMPLE_COUNT_1_BIT);
+            VkGraphicsPipelineCreateInfo.Buffer pipelineCreateInfos =
+                    VkGraphicsPipelineCreateInfo.calloc(1, stack);
+            pipelineCreateInfos
+                    .get(0)
+                    .sType$Default()
+                    .pNext(renderingCreateInfo)
+                    .stageCount(scrollShader.shaderModules.length)
+                    .pStages(scrollShader.shaderStages)
+                    .pVertexInputState(vertexInputState)
+                    .pInputAssemblyState(inputAssemblyState)
+                    .pViewportState(viewportState)
+                    .pRasterizationState(rasterizationState)
+                    .pMultisampleState(multisampleState)
+                    .pDepthStencilState(depthStencilState)
+                    .pColorBlendState(colorBlendState)
+                    .pDynamicState(dynamicState)
+                    .layout(pipelineLayout)
+                    .renderPass(VK_NULL_HANDLE);
+            checkError(
+                    vkCreateGraphicsPipelines(
+                            state.device.logical,
+                            VK_NULL_HANDLE,
+                            pipelineCreateInfos,
+                            null,
+                            longOutput));
+            return longOutput.get(0);
+        }
+    }
+
     private long createVolumePipeline(@NonNull VulkanState state) {
         return createPipeline(state, volumeShader, false, true, false, true, false);
     }

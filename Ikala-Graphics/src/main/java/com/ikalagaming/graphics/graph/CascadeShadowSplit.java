@@ -121,6 +121,14 @@ public class CascadeShadowSplit {
     final int[] redrawRect = new int[4];
 
     /**
+     * How far {@link SunShadowCache.Redraw#SCROLL} shifts the map's contents, in texels, x then y,
+     * like {@link #redrawRect}: a texel's contents move from where it is less this.
+     *
+     * @return The shift. Don't modify it.
+     */
+    final int[] scroll = new int[2];
+
+    /**
      * What things that don't move are culled with this frame, from render space: the whole cascade,
      * the part drawn again, or nothing.
      *

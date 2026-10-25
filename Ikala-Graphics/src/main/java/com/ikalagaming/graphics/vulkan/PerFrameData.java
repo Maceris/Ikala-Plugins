@@ -182,6 +182,12 @@ public class PerFrameData {
      */
     public TextureInfoVulkan[] cascadeDynamicShadows;
 
+    /**
+     * A copy of a cached cascade's map, which the map is drawn back from shifted along when the
+     * cascade moves across the light. Shared between frames and cascades, used one at a time.
+     */
+    public TextureInfoVulkan cascadeScrollCopy;
+
     /** This frame's sky occlusion view: its matrix and what of its map is drawn. */
     public CascadeShadowSplit skyView;
 

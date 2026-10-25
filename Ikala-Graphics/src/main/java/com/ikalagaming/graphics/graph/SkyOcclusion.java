@@ -62,7 +62,7 @@ public class SkyOcclusion {
      * @return The numbers.
      */
     public SunShadowCache.Stats stats() {
-        return new SunShadowCache.Stats(fullRedraws, partRedraws, texelsRedrawn);
+        return new SunShadowCache.Stats(fullRedraws, partRedraws, 0, texelsRedrawn);
     }
 
     /** Forget what the map holds, so it is drawn whole next frame. */

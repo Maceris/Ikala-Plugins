@@ -353,9 +353,11 @@ public class GraphicsDebug extends GuiWindow {
                     final var cacheStats = renderer.getState().sunShadows.stats();
                     IkGui.text(
                             String.format(
-                                    "Sun shadow redraws: %,d whole, %,d in part, %,.1f M texels",
+                                    "Sun shadow redraws: %,d whole, %,d in part, %,d shifted,"
+                                            + " %,.1f M texels",
                                     cacheStats.fullRedraws(),
                                     cacheStats.partRedraws(),
+                                    cacheStats.scrolls(),
                                     cacheStats.texelsRedrawn() / TEXELS_PER_MEGA));
                     IkGui.text(
                             String.format(

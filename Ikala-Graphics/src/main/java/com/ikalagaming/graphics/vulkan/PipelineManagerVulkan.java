@@ -99,6 +99,9 @@ public class PipelineManagerVulkan {
      */
     private TextureInfoVulkan[] dynamicShadowMaps;
 
+    /** The copy cached cascades' maps are shifted along from. */
+    private TextureInfoVulkan scrollCopy;
+
     /** The sky occlusion map, shared between frames like the shadow maps. */
     private TextureInfoVulkan skyMap;
 
@@ -246,7 +249,8 @@ public class PipelineManagerVulkan {
                         shaders.getShader(RenderStage.Type.SHADOW_CUTOUT),
                         shaders.getShader(RenderStage.Type.SHADOW_BAKED_CUTOUT),
                         shaders.getShader(RenderStage.Type.POINT_SHADOW),
-                        shaders.getShader(RenderStage.Type.POINT_SHADOW_BAKED));
+                        shaders.getShader(RenderStage.Type.POINT_SHADOW_BAKED),
+                        shaders.getShader(RenderStage.Type.SHADOW_SCROLL));
         stageShadowRender.initialize(state);
         stageLightCull = new LightCull(shaders.getShader(RenderStage.Type.LIGHT_CULL));
         stageLightCull.initialize(state);
@@ -534,6 +538,8 @@ public class PipelineManagerVulkan {
                 all.add(dynamicShadowMaps[i]);
             }
         }
+        // Only ever copied into whole before it is read, so it isn't cleared
+        scrollCopy = createShadowMap(state, SunShadowCache.STATIC_MAP_SIZE);
         skyMap = createShadowMap(state, SkyOcclusion.MAP_SIZE);
         all.add(skyMap);
         pointAtlas = createShadowMap(state, PointShadows.ATLAS_SIZE);
@@ -562,6 +568,7 @@ public class PipelineManagerVulkan {
                         DEPTH_FORMAT,
                         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
                                 | VK_IMAGE_USAGE_SAMPLED_BIT
+                                | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
                                 | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
                         VK_IMAGE_ASPECT_DEPTH_BIT,
                         VK_FILTER_LINEAR,
@@ -659,6 +666,9 @@ public class PipelineManagerVulkan {
             }
         }
         dynamicShadowMaps = null;
+        state.bindlessTextures.release(state, scrollCopy);
+        scrollCopy.destroy(state);
+        scrollCopy = null;
         state.bindlessTextures.release(state, skyMap);
         skyMap.destroy(state);
         skyMap = null;
@@ -789,6 +799,7 @@ public class PipelineManagerVulkan {
             @NonNull VkExtent3D imageExtent) {
         data.cascadeShadows = shadowMaps;
         data.cascadeDynamicShadows = dynamicShadowMaps;
+        data.cascadeScrollCopy = scrollCopy;
         data.skyMap = skyMap;
         data.pointAtlas = pointAtlas;
         data.pointDynamicAtlas = pointDynamicAtlas;

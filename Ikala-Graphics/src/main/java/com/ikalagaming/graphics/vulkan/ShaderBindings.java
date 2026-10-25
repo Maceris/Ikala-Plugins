@@ -1405,6 +1405,16 @@ public class ShaderBindings {
         public static final int VOLUME_PUSH_CONSTANTS_SIZE =
                 PUSH_CONSTANT_FRAME_OFFSET + Integer.BYTES - PUSH_CONSTANT_BRICKS_OFFSET;
 
+        /**
+         * Push constant offset for the bindless index of the copy of a map that {@code
+         * shadow_scroll.frag} shifts along, in the same range as the volumes' constants.
+         */
+        public static final int PUSH_CONSTANT_SCROLL_SOURCE_OFFSET = PUSH_CONSTANT_BRICKS_OFFSET;
+
+        /** Push constant offset for the shift in texels, x then y, as two ints. */
+        public static final int PUSH_CONSTANT_SCROLL_SHIFT_OFFSET =
+                PUSH_CONSTANT_SCROLL_SOURCE_OFFSET + Integer.BYTES;
+
         /** The binding point for the model matrices buffer. */
         public static final int MODEL_MATRICES_BINDING = 0;
 

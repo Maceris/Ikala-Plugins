@@ -1797,10 +1797,11 @@ public final class GateBenchmark {
         if (start != null) {
             final SunShadowCache.Stats end = renderer().getState().sunShadows.stats();
             log.info(
-                    "Gate benchmark sun shadow cache while measuring: {} whole cascades and {} parts"
-                            + " drawn again, {} M texels, over {} frames, walking {} m/s",
+                    "Gate benchmark sun shadow cache while measuring: {} whole cascades, {} parts"
+                            + " and {} shifted along, {} M texels, over {} frames, walking {} m/s",
                     end.fullRedraws() - start.fullRedraws(),
                     end.partRedraws() - start.partRedraws(),
+                    end.scrolls() - start.scrolls(),
                     String.format(
                             "%.1f",
                             (end.texelsRedrawn() - start.texelsRedrawn()) / TEXELS_PER_MEGA),
