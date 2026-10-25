@@ -363,6 +363,21 @@ class LodCullMathTest {
      * @return The entries and units.
      */
     private static Streamed streamed(LodStore store, LodDag dag) {
+        return streamed(store, dag, null);
+    }
+
+    /**
+     * Pack a built store's clusters with their units, as {@link #streamed(LodStore, LodDag)} does,
+     * and with each one's cell, parent cell and section slot if given cell slots.
+     *
+     * @param store The store, built.
+     * @param dag Its snapshot.
+     * @param cellSlots Each cell's slot, or null to leave places out.
+     * @return The entries and units.
+     */
+    private static Streamed streamed(
+            LodStore store, LodDag dag, java.util.Map<LodStore.CellKey, Integer> cellSlots) {
+        final java.util.Map<LodStore.SectionPos, Integer> sectionSlots = new java.util.HashMap<>();
         record Key(LodStore.CellKey cell, int group) {}
         final java.util.Map<Key, Integer> slots = new java.util.LinkedHashMap<>();
         final java.util.List<double[]> bounds = new java.util.ArrayList<>();
@@ -405,9 +420,14 @@ class LodCullMathTest {
                         0,
                         new LodCullMath.Place(
                                 0,
-                                LodCullMath.NONE,
-                                LodCullMath.NONE,
-                                LodCullMath.NONE,
+                                cellSlots == null ? LodCullMath.NONE : cellSlots.get(key),
+                                cellSlots == null || piece.parentCell() == null
+                                        ? LodCullMath.NONE
+                                        : cellSlots.get(piece.parentCell()),
+                                cellSlots == null || piece.section() == null
+                                        ? LodCullMath.NONE
+                                        : sectionSlots.computeIfAbsent(
+                                                piece.section(), k -> sectionSlots.size()),
                                 own.get(at)[0],
                                 child == null ? LodCullMath.NONE : child,
                                 piece.info().level()),
@@ -485,6 +505,61 @@ class LodCullMathTest {
             }
         }
         assertTrue(forcedViews > 0, "Some views had units missing");
+    }
+
+    /**
+     * With every cell stale, as while a section near the observer waits for its cell to catch up,
+     * and only some units on the GPU, the clusters above the leaves still stand in for children
+     * that aren't there: the cut has no holes or overlaps. Without them every place whose leaves
+     * weren't on the GPU went undrawn.
+     */
+    @Test
+    void testStaleCellsStandInForMissingUnits() {
+        final LodStore store = cellStore(DagTest.terrain(2));
+        final LodDag dag = store.snapshot();
+        final java.util.Map<LodStore.CellKey, Integer> cellSlots = new java.util.HashMap<>();
+        for (LodStore.CellKey key : store.cellKeys()) {
+            cellSlots.put(key, cellSlots.size());
+        }
+        final Streamed streamed = streamed(store, dag, cellSlots);
+        final int[] flags = new int[cellSlots.size()];
+        java.util.Arrays.fill(flags, LodCullMath.FLAG_STALE);
+        final CrackCheck check = new CrackCheck(dag);
+        final Random random = new Random(13);
+        int partial = 0;
+        for (int v = 0; v < VIEWS; ++v) {
+            final boolean[] loaded = new boolean[streamed.units().size()];
+            for (int u = 0; u < loaded.length; ++u) {
+                loaded[u] = random.nextDouble() < 0.7;
+            }
+            final LodResidency residency = new LodResidency(streamed.units(), loaded);
+            final LodCut.View view = randomView(random, 2 * SECTION);
+            final double threshold = 0.25 + random.nextDouble() * 16;
+            final boolean[] drawn =
+                    LodCullMath.select(
+                            streamed.entries(),
+                            dag.clusters().size(),
+                            dag.getOrigin(),
+                            view,
+                            threshold,
+                            flags,
+                            new int[0],
+                            shownBits(residency));
+            final CrackCheck.Result result = check.check(drawn);
+            assertTrue(
+                    result.isClean(),
+                    "View "
+                            + v
+                            + ": "
+                            + result.openEdges().size()
+                            + " cracks, "
+                            + result.overdrawnEdges().size()
+                            + " edges drawn twice");
+            if (residency.shownCount() < residency.size()) {
+                ++partial;
+            }
+        }
+        assertTrue(partial > 0, "Some views had units missing");
     }
 
     /**

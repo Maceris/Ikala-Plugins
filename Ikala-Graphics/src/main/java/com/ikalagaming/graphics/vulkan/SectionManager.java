@@ -1653,9 +1653,9 @@ public class SectionManager {
                                 && distance(eye, section.position) <= reach;
                 if (override) {
                     overriding.add(section);
-                    overrides.get(section.owner).add(section.position);
+                    final boolean nothingOpaque = current.opaqueModel().getMeshDataList().isEmpty();
                     if (section.opaqueInstance == null
-                            && !current.opaqueModel().getMeshDataList().isEmpty()
+                            && !nothingOpaque
                             && resident(state.bakedGeometry.getRegistry(), current.opaqueModel())) {
                         shadows.addSection(current.origin());
                         section.opaqueInstance =
@@ -1667,6 +1667,13 @@ public class SectionManager {
                                                 current.origin(),
                                                 new Quaternionf(),
                                                 1.0f / BakedVertex.STEPS_PER_UNIT);
+                    }
+                    // The level of detail goes on drawing the section until its own blocks can
+                    // be drawn: an opaque model restored as the section comes near, or a new
+                    // bake's, takes some frames to upload, and hiding the leaves meanwhile
+                    // showed the sky through the ground
+                    if (nothingOpaque || section.opaqueInstance != null) {
+                        overrides.get(section.owner).add(section.position);
                     }
                     ++count;
                 } else {

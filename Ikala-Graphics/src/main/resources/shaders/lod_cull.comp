@@ -16,8 +16,10 @@
 // their count.
 //
 // While a live world catches up with its sections, a cell marked stale can't have its clusters
-// above the leaves drawn, a cluster whose parent is in a stale cell treats its parent's error as
-// infinite, and a hidden section's leaves aren't drawn, since the section draws itself.
+// above the leaves drawn, except to stand in for children that aren't there, a cluster whose
+// parent is in a stale cell treats its parent's error as infinite, and a hidden section's leaves
+// aren't drawn, since the section draws itself. Without the stand ins, a stale chain of cells up to
+// the root left every place whose leaves weren't on the GPU undrawn.
 //
 // Only some streaming units are on the GPU (see LodResidency): a cluster is drawn only while its
 // unit is shown, and while its children's unit isn't, it is drawn whatever its own error, standing
@@ -403,7 +405,7 @@ void main()
     bool leaf = cluster.place.w != NONE;
     bool selectable = leaf
         ? (hiddenTable.hidden[cluster.place.w >> 5] & (1u << (cluster.place.w & 31u))) == 0
-        : !stale(cluster.place.y);
+        : !stale(cluster.place.y) || forced;
     float own = projected(uintBitsToFloat(cluster.info.x), cluster.bound, w.eye.xyz, pixelsPerUnit);
     float parent = stale(cluster.place.z)
         ? uintBitsToFloat(0x7F800000u)

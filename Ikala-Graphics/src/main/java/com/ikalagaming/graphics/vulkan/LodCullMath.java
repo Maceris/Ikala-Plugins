@@ -364,7 +364,8 @@ public final class LodCullMath {
         if (leaf && isHidden(hidden, section)) {
             return false;
         }
-        if (!leaf && isStale(cellFlags, cell)) {
+        // Above the leaves, a stale cell's clusters only stand in for children that aren't there
+        if (!leaf && isStale(cellFlags, cell) && !forced) {
             return false;
         }
         final float own =

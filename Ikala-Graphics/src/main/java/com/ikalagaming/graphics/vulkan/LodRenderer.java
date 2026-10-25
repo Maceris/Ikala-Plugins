@@ -1522,12 +1522,22 @@ public class LodRenderer {
                 continue;
             }
             final ClusterMeshes.Mesh mesh = pieceMeshes.get(uploading.cluster);
-            // Only what the observer wants now, within the budget; the rest streams in once the
-            // batch is applied
+            // Only what the observer wants now, and for new level 0 cells within the budget; the
+            // rest streams in once the batch is applied. A parent cell's units are parents of
+            // units already shown, a cell built again replaces one drawn now, and clusters with no
+            // parent cell yet join the one root unit every unit hangs from: their units must be
+            // there when the batch is applied, or everything under them goes undrawn until
+            // streaming loads them, flashing out whole stretches of ground, or all of it.
+            // Streaming evicts what is over the budget afterwards.
+            final boolean holdsUp =
+                    piece.key().level() > 0
+                            || world.pieces.containsKey(piece.key())
+                            || piece.clusters().get(uploading.cluster).parentCell() == null;
             if ((mesh.triangleCount() > 0 || isVolume(piece.clusters().get(uploading.cluster)))
                     && isWanted(world, piece.clusters().get(uploading.cluster))
-                    && world.firstBytes + bytes(mesh)
-                            <= GraphicsManager.getSettings().lodResidentBytes) {
+                    && (holdsUp
+                            || world.firstBytes + bytes(mesh)
+                                    <= GraphicsManager.getSettings().lodResidentBytes)) {
                 uploading.meshes[uploading.piece][uploading.cluster] =
                         tryRegisterDrawn(
                                 state,
