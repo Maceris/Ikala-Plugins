@@ -15,12 +15,13 @@ import lombok.extern.slf4j.Slf4j;
 public class ExampleListener implements Listener {
 
     /**
-     * Logs the fact that a plugin was loaded.
+     * Logs the fact that a plugin was enabled. Listeners are only registered while their plugin is
+     * enabled, so this is called for this plugin and the ones enabled after it.
      *
      * @param event The event we are handling.
      */
     @EventHandler
     public void onPluginEnabled(PluginEnabled event) {
-        log.info("The plugin " + event.getPlugin() + " was loaded!");
+        log.info("The plugin {} was enabled!", event.getPlugin());
     }
 }

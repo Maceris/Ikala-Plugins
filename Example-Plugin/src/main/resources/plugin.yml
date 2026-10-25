@@ -1,6 +1,15 @@
 ---
+# Names may use letters, digits, hyphens and underscores
 name: Example-Plugin
+# A semantic version, pre-release and build information included, used to detect upgrades
 version: 0.0.2-alpha
 description: An example plugin to demonstrate how plugins are set up
 authors: [maceris]
 main-class: com.ikalagaming.example.ExamplePlugin
+# Plugins this needs, which are enabled first. It fails to load if one is missing.
+# Only classes from the plugins listed here and in soft-dependencies are visible.
+dependencies: []
+# Plugins this uses if they are present, which are also enabled first
+soft-dependencies: []
+# Shared library jars from the libs folder, by name without a version, like lwjgl-glfw
+libraries: []

@@ -49,6 +49,9 @@ idea {
 }
 
 configurations {
+	// Shared libraries this plugin needs at runtime, see collectLibraries
+	library
+	// Bundled into this plugin's jar. Prefer library, since libraries are loaded once and shared
 	provided
 	// Make compile extend from our provided configuration so that things added to bundled end up on the compile classpath
 	implementation.extendsFrom(provided)
@@ -56,6 +59,12 @@ configurations {
 
 dependencies {
 	compileOnly project(':Ikala-Core')
+	/*
+	 * A third party library is used with implementation for compiling and tests, and library so it
+	 * goes in the libs folder, and is listed in plugin.yml libraries without its version:
+	 * implementation "com.opencsv:opencsv:${openCSVVersion}"
+	 * library "com.opencsv:opencsv:${openCSVVersion}"
+	 */
 
 	// Testing
 	testImplementation project(':Ikala-Core')
@@ -115,6 +124,10 @@ tasks.named('jar') {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
+tasks.register('collectLibraries', Copy) {
+	from configurations.library
+	into layout.buildDirectory.dir('libraries')
+}
 
 tasks.named('check') {
 	dependsOn spotlessApply
