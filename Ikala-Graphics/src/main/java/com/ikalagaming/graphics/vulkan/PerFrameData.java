@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.vulkan;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.Model;
 
+import java.util.BitSet;
 import java.util.Map;
 
 /** Data buffers for a frame, only the data that the CPU cares about. */
@@ -111,6 +112,23 @@ public class PerFrameData {
      * fills in, then the CPU-written commands of {@link #modelDrawInfo}.
      */
     public SharedBuffer sceneDrawCommands;
+
+    /**
+     * The standard mesh slots whose draw commands {@link #sceneDrawCommands} holds as drawable, as
+     * last written: only those and the slots drawable now are written again.
+     */
+    public final BitSet drawnStandard = new BitSet();
+
+    /**
+     * The baked mesh slots whose draw commands it holds as drawable, like {@link #drawnStandard}.
+     */
+    public final BitSet drawnBaked = new BitSet();
+
+    /**
+     * The command buffer, standard slots and baked slots its draw commands were laid out for, or -1
+     * before the first: anything else, and every command is written again.
+     */
+    public final long[] drawnLayout = {-1, -1, -1};
 
     /**
      * Indirect draw commands for level of detail clusters this frame, written by the culling pass:

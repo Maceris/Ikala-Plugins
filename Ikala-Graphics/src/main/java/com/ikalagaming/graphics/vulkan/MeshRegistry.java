@@ -103,6 +103,21 @@ public class MeshRegistry {
     /** Slots whose GPU mesh table entry is out of date. */
     private final BitSet changed = new BitSet();
 
+    /** Slots whose GPU mesh table entry, as last written, holds a mesh that can be drawn. */
+    private final BitSet recordedResident = new BitSet();
+
+    /** Each slot's vertex offset as last written to the GPU mesh table. */
+    private int[] recordedVertexOffsets = new int[0];
+
+    /** Each slot's first index as last written to the GPU mesh table. */
+    private int[] recordedFirstIndices = new int[0];
+
+    /** Each slot's index count as last written to the GPU mesh table. */
+    private int[] recordedIndexCounts = new int[0];
+
+    /** Each slot's generation as last written to the GPU mesh table. */
+    private int[] recordedGenerations = new int[0];
+
     /**
      * Receives a mesh table entry that changed, to write into the GPU's copy.
      *
@@ -472,11 +487,47 @@ public class MeshRegistry {
                             handle.indexCount(),
                             handle.aabbMin(),
                             handle.aabbMax());
+                    recordedResident.set(slot);
+                    recordedVertexOffsets[slot] = vertexOffsets[slot];
+                    recordedFirstIndices[slot] = firstIndices[slot];
+                    recordedIndexCounts[slot] = handle.indexCount();
+                    recordedGenerations[slot] = generations[slot];
                 } else {
                     writer.write(slot, false, generations[slot], 0, 0, 0, ORIGIN, ORIGIN);
+                    recordedResident.clear(slot);
                 }
             }
             changed.clear();
+            return handles.length;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Hand every slot whose GPU mesh table entry holds a mesh that can be drawn, as last written by
+     * {@link #takeChanged}, to a writer, for building draw commands that agree with what culling
+     * reads from that table. Slots that can't be drawn are skipped.
+     *
+     * @param writer Receives each such slot, lowest first, with no bounding box.
+     * @return The slot count.
+     */
+    public int visitRecorded(@NonNull EntryWriter writer) {
+        lock.lock();
+        try {
+            for (int slot = recordedResident.nextSetBit(0);
+                    slot >= 0 && slot < handles.length;
+                    slot = recordedResident.nextSetBit(slot + 1)) {
+                writer.write(
+                        slot,
+                        true,
+                        recordedGenerations[slot],
+                        recordedVertexOffsets[slot],
+                        recordedFirstIndices[slot],
+                        recordedIndexCounts[slot],
+                        ORIGIN,
+                        ORIGIN);
+            }
             return handles.length;
         } finally {
             lock.unlock();
@@ -601,6 +652,10 @@ public class MeshRegistry {
             vertexOffsets = Arrays.copyOf(vertexOffsets, newLength);
             firstIndices = Arrays.copyOf(firstIndices, newLength);
             generations = Arrays.copyOf(generations, newLength);
+            recordedVertexOffsets = Arrays.copyOf(recordedVertexOffsets, newLength);
+            recordedFirstIndices = Arrays.copyOf(recordedFirstIndices, newLength);
+            recordedIndexCounts = Arrays.copyOf(recordedIndexCounts, newLength);
+            recordedGenerations = Arrays.copyOf(recordedGenerations, newLength);
             for (int slot = oldLength; slot < newLength; ++slot) {
                 freeSlots.add(slot);
             }

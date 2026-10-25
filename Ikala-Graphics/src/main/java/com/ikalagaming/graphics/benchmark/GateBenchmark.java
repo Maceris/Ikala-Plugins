@@ -564,6 +564,15 @@ public final class GateBenchmark {
     /** How fast the camera walks along x while it turns, in meters a second, 0 to stand still. */
     private double walkSpeed;
 
+    /**
+     * How many of the {@link #CHECK_SPOTS} the gate checks for cracks, the first so many: each
+     * takes minutes at a large radius, and most runs only need some.
+     */
+    private int crackSpots = CHECK_SPOTS.length;
+
+    /** Whether the gate checks the cut over its edits for cracks, after making them. */
+    private boolean editCracks = true;
+
     /** How far above the ground a walking camera keeps, in blocks. */
     private static final double WALK_CLEARANCE = 6;
 
@@ -785,7 +794,8 @@ public final class GateBenchmark {
             case CHECKING ->
                     String.format(
                             "Checking for cracks: %d of %d",
-                            checkIndex + 1, CHECK_SPOTS.length + 1);
+                            Math.min(checkIndex, crackSpots) + 1,
+                            crackSpots + (editCracks ? 1 : 0));
             case EDITING -> String.format("Editing: %d of %d edits made", digCount, GATE_DIGS);
             case DONE -> "Done";
             case STOPPED -> failure == null ? "Stopped" : "Failed: " + failure;
@@ -853,6 +863,17 @@ public final class GateBenchmark {
                         Boolean.getBoolean(PROPERTY + ".gate"));
                 current.digsLeft = Integer.getInteger(PROPERTY + ".digs", 0);
                 current.walkSpeed = Double.parseDouble(System.getProperty(PROPERTY + ".walk", "0"));
+                // Fewer crack checks, for runs that only need some: the first so many views, and
+                // whether the cut over the edits is checked; the edits are made and timed anyway
+                current.crackSpots =
+                        Math.clamp(
+                                Integer.getInteger(PROPERTY + ".cracks", CHECK_SPOTS.length),
+                                0,
+                                CHECK_SPOTS.length);
+                final String editCracks = System.getProperty(PROPERTY + ".editCracks");
+                if (editCracks != null) {
+                    current.editCracks = Boolean.parseBoolean(editCracks);
+                }
                 // Off, every cascade is drawn whole every frame, for comparing against the cache
                 final String sunCache = System.getProperty(PROPERTY + ".sunCache");
                 if (sunCache != null) {
@@ -1202,7 +1223,9 @@ public final class GateBenchmark {
                 logResidency(seconds);
                 if (seconds >= TURN_SECONDS) {
                     renderer().getState().frameTimings.setListener(null);
-                    if (gate && lodWorld != null) {
+                    if (gate && lodWorld != null && crackSpots == 0) {
+                        startEdits(System.nanoTime());
+                    } else if (gate && lodWorld != null) {
                         phase = Phase.CHECKING;
                         checkSince = System.nanoTime();
                     } else {
@@ -1211,7 +1234,7 @@ public final class GateBenchmark {
                 }
             }
             case CHECKING -> {
-                if (checkIndex < CHECK_SPOTS.length) {
+                if (checkIndex < crackSpots) {
                     final Vector3d at = checkSpot(checkIndex);
                     checkPosition = at;
                     scene.getCamera().setPosition(at.x, at.y, at.z);
@@ -1457,7 +1480,7 @@ public final class GateBenchmark {
         }
         final Vector3d at = checkPosition;
         final String where =
-                checkIndex < CHECK_SPOTS.length && at != null
+                checkIndex < crackSpots && at != null
                         ? String.format("from (%.0f, %.0f, %.0f)", at.x, at.y, at.z)
                         : "over the edits";
         final LodRenderer.Cut cut = checkCut;
@@ -1474,14 +1497,24 @@ public final class GateBenchmark {
         checkCut = null;
         checkIndex += 1;
         checkSince = now;
-        if (checkIndex == CHECK_SPOTS.length) {
-            phase = Phase.EDITING;
-            digsLeft = GATE_DIGS;
-            propertyDigRate = GATE_DIG_RATE;
-            editStart = now;
-        } else if (checkIndex > CHECK_SPOTS.length) {
+        if (checkIndex == crackSpots) {
+            startEdits(now);
+        } else if (checkIndex > crackSpots) {
             finish();
         }
+    }
+
+    /**
+     * Start making the gate's edits.
+     *
+     * @param now The time, from {@link System#nanoTime()}.
+     */
+    private void startEdits(long now) {
+        checkIndex = crackSpots;
+        phase = Phase.EDITING;
+        digsLeft = GATE_DIGS;
+        propertyDigRate = GATE_DIG_RATE;
+        editStart = now;
     }
 
     /**
@@ -1534,6 +1567,10 @@ public final class GateBenchmark {
             log.warn("Gate benchmark: {} edits didn't finish in time", editsUnfinished);
             digs.clear();
             digsLeft = 0;
+        }
+        if (!editCracks) {
+            finish();
+            return;
         }
         phase = Phase.CHECKING;
         checkSince = now;
@@ -1637,13 +1674,16 @@ public final class GateBenchmark {
                 gate.checks().stream().mapToLong(c -> c.cracks().overdrawnEdges()).sum();
         final long holes = gate.checks().stream().mapToLong(Check::missing).sum();
         lines.add(
-                String.format(
-                        "Cracks: %,d cracks, %,d overdrawn edges and %,d holes in %d cuts, %s",
-                        cracks,
-                        overdrawn,
-                        holes,
-                        gate.checks().size(),
-                        verdict(gate.cracksPassed())));
+                gate.checks().isEmpty()
+                        ? "Cracks: not checked"
+                        : String.format(
+                                "Cracks: %,d cracks, %,d overdrawn edges and %,d holes in %d cuts,"
+                                        + " %s",
+                                cracks,
+                                overdrawn,
+                                holes,
+                                gate.checks().size(),
+                                verdict(gate.cracksPassed())));
         lines.add(
                 String.format(
                         "Edits: %d of %d at %.0f a second, worst drawn at full resolution after %.1f"

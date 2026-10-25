@@ -38,6 +38,7 @@ import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -417,6 +418,12 @@ public class InstanceDrawUpdate implements RenderStage {
                 MemoryUtil.memByteBuffer(
                         frameData.sceneDrawCommands.allocationInfo.pMappedData(),
                         Math.max(1, commandCount) * DRAW_COMMAND_SIZE);
+        // Only the commands of meshes drawable now or when this frame's commands were last
+        // written: the rest are already empty, and culling adds no instances to them
+        final long[] layout = {frameData.sceneDrawCommands.buffer, meshSlots, bakedSlots};
+        final boolean whole = !Arrays.equals(layout, frameData.drawnLayout);
+        System.arraycopy(layout, 0, frameData.drawnLayout, 0, layout.length);
+        final BitSet standardNow = new BitSet();
         writeCulledCommands(
                 commands,
                 meshes,
@@ -424,7 +431,10 @@ public class InstanceDrawUpdate implements RenderStage {
                 meshSlots,
                 bakedSlots,
                 firstVisible,
-                culledEntries);
+                culledEntries,
+                whole ? null : frameData.drawnStandard,
+                standardNow);
+        final BitSet bakedNow = new BitSet();
         for (MeshKind kind : MeshKind.ALL) {
             if (kind.isBaked()) {
                 writeCulledCommands(
@@ -434,9 +444,15 @@ public class InstanceDrawUpdate implements RenderStage {
                         meshSlots,
                         bakedSlots,
                         firstVisible,
-                        culledEntries);
+                        culledEntries,
+                        whole ? null : frameData.drawnBaked,
+                        bakedNow);
             }
         }
+        frameData.drawnStandard.clear();
+        frameData.drawnStandard.or(standardNow);
+        frameData.drawnBaked.clear();
+        frameData.drawnBaked.or(bakedNow);
         writeFrusta(scene, frameData, visualizers.isCullingDisabled());
         writeOcclusionView(scene, sceneTarget, vulkanState, frameData, visualizers);
 
@@ -554,6 +570,10 @@ public class InstanceDrawUpdate implements RenderStage {
      * @param bakedSlots How many slots the baked mesh table has.
      * @param firstVisible Where each mesh slot's room starts in a visible list, by kind.
      * @param listEntries How many visible entries each list has room for.
+     * @param drawnBefore The slots whose commands were last written as drawable, whose commands are
+     *     emptied if they aren't now; null to empty every slot's that isn't drawable now, when what
+     *     the buffer holds is unknown.
+     * @param drawnNow Receives the slots whose commands are written as drawable.
      */
     private static void writeCulledCommands(
             @NonNull ByteBuffer commands,
@@ -562,26 +582,54 @@ public class InstanceDrawUpdate implements RenderStage {
             int standardSlots,
             int bakedSlots,
             int @NonNull [] @NonNull [] firstVisible,
-            int listEntries) {
+            int listEntries,
+            BitSet drawnBefore,
+            @NonNull BitSet drawnNow) {
         final int slots = slotsOf(kind, standardSlots, bakedSlots);
         final int[] kindFirst = firstVisible[kind.ordinal()];
-        meshes.visitAll(
+        // As the GPU mesh table has them, so culling, which reads that table, only adds instances
+        // to commands written here
+        meshes.visitRecorded(
                 (slot, resident, generation, vertexOffset, firstIndex, indexCount, min, max) -> {
                     if (slot >= slots) {
                         return;
                     }
+                    drawnNow.set(slot);
                     for (int list = 0; list < LIST_COUNT; ++list) {
                         writeCommand(
                                 commands,
                                 commandIndex(kind, list, slot, standardSlots, bakedSlots)
                                         * DRAW_COMMAND_SIZE,
-                                resident ? indexCount : 0,
+                                indexCount,
                                 0,
                                 firstIndex,
                                 vertexOffset,
                                 list * listEntries + kindFirst[slot]);
                     }
                 });
+        // Empty what was drawable and isn't now, or every other slot's when it isn't known
+        final BitSet empty = new BitSet();
+        if (drawnBefore == null) {
+            empty.set(0, slots);
+        } else {
+            empty.or(drawnBefore);
+        }
+        empty.andNot(drawnNow);
+        for (int slot = empty.nextSetBit(0);
+                slot >= 0 && slot < slots;
+                slot = empty.nextSetBit(slot + 1)) {
+            for (int list = 0; list < LIST_COUNT; ++list) {
+                writeCommand(
+                        commands,
+                        commandIndex(kind, list, slot, standardSlots, bakedSlots)
+                                * DRAW_COMMAND_SIZE,
+                        0,
+                        0,
+                        0,
+                        0,
+                        list * listEntries + kindFirst[slot]);
+            }
+        }
     }
 
     /**
