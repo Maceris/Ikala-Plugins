@@ -1,6 +1,7 @@
 package com.ikalagaming.characters.demo;
 
 import com.ikalagaming.characters.definition.Rig;
+import com.ikalagaming.characters.definition.RigMap;
 import com.ikalagaming.characters.gltf.GltfImporter;
 import com.ikalagaming.characters.gltf.ImportedCharacter;
 import com.ikalagaming.characters.pose.Clip;
@@ -9,6 +10,7 @@ import com.ikalagaming.characters.pose.PoseSolver;
 import com.ikalagaming.characters.pose.Proportions;
 import com.ikalagaming.characters.pose.Skeleton;
 import com.ikalagaming.characters.registry.CharacterRegistry;
+import com.ikalagaming.characters.retarget.Retargeter;
 import com.ikalagaming.graphics.Format;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.SkinnedInstanceHandle;
@@ -120,14 +122,69 @@ public final class CharacterPreview {
         if (definition != null) {
             character = character.onRig(definition);
         }
+        show(character, clipName);
+    }
+
+    /**
+     * Show a character moved onto a rig through the loaded rig map that covers its bones, replacing
+     * whatever was shown.
+     *
+     * @param file The character's glTF file.
+     * @param referenceFile A glTF file of the rig at its reference rest, like the mannequin, for
+     *     the bones and twists the character doesn't give.
+     * @param clipName The clip to play, or null for idle, or the first.
+     * @throws IOException If a file can't be read.
+     * @throws IllegalArgumentException If no rig map covers the character, or the reference isn't
+     *     on the map's rig.
+     */
+    public void showRetargeted(@NonNull Path file, @NonNull Path referenceFile, String clipName)
+            throws IOException {
+        ImportedCharacter source = GltfImporter.read(file);
+        RigMap map = coveringMap(source.rig());
+        Rig target = registry.get().get(Rig.class, map.rig());
+        ImportedCharacter reference = GltfImporter.read(referenceFile).onRig(target);
+        show(Retargeter.retarget(source, map, target, reference.rest()), clipName);
+    }
+
+    /**
+     * Find a loaded rig map that maps or drops every bone of a skeleton.
+     *
+     * @param imported The skeleton's rig.
+     * @return The map.
+     * @throws IllegalArgumentException If none does.
+     */
+    private RigMap coveringMap(Rig imported) {
+        for (RigMap map : registry.get().all(RigMap.class)) {
+            boolean covers =
+                    imported.bones().stream()
+                            .allMatch(
+                                    bone ->
+                                            map.bones().containsKey(bone.name())
+                                                    || map.drop().contains(bone.name()));
+            if (covers) {
+                return map;
+            }
+        }
+        throw new IllegalArgumentException("No loaded rig map covers the skeleton's bones");
+    }
+
+    /**
+     * Show an imported character, replacing whatever was shown.
+     *
+     * @param character The character.
+     * @param clipName The clip to play, or null for idle, or the first.
+     * @throws IllegalArgumentException If there is no such clip.
+     */
+    private void show(ImportedCharacter character, String clipName) {
         ImportedCharacter.ClipData clipData = pickClip(character, clipName);
         lock.lock();
         try {
             hide();
             start(character, clipData);
             log.info(
-                    "Showing {}: {} bones, {} of {} parts, playing {}",
+                    "Showing {} on {}: {} bones, {} of {} parts, playing {}",
                     character.name(),
+                    character.rig().id(),
                     character.rig().bones().size(),
                     meshes.size(),
                     character.parts().size(),

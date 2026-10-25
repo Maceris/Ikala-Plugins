@@ -22,6 +22,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Character and animal design: body plans, parts, appearance and animation.
@@ -41,6 +43,12 @@ public class CharacterPlugin extends Plugin {
 
     /** The config entry listing content folders, as {@code namespace=folder}. */
     static final String CONTENT_FOLDERS = "content-folders";
+
+    /** Two glTF file paths, which may hold spaces, and an optional clip name after them. */
+    private static final Pattern TWO_FILES =
+            Pattern.compile(
+                    "(.+?\\.gl(?:b|tf))\\s+(.+?\\.gl(?:b|tf))(?:\\s+(\\S+))?",
+                    Pattern.CASE_INSENSITIVE);
 
     /** The most problems logged by a load, so a broken folder doesn't flood the console. */
     private static final int MAX_LOGGED_PROBLEMS = 50;
@@ -189,6 +197,27 @@ public class CharacterPlugin extends Plugin {
     }
 
     /**
+     * Show a character moved onto a rig, from its glTF file and a reference file of the rig. The
+     * console splits on spaces, so the words are put back together and split after each glTF file
+     * name; a word after the second names the clip to play.
+     *
+     * @param words The words after {@code retarget}.
+     */
+    private void retarget(List<String> words) {
+        Matcher matcher = TWO_FILES.matcher(String.join(" ", words));
+        if (!matcher.matches()) {
+            log.info("Usage: character retarget <file.glb> <reference.glb> [clip]");
+            return;
+        }
+        try {
+            preview.showRetargeted(
+                    Path.of(matcher.group(1)), Path.of(matcher.group(2)), matcher.group(3));
+        } catch (IOException | IllegalArgumentException e) {
+            log.error("Couldn't retarget {}: {}", matcher.group(1), e.getMessage());
+        }
+    }
+
+    /**
      * Handle the character command.
      *
      * @param args The arguments that were typed after the command.
@@ -200,6 +229,7 @@ public class CharacterPlugin extends Plugin {
         switch (action) {
             case "reload" -> reload();
             case "show" -> show(args.subList(1, args.size()));
+            case "retarget" -> retarget(args.subList(1, args.size()));
             case "hide" -> preview.hide();
             case "demo" -> {
                 if (demo.isRunning()) {
@@ -235,8 +265,9 @@ public class CharacterPlugin extends Plugin {
             }
             default ->
                     log.info(
-                            "Usage: character reload | demo | show <file> [clip] | hide | validate"
-                                    + " namespace=folder | schemas <output folder>");
+                            "Usage: character reload | demo | show <file> [clip] | retarget <file>"
+                                    + " <reference file> [clip] | hide | validate namespace=folder |"
+                                    + " schemas <output folder>");
         }
     }
 }
