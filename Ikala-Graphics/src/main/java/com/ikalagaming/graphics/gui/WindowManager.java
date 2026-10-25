@@ -185,19 +185,33 @@ public class WindowManager {
     public void drawGui(final int width, final int height) {
         IkGui.newFrame();
 
-        windows.values().stream()
-                .map(Owned::value)
-                .filter(Component::isVisible)
-                .forEach(window -> window.draw(width, height));
+        // A plugin's window or toolbar whose drawing throws stops being drawn, rather than taking
+        // the render thread down with it
+        for (Map.Entry<String, Owned<GuiWindow>> entry : windows.entrySet()) {
+            final GuiWindow window = entry.getValue().value();
+            if (window.isVisible()
+                    && !GuardedDraw.run(
+                            entry.getValue().owner().getOwner(),
+                            "Window",
+                            entry.getKey(),
+                            () -> window.draw(width, height))) {
+                window.setVisible(false);
+            }
+        }
 
         final UiManager currentUi = uiManager;
         if (currentUi != null) {
             currentUi.draw();
         }
 
-        MainToolbar currentToolbar = getToolbar();
-        if (currentToolbar != null) {
-            currentToolbar.draw(width, height);
+        final Owned<MainToolbar> currentToolbar = toolbar.get();
+        if (currentToolbar != null
+                && !GuardedDraw.run(
+                        currentToolbar.owner().getOwner(),
+                        "Toolbar",
+                        currentToolbar.value().getClass().getName(),
+                        () -> currentToolbar.value().draw(width, height))) {
+            toolbar.compareAndSet(currentToolbar, null);
         }
 
         // Defer this until right at the end

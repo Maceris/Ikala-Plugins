@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.ui;
 
 import com.ikalagaming.graphics.GraphicsContext;
+import com.ikalagaming.graphics.gui.GuardedDraw;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.Style;
 import com.ikalagaming.graphics.gui.data.Viewport;
@@ -628,8 +629,16 @@ public class UiManager {
                         viewport.workPosition.y + viewport.workSize.y);
         final UiFrame frame = new UiFrame(context, events::add, engine);
         for (Entry entry : surfaces.values()) {
-            if (entry.surface().isVisible()) {
-                entry.surface().draw(area, frame, engine);
+            final Surface surface = entry.surface();
+            if (surface.isVisible()
+                    && !GuardedDraw.run(
+                            entry.owner().getOwner(),
+                            "Surface",
+                            surface.getId(),
+                            () -> surface.draw(area, frame, engine))) {
+                // A plugin's drawing threw: hidden until it shows the surface again, so the error
+                // isn't logged every frame
+                surface.setVisible(false);
             }
         }
     }
