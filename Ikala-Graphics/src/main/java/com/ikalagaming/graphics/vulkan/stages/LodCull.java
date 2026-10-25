@@ -172,20 +172,18 @@ public class LodCull implements RenderStage {
             constants.putInt(
                     ShaderBindings.LodCull.PUSH_CONSTANT_PAIR_CAPACITY_OFFSET,
                     frameData.lodPairCapacity);
-            // Early, the scene and every cascade; late, only the scene
-            final int passes =
-                    phase == ShaderBindings.Cull.PHASE_EARLY ? InstanceDrawUpdate.PASS_COUNT : 1;
             vkCmdPushConstants(
                     commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
             // One thread per entry of the cluster table, over every world at once, then one per
-            // pair of an instance and a cluster of its model
+            // pair of an instance and a cluster of its model; early, each does the scene and every
+            // cascade, late only the scene
             final int groups =
                     (frameData.lodCapacity
                                     + frameData.lodPairCapacity
                                     + ShaderBindings.LodCull.WORKGROUP_SIZE
                                     - 1)
                             / ShaderBindings.LodCull.WORKGROUP_SIZE;
-            vkCmdDispatch(commandBuffer, groups, passes, 1);
+            vkCmdDispatch(commandBuffer, groups, 1, 1);
 
             // Draws read the commands and counts, the CPU reads the counters later, and next
             // frame's culling reads the visibility history

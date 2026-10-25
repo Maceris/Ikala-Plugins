@@ -423,7 +423,7 @@ public class InstanceDrawUpdate implements RenderStage {
         final long[] layout = {frameData.sceneDrawCommands.buffer, meshSlots, bakedSlots};
         final boolean whole = !Arrays.equals(layout, frameData.drawnLayout);
         System.arraycopy(layout, 0, frameData.drawnLayout, 0, layout.length);
-        final BitSet standardNow = new BitSet();
+        final BitSet standardNow = new BitSet(meshSlots);
         writeCulledCommands(
                 commands,
                 meshes,
@@ -434,7 +434,7 @@ public class InstanceDrawUpdate implements RenderStage {
                 culledEntries,
                 whole ? null : frameData.drawnStandard,
                 standardNow);
-        final BitSet bakedNow = new BitSet();
+        final BitSet bakedNow = new BitSet(bakedSlots);
         for (MeshKind kind : MeshKind.ALL) {
             if (kind.isBaked()) {
                 writeCulledCommands(
@@ -608,7 +608,7 @@ public class InstanceDrawUpdate implements RenderStage {
                     }
                 });
         // Empty what was drawable and isn't now, or every other slot's when it isn't known
-        final BitSet empty = new BitSet();
+        final BitSet empty = new BitSet(slots);
         if (drawnBefore == null) {
             empty.set(0, slots);
         } else {

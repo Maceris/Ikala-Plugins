@@ -56,6 +56,19 @@ public class FrameTimings {
     public static final String FRAME_INTERVAL = "Frame interval";
 
     /**
+     * The name of the time a frame waits before recording: for its frame in flight's fence, which
+     * the GPU signals once done with the frame before, and for a swapchain image, which waits for
+     * the display.
+     */
+    public static final String WAIT = "Wait";
+
+    /**
+     * The name of the time from one frame's submit to the next one's wait: the rest of the main
+     * loop, outside rendering.
+     */
+    public static final String BETWEEN_FRAMES = "Between frames";
+
+    /**
      * One part of a frame's timings.
      *
      * @param name What it is.
@@ -125,6 +138,18 @@ public class FrameTimings {
 
     /** Each frame in flight's time since the frame before it started, in milliseconds. */
     private final double[] intervalMilliseconds = new double[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
+    /** Each frame in flight's wait before recording, in milliseconds. */
+    private final double[] waitMilliseconds = new double[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
+    /** Each frame in flight's time since the frame before it was submitted, in milliseconds. */
+    private final double[] betweenMilliseconds = new double[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
+    /** When the current frame started waiting, from {@link System#nanoTime()}, 0 if it hasn't. */
+    private long waitStart;
+
+    /** When the last frame was submitted, from {@link System#nanoTime()}, 0 before the first. */
+    private long lastEnd;
 
     /** Guards {@link #rolling}. */
     private final ReentrantLock lock = new ReentrantLock();
@@ -230,6 +255,11 @@ public class FrameTimings {
                 name, sum / sorted.length, sorted[Math.max(0, rank)], sorted[sorted.length - 1]);
     }
 
+    /** Note that a frame starts waiting for its fence and swapchain image. Call before waiting. */
+    public void waitStarted() {
+        waitStart = System.nanoTime();
+    }
+
     /**
      * Start a frame: read back the last results of this frame index, which the GPU is done with,
      * then reset its queries and write its first timestamp. Call right after the command buffer
@@ -250,6 +280,10 @@ public class FrameTimings {
             readBack(frame, state);
         }
         intervalMilliseconds[frame] = previous == 0 ? 0 : (cpuStart - previous) / 1_000_000.0;
+        final long waited = waitStart == 0 ? cpuStart : waitStart;
+        waitMilliseconds[frame] = (cpuStart - waited) / 1_000_000.0;
+        betweenMilliseconds[frame] = lastEnd == 0 ? 0 : (waited - lastEnd) / 1_000_000.0;
+        waitStart = 0;
         vkCmdResetQueryPool(commandBuffer, queryPool, frame * MAX_MARKS, MAX_MARKS);
         names.get(frame).clear();
         mark(commandBuffer, frame, "");
@@ -282,7 +316,8 @@ public class FrameTimings {
      * @param frame The frame index.
      */
     public void end(int frame) {
-        cpuMilliseconds[frame] = (System.nanoTime() - cpuStart) / 1_000_000.0;
+        lastEnd = System.nanoTime();
+        cpuMilliseconds[frame] = (lastEnd - cpuStart) / 1_000_000.0;
         pending[frame] = true;
         if (!supported) {
             record(Map.of(CPU, cpuMilliseconds[frame]));
@@ -331,6 +366,8 @@ public class FrameTimings {
                             results.get(0), results.get(count - 1), validBits, tickNanoseconds));
             addPart(CPU, cpuMilliseconds[frame]);
             addPart(FRAME_INTERVAL, intervalMilliseconds[frame]);
+            addPart(WAIT, waitMilliseconds[frame]);
+            addPart(BETWEEN_FRAMES, betweenMilliseconds[frame]);
             recordParts();
         }
     }

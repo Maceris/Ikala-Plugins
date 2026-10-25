@@ -240,4 +240,50 @@ class LodResidencyTest {
         assertEquals(List.of(3), residency.toShow());
         assertTrue(residency.wantedAllShown());
     }
+
+    /**
+     * The loaded and wanted bytes and the shown count, kept as units change, match counting them
+     * again, through loads, shows, updates and evictions, and showing again finds nothing new.
+     */
+    @Test
+    void testKeptTotalsMatchCounting() {
+        final LodResidency residency =
+                new LodResidency(tree(), new boolean[] {true, false, false, false});
+        assertTotals(residency);
+        residency.update(new double[] {0, 0, 0}, PIXELS, THRESHOLD, 0, true);
+        assertTotals(residency);
+        residency.setLoaded(1);
+        residency.setLoaded(1);
+        residency.setLoaded(3);
+        assertEquals(List.of(1, 3), residency.toShow());
+        assertTrue(residency.toShow().isEmpty(), "Nothing new to show");
+        assertTotals(residency);
+        residency.update(new double[] {1000, 0, 0}, PIXELS, THRESHOLD, 0, true);
+        assertTotals(residency);
+        residency.toEvict(LodResidency.EVICT_DELAY_NANOS + 1, Long.MAX_VALUE);
+        assertTotals(residency);
+        residency.setLoaded(2);
+        assertEquals(List.of(2), residency.toShow());
+        assertTotals(residency);
+    }
+
+    /**
+     * Check a residency's kept totals against counting every unit.
+     *
+     * @param residency The residency.
+     */
+    private static void assertTotals(LodResidency residency) {
+        long loaded = 0;
+        long wanted = 0;
+        int shown = 0;
+        final List<LodResidency.Unit> units = tree();
+        for (int u = 0; u < residency.size(); ++u) {
+            loaded += residency.isLoaded(u) ? units.get(u).bytes() : 0;
+            wanted += residency.isWanted(u) ? units.get(u).bytes() : 0;
+            shown += residency.isShown(u) ? 1 : 0;
+        }
+        assertEquals(loaded, residency.loadedBytes());
+        assertEquals(wanted, residency.wantedBytes());
+        assertEquals(shown, residency.shownCount());
+    }
 }

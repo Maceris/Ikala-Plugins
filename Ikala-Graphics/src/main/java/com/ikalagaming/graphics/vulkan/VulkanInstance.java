@@ -1747,6 +1747,7 @@ public class VulkanInstance {
             }
         }
 
+        state.frameTimings.waitStarted();
         longOutput.put(0, state.fences[state.frameIndex]);
         checkError(vkWaitForFences(state.device.logical, longOutput, true, Long.MAX_VALUE));
         // The GPU is done with this frame index, so nothing can be using these anymore

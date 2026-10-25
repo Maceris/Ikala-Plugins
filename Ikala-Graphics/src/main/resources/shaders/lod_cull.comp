@@ -1,8 +1,8 @@
 #version 460
 #extension GL_EXT_buffer_reference : require
 
-// Picks each level of detail world's cut and culls it. Each thread takes one cluster of one world
-// and one pass. A cluster is in the cut by Nanite's rule: its own error, projected to the screen
+// Picks each level of detail world's cut and culls it. Each thread takes one cluster of one world,
+// for every pass of its phase. A cluster is in the cut by Nanite's rule: its own error, projected to the screen
 // from the nearest point of its saturated sphere, is at or under the threshold, and its parent
 // group's is over it (LodCullMath has it in Java, with tests). What is in the cut is then tested
 // against the pass's frustum, and the scene's against the depth pyramid in two phases, the same
@@ -358,8 +358,6 @@ void setVisible(bool instanced, uint index, bool visible)
 void main()
 {
     uint thread = gl_GlobalInvocationID.x;
-    // Early, the scene then each cascade; late, only the scene
-    uint pass = gl_GlobalInvocationID.y;
     if (thread >= capacity + pairCapacity) {
         return;
     }
@@ -449,36 +447,36 @@ void main()
         ? rotate(w.rotation, cluster.tight.xyz * w.renderOffset.w) + w.renderOffset.xyz
         : cluster.tight.xyz + w.renderOffset.xyz;
     float radius = instanced ? cluster.tight.w * w.renderOffset.w : cluster.tight.w;
-    // Clusters never move, so a cascade culls them by its planes for what doesn't move; instances
-    // that move mark where they were and are as changed, see LodRenderer
-    bool inView = inFrustum(pass > 0 ? PASS_COUNT + pass : pass, center, radius);
-
+    // Early, the scene then each cascade, all from one read of the cluster: the table is far larger
+    // than the cut, so reading it once a pass cost the most here. Clusters never move, so a cascade
+    // culls them by its planes for what doesn't move; instances that move mark where they were and
+    // are as changed, see LodRenderer
     if (phase == PHASE_EARLY) {
-        if (pass == 0) {
-            atomicAdd(countList.counts[COUNTER_SELECTED], 1u);
-            atomicAdd(countList.counts[COUNTER_TRIANGLES], mesh.info.z / 3u);
-            uint levelCounters = COUNTER_LEVELS
-                + min(cluster.unit.z, LEVEL_COUNTERS - 1u) * COUNTERS_PER_LEVEL;
-            atomicAdd(countList.counts[levelCounters], 1u);
-            atomicAdd(countList.counts[levelCounters + 1u], mesh.info.z / 3u);
-            if (inView) {
-                atomicAdd(countList.counts[levelCounters + 2u], mesh.info.z / 3u);
-            }
-            if (!inView) {
-                atomicAdd(countList.counts[COUNTER_OUTSIDE], 1u);
-                return;
-            }
+        atomicAdd(countList.counts[COUNTER_SELECTED], 1u);
+        atomicAdd(countList.counts[COUNTER_TRIANGLES], mesh.info.z / 3u);
+        uint levelCounters = COUNTER_LEVELS
+            + min(cluster.unit.z, LEVEL_COUNTERS - 1u) * COUNTERS_PER_LEVEL;
+        atomicAdd(countList.counts[levelCounters], 1u);
+        atomicAdd(countList.counts[levelCounters + 1u], mesh.info.z / 3u);
+        if (inFrustum(0, center, radius)) {
+            atomicAdd(countList.counts[levelCounters + 2u], mesh.info.z / 3u);
             // With occlusion on, what wasn't visible last frame waits for the late test
             if ((view.flags & FLAG_OCCLUSION) == 0 || wasVisible(instanced, index)) {
                 draw(lists + LIST_SCENE_EARLY, mesh, drawId);
             }
-        } else if (inView) {
-            draw(lists + LIST_FIRST_CASCADE + pass - 1, mesh, drawId);
+        } else {
+            atomicAdd(countList.counts[COUNTER_OUTSIDE], 1u);
+        }
+        for (uint pass = 1; pass < PASS_COUNT; ++pass) {
+            if (inFrustum(PASS_COUNT + pass, center, radius)) {
+                draw(lists + LIST_FIRST_CASCADE + pass - 1, mesh, drawId);
+            }
         }
         return;
     }
 
-    bool seen = inView;
+    // Late, only the scene
+    bool seen = inFrustum(0, center, radius);
     if (seen && (view.flags & FLAG_PYRAMID_VALID) != 0 && occluded(center, vec3(radius))) {
         seen = false;
         atomicAdd(countList.counts[COUNTER_OCCLUDED], 1u);

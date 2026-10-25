@@ -105,6 +105,9 @@ public final class LodResidency {
     /** The units, every parent before its children. */
     private final int[] order;
 
+    /** How deep each unit is: one more than its deepest parent, 0 for roots. */
+    private final int[] rank;
+
     /** Whether each unit's meshes are all on the GPU. */
     private final boolean[] loaded;
 
@@ -131,6 +134,21 @@ public final class LodResidency {
      * wanted: {@link #PREFETCH}, or more where the budget allowed only the most needed.
      */
     private double cutoff = PREFETCH;
+
+    /** How many bytes the loaded units take, kept as they load and go: read every frame. */
+    private long loadedSum;
+
+    /** How many bytes the units wanted at the last update take. */
+    private long wantedSum;
+
+    /** How many units are shown. */
+    private int shownTotal;
+
+    /**
+     * Whether a unit may have become showable since {@link #toShow()} last looked: one loaded, or
+     * the wanted units worked out again.
+     */
+    private boolean mayShow = true;
 
     /**
      * Set up for a set of units.
@@ -187,12 +205,18 @@ public final class LodResidency {
             }
         }
         order = parentsFirst();
+        rank = new int[n];
+        for (int unit : order) {
+            rank[unit] = depth(unit, rank);
+        }
         for (int unit : order) {
             boolean parentsShown = true;
             for (int parent : parentsOf(unit)) {
                 parentsShown &= shown[parent];
             }
             shown[unit] = this.loaded[unit] && parentsShown;
+            shownTotal += shown[unit] ? 1 : 0;
+            loadedSum += this.loaded[unit] ? bytes[unit] : 0;
         }
     }
 
@@ -333,6 +357,7 @@ public final class LodResidency {
         if (wantedBytes > budgetBytes) {
             cutoff = cutoffFor(budgetBytes);
         }
+        long wantedNow = 0;
         for (int unit : order) {
             boolean any =
                     units.get(unit) != null
@@ -341,12 +366,15 @@ public final class LodResidency {
                 any &= wanted[parent];
             }
             wanted[unit] = any;
+            wantedNow += any ? bytes[unit] : 0;
             if (any) {
                 unwantedSince[unit] = WANTED;
             } else if (unwantedSince[unit] == WANTED) {
                 unwantedSince[unit] = now;
             }
         }
+        wantedSum = wantedNow;
+        mayShow = true;
     }
 
     /**
@@ -433,10 +461,6 @@ public final class LodResidency {
      * @return The units to load.
      */
     public List<Integer> toLoad() {
-        final int[] rank = new int[units.size()];
-        for (int i = 0; i < order.length; ++i) {
-            rank[order[i]] = depth(order[i], rank);
-        }
         final List<Integer> out = new ArrayList<>();
         for (int i = 0; i < units.size(); ++i) {
             if (wanted[i] && !loaded[i]) {
@@ -470,7 +494,11 @@ public final class LodResidency {
      * @param unit The unit.
      */
     public void setLoaded(int unit) {
-        loaded[unit] = true;
+        if (!loaded[unit]) {
+            loaded[unit] = true;
+            loadedSum += bytes[unit];
+            mayShow = true;
+        }
     }
 
     /**
@@ -480,6 +508,11 @@ public final class LodResidency {
      * @return The units shown now.
      */
     public List<Integer> toShow() {
+        if (!mayShow) {
+            // Nothing loaded or wanted since: what couldn't show then still can't
+            return List.of();
+        }
+        mayShow = false;
         final List<Integer> out = new ArrayList<>();
         for (int unit : order) {
             if (shown[unit] || !loaded[unit] || !wanted[unit]) {
@@ -491,6 +524,7 @@ public final class LodResidency {
             }
             if (parentsShown) {
                 shown[unit] = true;
+                ++shownTotal;
                 out.add(unit);
             }
         }
@@ -523,6 +557,8 @@ public final class LodResidency {
             if (childLoaded) {
                 continue;
             }
+            loadedSum -= bytes[unit];
+            shownTotal -= shown[unit] ? 1 : 0;
             loaded[unit] = false;
             shown[unit] = false;
             out.add(unit);
@@ -584,11 +620,7 @@ public final class LodResidency {
      * @return The bytes.
      */
     public long loadedBytes() {
-        long sum = 0;
-        for (int i = 0; i < bytes.length; ++i) {
-            sum += loaded[i] ? bytes[i] : 0;
-        }
-        return sum;
+        return loadedSum;
     }
 
     /**
@@ -630,11 +662,7 @@ public final class LodResidency {
      * @return The bytes.
      */
     public long wantedBytes() {
-        long sum = 0;
-        for (int i = 0; i < bytes.length; ++i) {
-            sum += wanted[i] ? bytes[i] : 0;
-        }
-        return sum;
+        return wantedSum;
     }
 
     /**
@@ -652,10 +680,6 @@ public final class LodResidency {
      * @return The count.
      */
     public int shownCount() {
-        int count = 0;
-        for (boolean s : shown) {
-            count += s ? 1 : 0;
-        }
-        return count;
+        return shownTotal;
     }
 }

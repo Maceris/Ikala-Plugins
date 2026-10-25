@@ -266,6 +266,15 @@ public class VolumeBricks {
     /** Each slot's section, or null for a free one. */
     private final LodStore.SectionPos[] slotPositions = new LodStore.SectionPos[VolumeMath.SLOTS];
 
+    /** How many values a slot's corner has in {@link #slotCorners}. */
+    private static final int CORNER_VALUES = 3;
+
+    /**
+     * Each slot's section's place, x, y and z, in sections, set as it is taken: the draw lists are
+     * written from these every frame, for thousands of bricks.
+     */
+    private final int[] slotCorners = new int[VolumeMath.SLOTS * CORNER_VALUES];
+
     /** The sections the draw order was sorted from. */
     private Members sortedFrom;
 
@@ -281,8 +290,18 @@ public class VolumeBricks {
      */
     private record Draw(LodStore.@NonNull SectionPos position, int slot, double distance) {}
 
-    /** The bricks to draw, nearest first. */
-    private List<Draw> sorted = List.of();
+    /**
+     * The bricks to draw, nearest first: each one's squared distance as float bits in the high
+     * half, which sort as the distances do since they are never negative, and its slot in the low
+     * half.
+     */
+    private final long[] sorted = new long[VolumeMath.SLOTS];
+
+    /** How many of {@link #sorted} are bricks to draw. */
+    private int sortedCount;
+
+    /** The slots of the bricks this frame's lists are made from, a scratch list. */
+    private final int[] filledSlots = new int[VolumeMath.SLOTS];
 
     /** Whether a slot was taken, filled or given back since the draws were sorted. */
     private boolean slotsChanged = true;
@@ -301,8 +320,11 @@ public class VolumeBricks {
     /** The {@link #slotVersion} the shadow list was made at. */
     private long shadowsAt = -1;
 
-    /** The bricks casting shadows, with no order. */
-    private List<Draw> shadows = List.of();
+    /** The slots of the bricks casting shadows, in slot order. */
+    private final int[] shadows = new int[VolumeMath.SLOTS];
+
+    /** How many of {@link #shadows} are bricks casting shadows. */
+    private int shadowCount;
 
     /** Where the camera was when the draw order was sorted, or null. */
     private Vector3d sortedAt;
@@ -923,9 +945,7 @@ public class VolumeBricks {
             @NonNull Vector3dc camera) {
         final SharedBuffer buffer = drawLists[frame];
         buffer.ensureCapacity((long) Math.max(1, slots.size()) * DRAW_SIZE, state);
-        final ByteBuffer out =
-                MemoryUtil.memByteBuffer(
-                        buffer.allocationInfo.pMappedData(), Math.max(1, slots.size()) * DRAW_SIZE);
+        final long out = buffer.allocationInfo.pMappedData();
         final double size = VolumeMath.BRICK * VolumeMath.VOXEL_SIZE;
         // Nearest first, so the depth pass writes the near faces before the far boxes behind them,
         // which the depth test then drops before their shaders run
@@ -938,33 +958,29 @@ public class VolumeBricks {
                 || slotsChanged
                 || sortedAt == null
                 || sortedAt.distance(camera) > RESORT_DISTANCE) {
-            final List<Draw> draws = new ArrayList<>();
-            for (Draw draw : filledIn(sections)) {
-                final LodStore.SectionPos position = draw.position();
-                final double dx = position.x() * size + half - camera.x();
-                final double dy = position.y() * size + half - camera.y();
-                final double dz = position.z() * size + half - camera.z();
-                draws.add(new Draw(position, draw.slot(), dx * dx + dy * dy + dz * dz));
+            final int filledCount = filledIn(sections, filledSlots);
+            for (int i = 0; i < filledCount; ++i) {
+                final int slot = filledSlots[i];
+                final int corner = slot * CORNER_VALUES;
+                final double dx = slotCorners[corner] * size + half - camera.x();
+                final double dy = slotCorners[corner + 1] * size + half - camera.y();
+                final double dz = slotCorners[corner + 2] * size + half - camera.z();
+                final float distance = (float) (dx * dx + dy * dy + dz * dz);
+                sorted[i] = ((long) Float.floatToRawIntBits(distance) << Integer.SIZE) | slot;
             }
-            draws.sort(Comparator.comparingDouble(Draw::distance));
-            sorted = draws;
+            // Primitive keys: no boxing or comparator, which cost the most here while walking
+            Arrays.sort(sorted, 0, filledCount);
+            sortedCount = filledCount;
             sortedFrom = sections;
             sortedVersion = version;
             sortedAt = new Vector3d(camera);
             slotsChanged = false;
         }
-        int count = 0;
-        for (Draw draw : sorted) {
-            final LodStore.SectionPos position = draw.position();
-            final int base = count * DRAW_SIZE;
-            out.putFloat(base, (float) (position.x() * size - camera.x()));
-            out.putFloat(base + Float.BYTES, (float) (position.y() * size - camera.y()));
-            out.putFloat(base + 2 * Float.BYTES, (float) (position.z() * size - camera.z()));
-            out.putInt(base + 3 * Float.BYTES, draw.slot());
-            ++count;
+        for (int i = 0; i < sortedCount; ++i) {
+            writeDraw(out, i, (int) sorted[i], size, camera);
         }
-        drawCounts[frame] = count;
-        return count;
+        drawCounts[frame] = sortedCount;
+        return sortedCount;
     }
 
     /**
@@ -986,29 +1002,40 @@ public class VolumeBricks {
             @NonNull Vector3dc camera) {
         final SharedBuffer buffer = shadowLists[frame];
         buffer.ensureCapacity((long) Math.max(1, slots.size()) * DRAW_SIZE, state);
-        final ByteBuffer out =
-                MemoryUtil.memByteBuffer(
-                        buffer.allocationInfo.pMappedData(), Math.max(1, slots.size()) * DRAW_SIZE);
+        final long out = buffer.allocationInfo.pMappedData();
         final double size = VolumeMath.BRICK * VolumeMath.VOXEL_SIZE;
         final long version = sections.version();
         if (sections != shadowsFrom || version != shadowsVersion || shadowsAt != slotVersion) {
-            shadows = filledIn(sections);
+            shadowCount = filledIn(sections, shadows);
             shadowsFrom = sections;
             shadowsVersion = version;
             shadowsAt = slotVersion;
         }
-        int count = 0;
-        for (Draw draw : shadows) {
-            final LodStore.SectionPos position = draw.position();
-            final int base = count * DRAW_SIZE;
-            out.putFloat(base, (float) (position.x() * size - camera.x()));
-            out.putFloat(base + Float.BYTES, (float) (position.y() * size - camera.y()));
-            out.putFloat(base + 2 * Float.BYTES, (float) (position.z() * size - camera.z()));
-            out.putInt(base + 3 * Float.BYTES, draw.slot());
-            ++count;
+        for (int i = 0; i < shadowCount; ++i) {
+            writeDraw(out, i, shadows[i], size, camera);
         }
-        shadowCounts[frame] = count;
-        return count;
+        shadowCounts[frame] = shadowCount;
+        return shadowCount;
+    }
+
+    /**
+     * Write one brick of a draw list: its corner relative to the camera, and its slot.
+     *
+     * @param out The list's address, with room for the brick.
+     * @param index Where in the list.
+     * @param slot The brick's slot, which holds a section.
+     * @param size A brick's size, in meters.
+     * @param camera The camera's position, in the world.
+     */
+    private void writeDraw(long out, int index, int slot, double size, @NonNull Vector3dc camera) {
+        final int corner = slot * CORNER_VALUES;
+        final long base = out + (long) index * DRAW_SIZE;
+        MemoryUtil.memPutFloat(base, (float) (slotCorners[corner] * size - camera.x()));
+        MemoryUtil.memPutFloat(
+                base + Float.BYTES, (float) (slotCorners[corner + 1] * size - camera.y()));
+        MemoryUtil.memPutFloat(
+                base + 2 * Float.BYTES, (float) (slotCorners[corner + 2] * size - camera.z()));
+        MemoryUtil.memPutInt(base + 3 * Float.BYTES, slot);
     }
 
     /**
@@ -1016,9 +1043,10 @@ public class VolumeBricks {
      * sections stand in as bricks than fit the atlas.
      *
      * @param sections The sections.
-     * @return Each one with a filled slot and its slot, no distance, in no order.
+     * @param into Receives the filled slots of those sections, in slot order.
+     * @return How many slots it received.
      */
-    private List<Draw> filledIn(@NonNull Members sections) {
+    private int filledIn(@NonNull Members sections, int @NonNull [] into) {
         final Tracked set = tracked.computeIfAbsent(sections, key -> new Tracked());
         final long version =
                 set.version < 0
@@ -1059,13 +1087,13 @@ public class VolumeBricks {
                 }
             }
         }
-        final List<Draw> out = new ArrayList<>();
+        int count = 0;
         for (int slot = 0; slot < VolumeMath.SLOTS; ++slot) {
             if (set.in[slot] && filled[slot] && slotPositions[slot] != null) {
-                out.add(new Draw(slotPositions[slot], slot, 0));
+                into[count++] = slot;
             }
         }
-        return out;
+        return count;
     }
 
     /**
@@ -1077,6 +1105,9 @@ public class VolumeBricks {
         final int slot = free.poll();
         slots.put(position, slot);
         slotPositions[slot] = position;
+        slotCorners[slot * CORNER_VALUES] = position.x();
+        slotCorners[slot * CORNER_VALUES + 1] = position.y();
+        slotCorners[slot * CORNER_VALUES + 2] = position.z();
         slotsChanged = true;
         ++slotVersion;
         for (Tracked set : tracked.values()) {
