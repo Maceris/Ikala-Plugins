@@ -1,0 +1,24 @@
+# The character editor's part panel: which character, and what fills each of its slots, grouped
+# into the body's regions by the characters.parts node type. Handlers and values come from
+# CharacterEditor.java.
+surface:
+  id: characters/editor-parts
+  anchors: { at: [0, 0], offset: [12, 12] }
+  width: 380
+
+content:
+  type: column
+  id: parts
+  padding: 8
+  gap: 8
+  align: stretch
+  children:
+    - type: row
+      id: character
+      gap: 6
+      align: center
+      children:
+        - { type: button, id: previous, text: "<", width: 28, onClick: previous-character }
+        - { type: label, id: name, text: "{character.name}", width: grow }
+        - { type: button, id: next, text: ">", width: 28, onClick: next-character }
+    - { type: characters.parts, id: slots, height: 600 }

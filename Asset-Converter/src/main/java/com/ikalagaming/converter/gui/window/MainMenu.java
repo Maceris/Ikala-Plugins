@@ -114,13 +114,14 @@ public class MainMenu {
     }
 
     /**
-     * Open a tool another plugin offers, like the Worldgen Lab. The menu stays up behind it, so
-     * closing the tool comes back here.
+     * Open a tool another plugin offers, like the Worldgen Lab. The menu hides, and comes back when
+     * the tool goes back to it; tools that leave the menu up behind them do that straight away.
      *
      * @param tool The tool.
      */
     private void openTool(Tool tool) {
-        tool.open().run();
+        ui.setVisible(SURFACE_ID, false);
+        tool.open().accept(() -> ui.setVisible(SURFACE_ID, true));
     }
 
     /** Hide the menu and show the asset inspector. */

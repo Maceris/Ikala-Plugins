@@ -104,6 +104,29 @@ public final class ConverterScripts {
     }
 
     /**
+     * Open a tool another plugin offers, as the main menu's button for it does, for checks that
+     * can't click the menu.
+     *
+     * @param id The tool's ID, like "characters/editor".
+     */
+    public static void openTool(String id) {
+        final var ui = graphics().ui();
+        ui.post(
+                () -> {
+                    final var tool =
+                            ui.tools().get().stream()
+                                    .filter(offered -> offered.id().equals(id))
+                                    .findFirst();
+                    if (tool.isEmpty()) {
+                        log.warn("Script: no tool {}", id);
+                        return;
+                    }
+                    showMenu(false);
+                    tool.get().open().accept(() -> showMenu(true));
+                });
+    }
+
+    /**
      * Put the camera somewhere, for checks to look at a scene from a known place. The scene view's
      * orbit follows it.
      *

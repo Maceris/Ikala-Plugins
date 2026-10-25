@@ -1,0 +1,830 @@
+package com.ikalagaming.characters.editor;
+
+import com.ikalagaming.characters.data.Range;
+import com.ikalagaming.characters.definition.BodyPlan;
+import com.ikalagaming.characters.definition.Slider;
+import com.ikalagaming.characters.demo.CharacterPreview;
+import com.ikalagaming.characters.gltf.ImportedCharacter;
+import com.ikalagaming.characters.pose.Proportions;
+import com.ikalagaming.characters.registry.CharacterRegistry;
+import com.ikalagaming.characters.view.CharacterFiles;
+import com.ikalagaming.characters.view.PartCategories;
+import com.ikalagaming.characters.view.PartRegions;
+import com.ikalagaming.characters.view.PartSlots;
+import com.ikalagaming.characters.view.ShownCharacter;
+import com.ikalagaming.graphics.GraphicsContext;
+import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.gui.IkGui;
+import com.ikalagaming.graphics.gui.component.GuiWindow;
+import com.ikalagaming.graphics.gui.data.IkIO;
+import com.ikalagaming.graphics.gui.enums.Condition;
+import com.ikalagaming.graphics.gui.enums.MouseButton;
+import com.ikalagaming.graphics.gui.flags.WindowFlags;
+import com.ikalagaming.graphics.scene.Camera;
+import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.ui.Immediate;
+import com.ikalagaming.graphics.ui.UiFrame;
+import com.ikalagaming.graphics.ui.spec.Observable;
+import com.ikalagaming.graphics.ui.spec.SpecBindings;
+import com.ikalagaming.graphics.ui.spec.SpecInstance;
+import com.ikalagaming.graphics.ui.spec.SpecLoader;
+import com.ikalagaming.random.SeededRandom;
+
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import org.joml.Quaternionf;
+import org.joml.Vector3d;
+import org.joml.Vector3f;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
+
+/**
+ * The character editor: a character standing on a {@link CharacterStage}, an orbit camera, a part
+ * panel choosing what fills each slot, a slider panel shaping the body, a clip bar playing its
+ * animations, and undo, random and clear buttons. The panels are UI specs bundled with the plugin,
+ * so any program with the plugin can open the editor, like the asset editor's tool menu or the
+ * game's character creation.
+ *
+ * <p>The part panel groups the slots into the body's regions, one open at a time, and the camera
+ * glides to frame the open one. Each slot's dropdown puts the hovered choice on the character while
+ * it is open, as a preview; clicking keeps it.
+ *
+ * <p>For now the characters are glTF files listed in the plugin's config, put on the loaded rigs as
+ * {@link CharacterFiles#readAny} does, and parts are sorted into slots by name with {@link
+ * PartSlots} and into regions by height with {@link PartCategories}. Render thread only, apart from
+ * loading characters.
+ *
+ * @author Ches Burks
+ */
+@Slf4j
+public final class CharacterEditor {
+    /** The tool's ID, in editors' tool menus. */
+    public static final String TOOL_ID = "characters/editor";
+
+    /** The tool's label, in editors' tool menus. */
+    public static final String LABEL = "Character Editor";
+
+    /** The part panel's spec, in the plugin's jar. */
+    static final String PARTS_SPEC = "/ui/character-editor/parts.yml";
+
+    /** The slider panel's spec, in the plugin's jar. */
+    static final String SLIDERS_SPEC = "/ui/character-editor/sliders.yml";
+
+    /** The clip bar's spec, in the plugin's jar. */
+    static final String CLIPS_SPEC = "/ui/character-editor/clips.yml";
+
+    /** The undo, random and clear buttons' spec, in the plugin's jar. */
+    static final String ACTIONS_SPEC = "/ui/character-editor/actions.yml";
+
+    /** The node type that draws the sliders, for the slider panel's spec. */
+    public static final String SLIDERS_NODE = "characters.sliders";
+
+    /** The node type that draws the slot categories and dropdowns, for the part panel's spec. */
+    public static final String PARTS_NODE = "characters.parts";
+
+    /** The handler that shows the character before in the list. */
+    static final String PREVIOUS_CHARACTER = "previous-character";
+
+    /** The handler that shows the character after in the list. */
+    static final String NEXT_CHARACTER = "next-character";
+
+    /** The handler that closes the editor. */
+    static final String CLOSE = "close";
+
+    /** The handler that undoes the last change to the look. */
+    static final String UNDO = "undo";
+
+    /** The handler that picks random parts and sliders. */
+    static final String RANDOMIZE = "randomize";
+
+    /** The handler that takes off everything that can be taken off. */
+    static final String CLEAR = "clear";
+
+    /** The handler that puts every slider back to 0. */
+    static final String RESET_SLIDERS = "reset-sliders";
+
+    /** The handler that plays the clip before. */
+    static final String PREVIOUS_CLIP = "previous-clip";
+
+    /** The handler that plays the clip after. */
+    static final String NEXT_CLIP = "next-clip";
+
+    /** The handler that pauses or plays the clip. */
+    static final String TOGGLE_PLAY = "toggle-play";
+
+    /** The value naming the character shown. */
+    static final String CHARACTER_NAME = "character.name";
+
+    /** The value saying what the sliders shape, or why there are none. */
+    static final String SLIDERS_TITLE = "sliders.title";
+
+    /** The value naming the clip playing. */
+    static final String CLIP_NAME = "clip.name";
+
+    /** The value saying which clip of how many is playing. */
+    static final String CLIP_POSITION = "clip.position";
+
+    /** The value for the play button's text. */
+    static final String PLAY_TEXT = "clip.play";
+
+    /** The window that reads the mouse for the camera; it draws nothing. */
+    static final String INPUT_WINDOW = "Character editor input";
+
+    /** The context sliders are limited to, as character creation for players. */
+    private static final String SLIDER_CONTEXT = Slider.CONTEXT_PLAYER;
+
+    /** What an empty slot's dropdown says. */
+    private static final String EMPTY_LABEL = "none";
+
+    /** How far the mouse must move with a button down to drag, in pixels. */
+    private static final float DRAG_SLOP = 2;
+
+    /** How high on the character the camera looks, in meters. */
+    private static final double LOOK_HEIGHT = 1.0;
+
+    /** How far away the camera starts, in meters. */
+    private static final double LOOK_DISTANCE = 4.2;
+
+    /** How far down the camera starts looking, in radians. */
+    private static final double LOOK_PITCH = 0.12;
+
+    /** How far the camera starts turned to the character's side, in radians. */
+    private static final double LOOK_YAW = -0.35;
+
+    /** The smallest radius framed, so a small region like the head isn't filled edge to edge. */
+    private static final double MIN_FRAME_RADIUS = 0.35;
+
+    /** Where the part panel's dropdowns start, after the slot names, in pixels. */
+    private static final int NAME_COLUMN = 64;
+
+    /** The room IkGui leaves between items on a row, in pixels, give or take. */
+    private static final float ROW_SPACING = 12;
+
+    /** Milliseconds per second, for IkGui's frame time. */
+    private static final double MILLISECONDS = 1000;
+
+    /** The plugin's graphics context. */
+    private final GraphicsContext graphics;
+
+    /** The plugin's name, which owns what is shown. */
+    private final String plugin;
+
+    /** The loaded definitions. */
+    private final Supplier<CharacterRegistry> registry;
+
+    /** The characters to choose from, and the rig reference for moving them, from the config. */
+    private final Supplier<EditorSettings> settings;
+
+    /** The stage. */
+    private final CharacterStage stage;
+
+    /** Turns the camera. */
+    private final OrbitCamera orbit = new OrbitCamera();
+
+    /** Characters read so far, by file, so switching back is quick. */
+    private final Map<Path, Prepared> read = new HashMap<>();
+
+    /** What the body under the worn parts hides, for the shown character. */
+    private PartRegions regions;
+
+    /**
+     * A character read and sorted, ready to show, which is slow enough to do off the render thread.
+     *
+     * @param character The character, its base parts split along the regions' borders.
+     * @param slots Its parts sorted into slots.
+     * @param regions What the wearable parts cover.
+     */
+    private record Prepared(ImportedCharacter character, PartSlots slots, PartRegions regions) {
+        /**
+         * Read a character and sort its parts.
+         *
+         * @param read The character as read.
+         * @return The prepared character.
+         */
+        static Prepared of(ImportedCharacter read) {
+            PartSlots slots = PartSlots.of(read);
+            PartRegions regions = PartRegions.of(read, slots);
+            return new Prepared(regions.character(), slots, regions);
+        }
+    }
+
+    /** The character's name. */
+    private final Observable<String> characterName = Observable.of("");
+
+    /** The slider panel's title. */
+    private final Observable<String> slidersTitle = Observable.of("");
+
+    /** The clip's name. */
+    private final Observable<String> clipName = Observable.of("");
+
+    /** Which clip of how many. */
+    private final Observable<String> clipPosition = Observable.of("");
+
+    /** The play button's text. */
+    private final Observable<String> playText = Observable.of("Pause");
+
+    /** The open panels. */
+    private final List<SpecInstance> panels = new ArrayList<>();
+
+    /** The way back to whatever opened the editor, or null while closed. */
+    private Runnable back;
+
+    /** Counts characters asked for, so a slow load that was replaced is dropped. */
+    private int loads;
+
+    /** The settings while open. */
+    private EditorSettings current;
+
+    /** Which character of the settings' list is shown. */
+    private int fileIndex;
+
+    /** The character shown, or null while loading or if it failed. */
+    private ShownCharacter shown;
+
+    /** What the character wears and its slider values, or null while nothing is shown. */
+    private CharacterLook look;
+
+    /** Its slots sorted into the body's regions. */
+    private PartCategories categories;
+
+    /** Which category is open, or -1 for none. */
+    private int openCategory = -1;
+
+    /** The parts last shown, to change them only when they change. */
+    private List<Integer> lastWorn = List.of();
+
+    /** The body plan the character's rig belongs to, or null. */
+    private BodyPlan plan;
+
+    /** The look before the slider being dragged, taken while no slider is dragged. */
+    private CharacterLook.Snapshot beforeEdit;
+
+    /** The look's version when {@link #beforeEdit} was taken. */
+    private int beforeEditVersion = -1;
+
+    /** Whether a slider drag has been remembered for undo. */
+    private boolean editing;
+
+    /** Which clip of the character's is playing, or -1 for none. */
+    private int clipIndex = -1;
+
+    /** Whether the clip's time moves on. */
+    private boolean playing = true;
+
+    /** Whether the left button went down over the stage rather than a panel. */
+    private boolean pressedOnStage;
+
+    /** Whether the middle button went down over the stage rather than a panel. */
+    private boolean middlePressedOnStage;
+
+    /**
+     * What the editor reads from the config.
+     *
+     * @param characters The glTF files to choose from.
+     * @param reference The rig reference file, for moving characters onto a rig.
+     */
+    public record EditorSettings(@NonNull List<Path> characters, @NonNull Path reference) {}
+
+    /**
+     * Set up the editor; nothing is shown until it opens.
+     *
+     * @param graphics The plugin's graphics context.
+     * @param plugin The plugin's name.
+     * @param registry The loaded definitions, read each time a character is shown.
+     * @param settings What to show, read each time the editor opens.
+     */
+    public CharacterEditor(
+            @NonNull GraphicsContext graphics,
+            @NonNull String plugin,
+            @NonNull Supplier<CharacterRegistry> registry,
+            @NonNull Supplier<EditorSettings> settings) {
+        this.graphics = graphics;
+        this.plugin = plugin;
+        this.registry = registry;
+        this.settings = settings;
+        stage = new CharacterStage(graphics);
+    }
+
+    /** Register the panels' node types, once, when the plugin is enabled. */
+    public void install() {
+        graphics.ui()
+                .registerNodeType(
+                        SLIDERS_NODE, (id, properties) -> new Immediate(id, this::drawSliders));
+        graphics.ui()
+                .registerNodeType(
+                        PARTS_NODE, (id, properties) -> new Immediate(id, this::drawParts));
+    }
+
+    /**
+     * Whether the editor is open.
+     *
+     * @return True if open.
+     */
+    public boolean isOpen() {
+        return back != null;
+    }
+
+    /**
+     * Open the editor on the first character in the config. Nothing happens if it is open.
+     *
+     * @param goBack What to run when it closes, like showing the menu that opened it again.
+     */
+    public void open(@NonNull Runnable goBack) {
+        if (back != null) {
+            return;
+        }
+        back = goBack;
+        read.clear();
+        current = settings.get();
+        stage.enter();
+        Scene scene = GraphicsManager.getScene();
+        orbit.look(
+                scene.getCamera(),
+                new Vector3d(CharacterStage.origin()).add(0, LOOK_HEIGHT, 0),
+                LOOK_PITCH,
+                LOOK_YAW,
+                LOOK_DISTANCE);
+        GraphicsManager.getWindowManager().addWindow(graphics, INPUT_WINDOW, new InputWindow());
+        GraphicsManager.getWindowManager().show(INPUT_WINDOW);
+        SpecBindings bindings =
+                new SpecBindings()
+                        .handler(PREVIOUS_CHARACTER, () -> showFile(fileIndex - 1))
+                        .handler(NEXT_CHARACTER, () -> showFile(fileIndex + 1))
+                        .handler(CLOSE, this::close)
+                        .handler(UNDO, () -> changeLook(CharacterLook::undo))
+                        .handler(
+                                RANDOMIZE,
+                                () ->
+                                        changeLook(
+                                                changed ->
+                                                        changed.randomize(
+                                                                new SeededRandom(System.nanoTime()),
+                                                                SLIDER_CONTEXT)))
+                        .handler(CLEAR, () -> changeLook(CharacterLook::clear))
+                        .handler(RESET_SLIDERS, () -> changeLook(CharacterLook::resetSliders))
+                        .handler(PREVIOUS_CLIP, () -> playClip(clipIndex - 1))
+                        .handler(NEXT_CLIP, () -> playClip(clipIndex + 1))
+                        .handler(TOGGLE_PLAY, this::togglePlay)
+                        .value(CHARACTER_NAME, characterName)
+                        .value(SLIDERS_TITLE, slidersTitle)
+                        .value(CLIP_NAME, clipName)
+                        .value(CLIP_POSITION, clipPosition)
+                        .value(PLAY_TEXT, playText);
+        for (String spec : List.of(PARTS_SPEC, SLIDERS_SPEC, CLIPS_SPEC, ACTIONS_SPEC)) {
+            panels.add(
+                    graphics.ui()
+                            .open(SpecLoader.loadResource(CharacterEditor.class, spec), bindings));
+        }
+        showFile(0);
+    }
+
+    /**
+     * Show a character from the settings' list, wrapping around its ends. It is read on another
+     * thread; the old one stays until it is ready.
+     *
+     * @param index The character's position in the list.
+     */
+    private void showFile(int index) {
+        List<Path> files = current.characters();
+        if (files.isEmpty()) {
+            characterName.set("No characters in the config");
+            return;
+        }
+        fileIndex = Math.floorMod(index, files.size());
+        final Path file = files.get(fileIndex);
+        final Path reference = current.reference();
+        final CharacterRegistry definitions = registry.get();
+        final int load = ++loads;
+        characterName.set("Loading " + file.getFileName() + "...");
+        final Prepared cached = read.get(file);
+        CompletableFuture.supplyAsync(
+                        () -> {
+                            if (cached != null) {
+                                return cached;
+                            }
+                            try {
+                                return Prepared.of(
+                                        CharacterFiles.readAny(file, reference, definitions));
+                            } catch (IOException e) {
+                                throw new IllegalArgumentException(e.getMessage(), e);
+                            }
+                        })
+                .whenComplete(
+                        (prepared, failure) ->
+                                graphics.ui().post(() -> loaded(load, file, prepared, failure)));
+    }
+
+    /**
+     * Put a character read on another thread on the stage, unless another was asked for since.
+     *
+     * @param load Which load this was.
+     * @param file The file it came from.
+     * @param prepared The character, or null if it failed.
+     * @param failure Why it failed, or null.
+     */
+    private void loaded(int load, Path file, Prepared prepared, Throwable failure) {
+        if (back == null || load != loads) {
+            return;
+        }
+        if (prepared == null) {
+            Throwable cause = failure.getCause() == null ? failure : failure.getCause();
+            log.error("Couldn't show {} in the character editor: {}", file, cause.getMessage());
+            characterName.set("Couldn't read " + file.getFileName());
+            return;
+        }
+        read.put(file, prepared);
+        if (shown != null) {
+            shown.close();
+        }
+        ImportedCharacter character = prepared.character();
+        PartSlots slots = prepared.slots();
+        regions = prepared.regions();
+        categories = PartCategories.of(character, slots);
+        look = new CharacterLook(slots, findSliders(character));
+        beforeEditVersion = -1;
+        editing = false;
+        lastWorn = look.worn(CharacterLook.NO_PREVIEW, 0);
+        // Facing the camera's side of the floor; characters face +Z
+        shown =
+                new ShownCharacter(
+                        plugin,
+                        character,
+                        regions.regions(),
+                        new Vector3d(CharacterStage.origin()),
+                        new Quaternionf(),
+                        lastWorn);
+        shown.setHiddenRegions(regions.hidden(lastWorn));
+        characterName.set(character.name());
+        if (!applySliders()) {
+            look = new CharacterLook(slots, List.of());
+            slidersTitle.set("No sliders: the skeleton lacks their bones");
+        }
+        openCategory = Math.min(openCategory, categories.categories().size() - 1);
+        frameOpenCategory();
+        ImportedCharacter.ClipData initial = CharacterPreview.pickClip(character, null);
+        playClip(initial == null ? -1 : character.clips().indexOf(initial));
+    }
+
+    /**
+     * Change the look, then show the change.
+     *
+     * @param change What to do to the look.
+     */
+    private void changeLook(Consumer<CharacterLook> change) {
+        if (look == null) {
+            return;
+        }
+        change.accept(look);
+        applySliders();
+        showWorn(CharacterLook.NO_PREVIEW, 0);
+    }
+
+    /**
+     * Show what the look wears, with one slot previewing another choice, if that changes what is
+     * shown.
+     *
+     * @param previewSlot The slot to preview, or {@link CharacterLook#NO_PREVIEW}.
+     * @param previewChoice What it would hold.
+     */
+    private void showWorn(int previewSlot, int previewChoice) {
+        if (look == null || shown == null) {
+            return;
+        }
+        List<Integer> worn = look.worn(previewSlot, previewChoice);
+        if (!worn.equals(lastWorn)) {
+            lastWorn = worn;
+            shown.showParts(worn);
+            shown.setHiddenRegions(regions.hidden(worn));
+        }
+    }
+
+    /**
+     * Draw the part panel's categories, one open at a time, with a dropdown and arrows for each
+     * slot that has a choice. The dropdown previews the hovered choice on the character.
+     *
+     * @param frame The UI frame.
+     */
+    private void drawParts(@NonNull UiFrame frame) {
+        if (look == null || categories == null) {
+            IkGui.textDisabled("Loading...");
+            return;
+        }
+        int previewSlot = CharacterLook.NO_PREVIEW;
+        int previewChoice = 0;
+        List<PartCategories.Category> list = categories.categories();
+        for (int c = 0; c < list.size(); ++c) {
+            PartCategories.Category category = list.get(c);
+            IkGui.setNextItemOpen(openCategory == c, Condition.ALWAYS);
+            boolean open = IkGui.collapsingHeader(category.label() + "##" + category.id());
+            if (open != (openCategory == c)) {
+                openCategory = open ? c : -1;
+                frameOpenCategory();
+            }
+            if (!open) {
+                continue;
+            }
+            for (int slot : category.slots()) {
+                IkGui.pushID(slot);
+                int hovered = drawSlot(slot);
+                if (hovered != Integer.MIN_VALUE) {
+                    previewSlot = slot;
+                    previewChoice = hovered;
+                }
+                IkGui.popID();
+            }
+        }
+        showWorn(previewSlot, previewChoice);
+    }
+
+    /**
+     * Draw one slot: its name, then what fills it, with arrows around a dropdown for slots with a
+     * choice.
+     *
+     * @param slot The slot's position.
+     * @return The choice hovered in its open dropdown, or {@code Integer.MIN_VALUE} for none.
+     */
+    private int drawSlot(int slot) {
+        PartSlots.Slot info = look.slots().slots().get(slot);
+        int choice = look.choice(slot);
+        String current = choice == CharacterLook.EMPTY ? EMPTY_LABEL : info.labels().get(choice);
+        // The slot's name in a column of its own, so the rows line up
+        IkGui.alignTextToFramePadding();
+        IkGui.textUnformatted(info.id());
+        IkGui.sameLine(NAME_COLUMN);
+        if (look.isFixed(slot)) {
+            IkGui.textUnformatted(current);
+            return Integer.MIN_VALUE;
+        }
+        int hovered = Integer.MIN_VALUE;
+        if (IkGui.button("<")) {
+            look.step(slot, -1);
+        }
+        IkGui.sameLine();
+        float arrow = IkGui.getFrameHeight();
+        IkGui.setNextItemWidth(
+                Math.max(arrow, IkGui.getContentRegionAvailableX() - arrow - ROW_SPACING));
+        // Named after the slot, so tests and scripts can find each dropdown
+        if (IkGui.beginCombo("##" + info.id(), current)) {
+            int first = info.optional() ? CharacterLook.EMPTY : 0;
+            for (int option = first; option < info.options().size(); ++option) {
+                String text =
+                        option == CharacterLook.EMPTY ? EMPTY_LABEL : info.labels().get(option);
+                boolean selected = option == choice;
+                if (IkGui.selectable(text + "##" + option, selected)) {
+                    look.choose(slot, option);
+                }
+                if (selected) {
+                    IkGui.setItemDefaultFocus();
+                }
+                if (IkGui.isItemHovered()) {
+                    hovered = option;
+                }
+            }
+            IkGui.endCombo();
+        }
+        IkGui.sameLine();
+        if (IkGui.button(">")) {
+            look.step(slot, 1);
+        }
+        return hovered;
+    }
+
+    /** Glide the camera to frame the open category, or the whole character if none is open. */
+    private void frameOpenCategory() {
+        if (categories == null) {
+            return;
+        }
+        Vector3f min;
+        Vector3f max;
+        if (openCategory >= 0) {
+            PartCategories.Category category = categories.categories().get(openCategory);
+            min = category.min();
+            max = category.max();
+        } else {
+            min = categories.min();
+            max = categories.max();
+        }
+        Vector3d center =
+                new Vector3d((min.x + max.x) / 2.0, (min.y + max.y) / 2.0, (min.z + max.z) / 2.0)
+                        .add(CharacterStage.origin());
+        double radius = Math.max(MIN_FRAME_RADIUS, new Vector3f(max).sub(min).length() / 2);
+        orbit.glideTo(center, radius);
+    }
+
+    /**
+     * Find the sliders for a character: those of the body plan its rig belongs to.
+     *
+     * @param character The character.
+     * @return The sliders, grouped as the panel shows them.
+     */
+    private List<Slider> findSliders(ImportedCharacter character) {
+        CharacterRegistry definitions = registry.get();
+        plan =
+                definitions.all(BodyPlan.class).stream()
+                        .filter(candidate -> candidate.rig().equals(character.rig().id()))
+                        .findFirst()
+                        .orElse(null);
+        if (plan == null || plan.sliders() == null) {
+            slidersTitle.set("No sliders: " + character.rig().id() + " has no body plan");
+            return List.of();
+        }
+        List<Slider> found = new ArrayList<>();
+        for (Slider slider : definitions.all(Slider.class)) {
+            if (plan.sliders().stream().anyMatch(pattern -> slider.id().matches(pattern))) {
+                found.add(slider);
+            }
+        }
+        // Grouped for the panel, in the order the groups first come
+        List<String> groups = found.stream().map(CharacterEditor::groupOf).distinct().toList();
+        found.sort(Comparator.comparingInt(slider -> groups.indexOf(groupOf(slider))));
+        slidersTitle.set(plan.id() + ", " + found.size() + " sliders");
+        return found;
+    }
+
+    /**
+     * Pose the character with the sliders' values.
+     *
+     * @return False if the sliders don't fit the skeleton.
+     */
+    private boolean applySliders() {
+        if (shown == null || plan == null || look == null) {
+            return look != null && look.sliders().isEmpty();
+        }
+        try {
+            shown.setProportions(
+                    Proportions.fromSliders(
+                            shown.getSkeleton(), plan, look.sliders(), look.values(), 1));
+            return true;
+        } catch (IllegalArgumentException e) {
+            log.warn("The sliders don't fit {}: {}", shown.getCharacter().name(), e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Draw the sliders, grouped as they say, inside the slider panel. A drag is one change to undo.
+     *
+     * @param frame The UI frame.
+     */
+    private void drawSliders(@NonNull UiFrame frame) {
+        if (look == null) {
+            return;
+        }
+        if (!editing && beforeEditVersion != look.version()) {
+            // Only taken when the look changed, so idle frames don't copy it
+            beforeEdit = look.snapshot();
+            beforeEditVersion = look.version();
+        }
+        String group = null;
+        boolean changed = false;
+        for (Slider slider : look.sliders()) {
+            String sliderGroup = groupOf(slider);
+            if (!sliderGroup.equals(group)) {
+                group = sliderGroup;
+                IkGui.separatorText(group);
+            }
+            Range range = slider.range(SLIDER_CONTEXT);
+            float[] value = look.values().get(slider.id());
+            String label = Objects.requireNonNullElse(slider.label(), slider.id().toString());
+            if (slider.vector()) {
+                changed |= IkGui.sliderFloat3(label, value, range.min(), range.max());
+            } else {
+                changed |= IkGui.sliderFloat(label, value, range.min(), range.max());
+            }
+        }
+        if (changed) {
+            if (!editing) {
+                look.push(beforeEdit);
+                editing = true;
+            }
+            look.touch();
+            applySliders();
+        }
+        if (editing && !IkGui.isAnyItemActive()) {
+            editing = false;
+        }
+    }
+
+    /**
+     * The editor group a slider is shown in.
+     *
+     * @param slider The slider.
+     * @return Its group, or "other".
+     */
+    private static String groupOf(Slider slider) {
+        return Objects.requireNonNullElse(slider.group(), "other");
+    }
+
+    /**
+     * Play one of the character's clips, wrapping around the ends of the list.
+     *
+     * @param index The clip's position in the character's list.
+     */
+    private void playClip(int index) {
+        if (shown == null) {
+            return;
+        }
+        List<ImportedCharacter.ClipData> clips = shown.getCharacter().clips();
+        if (clips.isEmpty()) {
+            clipIndex = -1;
+            shown.play(null);
+            clipName.set("No clips");
+            clipPosition.set("");
+            return;
+        }
+        clipIndex = Math.floorMod(index, clips.size());
+        ImportedCharacter.ClipData clip = clips.get(clipIndex);
+        shown.play(clip);
+        shown.setPlaying(playing);
+        clipName.set(clip.name());
+        clipPosition.set((clipIndex + 1) + " / " + clips.size());
+    }
+
+    /** Pause or play the clip. */
+    private void togglePlay() {
+        playing = !playing;
+        playText.set(playing ? "Pause" : "Play");
+        if (shown != null) {
+            shown.setPlaying(playing);
+        }
+    }
+
+    /**
+     * Turn the camera with the mouse where no panel is: left drag turns around the character,
+     * middle drag pans, and the wheel zooms. The right button still flies, as everywhere. Moves the
+     * camera on through any glide to frame a region.
+     */
+    private void handleMouse() {
+        final IkIO io = IkGui.getIO();
+        final Camera camera = GraphicsManager.getScene().getCamera();
+        orbit.follow(camera);
+        if (IkGui.isMouseClicked(MouseButton.LEFT)) {
+            pressedOnStage = !io.wantCaptureMouse;
+        }
+        if (IkGui.isMouseClicked(MouseButton.MIDDLE)) {
+            middlePressedOnStage = !io.wantCaptureMouse;
+        }
+        if (pressedOnStage && IkGui.isMouseDragging(MouseButton.LEFT, DRAG_SLOP)) {
+            orbit.turn(camera, io.mouseDelta.x, io.mouseDelta.y);
+        } else if (middlePressedOnStage && IkGui.isMouseDragging(MouseButton.MIDDLE, DRAG_SLOP)) {
+            orbit.pan(camera, io.mouseDelta.x, io.mouseDelta.y, io.displaySize.y);
+        }
+        if (!io.wantCaptureMouse && io.mouseWheel != 0) {
+            orbit.zoom(camera, io.mouseWheel);
+        }
+        orbit.glide(camera, io.deltaTime / MILLISECONDS);
+    }
+
+    /** Close the editor, putting back what it changed, and go back to what opened it. */
+    public void close() {
+        if (back == null) {
+            return;
+        }
+        final Runnable goBack = back;
+        back = null;
+        ++loads;
+        panels.forEach(SpecInstance::close);
+        panels.clear();
+        GraphicsManager.getWindowManager().removeWindow(INPUT_WINDOW);
+        if (shown != null) {
+            shown.close();
+            shown = null;
+        }
+        read.clear();
+        look = null;
+        regions = null;
+        categories = null;
+        openCategory = -1;
+        lastWorn = List.of();
+        stage.leave();
+        goBack.run();
+    }
+
+    /** Reads the mouse each frame for the orbit camera. Draws no window. */
+    private final class InputWindow extends GuiWindow {
+        /** Set up the window. */
+        InputWindow() {
+            super(INPUT_WINDOW, WindowFlags.NO_SAVED_SETTINGS);
+        }
+
+        @Override
+        public void draw(final int width, final int height) {
+            handleMouse();
+        }
+
+        @Override
+        public boolean handleGuiInput(@NonNull Scene scene) {
+            return false;
+        }
+    }
+}

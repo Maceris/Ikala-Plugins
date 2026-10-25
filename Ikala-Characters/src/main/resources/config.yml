@@ -2,3 +2,13 @@
 # Folders of character definitions to load, as namespace=folder. Every ID in a folder must use
 # its namespace. Relative folders are from the working directory.
 content-folders: []
+
+# The character editor's characters, glTF files it can switch between, and the rig reference file
+# used to move characters onto a rig, like the mannequin for ikala:rig/biped. Relative files are
+# from the working directory.
+editor:
+  characters:
+    - test_content/characters/mannequin/mannequin.glb
+    - test_content/characters/rpg_human/rpg_male.glb
+    - test_content/characters/rpg_human/rpg_female.glb
+  reference: test_content/characters/mannequin/mannequin.glb

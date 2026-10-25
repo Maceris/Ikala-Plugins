@@ -406,8 +406,10 @@ class UISubmissionTest {
         // The same ID replaces, and opening runs the tool's callback
         manager.addTool(owner, new com.ikalagaming.graphics.ui.Tool("a", "A2", () -> opened[0]++));
         assertEquals(2, manager.getTools().get().size());
-        manager.getTools().get().get(1).open().run();
+        int[] back = {0};
+        manager.getTools().get().get(1).open().accept(() -> back[0]++);
         assertEquals(1, opened[0]);
+        assertEquals(1, back[0], "A tool given a plain action leaves the menu up");
 
         manager.removeAllOwnedBy(owner);
         frame();

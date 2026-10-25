@@ -1,0 +1,17 @@
+# The character editor's slider panel. The sliders themselves are drawn by the characters.sliders
+# node type, from the body plan of the character's rig.
+surface:
+  id: characters/editor-sliders
+  anchors: { at: [1, 0], offset: [-12, 12] }
+  width: 360
+
+content:
+  type: column
+  id: sliders
+  padding: 8
+  gap: 8
+  align: stretch
+  children:
+    - { type: label, id: title, text: "{sliders.title}" }
+    - { type: characters.sliders, id: list, height: 560 }
+    - { type: button, id: reset, text: "Reset", onClick: reset-sliders }

@@ -3,12 +3,14 @@ package com.ikalagaming.characters;
 import com.ikalagaming.characters.data.Problem;
 import com.ikalagaming.characters.demo.CharacterPreview;
 import com.ikalagaming.characters.demo.SkinnedDemo;
+import com.ikalagaming.characters.editor.CharacterEditor;
 import com.ikalagaming.characters.registry.BuiltInContent;
 import com.ikalagaming.characters.registry.CharacterLoader;
 import com.ikalagaming.characters.registry.CharacterRegistry;
 import com.ikalagaming.characters.registry.ContentSource;
 import com.ikalagaming.characters.registry.Schemas;
 import com.ikalagaming.event.Listener;
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.plugins.Plugin;
 import com.ikalagaming.plugins.PluginManager;
 import com.ikalagaming.plugins.config.ConfigManager;
@@ -44,6 +46,16 @@ public class CharacterPlugin extends Plugin {
     /** The config entry listing content folders, as {@code namespace=folder}. */
     static final String CONTENT_FOLDERS = "content-folders";
 
+    /** The config entry listing the glTF files the character editor offers. */
+    static final String EDITOR_CHARACTERS = "editor.characters";
+
+    /** The config entry naming the rig reference file, for moving characters onto a rig. */
+    static final String EDITOR_REFERENCE = "editor.reference";
+
+    /** The reference file used when the config doesn't name one. */
+    private static final String DEFAULT_REFERENCE =
+            "test_content/characters/mannequin/mannequin.glb";
+
     /** Two glTF file paths, which may hold spaces, and an optional clip name after them. */
     private static final Pattern TWO_FILES =
             Pattern.compile(
@@ -58,6 +70,9 @@ public class CharacterPlugin extends Plugin {
 
     /** Shows imported characters, for {@code character show} and {@code character hide}. */
     private final CharacterPreview preview = new CharacterPreview(PLUGIN_NAME, this::getRegistry);
+
+    /** The character editor, while enabled. */
+    private CharacterEditor editor;
 
     /** The definitions currently loaded, replaced whole on each reload. */
     private volatile CharacterRegistry registry = CharacterRegistry.EMPTY;
@@ -80,6 +95,11 @@ public class CharacterPlugin extends Plugin {
     @Override
     public boolean onEnable() {
         reload();
+        var graphics = GraphicsManager.forPlugin(getName());
+        editor = new CharacterEditor(graphics, getName(), this::getRegistry, this::editorSettings);
+        editor.install();
+        // Listed in editors' tool menus, like the asset editor's main menu
+        graphics.ui().registerTool(CharacterEditor.TOOL_ID, CharacterEditor.LABEL, editor::open);
         PluginManager.getInstance()
                 .registerCommand(CHARACTER_COMMAND, this::onCharacterCommand, getName());
         return true;
@@ -91,6 +111,14 @@ public class CharacterPlugin extends Plugin {
         PluginManager.getInstance().unregisterCommand(CHARACTER_COMMAND);
         demo.stop();
         preview.hide();
+        if (editor != null) {
+            final CharacterEditor closing = editor;
+            var graphics = GraphicsManager.forPlugin(getName());
+            if (!graphics.isClosed()) {
+                graphics.ui().post(closing::close);
+            }
+            editor = null;
+        }
         registry = CharacterRegistry.EMPTY;
         return true;
     }
@@ -119,6 +147,40 @@ public class CharacterPlugin extends Plugin {
                 registry.size(),
                 sources.size(),
                 registry.getContentHash().substring(0, 12));
+    }
+
+    /**
+     * What the character editor offers, from the config.
+     *
+     * @return The settings.
+     */
+    private CharacterEditor.EditorSettings editorSettings() {
+        PluginConfig config = ConfigManager.loadConfig(getName());
+        List<Path> files =
+                config.isList(EDITOR_CHARACTERS)
+                        ? config.getStringList(EDITOR_CHARACTERS).stream().map(Path::of).toList()
+                        : List.of();
+        String reference = config.getOrDefault(EDITOR_REFERENCE, DEFAULT_REFERENCE);
+        return new CharacterEditor.EditorSettings(files, Path.of(reference));
+    }
+
+    /** Open the character editor, or close it if it is open, on the render thread. */
+    private void toggleEditor() {
+        final CharacterEditor shownEditor = editor;
+        if (shownEditor == null) {
+            return;
+        }
+        GraphicsManager.forPlugin(getName())
+                .ui()
+                .post(
+                        () -> {
+                            if (shownEditor.isOpen()) {
+                                shownEditor.close();
+                            } else {
+                                // Opened from the console, there is no menu to go back to
+                                shownEditor.open(() -> {});
+                            }
+                        });
     }
 
     /**
@@ -231,6 +293,7 @@ public class CharacterPlugin extends Plugin {
             case "show" -> show(args.subList(1, args.size()));
             case "retarget" -> retarget(args.subList(1, args.size()));
             case "hide" -> preview.hide();
+            case "editor" -> toggleEditor();
             case "demo" -> {
                 if (demo.isRunning()) {
                     demo.stop();
@@ -265,7 +328,7 @@ public class CharacterPlugin extends Plugin {
             }
             default ->
                     log.info(
-                            "Usage: character reload | demo | show <file> [clip] | retarget <file>"
+                            "Usage: character reload | demo | editor | show <file> [clip] | retarget <file>"
                                     + " <reference file> [clip] | hide | validate namespace=folder |"
                                     + " schemas <output folder>");
         }

@@ -1,0 +1,17 @@
+# The character editor's undo, random and clear buttons, and the way out.
+surface:
+  id: characters/editor-actions
+  anchors: { at: [0, 1], offset: [12, -12] }
+  width: fit
+
+content:
+  type: row
+  id: actions
+  padding: 8
+  gap: 8
+  align: center
+  children:
+    - { type: button, id: undo, text: "Undo", width: 80, onClick: undo }
+    - { type: button, id: random, text: "Random", width: 80, onClick: randomize }
+    - { type: button, id: clear, text: "Clear", width: 80, onClick: clear }
+    - { type: button, id: close, text: "Close", width: 80, onClick: close }

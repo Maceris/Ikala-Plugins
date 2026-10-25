@@ -101,8 +101,30 @@ public final class UI {
      * @param open Opens the tool, on the render thread.
      */
     public void registerTool(@NonNull String id, @NonNull String label, @NonNull Runnable open) {
+        registerTool(new Tool(id, label, open));
+    }
+
+    /**
+     * Offer a tool that takes over the screen, for an editor's menus to list. The menu hides while
+     * it is open, and the tool runs the way back it is given when it closes, to show the menu
+     * again. It goes away when this plugin unloads, or when it is removed.
+     *
+     * @param id The tool's ID, unique among all tools.
+     * @param label What menus show for it.
+     * @param open Opens the tool, given the way back to the menu, on the render thread.
+     */
+    public void registerTool(
+            @NonNull String id, @NonNull String label, @NonNull Consumer<Runnable> open) {
+        registerTool(new Tool(id, label, open));
+    }
+
+    /**
+     * Offer a tool.
+     *
+     * @param tool The tool.
+     */
+    private void registerTool(Tool tool) {
         context.checkOpen();
-        final Tool tool = new Tool(id, label, open);
         manager.get().post(() -> manager.get().addTool(context, tool));
     }
 

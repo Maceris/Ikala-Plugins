@@ -38,3 +38,18 @@ In the editor, with a 3D scene open, `character show <file.glb> [clip]` reads a
 character from glTF and shows it where the camera looks at the ground, playing
 the clip (idle by default). A skeleton with the same bones as a loaded rig, like
 the mannequin's, takes that rig's definition. `character hide` removes it.
+
+## Character editor
+
+The editor's main menu lists **Character Editor**, a tool this plugin offers (any
+program with the plugin can list it the same way). `character editor` opens or
+closes it from the console. It shows a character on its own floor, with an orbit
+camera (left drag turns, middle drag pans, the wheel zooms), a part panel, a
+slider panel and a clip bar. Its panels are UI specs in
+`src/main/resources/ui/character-editor`.
+
+It switches between the glTF files listed under `editor.characters` in the config,
+putting each on a loaded rig: straight on if a rig has its bones, else moved
+through a rig map using `editor.reference` as the rig's reference. Until parts
+come from definitions, parts are sorted into slots by name, so the RPG
+characters' heads, hair and armor are each one slot.
