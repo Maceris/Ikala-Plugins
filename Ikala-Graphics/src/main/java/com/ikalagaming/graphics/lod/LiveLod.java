@@ -50,6 +50,13 @@ public final class LiveLod implements AutoCloseable {
      */
     private static final int BATCHES_OF_WORKERS = 2;
 
+    /**
+     * How many batches the sink may hold unapplied before the builder waits for it: each holds its
+     * cells' meshes, so reading cells from the cache faster than they are drawn would otherwise
+     * hold every cell's at once.
+     */
+    public static final int MAX_BACKLOG = 2;
+
     /** How long a level 0 cell's sections must stay unchanged before it is built, by default. */
     public static final long SETTLE_NANOS = TimeUnit.MILLISECONDS.toNanos(500);
 
@@ -68,6 +75,15 @@ public final class LiveLod implements AutoCloseable {
          * @param batch The batch.
          */
         void publish(@NonNull Batch batch);
+
+        /**
+         * How many batches it took and hasn't applied yet. Called on the builder thread.
+         *
+         * @return The count; none by default.
+         */
+        default int backlog() {
+            return 0;
+        }
     }
 
     /**
@@ -388,8 +404,9 @@ public final class LiveLod implements AutoCloseable {
                 if (first != null) {
                     apply(first);
                 }
-                while (!closed && step()) {
-                    // Keep building while there is work, taking new changes between batches
+                while (!closed && sink.backlog() < MAX_BACKLOG && step()) {
+                    // Keep building while there is work and the sink keeps up, taking new
+                    // changes between batches
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

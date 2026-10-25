@@ -1896,6 +1896,17 @@ public class LodRenderer {
     }
 
     /**
+     * How many batches a world took and hasn't applied yet. Safe from any thread.
+     *
+     * @param id The world.
+     * @return The count, 0 if there is no such world.
+     */
+    public int backlog(long id) {
+        final World world = world(id);
+        return world == null ? 0 : world.incoming.size() + (world.busy ? 1 : 0);
+    }
+
+    /**
      * How a world is keeping up.
      *
      * @param id The world.

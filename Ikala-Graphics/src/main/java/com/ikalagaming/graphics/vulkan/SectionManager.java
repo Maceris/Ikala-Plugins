@@ -1456,7 +1456,17 @@ public class SectionManager {
                                                     ? materialAverages(state)
                                                     : null)
                                     .withVolumes(GraphicsManager.getSettings().lodVolumes),
-                            batch -> state.lods.publish(state, id[0], batch),
+                            new LiveLod.Sink() {
+                                @Override
+                                public void publish(LiveLod.@NonNull Batch batch) {
+                                    state.lods.publish(state, id[0], batch);
+                                }
+
+                                @Override
+                                public int backlog() {
+                                    return state.lods.backlog(id[0]);
+                                }
+                            },
                             LodCache.fromSettings());
             id[0] = state.lods.addLive(owner, origin, lod::cellOf, thresholdPixels);
             world = new Live(id[0], lod, new HashMap<>());
