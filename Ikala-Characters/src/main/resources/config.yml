@@ -1,6 +1,4 @@
 ---
-log-string: 'Hello world!'
-standard-settings:
-  printMessage: true
-  other-string: 'test string'
-  repeats: 2
+# Folders of character definitions to load, as namespace=folder. Every ID in a folder must use
+# its namespace. Relative folders are from the working directory.
+content-folders: []

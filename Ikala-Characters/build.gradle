@@ -127,6 +127,14 @@ tasks.named('jar') {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
+// Regenerates the JSON Schemas shipped for modders, which TestSchemas checks are current
+tasks.register('writeSchemas', JavaExec) {
+	description = 'Writes the character definition JSON Schemas into the resources'
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.ikalagaming.characters.registry.Schemas'
+	args = [file('src/main/resources/schemas').absolutePath]
+}
+
 tasks.register('collectLibraries', Copy) {
 	from configurations.library
 	into layout.buildDirectory.dir('libraries')

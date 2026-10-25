@@ -1,0 +1,8 @@
+{
+  "id": "ikala:rig_map/rpg_human",
+  "rig": "ikala:rig/biped",
+  "source": "Modular RPG characters by System G6",
+  "height": 2,
+  "bones": { "pelvis": "hips", "torso": "chest", "head": "head", "palm_L": "hand.L", "palm_R": "hand.R" },
+  "drop": ["wep_pos_L", "wep_pos_R"]
+}

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ikala character rig",
+  "description": "A bone hierarchy with standard names. Rest transforms come from the rig's mesh asset; listing the bones lets plans, sliders and parts be checked without loading meshes.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Rig"
+    },
+    {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Rig"
+      }
+    }
+  ],
+  "$defs": {
+    "Bone": {
+      "type": "object",
+      "description": "One bone.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The bone's name, like \"forearm.L\"."
+        },
+        "parent": {
+          "type": "string",
+          "description": "The parent bone's name. Only the root leaves it out."
+        },
+        "kind": {
+          "enum": [
+            "deform",
+            "shape",
+            "socket"
+          ],
+          "description": "What the bone is for.",
+          "default": "deform"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "Rig": {
+      "type": "object",
+      "description": "A bone hierarchy with standard names. Rest transforms come from the rig's mesh asset; listing the bones lets plans, sliders and parts be checked without loading meshes.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "This rig's ID, like \"ikala:rig/biped\"."
+        },
+        "bones": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Bone"
+          },
+          "description": "The bones, each listed after its parent. Exactly one has no parent."
+        },
+        "extends": {
+          "type": "string",
+          "description": "The ID of a definition of the same kind to start from. Fields written here replace the parent's, and objects merge field by field."
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "extends"
+          ]
+        },
+        {
+          "required": [
+            "id",
+            "bones"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ikala character rigMap",
+  "description": "How another skeleton's bones map onto a rig, so its meshes and clips can be imported. Several source bones can map to one rig bone, which merges their weights.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/RigMap"
+    },
+    {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RigMap"
+      }
+    }
+  ],
+  "$defs": {
+    "RigMap": {
+      "type": "object",
+      "description": "How another skeleton's bones map onto a rig, so its meshes and clips can be imported. Several source bones can map to one rig bone, which merges their weights.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "This map's ID, like \"ikala:rig_map/rpg_human\"."
+        },
+        "rig": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "The rig it maps onto."
+        },
+        "source": {
+          "type": "string",
+          "description": "A description of the source skeleton, for people."
+        },
+        "bones": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Rig bones by source bone, like {\"palm_L\": \"hand.L\"}."
+        },
+        "drop": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Source bones that are left out. Every source bone is mapped or dropped."
+        },
+        "scale": {
+          "type": "number",
+          "description": "How much to scale the source by, when height isn't given.",
+          "default": 1
+        },
+        "height": {
+          "type": "number",
+          "description": "The standing height in meters to scale the source to, which overrides scale."
+        },
+        "extends": {
+          "type": "string",
+          "description": "The ID of a definition of the same kind to start from. Fields written here replace the parent's, and objects merge field by field."
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "extends"
+          ]
+        },
+        {
+          "required": [
+            "id",
+            "rig",
+            "bones"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "ikala:part/biped/forearm_robot",
+  "plan": "ikala:biped",
+  "kind": "body",
+  "fills": ["lowerArm.L"],
+  "mirror": true,
+  "meshes": { "male": "robot/forearm_m", "*": "robot/forearm_n" },
+  "materialSlots": [ { "name": "plating", "template": "ikala:mat/metal", "channels": { "r": "primary", "g": "secondary" } } ],
+  "tags": ["robot", "scifi"]
+}

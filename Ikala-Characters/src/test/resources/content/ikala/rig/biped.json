@@ -1,0 +1,28 @@
+// A cut-down biped rig for tests
+{
+  "id": "ikala:rig/biped",
+  "bones": [
+    { "name": "root" },
+    { "name": "hips", "parent": "root" },
+    { "name": "spine", "parent": "hips" },
+    { "name": "chest", "parent": "spine" },
+    { "name": "neck", "parent": "chest" },
+    { "name": "head", "parent": "neck" },
+    { "name": "face.nose", "parent": "head", "kind": "shape" },
+    { "name": "upperarm.L", "parent": "chest" },
+    { "name": "forearm.L", "parent": "upperarm.L" },
+    { "name": "hand.L", "parent": "forearm.L" },
+    { "name": "upperarm.R", "parent": "chest" },
+    { "name": "forearm.R", "parent": "upperarm.R" },
+    { "name": "hand.R", "parent": "forearm.R" },
+    { "name": "thigh.L", "parent": "hips" },
+    { "name": "shin.L", "parent": "thigh.L" },
+    { "name": "foot.L", "parent": "shin.L" },
+    { "name": "thigh.R", "parent": "hips" },
+    { "name": "shin.R", "parent": "thigh.R" },
+    { "name": "foot.R", "parent": "shin.R" },
+    { "name": "socket.back", "parent": "chest", "kind": "socket" },
+    { "name": "cape.01", "parent": "chest" },
+    { "name": "cape.02", "parent": "cape.01" }
+  ]
+}

@@ -1,0 +1,1 @@
+{ "id": "ikala:mat/metal", "params": { "roughness": { "type": "number", "range": [0, 1] }, "tint": { "type": "color" } } }

@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ikala character slider",
+  "description": "A named value from -1 to 1 that scales bones. Body plans pick up sliders by ID, and check the bones against their rig.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Slider"
+    },
+    {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Slider"
+      }
+    }
+  ],
+  "$defs": {
+    "Op": {
+      "type": "object",
+      "description": "Scales some bones from min at -1, through 1 at 0, to max at 1.",
+      "properties": {
+        "bones": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The bones to scale."
+        },
+        "type": {
+          "enum": [
+            "length",
+            "shape"
+          ],
+          "description": "How the bones are scaled."
+        },
+        "min": {
+          "type": "number",
+          "description": "The scale at -1, above 0."
+        },
+        "max": {
+          "type": "number",
+          "description": "The scale at 1, above 0."
+        }
+      },
+      "required": [
+        "bones",
+        "type",
+        "min",
+        "max"
+      ],
+      "additionalProperties": false
+    },
+    "Slider": {
+      "type": "object",
+      "description": "A named value from -1 to 1 that scales bones. Body plans pick up sliders by ID, and check the bones against their rig.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "This slider's ID, like \"ikala:slider/biped/leg_length\"."
+        },
+        "group": {
+          "type": "string",
+          "description": "The editor group it is shown in, like \"body\" or \"face\"."
+        },
+        "label": {
+          "type": "string",
+          "description": "The name shown in editors."
+        },
+        "vector": {
+          "type": "boolean",
+          "description": "Whether it has separate x, y and z values, like a nose's width, height and depth. Each op then scales each axis by its own value.",
+          "default": false
+        },
+        "ops": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Op"
+          },
+          "description": "What the slider does to bones."
+        },
+        "ranges": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "description": "The values allowed in each context, \"player\" and \"npc\". A context left out allows -1 to 1."
+        },
+        "extends": {
+          "type": "string",
+          "description": "The ID of a definition of the same kind to start from. Fields written here replace the parent's, and objects merge field by field."
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "extends"
+          ]
+        },
+        {
+          "required": [
+            "id",
+            "ops"
+          ]
+        }
+      ]
+    }
+  }
+}

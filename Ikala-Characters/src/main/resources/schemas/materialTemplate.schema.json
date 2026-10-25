@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ikala character materialTemplate",
+  "description": "A kind of material, like skin, cloth or metal, and the parameters that can be set on it. Textures, including the tint mask whose channels take palette colors, come with each part's mesh.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/MaterialTemplate"
+    },
+    {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/MaterialTemplate"
+      }
+    }
+  ],
+  "$defs": {
+    "MaterialTemplate": {
+      "type": "object",
+      "description": "A kind of material, like skin, cloth or metal, and the parameters that can be set on it. Textures, including the tint mask whose channels take palette colors, come with each part's mesh.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "This template's ID, like \"ikala:mat/metal\"."
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Param"
+          },
+          "description": "The parameters it takes, by name, like \"roughness\"."
+        },
+        "extends": {
+          "type": "string",
+          "description": "The ID of a definition of the same kind to start from. Fields written here replace the parent's, and objects merge field by field."
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "extends"
+          ]
+        },
+        {
+          "required": [
+            "id"
+          ]
+        }
+      ]
+    },
+    "Param": {
+      "type": "object",
+      "description": "One parameter.",
+      "properties": {
+        "type": {
+          "enum": [
+            "number",
+            "color",
+            "boolean"
+          ],
+          "description": "What it holds."
+        },
+        "range": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "For numbers, the values allowed, as [min, max]."
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

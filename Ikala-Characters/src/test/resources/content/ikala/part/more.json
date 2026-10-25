@@ -1,0 +1,30 @@
+[
+  {
+    "id": "ikala:part/biped/forearm_stump",
+    "plan": "ikala:biped",
+    "kind": "body",
+    "fills": ["lowerArm.R", "hand.R"],
+    "sockets": { "back": { "bone": "forearm.R", "offset": [0, 0.12, 0], "rotate": [0, 0, 90] } }
+  },
+  {
+    "id": "ikala:part/biped/helmet_iron",
+    "plan": "ikala:biped",
+    "kind": "layer",
+    "fills": ["helmet"],
+    "hidesLayers": ["hair"],
+    "hidesRegions": ["scalp"]
+  },
+  {
+    "id": "ikala:part/biped/helmet_iron_spiked",
+    "extends": "ikala:part/biped/helmet_iron",
+    "tags": ["spiky"]
+  },
+  {
+    "id": "ikala:part/biped/cape_basic",
+    "plan": "ikala:biped",
+    "kind": "accessory",
+    "fits": ["back.large"],
+    "rigid": false,
+    "extension": "cape"
+  }
+]

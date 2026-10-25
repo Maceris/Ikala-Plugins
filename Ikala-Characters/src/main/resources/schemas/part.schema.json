@@ -1,0 +1,206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ikala character part",
+  "description": "One swappable mesh: a body part that fills slots, a clothing or armor layer, or an accessory on a socket.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Part"
+    },
+    {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Part"
+      }
+    }
+  ],
+  "$defs": {
+    "MaterialSlot": {
+      "type": "object",
+      "description": "One of the mesh's materials.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The material's name in the mesh."
+        },
+        "template": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "The material template it uses."
+        },
+        "channels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Which palette channel each tint mask channel (r, g, b, a) takes, like {\"r\": \"primary\"}."
+        }
+      },
+      "required": [
+        "name",
+        "template"
+      ],
+      "additionalProperties": false
+    },
+    "Part": {
+      "type": "object",
+      "description": "One swappable mesh: a body part that fills slots, a clothing or armor layer, or an accessory on a socket.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "This part's ID, like \"ikala:part/biped/forearm_robot\"."
+        },
+        "plan": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "The body plan it is for."
+        },
+        "kind": {
+          "enum": [
+            "body",
+            "layer",
+            "accessory"
+          ],
+          "description": "What sort of part it is."
+        },
+        "fills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The body slots a body part fills, or the layers a layer part fills. Accessories leave it out."
+        },
+        "fits": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "For accessories: the socket names or socket types it fits."
+        },
+        "rigid": {
+          "type": "boolean",
+          "description": "For accessories: whether it moves rigidly with its socket, like a hat.",
+          "default": true
+        },
+        "extension": {
+          "type": "string",
+          "description": "For skinned accessories: the extension chain it is weighted to, like \"cape\"."
+        },
+        "mirror": {
+          "type": "boolean",
+          "description": "Whether it is authored for one side, and the converter makes the other by mirroring and swapping .L and .R.",
+          "default": false
+        },
+        "meshes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Mesh assets by variant name, with \"*\" for any other variant."
+        },
+        "materialSlots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MaterialSlot"
+          },
+          "description": "The mesh's materials, and which palette channels tint them."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Tags that variants and editors filter by, like \"robot\"."
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$"
+          },
+          "description": "Parts that can't be used along with this one."
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$"
+          },
+          "description": "Parts that must be used along with this one."
+        },
+        "hidesRegions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Mask regions of the body this hides, so they don't poke through."
+        },
+        "hidesLayers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Layers this hides, like a helmet hiding hair."
+        },
+        "sockets": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/SocketMove"
+          },
+          "description": "Sockets this moves, for stumps and missing limbs, so held items still have somewhere to go."
+        },
+        "extends": {
+          "type": "string",
+          "description": "The ID of a definition of the same kind to start from. Fields written here replace the parent's, and objects merge field by field."
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "extends"
+          ]
+        },
+        {
+          "required": [
+            "id",
+            "plan",
+            "kind"
+          ]
+        }
+      ]
+    },
+    "SocketMove": {
+      "type": "object",
+      "description": "Where a socket moves to.",
+      "properties": {
+        "bone": {
+          "type": "string",
+          "description": "The bone it moves to."
+        },
+        "offset": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "Its offset from the bone, in meters."
+        },
+        "rotate": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "Its rotation from the bone, in degrees."
+        }
+      },
+      "required": [
+        "bone"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

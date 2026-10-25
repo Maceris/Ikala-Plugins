@@ -1,5 +1,6 @@
 package com.ikalagaming.characters;
 
+import com.ikalagaming.characters.registry.ContentSource;
 import com.ikalagaming.event.EventManager;
 import com.ikalagaming.plugins.PluginInfo;
 import com.ikalagaming.plugins.PluginManager;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.InputStream;
+import java.nio.file.Path;
 
 /**
  * Tests for the {@link CharacterPlugin characters plugin}.
@@ -40,11 +42,15 @@ class TestCharacterPlugin {
         EventManager.destroyInstance();
     }
 
-    /** Test that the plugin provides its listener. */
+    /** Content folder entries split into a namespace and folder, and bad ones are rejected. */
     @Test
-    void testGetListeners() {
-        CharacterPlugin plugin = new CharacterPlugin();
-        Assertions.assertFalse(plugin.getListeners().isEmpty());
+    void testParseSource() {
+        ContentSource source = CharacterPlugin.parseSource("goblinmod=D:/mods/goblin/characters");
+        Assertions.assertEquals("goblinmod", source.namespace());
+        Assertions.assertEquals(Path.of("D:/mods/goblin/characters"), source.root());
+        Assertions.assertNull(CharacterPlugin.parseSource("no-folder"));
+        Assertions.assertNull(CharacterPlugin.parseSource("=folder"));
+        Assertions.assertNull(CharacterPlugin.parseSource("namespace="));
     }
 
     /**

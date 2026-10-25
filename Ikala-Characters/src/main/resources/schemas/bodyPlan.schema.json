@@ -1,0 +1,382 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ikala character bodyPlan",
+  "description": "A rig plus the variants, body slots, clothing layers, sockets, extension chains, sliders and IK setup built on it. Any part or clip made for a plan works on every character of that plan.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/BodyPlan"
+    },
+    {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/BodyPlan"
+      }
+    }
+  ],
+  "$defs": {
+    "BodyPlan": {
+      "type": "object",
+      "description": "A rig plus the variants, body slots, clothing layers, sockets, extension chains, sliders and IK setup built on it. Any part or clip made for a plan works on every character of that plan.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "This plan's ID, like \"ikala:biped\"."
+        },
+        "rig": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "The rig it is built on."
+        },
+        "variants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Variant"
+          },
+          "description": "Its variants, like male and female, which share the rig's bones."
+        },
+        "slots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Slot"
+          },
+          "description": "Body slots, which body parts fill, joined at seam rings."
+        },
+        "layers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Layer"
+          },
+          "description": "Clothing and armor layers, which overlap body slots and hide what they cover."
+        },
+        "sockets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Socket"
+          },
+          "description": "Attach points for accessories and held items."
+        },
+        "extensions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Extension"
+          },
+          "description": "Optional bone chains, like a tail, wings or a cape."
+        },
+        "sliders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The sliders it uses, as IDs or patterns ending in *, like \"ikala:slider/biped/*\"."
+        },
+        "channels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Palette channels beyond the standard ones (skin, eyes, hair, primary, secondary, tertiary, accent), like \"fur\"."
+        },
+        "regions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Mask region names that body meshes tag their triangles with, so layers can hide them. At most 64."
+        },
+        "boneGroups": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": "Named sets of bones, for masking animation layers, like \"upperBody\"."
+        },
+        "ik": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Ik"
+            }
+          ],
+          "description": "IK setup."
+        },
+        "collision": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Collision"
+            }
+          ],
+          "description": "How the collision capsule is placed."
+        },
+        "extends": {
+          "type": "string",
+          "description": "The ID of a definition of the same kind to start from. Fields written here replace the parent's, and objects merge field by field."
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "extends"
+          ]
+        },
+        {
+          "required": [
+            "id",
+            "rig",
+            "variants"
+          ]
+        }
+      ]
+    },
+    "Collision": {
+      "type": "object",
+      "description": "How the collision capsule is placed.",
+      "properties": {
+        "capsuleFromBones": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The two bones the capsule spans, bottom first."
+        },
+        "radiusScale": {
+          "type": "number",
+          "description": "The radius as a share of the capsule's height.",
+          "default": 0.35
+        }
+      },
+      "required": [
+        "capsuleFromBones"
+      ],
+      "additionalProperties": false
+    },
+    "Extension": {
+      "type": "object",
+      "description": "An optional bone chain, skipped when no part uses it.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The chain's name, like \"cape\"."
+        },
+        "root": {
+          "type": "string",
+          "description": "The bone it hangs from."
+        },
+        "bones": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Its bones, from the root outward, each the next one's parent."
+        }
+      },
+      "required": [
+        "id",
+        "root",
+        "bones"
+      ],
+      "additionalProperties": false
+    },
+    "Ik": {
+      "type": "object",
+      "description": "IK setup.",
+      "properties": {
+        "feet": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Leg"
+          },
+          "description": "The leg chains that foot IK plants."
+        },
+        "lookAt": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LookAt"
+          },
+          "description": "The bones that turn to look at a target, and how much each turns."
+        }
+      },
+      "additionalProperties": false
+    },
+    "Layer": {
+      "type": "object",
+      "description": "A clothing or armor layer.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The layer's name, like \"gloves\"."
+        },
+        "covers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The body slots it covers."
+        },
+        "order": {
+          "type": "integer",
+          "description": "Where it stacks; higher goes over lower, like shirt 10 < jacket 20.",
+          "default": 0
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "Leg": {
+      "type": "object",
+      "description": "A leg for foot IK.",
+      "properties": {
+        "chain": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The bones from the hip to the foot, each the next one's parent."
+        }
+      },
+      "required": [
+        "chain"
+      ],
+      "additionalProperties": false
+    },
+    "LookAt": {
+      "type": "object",
+      "description": "One bone's share of looking at a target.",
+      "properties": {
+        "bone": {
+          "type": "string",
+          "description": "The bone."
+        },
+        "weight": {
+          "type": "number",
+          "description": "How much of the turn it takes, 0 to 1."
+        }
+      },
+      "required": [
+        "bone",
+        "weight"
+      ],
+      "additionalProperties": false
+    },
+    "SliderSetting": {
+      "type": "object",
+      "description": "A variant's setting for one slider.",
+      "properties": {
+        "initial": {
+          "type": "number",
+          "description": "The value it starts at.",
+          "default": 0
+        },
+        "range": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "The values allowed, as [min, max], within the slider's own."
+        }
+      },
+      "additionalProperties": false
+    },
+    "Slot": {
+      "type": "object",
+      "description": "A body slot, which one body part fills.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The slot's name, like \"lowerArm.L\"."
+        },
+        "bones": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The bones a part in this slot may weight."
+        },
+        "seams": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The seam rings at its edges, shared with neighboring slots."
+        },
+        "mirrorOf": {
+          "type": "string",
+          "description": "The matching slot on the other side, for mirrored parts."
+        },
+        "optional": {
+          "type": "boolean",
+          "description": "Whether the slot may be left empty, like a tail.",
+          "default": false
+        }
+      },
+      "required": [
+        "id",
+        "bones"
+      ],
+      "additionalProperties": false
+    },
+    "Socket": {
+      "type": "object",
+      "description": "An attach point.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The socket's name, like \"back\"."
+        },
+        "bone": {
+          "type": "string",
+          "description": "The bone it is on, like \"socket.back\"."
+        },
+        "max": {
+          "type": "integer",
+          "description": "How many items it holds at once.",
+          "default": 1
+        },
+        "type": {
+          "type": "string",
+          "description": "Its type tag, which items fit by, like \"grip.1h\" or \"back.large\"."
+        }
+      },
+      "required": [
+        "id",
+        "bone"
+      ],
+      "additionalProperties": false
+    },
+    "Variant": {
+      "type": "object",
+      "description": "A variant, sharing the plan's bones with its own proportions and limits.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The variant's name, like \"female\"."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Parts must have one of these tags to be used on it. Empty allows any part."
+        },
+        "sliders": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/SliderSetting"
+          },
+          "description": "Slider settings for this variant, by slider ID."
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

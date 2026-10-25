@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ikala character palette",
+  "description": "A reusable color theme, by palette channel, that designs refer to or copy.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Palette"
+    },
+    {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Palette"
+      }
+    }
+  ],
+  "$defs": {
+    "Palette": {
+      "type": "object",
+      "description": "A reusable color theme, by palette channel, that designs refer to or copy.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "This palette's ID, like \"ikala:palette/hero_blue\"."
+        },
+        "colors": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "description": "Colors by channel, like {\"primary\": \"#2a4d8f\"}."
+        },
+        "extends": {
+          "type": "string",
+          "description": "The ID of a definition of the same kind to start from. Fields written here replace the parent's, and objects merge field by field."
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "extends"
+          ]
+        },
+        {
+          "required": [
+            "id",
+            "colors"
+          ]
+        }
+      ]
+    }
+  }
+}
