@@ -13,6 +13,7 @@ Each plugin will likely have it's own README, but below are high level descripti
 * `Factory-Core` - The core of a factory game.
 * `Factory-Server` - The server-side part of a factory game.
 * `Ikala-Attributes` - RPG related attributes, player and enemy stats.
+* `Ikala-Characters` - Character and animal design: body plans with swappable parts, sliders, palettes and FX, plus their animation.
 * `Ikala-Graphics` - Proivides utilities for graphics, using LWJGL.
 * `Ikala-Permissions` - Provides role-based permissions to provide fine-grained control over what can and can't be done in a game.
 * `RPG-GUI` (Deprecated) - A Graphical User Interface relating to RPGs.
