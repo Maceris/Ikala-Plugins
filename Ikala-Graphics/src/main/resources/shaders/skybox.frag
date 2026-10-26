@@ -8,6 +8,9 @@
 #include "atmosphere.glsl"
 #include "environment.glsl"
 #include "equirect.glsl"
+// The fog volume, set 3, see SkyboxRender
+#define FOG_SET 3
+#include "fog.glsl"
 
 layout(location = 0) in vec2 outTextCoord;
 layout(location = 1) in vec3 outDirection;
@@ -29,6 +32,8 @@ layout(set = 0, binding = 0) uniform Uniforms {
     // What the physical sky is scaled by, the sun's color times its intensity times the sky's
     // strength, with w 1; or with w 2, the ambient light an environment map's average is scaled to
     vec4 skyScale;
+    // Nonzero to see the sky through all the fog in the volume
+    int fogEnabled;
 };
 
 layout(set = 1, binding = 0) uniform sampler2D bindlessTextures[];
@@ -42,6 +47,16 @@ const int LAYOUT_EQUIRECTANGULAR = 1;
 
 // The scene color is linear light, tone mapped later. The sky's texture samples in linear light
 // already; its color is given sRGB encoded, as material colors are.
+// The sky's light, seen through the fog
+void finish(vec3 color)
+{
+    if (fogEnabled != 0) {
+        vec4 seen = fogBeyond(gl_FragCoord.xy);
+        color = color * seen.a + seen.rgb;
+    }
+    fragColor = vec4(color, 1.0);
+}
+
 void main()
 {
     if (physicalSky != 0) {
@@ -56,7 +71,7 @@ void main()
             float solidAngle = ATMOSPHERE_PI * SUN_ANGULAR_RADIUS * SUN_ANGULAR_RADIUS;
             color += disk * sunTransmittance(r, sun.y) / solidAngle;
         }
-        fragColor = vec4(color * skyScale.rgb, 1.0);
+        finish(color * skyScale.rgb);
         return;
     }
     if (hasTexture == 1 && skyLayout == LAYOUT_EQUIRECTANGULAR) {
@@ -70,11 +85,11 @@ void main()
         vec3 color = textureGrad(bindlessTextures[nonuniformEXT(textureIndex)], uv, dx, dy).rgb;
         // As bright as it lights the scene
         float average = max(dot(environmentAverage(), ENVIRONMENT_LUMINANCE), 1e-4);
-        fragColor = vec4(color * skyScale.rgb / average, 1.0);
+        finish(color * skyScale.rgb / average);
         return;
     }
     vec3 color = hasTexture == 1
         ? texture(bindlessTextures[nonuniformEXT(textureIndex)], outTextCoord).rgb
         : sRGBToLinear(diffuse.rgb);
-    fragColor = vec4(color, 1.0);
+    finish(color);
 }

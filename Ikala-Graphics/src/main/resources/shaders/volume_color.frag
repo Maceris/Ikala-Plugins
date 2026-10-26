@@ -26,6 +26,8 @@
 #include "oit_volume.glsl"
 #define VOLUME_SET 4
 #include "volume.glsl"
+#define FOG_SET 6
+#include "fog.glsl"
 #include "volume_face.glsl"
 
 layout(location = 0) in vec3 outRenderPosition;
@@ -205,6 +207,11 @@ void main() {
                     }
                     float cover = textured ? 1.0 : volumeCoverage(stored.a);
                     vec3 color = albedo * mix(under, light, cover);
+                    // Seen through the fog in front of it, as the opaque scene is
+                    if ((fog.enabled & FOG_ENABLED) != 0) {
+                        color = fogApply(color, gl_FragCoord.xy, -renderToView(hit).z,
+                            fog.logScale);
+                    }
                     float weight = voxelWeights != 0
                         ? inFront * through
                         : depthWeight(1.0, -renderToView(hit).z);
@@ -222,6 +229,10 @@ void main() {
                     renderSun, shadowDistance, scale);
                 vec3 color = voxel.rgb * (sun * SUN_SCATTER * seen.x
                     + ambient * mix(skyLightFloor, 1.0, seen.y));
+                if ((fog.enabled & FOG_ENABLED) != 0) {
+                    color = fogApply(color, gl_FragCoord.xy, -renderToView(renderPoint).z,
+                        fog.logScale);
+                }
                 float weight = voxelWeights != 0
                     ? inFront * through
                     : depthWeight(alpha, -renderToView(renderPoint).z);

@@ -87,7 +87,22 @@ public class GraphicsDebug extends GuiWindow {
 
     public static final String WINDOW_NAME = "Graphics Debug";
 
+    /** The densest fog the slider goes to, extinction per meter. */
+    private static final float MAX_FOG_DENSITY = 0.05f;
+
+    /** The fastest fog thins with height on the slider, per meter. */
+    private static final float MAX_FOG_FALLOFF = 0.2f;
+
+    /** The fog's base height's range on the slider, in meters. */
+    private static final float MIN_FOG_BASE = -64;
+
+    private static final float MAX_FOG_BASE = 256;
+
+    /** The fog's phase anisotropy's range on the slider, either way. */
+    private static final float MAX_FOG_ANISOTROPY = 0.9f;
+
     private final Checkbox fogEnabled;
+    private final Checkbox fogHaze;
     private final Checkbox wireframeEnabled;
 
     private final Checkbox showPointLights;
@@ -103,6 +118,9 @@ public class GraphicsDebug extends GuiWindow {
     private final Checkbox disableOcclusion;
     private final Checkbox showUiShowcase;
     private final Slider fogDensity;
+    private final Slider fogFalloff;
+    private final Slider fogBase;
+    private final Slider fogAnisotropy;
     private final Slider exposure;
     private final Slider directionalLightX;
     private final Slider directionalLightY;
@@ -237,7 +255,11 @@ public class GraphicsDebug extends GuiWindow {
         disableCulling = new Checkbox("Draw everything (no culling)", false);
         disableOcclusion = new Checkbox("Draw hidden things (no occlusion culling)", false);
         showUiShowcase = new Checkbox("UI showcase", false);
-        fogDensity = new Slider("Fog Density", 0, 0, 1);
+        fogDensity = new Slider("Fog density (per m)", 0, 0, MAX_FOG_DENSITY);
+        fogFalloff = new Slider("Fog height falloff (per m)", 0, 0, MAX_FOG_FALLOFF);
+        fogBase = new Slider("Fog base height (m)", 0, MIN_FOG_BASE, MAX_FOG_BASE);
+        fogAnisotropy = new Slider("Fog anisotropy", 0, -MAX_FOG_ANISOTROPY, MAX_FOG_ANISOTROPY);
+        fogHaze = new Checkbox("Atmosphere haze", false);
         exposure = new Slider("Exposure", 1, 0, MAX_EXPOSURE);
         directionalLightX = new Slider("Directional Light X", 0, -1, 1);
         directionalLightY = new Slider("Directional Light Y", 0, -1, 1);
@@ -252,6 +274,10 @@ public class GraphicsDebug extends GuiWindow {
 
         addChild(fogEnabled);
         addChild(fogDensity);
+        addChild(fogFalloff);
+        addChild(fogBase);
+        addChild(fogAnisotropy);
+        addChild(fogHaze);
         addChild(exposure);
         addChild(wireframeEnabled);
         addChild(showPointLights);
@@ -434,6 +460,10 @@ public class GraphicsDebug extends GuiWindow {
                 }
                 fogEnabled.draw(width, height);
                 fogDensity.draw(width, height);
+                fogFalloff.draw(width, height);
+                fogBase.draw(width, height);
+                fogAnisotropy.draw(width, height);
+                fogHaze.draw(width, height);
                 exposure.draw(width, height);
                 wireframeEnabled.draw(width, height);
                 directionalLightX.draw(width, height);
@@ -580,6 +610,9 @@ public class GraphicsDebug extends GuiWindow {
             scene.getFog().setActive(fogEnabled.getState());
             return true;
         }
+        if (fogHaze.checkResult()) {
+            scene.getFog().setHaze(fogHaze.getState());
+        }
         if (wireframeEnabled.checkResult()) {
             scene.getDebugVisualizers().setWireframe(wireframeEnabled.getState());
         }
@@ -592,6 +625,15 @@ public class GraphicsDebug extends GuiWindow {
         Vector3f directionalLightDir = directionalLight.getDirection();
         if (fogDensity.checkResult()) {
             scene.getFog().setDensity(fogDensity.getValue());
+        }
+        if (fogFalloff.checkResult()) {
+            scene.getFog().setHeightFalloff(fogFalloff.getValue());
+        }
+        if (fogBase.checkResult()) {
+            scene.getFog().setBaseHeight(fogBase.getValue());
+        }
+        if (fogAnisotropy.checkResult()) {
+            scene.getFog().setAnisotropy(fogAnisotropy.getValue());
         }
         if (exposure.checkResult()) {
             scene.setExposure(exposure.getValue());
@@ -617,6 +659,7 @@ public class GraphicsDebug extends GuiWindow {
         super.updateValues(scene);
 
         fogEnabled.setState(scene.getFog().isActive());
+        fogHaze.setState(scene.getFog().isHaze());
         wireframeEnabled.setState(scene.getDebugVisualizers().isWireframe());
         final VulkanInstance renderer = GraphicsManager.getRenderInstance();
         if (renderer != null) {
@@ -626,6 +669,9 @@ public class GraphicsDebug extends GuiWindow {
         DirectionalLight directionalLight = scene.getSceneLights().getDirLight();
         Vector3f directionalLightDir = directionalLight.getDirection();
         fogDensity.setValue(scene.getFog().getDensity());
+        fogFalloff.setValue(scene.getFog().getHeightFalloff());
+        fogBase.setValue(scene.getFog().getBaseHeight());
+        fogAnisotropy.setValue(scene.getFog().getAnisotropy());
         exposure.setValue(scene.getExposure());
         directionalLightX.setValue(directionalLightDir.x());
         directionalLightY.setValue(directionalLightDir.y());

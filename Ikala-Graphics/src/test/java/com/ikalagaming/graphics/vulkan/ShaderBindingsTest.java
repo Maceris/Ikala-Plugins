@@ -23,9 +23,12 @@ class ShaderBindingsTest {
         // int lightCount, int clusterHeatMap
         assertEquals(176, ShaderBindings.Light.LIGHT_COUNT_OFFSET);
         assertEquals(180, ShaderBindings.Light.CLUSTER_HEAT_MAP_OFFSET);
-        // Fog {vec3 color; float density; int enabled; vec3 pad;} starts on a 16 byte boundary
+        // Fog {vec3 color; float density; int enabled; float logScale; vec3 shape;} starts on a 16
+        // byte boundary, its shape on the next
         assertEquals(192, ShaderBindings.Light.FOG_OFFSET);
-        assertEquals(32, ShaderBindings.Light.Fog.PADDING);
+        assertEquals(16, ShaderBindings.Light.Fog.ENABLED);
+        assertEquals(20, ShaderBindings.Light.Fog.LOG_SCALE);
+        assertEquals(32, ShaderBindings.Light.Fog.SHAPE);
         assertEquals(48, ShaderBindings.Light.Fog.SIZEOF);
         // CascadeShadow {mat4 projViewMatrix; float splitDistance;}[3], each padded to 80 bytes
         assertEquals(240, ShaderBindings.Light.CASCADE_SHADOWS_OFFSET);
@@ -150,7 +153,7 @@ class ShaderBindingsTest {
     @Test
     void testSkyboxUniformOffsets() {
         // mat4 projectionMatrix; mat4 viewMatrix; vec4 diffuse; int hasTexture; int textureIndex;
-        // int physicalSky; vec4 sunAndRadius; vec4 skyScale;
+        // int physicalSky; vec4 sunAndRadius; vec4 skyScale; int fogEnabled;
         assertEquals(0, ShaderBindings.Skybox.PROJECTION_MATRIX_OFFSET);
         assertEquals(64, ShaderBindings.Skybox.VIEW_MATRIX_OFFSET);
         assertEquals(128, ShaderBindings.Skybox.DIFFUSE_OFFSET);
@@ -160,7 +163,8 @@ class ShaderBindingsTest {
         assertEquals(156, ShaderBindings.Skybox.LAYOUT_OFFSET);
         assertEquals(160, ShaderBindings.Skybox.SUN_AND_RADIUS_OFFSET);
         assertEquals(176, ShaderBindings.Skybox.SKY_SCALE_OFFSET);
-        assertEquals(192, ShaderBindings.Skybox.UNIFORMS_BUFFER_SIZE);
+        assertEquals(192, ShaderBindings.Skybox.FOG_ENABLED_OFFSET);
+        assertEquals(208, ShaderBindings.Skybox.UNIFORMS_BUFFER_SIZE);
     }
 
     @Test

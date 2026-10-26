@@ -59,6 +59,9 @@ public final class GraphicsContext {
     /** Places point lights and spotlights for this plugin. */
     private final Lights lights;
 
+    /** The medium volumes API for this plugin. */
+    private final Media media;
+
     /** The sections API for this plugin. */
     private final Sections sections;
 
@@ -91,6 +94,7 @@ public final class GraphicsContext {
         meshes = new Meshes(this);
         instances = new Instances(this);
         lights = new Lights(this);
+        media = new Media(this);
         sections = new Sections(this);
         lods = new Lods(this);
         skins = new Skins(this);
@@ -141,6 +145,17 @@ public final class GraphicsContext {
     public Lights lights() {
         checkOpen();
         return lights;
+    }
+
+    /**
+     * Place medium volumes, like smoke, fog banks and steam, in the scene, owned by this plugin.
+     *
+     * @return The media API for this plugin.
+     * @throws IllegalStateException If the plugin was unloaded.
+     */
+    public Media media() {
+        checkOpen();
+        return media;
     }
 
     /**

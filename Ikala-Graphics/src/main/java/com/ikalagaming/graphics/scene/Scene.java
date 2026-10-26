@@ -79,6 +79,13 @@ public class Scene {
     private final LightRegistry lightRegistry;
 
     /**
+     * The medium volumes plugins placed, through {@link com.ikalagaming.graphics.Media}.
+     *
+     * @return The medium registry.
+     */
+    private final MediumRegistry mediumRegistry;
+
+    /**
      * The texture of the skybox, which may be null if we want the sky to be just a single diffuse
      * color.
      */
@@ -162,6 +169,7 @@ public class Scene {
         materialCache = new MaterialCache();
         sceneLights = new SceneLights();
         lightRegistry = new LightRegistry();
+        mediumRegistry = new MediumRegistry();
         viewDistance = DEFAULT_VIEW_DISTANCE;
         exposure = 1;
         camera = new Camera();

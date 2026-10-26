@@ -8,6 +8,7 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.LightHandle;
 import com.ikalagaming.graphics.LodHandle;
+import com.ikalagaming.graphics.MediumHandle;
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.SectionHandle;
@@ -22,6 +23,8 @@ import com.ikalagaming.graphics.graph.VolumeMath;
 import com.ikalagaming.graphics.lod.CrackCheck;
 import com.ikalagaming.graphics.lod.LodCache;
 import com.ikalagaming.graphics.lod.LodStore;
+import com.ikalagaming.graphics.scene.Fog;
+import com.ikalagaming.graphics.scene.MediumVolume;
 import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
@@ -623,6 +626,43 @@ public final class GateBenchmark {
 
     /** Whether the exposure adapted before the run. */
     private boolean previousAutoExposure;
+
+    /** Where the fog's anisotropy is in the {@code .fog} property, after three other values. */
+    private static final int FOG_ANISOTROPY_PART = 3;
+
+    /** Whether the fog was drawn before the run. */
+    private boolean previousFog;
+
+    /** The test medium volumes the run placed, removed when it ends. */
+    private final List<MediumHandle> testMedia = new ArrayList<>();
+
+    /** How tall the test smoke column is, half of it, in meters. */
+    private static final float SMOKE_HALF_HEIGHT = 20;
+
+    /** The test smoke column's radius, in meters. */
+    private static final float SMOKE_RADIUS = 4;
+
+    /** How dense the test smoke is, per meter. */
+    private static final float SMOKE_DENSITY = 0.4f;
+
+    /** The test smoke's drift, up and along x, in meters a second. */
+    private static final Vector3fc SMOKE_WIND = new Vector3f(1, 3, 0);
+
+    /** Where the glowing sphere is from the smoke, and its radius, in meters. */
+    private static final Vector3d GLOW_OFFSET = new Vector3d(-25, 5, 0);
+
+    private static final float GLOW_RADIUS = 6;
+
+    /** The glowing sphere's light per unit of density: an orange glow, as over a fire. */
+    private static final Vector3fc GLOW_EMISSION = new Vector3f(4, 1.5f, 0.3f);
+
+    /** Where the fog bank is from the smoke, and its half size, in meters. */
+    private static final Vector3d BANK_OFFSET = new Vector3d(0, -12, 40);
+
+    private static final Vector3fc BANK_HALF_SIZE = new Vector3f(40, 5, 15);
+
+    /** How dense the fog bank is, per meter. */
+    private static final float BANK_DENSITY = 0.08f;
 
     /**
      * Set up a run.
@@ -1288,6 +1328,92 @@ public final class GateBenchmark {
         }
         previousAutoExposure = scene.isAutoExposure();
         scene.setAutoExposure(Boolean.getBoolean(PROPERTY + ".autoExposure"));
+        previousFog = scene.getFog().isActive();
+        placeFog(scene.getFog());
+        placeTestMedia();
+    }
+
+    /**
+     * Place test medium volumes from the startup property: {@code .smoke=x,y,z} puts a column of
+     * gray smoke drifting up there, a glowing orange sphere beside it and a flat fog bank in front,
+     * for looking at smoke with the fog, the lights and transparency.
+     */
+    private void placeTestMedia() {
+        final String value = System.getProperty(PROPERTY + ".smoke");
+        if (value == null) {
+            return;
+        }
+        final String[] parts = value.split(",");
+        if (parts.length != 3) {
+            log.warn("The benchmark's smoke must be x,y,z, not {}", value);
+            return;
+        }
+        final Vector3d at =
+                new Vector3d(
+                        Double.parseDouble(parts[0].trim()),
+                        Double.parseDouble(parts[1].trim()),
+                        Double.parseDouble(parts[2].trim()));
+        final MediumVolume smoke =
+                MediumVolume.of(
+                                MediumVolume.Shape.CYLINDER,
+                                at,
+                                new Vector3f(SMOKE_RADIUS, SMOKE_HALF_HEIGHT, 0))
+                        .withMedium(SMOKE_DENSITY, new Vector3f(0.6f), new Vector3f())
+                        .withNoise(
+                                MediumVolume.DEFAULT_EDGE * 2,
+                                MediumVolume.DEFAULT_NOISE_SCALE,
+                                0.7f,
+                                SMOKE_WIND);
+        final MediumVolume glow =
+                MediumVolume.of(
+                                MediumVolume.Shape.SPHERE,
+                                new Vector3d(at).add(GLOW_OFFSET),
+                                new Vector3f(GLOW_RADIUS))
+                        .withMedium(SMOKE_DENSITY / 2, new Vector3f(0.5f), GLOW_EMISSION);
+        final MediumVolume bank =
+                MediumVolume.of(
+                                MediumVolume.Shape.BOX,
+                                new Vector3d(at).add(BANK_OFFSET),
+                                BANK_HALF_SIZE)
+                        .withMedium(BANK_DENSITY, new Vector3f(0.9f), new Vector3f())
+                        .withNoise(
+                                MediumVolume.DEFAULT_EDGE * 4,
+                                MediumVolume.DEFAULT_NOISE_SCALE * 3,
+                                MediumVolume.DEFAULT_NOISE_STRENGTH,
+                                new Vector3f(0.5f, 0, 0));
+        for (MediumVolume volume : List.of(smoke, glow, bank)) {
+            final MediumHandle handle = graphics.media().add(volume);
+            if (handle != null) {
+                testMedia.add(handle);
+            }
+        }
+    }
+
+    /**
+     * Turn the scene's fog on from the startup properties: {@code .fog} gives its density per
+     * meter, then, comma separated, its height falloff per meter, base height and phase anisotropy;
+     * {@code .haze=true} adds the physical sky's air and haze.
+     *
+     * @param fog The scene's fog.
+     */
+    private static void placeFog(@NonNull Fog fog) {
+        final String value = System.getProperty(PROPERTY + ".fog");
+        if (value == null) {
+            return;
+        }
+        final String[] parts = value.split(",");
+        fog.setActive(true);
+        fog.setDensity(Float.parseFloat(parts[0].trim()));
+        if (parts.length > 1) {
+            fog.setHeightFalloff(Float.parseFloat(parts[1].trim()));
+        }
+        if (parts.length > 2) {
+            fog.setBaseHeight(Float.parseFloat(parts[2].trim()));
+        }
+        if (parts.length > FOG_ANISOTROPY_PART) {
+            fog.setAnisotropy(Float.parseFloat(parts[FOG_ANISOTROPY_PART].trim()));
+        }
+        fog.setHaze(Boolean.getBoolean(PROPERTY + ".haze"));
     }
 
     /**
@@ -2397,6 +2523,11 @@ public final class GateBenchmark {
             scene.getSceneLights().setAmbientLight(previousAmbient);
             scene.setPhysicalSky(previousPhysicalSky);
             scene.setAutoExposure(previousAutoExposure);
+            scene.getFog().setActive(previousFog);
+        }
+        if (!graphics.isClosed()) {
+            testMedia.forEach(graphics.media()::remove);
+            testMedia.clear();
         }
         if (scene != null && !Double.isNaN(previousViewDistance)) {
             scene.setViewDistance(previousViewDistance);

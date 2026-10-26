@@ -19,6 +19,9 @@
 #include "lighting.glsl"
 #define OIT_VOLUME_SET 3
 #include "oit_volume.glsl"
+// The fog volume, set 6, see FogRender
+#define FOG_SET 6
+#include "fog.glsl"
 #include "volume_fade.glsl"
 
 // Whether these are sections' baked blocks, which hand over to their volume bricks with distance,
@@ -109,6 +112,11 @@ void main() {
         geometricNormal, tangent, bitangent, gl_FragCoord.xy / screenSize, clusterLights);
 
     float depth = -outViewPosition.z;
+    // Seen through the fog in front of it: blended over the fogged scene behind, which is right for
+    // one layer and near enough for more
+    if ((fog.enabled & FOG_ENABLED) != 0) {
+        color = fogApply(color, gl_FragCoord.xy, depth, fog.logScale);
+    }
     float w = voxelWeights != 0
         ? transmittanceInFront(gl_FragCoord.xy, depth, logScale, tiles)
         : depthWeight(alpha, depth);

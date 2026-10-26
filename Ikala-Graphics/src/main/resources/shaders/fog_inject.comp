@@ -1,0 +1,307 @@
+#version 460
+#extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_buffer_reference : require
+
+// Fills the fog volume's froxels, one thread each: the media at the froxel's middle, its extinction
+// per meter, and the light they scatter toward the camera per meter, from the sun through its
+// shadow cascades, the sky dimmed under cover, and the point lights and spotlights of the froxel's
+// light cluster through their shadow maps. See fog.glsl and FogMath.
+//
+// The media are the scene's fog, thick at and below its base height and thinning above it; the
+// medium volumes plugins placed, shapes with soft edges and drifting noise, like smoke; and, with a
+// physical sky, the air and haze it is made of at sea level, so far land fades into the sky. The
+// fog and the volumes shade themselves: the sun's and the sky's light reaching a point is dimmed by
+// what of them lies toward the sun and straight up, worked out for each shape and for the fog's
+// fall off with height rather than marched. Their extinction is kept as one value, the air's averaged over its colors; the air's color
+// comes from the light it scatters, which is by color.
+
+// The light stage's sets, see LightRender
+#define OCCUPANCY_SET 2
+#define ENVIRONMENT_SET 3
+#include "lighting.glsl"
+#include "atmosphere.glsl"
+#include "fog.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+// One medium volume, see FogRender.writeMedia: its middle in render space and its shape; the
+// rotation from render space to its own frame; its half size and soft edge's width; its albedo and
+// density; its emission and noise feature size; and its noise's drift and strength
+struct MediumVolume {
+    vec4 centerShape;
+    vec4 toLocal;
+    vec4 halfSizeEdge;
+    vec4 albedoDensity;
+    vec4 emissionNoiseScale;
+    vec4 noiseOffsetStrength;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer MediaList {
+    uint mediumCount;
+    uint mediumPadding0;
+    uint mediumPadding1;
+    uint mediumPadding2;
+    MediumVolume media[];
+};
+
+// This frame's media and their light, per froxel, blended with the frames before's, see FogVolume
+layout(set = 4, binding = 0, rgba16f) uniform restrict writeonly image3D media;
+layout(set = 4, binding = 1) uniform sampler3D history;
+
+layout(push_constant) uniform Constants {
+    // From this frame's render space to last frame's view space
+    mat4 toPreviousView;
+    // Last frame's projection's m00, m11, m20 and m21, without jitter
+    vec4 previousProjection;
+    // How many tiles across and down this frame's volume holds
+    uvec2 tiles;
+    // The drawn area, in pixels
+    vec2 screenSize;
+    // Where this frame samples each froxel: across, down and in depth, -0.5 to 0.5 of its size
+    vec3 jitter;
+    // How much of the frames before each froxel keeps, 0 for none
+    float historyWeight;
+    // Last frame's slices' log scale
+    float previousLogScale;
+    // This frame's medium volumes
+    MediaList mediaList;
+};
+
+// Straight up, in render space
+const vec3 UP = vec3(0.0, 1.0, 0.0);
+// Kilometers to meters, for the atmosphere's coefficients
+const float PER_KILOMETER = 1e-3;
+// The shapes, see MediumVolume.Shape
+const int SHAPE_BOX = 0;
+const int SHAPE_SPHERE = 1;
+// The longest the fog's own shade toward the sun is worked out over, in meters: even fog stretches
+// forever, and would hide the sun entirely
+const float SUN_PATH = 100.0;
+// How far the sun must be above the horizon for the fog's fall off to bound its shade
+const float LOW_SUN = 0.01;
+
+// Turn a vector by a quaternion
+vec3 rotateBy(vec4 q, vec3 v) {
+    vec3 t = 2.0 * cross(q.xyz, v);
+    return v + q.w * t + cross(q.xyz, t);
+}
+
+// How far a point is outside a shape, negative inside, in its own frame; FogMath has them in Java
+float shapeDistance(int shape, vec3 p, vec3 halfSize) {
+    if (shape == SHAPE_BOX) {
+        vec3 q = abs(p) - halfSize;
+        return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
+    }
+    if (shape == SHAPE_SPHERE) {
+        return length(p) - halfSize.x;
+    }
+    vec2 d = vec2(length(p.xz) - halfSize.x, abs(p.y) - halfSize.y);
+    return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+}
+
+// How far a ray from a point inside a shape goes before it leaves, in its own frame
+float shapeChord(int shape, vec3 p, vec3 d, vec3 halfSize) {
+    // Slabs across the axes a box or a cylinder's height bound
+    vec3 safe = mix(d, vec3(1e-6), lessThan(abs(d), vec3(1e-6)));
+    vec3 slab = (sign(safe) * halfSize - p) / safe;
+    if (shape == SHAPE_BOX) {
+        return max(0.0, min(slab.x, min(slab.y, slab.z)));
+    }
+    if (shape == SHAPE_SPHERE) {
+        float b = dot(p, d);
+        float c = dot(p, p) - halfSize.x * halfSize.x;
+        return max(0.0, -b + sqrt(max(b * b - c, 0.0)));
+    }
+    // Across the circle, then the height
+    vec2 q = p.xz;
+    vec2 e = d.xz;
+    float a = dot(e, e);
+    float across = 1e30;
+    if (a > 1e-12) {
+        float b = dot(q, e);
+        float c = dot(q, q) - halfSize.x * halfSize.x;
+        across = (-b + sqrt(max(b * b - a * c, 0.0))) / a;
+    }
+    return max(0.0, min(across, slab.y));
+}
+
+// A well spread hash of a lattice point, 0 to 1
+float latticeHash(vec3 p) {
+    uvec3 q = uvec3(ivec3(p) + 32768);
+    uint h = q.x * 73856093u ^ q.y * 19349663u ^ q.z * 83492791u;
+    h = (h ^ (h >> 16)) * 0x7feb352du;
+    h = (h ^ (h >> 15)) * 0x846ca68bu;
+    return float(h ^ (h >> 16)) / 4294967295.0;
+}
+
+// Smooth value noise, 0 to 1
+float valueNoise(vec3 p) {
+    vec3 cell = floor(p);
+    vec3 f = p - cell;
+    vec3 u = f * f * (3.0 - 2.0 * f);
+    float x00 = mix(latticeHash(cell), latticeHash(cell + vec3(1, 0, 0)), u.x);
+    float x10 = mix(latticeHash(cell + vec3(0, 1, 0)), latticeHash(cell + vec3(1, 1, 0)), u.x);
+    float x01 = mix(latticeHash(cell + vec3(0, 0, 1)), latticeHash(cell + vec3(1, 0, 1)), u.x);
+    float x11 = mix(latticeHash(cell + vec3(0, 1, 1)), latticeHash(cell + vec3(1, 1, 1)), u.x);
+    return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
+}
+
+// Two octaves of value noise, 0 to 1
+float mediumNoise(vec3 p) {
+    return (valueNoise(p) * 2.0 + valueNoise(p * 2.03 + 17.0)) / 3.0;
+}
+
+void main() {
+    uvec3 froxel = gl_GlobalInvocationID;
+    if (any(greaterThanEqual(froxel.xy, tiles)) || froxel.z >= SLICES) {
+        return;
+    }
+    // A point in the froxel, a different one each frame, which the frames before average over
+    vec2 screen = min((vec2(froxel.xy) + 0.5 + jitter.xy) * float(FOG_TILE), screenSize) / screenSize;
+    float depth = sliceDepth(float(froxel.z) + 0.5 + jitter.z, fog.logScale);
+    // Along the pixel's ray to that depth, as lights.frag rebuilds points: y flipped back
+    vec4 far = invProjectionMatrix * vec4(screen.x * 2.0 - 1.0, 1.0 - screen.y * 2.0, 1.0, 1.0);
+    vec3 ray = far.xyz / far.w;
+    vec3 viewPosition = ray * (depth / -ray.z);
+    vec3 renderPosition = (invViewMatrix * vec4(viewPosition, 1.0)).xyz;
+    // Toward the camera, which is at render space's origin
+    vec3 toCamera = normalize(-renderPosition);
+
+    float extinction = 0.0;
+    // The light scattered toward the camera per meter, by what scatters it
+    vec3 scattered = vec3(0.0);
+    // What scatters light from the sun, the sky and the lights alike, and what gives off its own
+    vec3 scattering = vec3(0.0);
+    vec3 emitted = vec3(0.0);
+    // How much of the fog and the volumes lies toward the sun and straight up from here
+    float towardSun = 0.0;
+    float overhead = 0.0;
+
+    vec3 renderSun = normalize((invViewMatrix * vec4(-directionalLight.direction, 0.0)).xyz);
+    // From the sun's direction of travel to the camera
+    float cosTheta = dot(-renderSun, toCamera);
+    float shadowDistance = -cascadeShadowSplits[NUM_CASCADES - 1].splitDistance;
+    float sunVisible = sunVisibility(viewPosition, renderPosition, vec3(0.0));
+    float sky = skyVisibility(renderPosition, UP);
+    if (depth >= shadowDistance) {
+        // Past the cascades, the sky map stands in for the sun's shadow
+        sunVisible = min(sunVisible, sky);
+    }
+    vec3 sun = directionalLight.color * directionalLight.intensity * sunVisible;
+    // The sky's average light, which for the skybox is the ambient light, and for the physical sky
+    // follows the sun, dimmed under cover
+    vec3 ambient = environmentEnabled != 0 && environmentScale.w > 0.5
+        ? environmentScale.rgb * environmentAverage()
+        : ambientLight.color * ambientLight.intensity;
+    ambient *= mix(skyLightFloor, 1.0, sky);
+
+    if ((fog.enabled & FOG_GLOBAL) != 0) {
+        float density = fog.density * exp(-fog.shape.x * max(0.0, renderPosition.y - fog.shape.y));
+        extinction += density;
+        scattering += density * fog.color;
+        // Fog falling off with height thins out toward a high sun: e^-(falloff h) integrates to
+        // the density over falloff times how fast the ray climbs
+        float sunPath = fog.shape.x > 0.0 && renderSun.y > LOW_SUN
+            ? min(1.0 / (fog.shape.x * renderSun.y), SUN_PATH)
+            : SUN_PATH;
+        towardSun += density * sunPath;
+    }
+    uint mediumCount = mediaList.mediumCount;
+    for (uint i = 0; i < mediumCount; ++i) {
+        MediumVolume medium = mediaList.media[i];
+        vec3 offset = renderPosition - medium.centerShape.xyz;
+        vec3 local = rotateBy(medium.toLocal, offset);
+        int shape = int(medium.centerShape.w);
+        float inside = edgeWeight(shapeDistance(shape, local, medium.halfSizeEdge.xyz),
+            medium.halfSizeEdge.w);
+        if (inside <= 0.0) {
+            continue;
+        }
+        // Broken up by noise fixed in the world, drifting with the wind
+        float strength = medium.noiseOffsetStrength.w;
+        float noise = mediumNoise(offset / medium.emissionNoiseScale.w + medium.noiseOffsetStrength.xyz
+            / medium.emissionNoiseScale.w);
+        float density = medium.albedoDensity.w * inside * (1.0 - strength * (1.0 - noise));
+        extinction += density;
+        scattering += density * medium.albedoDensity.rgb;
+        emitted += density * medium.emissionNoiseScale.rgb;
+        // Its shade, from its average density along each way out
+        float average = medium.albedoDensity.w * (1.0 - 0.5 * strength);
+        towardSun += average * shapeChord(shape, local, rotateBy(medium.toLocal, renderSun),
+            medium.halfSizeEdge.xyz);
+        overhead += average * shapeChord(shape, local, rotateBy(medium.toLocal, UP),
+            medium.halfSizeEdge.xyz);
+    }
+    scattered += scattering * (sun * exp(-towardSun) * henyeyGreenstein(cosTheta, fog.shape.z)
+        + ambient * exp(-overhead)) + emitted;
+    if ((fog.enabled & FOG_HAZE) != 0) {
+        vec3 rayleigh = RAYLEIGH_SCATTERING * PER_KILOMETER;
+        float mie = MIE_SCATTERING * PER_KILOMETER;
+        extinction += dot(rayleigh, vec3(1.0 / 3.0)) + MIE_EXTINCTION * PER_KILOMETER;
+        scattered += sun * (rayleigh * rayleighPhase(cosTheta) + mie * miePhase(cosTheta))
+            + (rayleigh + mie) * ambient;
+    }
+
+    // The lights that can reach the froxel's cluster
+    if (any(greaterThan(scattering, vec3(0.0)))) {
+        uint cluster = findCluster(screen, depth);
+        uint count = clusterData[cluster];
+        uint firstIndex = CLUSTER_COUNT + cluster * MAX_LIGHTS_PER_CLUSTER;
+        for (uint i = 0; i < count; ++i) {
+            Light light = lights[clusterData[firstIndex + i]];
+            vec3 toLight = light.position - viewPosition;
+            float distance = length(toLight);
+            if (distance >= light.range) {
+                continue;
+            }
+            toLight /= distance;
+            float intensity = scaleIntensity(distance, light.range) * light.intensity;
+            if (light.type == LIGHT_TYPE_SPOT) {
+                float spotAlpha = dot(-toLight, normalize(light.direction));
+                if (spotAlpha <= light.cosOuter) {
+                    continue;
+                }
+                float fadeWidth = light.cosInner - light.cosOuter;
+                if (fadeWidth > 0.0) {
+                    intensity *= clamp((spotAlpha - light.cosOuter) / fadeWidth, 0.0, 1.0);
+                }
+            }
+            if (light.shadowMap >= 0) {
+                intensity *= pointVisibility(light, renderPosition, vec3(0.0));
+            }
+            // From the light's direction of travel to the camera, both in view space
+            float cosLight = dot(-toLight, normalize(-viewPosition));
+            scattered += scattering * light.color * intensity
+                * henyeyGreenstein(cosLight, fog.shape.z);
+        }
+    }
+    vec4 sampled = vec4(scattered, extinction);
+
+    // Blended with where the froxel's middle was last frame, if it was on screen
+    if (historyWeight > 0.0) {
+        vec2 middleScreen = min((vec2(froxel.xy) + 0.5) * float(FOG_TILE), screenSize) / screenSize;
+        float middleDepth = sliceDepth(float(froxel.z) + 0.5, fog.logScale);
+        vec4 middleFar = invProjectionMatrix
+            * vec4(middleScreen.x * 2.0 - 1.0, 1.0 - middleScreen.y * 2.0, 1.0, 1.0);
+        vec3 middleRay = middleFar.xyz / middleFar.w;
+        vec3 middleView = middleRay * (middleDepth / -middleRay.z);
+        vec3 middleRender = (invViewMatrix * vec4(middleView, 1.0)).xyz;
+        vec3 before = (toPreviousView * vec4(middleRender, 1.0)).xyz;
+        float beforeDepth = -before.z;
+        if (beforeDepth > 0.0) {
+            vec2 ndc = vec2(previousProjection.x * before.x + previousProjection.z * before.z,
+                previousProjection.y * before.y + previousProjection.w * before.z) / beforeDepth;
+            vec2 beforeScreen = vec2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+            float beforeSlice = sliceCoordinate(beforeDepth, previousLogScale);
+            if (all(greaterThanEqual(beforeScreen, vec2(0.0))) && all(lessThanEqual(beforeScreen, vec2(1.0)))
+                    && beforeSlice < float(SLICES)) {
+                vec3 size = vec3(textureSize(history, 0));
+                vec3 at = vec3(beforeScreen * screenSize / float(FOG_TILE) / size.xy,
+                    beforeSlice / size.z);
+                sampled = mix(sampled, texture(history, at), historyWeight);
+            }
+        }
+    }
+    imageStore(media, ivec3(froxel), sampled);
+}

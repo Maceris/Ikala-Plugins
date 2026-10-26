@@ -1,0 +1,56 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// Sums each tile's froxels front to back into the fog in front of each slice's far end: the light
+// scattered toward the camera and how much light gets through, energy-conserving within each slice
+// (Hillaire 2015). One thread per tile. FogMath.integrate has the same math in Java.
+
+#include "fog.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+// The media and their light, per froxel, from fog_inject.comp
+layout(set = 0, binding = 0) uniform sampler3D media;
+// The fog in front of each froxel's far end
+layout(set = 0, binding = 1, rgba16f) uniform restrict writeonly image3D integrated;
+
+layout(push_constant) uniform Constants {
+    // To view space from clip space, for each tile's ray
+    mat4 invProjectionMatrix;
+    // How many tiles across and down this frame's volume holds
+    uvec2 tiles;
+    // The drawn area, in pixels
+    vec2 screenSize;
+    // The slices' log scale
+    float logScale;
+};
+
+// Below this extinction, per meter, a slice's light is gathered as if clear, see FogMath.CLEAR
+const float CLEAR = 1e-6;
+
+void main() {
+    uvec2 tile = gl_GlobalInvocationID.xy;
+    if (any(greaterThanEqual(tile, tiles))) {
+        return;
+    }
+    // How long the tile's ray is per meter of depth
+    vec2 screen = min((vec2(tile) + 0.5) * float(FOG_TILE), screenSize) / screenSize;
+    vec4 far = invProjectionMatrix * vec4(screen.x * 2.0 - 1.0, 1.0 - screen.y * 2.0, 1.0, 1.0);
+    vec3 ray = far.xyz / far.w;
+    float perDepth = length(ray) / -ray.z;
+
+    vec3 gathered = vec3(0.0);
+    float through = 1.0;
+    float near = sliceDepth(0.0, logScale);
+    for (uint slice = 0; slice < SLICES; ++slice) {
+        float farDepth = sliceDepth(float(slice) + 1.0, logScale);
+        float segment = (farDepth - near) * perDepth;
+        near = farDepth;
+        vec4 froxel = texelFetch(media, ivec3(tile, slice), 0);
+        float slab = exp(-froxel.a * segment);
+        vec3 within = froxel.a < CLEAR ? froxel.rgb * segment : froxel.rgb * (1.0 - slab) / froxel.a;
+        gathered += through * within;
+        through *= slab;
+        imageStore(integrated, ivec3(tile, slice), vec4(gathered, through));
+    }
+}

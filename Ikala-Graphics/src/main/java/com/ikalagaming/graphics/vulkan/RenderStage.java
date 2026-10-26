@@ -18,6 +18,8 @@ public interface RenderStage {
         DEPTH_PYRAMID,
         ENVIRONMENT,
         FILTER,
+        FOG_INJECT,
+        FOG_INTEGRATE,
         FILTER_BASE_COLOR,
         FILTER_DEPTH,
         FILTER_MATERIAL,

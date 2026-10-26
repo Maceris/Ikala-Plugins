@@ -2,7 +2,8 @@
 #define LIGHTING_GLSL
 
 // Lighting a surface: the Disney BRDF, the sun with its filtered shadow cascades, the point lights
-// and spotlights light_cull.comp sorted into the surface's cluster, ambient light and fog. All in
+// and spotlights light_cull.comp sorted into the surface's cluster, and ambient light; fog is laid
+// over it afterward, see fog.glsl. All in
 // view space, in linear light. AmbientMath has the ambient reflection in Java, with tests.
 
 #include "color.glsl"
@@ -240,16 +241,6 @@ vec3 ambientReflectance(vec3 baseLinear, Material material, float nDotV) {
     vec3 singleScatter;
     vec3 spread = ambientParts(baseLinear, material, nDotV, singleScatter);
     return singleScatter + spread;
-}
-
-vec3 calcFog(vec3 pos, vec3 color, Fog fog, vec3 ambientLight, DirectionalLight directionalLight) {
-    vec3 fogColor = sRGBToLinear(fog.color);
-    float distance = length(pos);
-    float fogFactor = 1.0 / exp(sqr(distance * fog.density));
-    fogFactor = clamp(fogFactor, 0.0, 1.0);
-
-    vec3 resultColor = mix(fogColor, color, fogFactor);
-    return resultColor;
 }
 
 // The cluster a pixel is in, from where it is on the screen and how far in front of the camera
@@ -570,12 +561,9 @@ vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 ren
         ambient = ambientColor * ambientVisible
             * ambientReflectance(sRGBToLinear(baseColor.rgb), material, nDotV);
     }
-    // Light the surface gives off isn't shadowed or occluded, only fogged
+    // Light the surface gives off isn't shadowed or occluded
     vec3 finalColor = ambient + color + material.emissive;
 
-    if (fog.enabled == 1 && fog.density > 0) {
-        finalColor = calcFog(viewPosition, finalColor, fog, ambientLight.color, directionalLight);
-    }
     return finalColor;
 }
 

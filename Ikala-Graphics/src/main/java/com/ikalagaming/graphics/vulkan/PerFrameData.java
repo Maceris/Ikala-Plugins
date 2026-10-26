@@ -267,6 +267,12 @@ public class PerFrameData {
     public boolean voxelTransparency;
 
     /**
+     * Whether the light stage filled the fog volume this frame, for the global fog or medium
+     * volumes, so the sky and the transparent stages see through it too.
+     */
+    public boolean fogFilled;
+
+    /**
      * The texture we render to just before moving over to the swapchain. The filter stage renders
      * here if present, otherwise the scene can be rendered here directly. The GUI is rendered on
      * top of here as well at the end.

@@ -256,7 +256,8 @@ public class OccupancyVolume {
                     .binding(COVERAGE_SAMPLED_BINDING)
                     .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
                     .descriptorCount(levels)
-                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT);
+                    // Compute too: the fog's injection includes the lighting that reads it
+                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT);
             checkError(
                     vkCreateDescriptorSetLayout(
                             state.device.logical,

@@ -227,7 +227,8 @@ public class SkyboxRender implements RenderStage {
                         stack.longs(
                                 descriptorSets[vulkanState.frameIndex],
                                 vulkanState.bindlessTextures.getDescriptorSet(),
-                                vulkanState.environment.getSet()),
+                                vulkanState.environment.getSet(),
+                                vulkanState.fogVolume.getReadSet()),
                         null);
                 vkCmdBindVertexBuffers(
                         commandBuffer,
@@ -278,6 +279,8 @@ public class SkyboxRender implements RenderStage {
         // The physical sky, from the table the environment update filled this frame
         final PhysicalSky physicalSky = scene.getPhysicalSky();
         uniformData.putInt(ShaderBindings.Skybox.PHYSICAL_SKY_OFFSET, physicalSky != null ? 1 : 0);
+        // The fog volume is filled before the sky is drawn, see LightRender
+        uniformData.putInt(ShaderBindings.Skybox.FOG_ENABLED_OFFSET, frameData.fogFilled ? 1 : 0);
         uniformData.putInt(ShaderBindings.Skybox.LAYOUT_OFFSET, scene.getSkyboxLayout().ordinal());
         if (physicalSky == null) {
             // An environment map is drawn as bright as it lights, scaled to the ambient light
@@ -329,7 +332,8 @@ public class SkyboxRender implements RenderStage {
                                     stack.longs(
                                             descriptorSetLayout,
                                             state.bindlessTextures.getDescriptorSetLayout(),
-                                            state.environment.getSetLayout()));
+                                            state.environment.getSetLayout(),
+                                            state.fogVolume.getReadSetLayout()));
             checkError(
                     vkCreatePipelineLayout(
                             state.device.logical, pipelineLayoutCreateInfo, null, longOutput));

@@ -25,13 +25,23 @@ struct DirectionalLight
     float intensity;
 };
 
+// The fog, see Fog and fog.glsl: its scattering albedo, its extinction per meter at its base height,
+// FOG_ENABLED and FOG_HAZE bits, the fog volume's slices' log scale, and its height falloff per
+// meter, base height relative to the camera and phase anisotropy
 struct Fog
 {
     vec3 color;
     float density;
     int enabled;
-    vec3 _padding;
+    float logScale;
+    vec3 shape;
 };
+
+// The bits of Fog's enabled: the fog volume is filled and drawn through; the physical sky's air and
+// haze are in it; the scene's own height fog is in it
+const int FOG_ENABLED = 1;
+const int FOG_HAZE = 2;
+const int FOG_GLOBAL = 4;
 
 struct CascadeShadow {
     mat4 projViewMatrix;

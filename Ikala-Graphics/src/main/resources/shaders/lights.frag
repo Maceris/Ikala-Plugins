@@ -10,6 +10,9 @@
 #define OCCUPANCY_SET 2
 #define ENVIRONMENT_SET 3
 #include "lighting.glsl"
+// The fog volume, set 4, filled just before, see FogRender
+#define FOG_SET 4
+#include "fog.glsl"
 
 layout(location = 0) in vec2 outTextCoord;
 layout(location = 0) out vec4 fragColor;
@@ -97,6 +100,11 @@ void main()
     uint clusterLights;
     vec3 finalColor = lightSurface(baseColor, material, viewPosition, renderPosition.xyz, normal,
         geometricNormal, tangent, bitangent, outTextCoord, clusterLights);
+
+    // Seen through the fog in front of it
+    if ((fog.enabled & FOG_ENABLED) != 0) {
+        finalColor = fogApply(finalColor, gl_FragCoord.xy, -viewPosition.z, fog.logScale);
+    }
 
     if (clusterHeatMap != 0 && clusterLights > 0) {
         finalColor = mix(finalColor, heatColor(clusterLights), HEAT_MAP_OPACITY);

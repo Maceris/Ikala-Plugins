@@ -110,7 +110,8 @@ public class TranslucentRender implements RenderStage {
                                             sceneRender.getDescriptorSetLayout(),
                                             state.oitVolume.getReadSetLayout(),
                                             state.occupancy.getSetLayout(),
-                                            state.environment.getSetLayout()))
+                                            state.environment.getSetLayout(),
+                                            state.fogVolume.getReadSetLayout()))
                             .pPushConstantRanges(pushConstantRanges);
             checkError(vkCreatePipelineLayout(state.device.logical, layoutInfo, null, longOutput));
             pipelineLayout = longOutput.get(0);
@@ -206,7 +207,8 @@ public class TranslucentRender implements RenderStage {
                                 sceneRender.getDescriptorSet(state.frameIndex),
                                 state.oitVolume.getReadSet(),
                                 state.occupancy.getSet(),
-                                state.environment.getSet()),
+                                state.environment.getSet(),
+                                state.fogVolume.getReadSet()),
                         null);
                 ByteBuffer constants = stack.calloc(ShaderBindings.Translucent.PUSH_CONSTANTS_SIZE);
                 constants.putFloat(

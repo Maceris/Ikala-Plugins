@@ -337,6 +337,10 @@ public class GraphicsManager {
         }
         if (scene != null) {
             int lights = scene.getLightRegistry().removeAllOwnedBy(context.getOwnerKey());
+            int media = scene.getMediumRegistry().removeAllOwnedBy(context.getOwnerKey());
+            if (media > 0) {
+                log.debug("Removed {} medium volumes owned by {}", media, context.getOwnerKey());
+            }
             if (lights > 0) {
                 log.debug("Removed {} lights owned by {}", lights, context.getOwnerKey());
             }

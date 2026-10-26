@@ -113,6 +113,9 @@ public class VulkanState {
     /** The voxel-based transparency volume, sized with the g-buffer. */
     public OitVolume oitVolume = null;
 
+    /** The fog volume, see {@link FogVolume}. */
+    public FogVolume fogVolume = null;
+
     /** For submitting work outside the frame, like texture uploads. */
     public ImmediateCommands immediateCommands = null;
 

@@ -259,7 +259,13 @@ public class PipelineManagerVulkan {
         stageEnvironmentUpdate.initialize(state);
         state.tableScatter =
                 new TableScatter(state, shaders.getShader(RenderStage.Type.TABLE_SCATTER));
-        stageLightRender = new LightRender(shaders.getShader(RenderStage.Type.LIGHT), quadMesh);
+        stageLightRender =
+                new LightRender(
+                        shaders.getShader(RenderStage.Type.LIGHT),
+                        quadMesh,
+                        new FogRender(
+                                shaders.getShader(RenderStage.Type.FOG_INJECT),
+                                shaders.getShader(RenderStage.Type.FOG_INTEGRATE)));
         stageLightRender.initialize(state);
         stageToneMap =
                 new ToneMap(
@@ -678,6 +684,8 @@ public class PipelineManagerVulkan {
             state.depthPyramid.resize(state, width, height);
             state.oitVolume = new OitVolume(state);
             state.oitVolume.resize(state, width, height);
+            state.fogVolume = new FogVolume(state);
+            state.fogVolume.resize(state, width, height);
             state.occupancy = new OccupancyVolume(state);
             state.environment = new Environment(state);
             state.volumeBricks = new VolumeBricks(state);
@@ -920,6 +928,8 @@ public class PipelineManagerVulkan {
         state.depthPyramid = null;
         state.oitVolume.cleanup(state);
         state.oitVolume = null;
+        state.fogVolume.cleanup(state);
+        state.fogVolume = null;
         state.occupancy.cleanup(state);
         state.occupancy = null;
         state.environment.cleanup(state);
@@ -1199,6 +1209,7 @@ public class PipelineManagerVulkan {
             }
             state.depthPyramid.resize(state, newWidth, newHeight);
             state.oitVolume.resize(state, newWidth, newHeight);
+            state.fogVolume.resize(state, newWidth, newHeight);
         }
     }
 }

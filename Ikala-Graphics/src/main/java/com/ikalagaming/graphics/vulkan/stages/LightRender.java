@@ -39,6 +39,12 @@ import java.util.Arrays;
 @Slf4j
 public class LightRender implements RenderStage {
 
+    /** The name of the fog's part of the frame timings. */
+    public static final String FOG_TIMING = "Fog";
+
+    /** The most the fog's phase anisotropy goes either way, short of all one way. */
+    private static final float MAX_ANISOTROPY = 0.95f;
+
     /** The storage buffer bindings in the descriptor set, in the order we update them. */
     private static final int[] STORAGE_BINDINGS = {
         ShaderBindings.Light.LIGHTS_BINDING,
@@ -52,6 +58,9 @@ public class LightRender implements RenderStage {
 
     /** A mesh for rendering onto. */
     @NonNull private QuadMesh quadMesh;
+
+    /** Fills the fog volume, which the scene is lit through. */
+    @NonNull private final FogRender fogRender;
 
     /** VkDescriptorSetLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long descriptorSetLayout;
@@ -79,10 +88,15 @@ public class LightRender implements RenderStage {
      *
      * @param shader Shader to use for rendering.
      * @param quadMesh Mesh for rendering onto.
+     * @param fogRender Fills the fog volume, before the scene is lit through it.
      */
-    public LightRender(final @NonNull ShaderVulkan shader, final @NonNull QuadMesh quadMesh) {
+    public LightRender(
+            final @NonNull ShaderVulkan shader,
+            final @NonNull QuadMesh quadMesh,
+            final @NonNull FogRender fogRender) {
         this.shader = shader;
         this.quadMesh = quadMesh;
+        this.fogRender = fogRender;
 
         this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
@@ -104,10 +118,12 @@ public class LightRender implements RenderStage {
                         pipelineLayout,
                         PipelineManagerVulkan.SCENE_COLOR_FORMAT,
                         null);
+        fogRender.initialize(vulkanState, descriptorSetLayout);
     }
 
     @Override
     public void cleanup(@NonNull VulkanState vulkanState) {
+        fogRender.cleanup(vulkanState);
         // Freed along with the pool
         Arrays.fill(descriptorSets, VK_NULL_HANDLE);
         vkDestroyDescriptorPool(vulkanState.device.logical, descriptorPool, null);
@@ -131,6 +147,8 @@ public class LightRender implements RenderStage {
         final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
         final TextureInfoVulkan target = frameData.sceneColor;
 
+        // The fog volume is filled for the scene's fog or any medium volumes
+        frameData.fogFilled = scene.getFog().isActive() || scene.getMediumRegistry().getCount() > 0;
         // The light cull stage wrote the lights and sorted them into clusters
         updateUniforms(scene, vulkanState, frameData, frameData.lightCount);
         SceneRender.writeStorageBindings(
@@ -147,6 +165,19 @@ public class LightRender implements RenderStage {
 
         final int width = Math.min(sceneTarget.width(), vulkanState.realSize.width());
         final int height = Math.min(sceneTarget.height(), vulkanState.realSize.height());
+        final long[] sets = {
+            descriptorSets[vulkanState.frameIndex],
+            vulkanState.bindlessTextures.getDescriptorSet(),
+            vulkanState.occupancy.getSet(),
+            vulkanState.environment.getSet()
+        };
+        // The fog, lit by what lights the scene, before the scene is lit through it
+        if (frameData.fogFilled && width > 0 && height > 0) {
+            fogRender.record(commandBuffer, vulkanState, sets, width, height, scene);
+            vulkanState.frameTimings.mark(commandBuffer, vulkanState.frameIndex, FOG_TIMING);
+        } else {
+            fogRender.skip(vulkanState);
+        }
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             // Last read by the tone map stage, a frame or more ago
@@ -192,10 +223,11 @@ public class LightRender implements RenderStage {
                         pipelineLayout,
                         0,
                         stack.longs(
-                                descriptorSets[vulkanState.frameIndex],
-                                vulkanState.bindlessTextures.getDescriptorSet(),
-                                vulkanState.occupancy.getSet(),
-                                vulkanState.environment.getSet()),
+                                sets[0],
+                                sets[1],
+                                sets[2],
+                                sets[3],
+                                vulkanState.fogVolume.getReadSet()),
                         null);
                 FullScreenPass.draw(commandBuffer, quadMesh, width, height, stack);
             }
@@ -336,9 +368,28 @@ public class LightRender implements RenderStage {
         Fog fog = scene.getFog();
         offset = ShaderBindings.Light.FOG_OFFSET;
         fog.getColor().get(offset + ShaderBindings.Light.Fog.COLOR, uniformData);
+        uniformData.putFloat(offset + ShaderBindings.Light.Fog.DENSITY, fog.getDensity());
+        int fogEnabled = 0;
+        if (frameData.fogFilled) {
+            fogEnabled |= ShaderBindings.Light.Fog.ENABLED_FOG;
+        }
+        if (fog.isActive()) {
+            fogEnabled |= ShaderBindings.Light.Fog.ENABLED_GLOBAL;
+            // The air and haze are the physical sky's
+            if (fog.isHaze() && scene.getPhysicalSky() != null) {
+                fogEnabled |= ShaderBindings.Light.Fog.ENABLED_HAZE;
+            }
+        }
+        uniformData.putInt(offset + ShaderBindings.Light.Fog.ENABLED, fogEnabled);
         uniformData.putFloat(
-                offset + ShaderBindings.Light.Fog.DENSITY, fog.getDensity() * Fog.DENSITY_SCALE);
-        uniformData.putInt(offset + ShaderBindings.Light.Fog.ENABLED, fog.isActive() ? 1 : 0);
+                offset + ShaderBindings.Light.Fog.LOG_SCALE,
+                VoxelOitMath.logScale(scene.getViewDistance()));
+        // Its base height in render space, which is world space with the camera at the origin
+        new Vector3f(
+                        fog.getHeightFalloff(),
+                        (float) (fog.getBaseHeight() - scene.getCamera().getPosition().y()),
+                        Math.clamp(fog.getAnisotropy(), -MAX_ANISOTROPY, MAX_ANISOTROPY))
+                .get(offset + ShaderBindings.Light.Fog.SHAPE, uniformData);
 
         CascadeShadowSplit[] cascadeShadowSplits = frameData.cascadeShadowSplits;
         for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
@@ -420,13 +471,14 @@ public class LightRender implements RenderStage {
                     .binding(ShaderBindings.Light.UNIFORMS_BINDING)
                     .descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
                     .descriptorCount(1)
-                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT);
+                    // The fog's injection lights the fog with the same inputs
+                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT);
             for (int i = 0; i < STORAGE_BINDINGS.length; i++) {
                 bindings.get(i + 1)
                         .binding(STORAGE_BINDINGS[i])
                         .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                         .descriptorCount(1)
-                        .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT);
+                        .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT);
             }
 
             // Each frame has its own set, only updated once the GPU is done with that frame
@@ -447,7 +499,8 @@ public class LightRender implements RenderStage {
                                             descriptorSetLayout,
                                             state.bindlessTextures.getDescriptorSetLayout(),
                                             state.occupancy.getSetLayout(),
-                                            state.environment.getSetLayout()));
+                                            state.environment.getSetLayout(),
+                                            state.fogVolume.getReadSetLayout()));
             checkError(
                     vkCreatePipelineLayout(
                             state.device.logical, pipelineLayoutCreateInfo, null, longOutput));

@@ -965,23 +965,35 @@ public class ShaderBindings {
          * @author Ches Burks
          */
         public static class Fog {
-            /** The base color of the fog. */
+            /** The fog's color, its scattering albedo. */
             public static final int COLOR = 0;
 
-            /** How dense the fog is. */
+            /** Its extinction at and below its base height, per meter. */
             public static final int DENSITY = 3 * Float.BYTES;
 
-            /** Whether the fog is enabled, 1 if enabled. */
+            /** {@link #ENABLED_FOG}, with {@link #ENABLED_HAZE} for the physical sky's haze. */
             public static final int ENABLED = 4 * Float.BYTES;
 
+            /** The bit of {@link #ENABLED} for the fog volume being drawn. */
+            public static final int ENABLED_FOG = 1;
+
+            /** The bit of {@link #ENABLED} for the physical sky's air and haze being added in. */
+            public static final int ENABLED_HAZE = 2;
+
+            /** The bit of {@link #ENABLED} for the scene's own height fog being in the volume. */
+            public static final int ENABLED_GLOBAL = 4;
+
+            /** The fog volume's slices' log scale, {@code VoxelOitMath.logScale}. */
+            public static final int LOG_SCALE = 5 * Float.BYTES;
+
             /**
-             * The offset of the trailing vec3 padding, which starts on a 16 byte boundary under
-             * std140 rules.
+             * Its height falloff per meter, base height relative to the camera, and phase
+             * anisotropy, a vec3 on a 16 byte boundary under std140 rules.
              */
-            public static final int PADDING = (int) SharedBuffer.align(ENABLED + Integer.BYTES);
+            public static final int SHAPE = (int) SharedBuffer.align(LOG_SCALE + 2 * Float.BYTES);
 
             /** The size of the struct in bytes, padded out to 16 bytes under std140 rules. */
-            public static final int SIZEOF = (int) SharedBuffer.align(PADDING + 3 * Float.BYTES);
+            public static final int SIZEOF = (int) SharedBuffer.align(SHAPE + 3 * Float.BYTES);
 
             /** Private constructor so this class is not instantiated. */
             private Fog() {
@@ -1472,7 +1484,12 @@ public class ShaderBindings {
         public static final int SKY_SCALE_OFFSET = SUN_AND_RADIUS_OFFSET + 4 * Float.BYTES;
 
         /** The size of the uniforms buffer. */
-        public static final int UNIFORMS_BUFFER_SIZE = SKY_SCALE_OFFSET + 4 * Float.BYTES;
+        /** The offset of whether the fog is drawn over the sky, 1 if it is. */
+        public static final int FOG_ENABLED_OFFSET = SKY_SCALE_OFFSET + 4 * Float.BYTES;
+
+        /** The size of the uniforms, padded to 16 bytes under std140 rules. */
+        public static final int UNIFORMS_BUFFER_SIZE =
+                (int) SharedBuffer.align(FOG_ENABLED_OFFSET + Integer.BYTES);
 
         /** Offset in the uniform buffer in bytes for the cameras view matrix. */
         public static final int VIEW_MATRIX_OFFSET = 4 * 4 * Float.BYTES;

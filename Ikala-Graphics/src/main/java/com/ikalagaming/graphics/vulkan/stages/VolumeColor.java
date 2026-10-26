@@ -112,7 +112,8 @@ public class VolumeColor implements RenderStage {
                         sceneRender.getDescriptorSetLayout(),
                         state.oitVolume.getReadSetLayout(),
                         state.volumeBricks.getSetLayout(),
-                        state.environment.getSetLayout());
+                        state.environment.getSetLayout(),
+                        state.fogVolume.getReadSetLayout());
         pipeline = createPipeline(state, shader, pipelineLayout, true);
     }
 
@@ -185,7 +186,8 @@ public class VolumeColor implements RenderStage {
                             sceneRender.getDescriptorSet(state.frameIndex),
                             state.oitVolume.getReadSet(),
                             bricks.getSet(),
-                            state.environment.getSet()),
+                            state.environment.getSet(),
+                            state.fogVolume.getReadSet()),
                     null);
             final ByteBuffer constants = stack.calloc(CONSTANTS_SIZE);
             constants.putLong(0, bricks.drawList(state.frameIndex));
