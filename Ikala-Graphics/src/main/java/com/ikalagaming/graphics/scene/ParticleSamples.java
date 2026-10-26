@@ -102,6 +102,66 @@ public final class ParticleSamples {
                     .lit(false)
                     .build();
 
+    /** Droplets thrown up where a raindrop lands. */
+    public static final ParticleEffect RAIN_SPLASH =
+            ParticleEffect.builder()
+                    .rate(0)
+                    .lifetime(0.2f, 0.35f)
+                    .speed(1, 2)
+                    .spread(0.9f)
+                    .acceleration(GRAVITY)
+                    .size(0.015f, 0.01f)
+                    .colors(
+                            new Vector4f(0.7f, 0.75f, 0.8f, 0.6f),
+                            new Vector4f(0.7f, 0.75f, 0.8f, 0))
+                    .anisotropy(0.5f)
+                    .stretch(0.03f)
+                    .build();
+
+    /**
+     * Rain around the camera: thin streaks falling through a box that follows it, stopped by roofs
+     * and splashing where they land.
+     */
+    public static final ParticleEffect RAIN =
+            ParticleEffect.builder()
+                    .rate(20_000)
+                    .lifetime(1.6f, 2)
+                    .speed(8, 10)
+                    .direction(new Vector3f(0, -1, 0))
+                    .spread(0.05f)
+                    .size(0.02f, 0.02f)
+                    .colors(
+                            new Vector4f(0.8f, 0.85f, 0.9f, 0.8f),
+                            new Vector4f(0.8f, 0.85f, 0.9f, 0.8f))
+                    .anisotropy(0.5f)
+                    .collision(ParticleEffect.Collision.DIE)
+                    .spawnBox(new Vector3f(24, 16, 24))
+                    .aroundCamera(true)
+                    .stretch(0.025f)
+                    .splash(RAIN_SPLASH)
+                    .splashCount(2)
+                    .build();
+
+    /** Snow around the camera: flakes drifting down and settling where they land. */
+    public static final ParticleEffect SNOW =
+            ParticleEffect.builder()
+                    .rate(3000)
+                    .lifetime(12, 16)
+                    .speed(0.3f, 0.8f)
+                    .direction(new Vector3f(0, -1, 0))
+                    .spread(0.6f)
+                    .acceleration(new Vector3f(0, -1, 0))
+                    .drag(1)
+                    .size(0.03f, 0.03f)
+                    .colors(
+                            new Vector4f(0.9f, 0.9f, 0.92f, 0.9f),
+                            new Vector4f(0.9f, 0.9f, 0.92f, 0))
+                    .anisotropy(0.1f)
+                    .collision(ParticleEffect.Collision.STICK)
+                    .spawnBox(new Vector3f(24, 16, 24))
+                    .aroundCamera(true)
+                    .build();
+
     /** Every sample, in the order lists show them. */
     public static final List<Sample> ALL =
             List.of(
@@ -109,7 +169,9 @@ public final class ParticleSamples {
                     new Sample("Sparks", SPARKS),
                     new Sample("Smoke", SMOKE),
                     new Sample("Thick smoke", THICK_SMOKE),
-                    new Sample("Fire", FIRE));
+                    new Sample("Fire", FIRE),
+                    new Sample("Rain", RAIN),
+                    new Sample("Snow", SNOW));
 
     /** Static samples only. */
     private ParticleSamples() {}

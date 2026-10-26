@@ -79,6 +79,9 @@ public final class PreviewShapes {
 
     private static final double PANE_SIDE = 1;
 
+    /** How far the roof over the back left corner reaches out from the back wall. */
+    private static final double ROOF_DEPTH = 2.5;
+
     /** Not to be made. */
     private PreviewShapes() {}
 
@@ -137,10 +140,11 @@ public final class PreviewShapes {
     }
 
     /**
-     * Make the stage particles are watched on: a floor, a wall behind and one to the left, and two
+     * Make the stage particles are watched on: a floor, a wall behind and one to the left, two
      * panes of blue glass, one in front of the emitter's left side and one behind its right, so
-     * particles show in front of, behind and through translucent surfaces. The emitter stands at
-     * the origin.
+     * particles show in front of, behind and through translucent surfaces, and a roof over the back
+     * left corner, which keeps rain and snow off the floor under it. The emitter stands at the
+     * origin.
      *
      * @return The scene, named {@link #PARTICLE_STAGE}.
      */
@@ -201,6 +205,17 @@ public final class PreviewShapes {
                         WALL_THICKNESS,
                         WALL_HEIGHT,
                         2 * STAGE_HALF));
+        root.addChild(
+                box(
+                        root,
+                        "Roof",
+                        1,
+                        -WALL_DISTANCE / 2,
+                        WALL_HEIGHT + WALL_THICKNESS / 2,
+                        -WALL_DISTANCE + ROOF_DEPTH / 2,
+                        WALL_DISTANCE,
+                        WALL_THICKNESS,
+                        ROOF_DEPTH));
         root.addChild(
                 box(
                         root,

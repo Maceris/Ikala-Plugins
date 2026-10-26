@@ -1,6 +1,8 @@
 package com.ikalagaming.graphics.graph;
 
 import lombok.NonNull;
+import org.joml.Matrix4d;
+import org.joml.Matrix4f;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
 
@@ -123,6 +125,32 @@ public class SkyOcclusion {
             view.redraw = SunShadowCache.Redraw.NONE;
         }
         SunShadowCache.fill(view, placement, cameraPosition, 0);
+    }
+
+    /**
+     * The map as it was last drawn, seen from a space whose origin is at a world position, for
+     * passes early in the frame, before this frame's {@link #plan} may move it.
+     *
+     * @param origin The space's origin, in the world.
+     * @param matrix Receives the matrix from that space to the map's clip space.
+     * @return Whether the map was drawn, so the matrix holds; false before its first draw.
+     */
+    public boolean lastView(@NonNull Vector3dc origin, @NonNull Matrix4f matrix) {
+        if (!placement.valid) {
+            return false;
+        }
+        final Vector3d offset = new Vector3d(origin).sub(placement.center);
+        SunShadowCache.toFloat(new Matrix4d(placement.fromCenter).translate(offset), matrix);
+        return true;
+    }
+
+    /**
+     * How far down the map reaches as it was last placed, in meters, see {@link #lastView}.
+     *
+     * @return The depth range.
+     */
+    public float lastDepthRange() {
+        return (float) placement.depth;
     }
 
     /**

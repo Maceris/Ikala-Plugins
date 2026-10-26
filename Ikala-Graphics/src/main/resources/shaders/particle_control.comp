@@ -41,6 +41,7 @@ void main() {
             control.dispatchArgs = uvec4(0, 1, 1, 0);
             control.drawArgs = uvec4(BILLBOARD_VERTICES, 0, 0, 0);
             control.counts = uvec4(0, 0, 1, 1);
+            control.hits = uvec4(0);
         }
         return;
     }
@@ -53,6 +54,7 @@ void main() {
         control.alive[1 - current] = 0;
         control.dropped = 0;
         control.counts.x = 0;
+        control.hits.x = 0;
     } else {
         uint drawn = control.alive[1 - current];
         control.drawArgs = uvec4(BILLBOARD_VERTICES, drawn, 0, 0);

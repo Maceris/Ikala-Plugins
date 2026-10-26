@@ -36,15 +36,29 @@ void main() {
     }
     float life = lifeFraction(particle.age, particle.lifetime);
     float size = mix(particle.sizeStart, particle.sizeEnd, life);
+    float emissive = particleEmissive(particle);
     vec2 corner = CORNERS[gl_VertexIndex % BILLBOARD_VERTICES];
     vec4 view = viewMatrix * vec4(particle.position + anchor, 1.0);
-    view.xy += corner * (0.5 * size);
-    outCorner = corner;
     vec4 color = mix(unpackParticleColor(particle.colorStart),
         unpackParticleColor(particle.colorEnd), life);
+    // Stretched along its motion across the view, trailing behind it, its opacity spread over the
+    // streak, see ParticleMath.streakLength and streakOpacity
+    vec2 across = (mat3(viewMatrix) * particle.velocity).xy;
+    float speed = length(across);
+    float streak = streakLength(size, speed, particleStretch(particle));
+    if (streak > size && speed > 0.0) {
+        vec2 along = across / speed;
+        vec2 side = vec2(-along.y, along.x);
+        view.xy += along * (corner.x * 0.5 * streak - 0.5 * (streak - size))
+            + side * (corner.y * 0.5 * size);
+        color.a *= min(1.0, size / streak);
+    } else {
+        view.xy += corner * (0.5 * size);
+    }
+    outCorner = corner;
     vec3 light = unpackParticleColor(radianceList.radiance[slot]).rgb;
-    outColor = vec4(color.rgb * (light + particle.emissive), color.a);
+    outColor = vec4(color.rgb * (light + emissive), color.a);
     outViewPosition = view;
-    outSizeEmissive = vec2(size, particle.emissive);
+    outSizeEmissive = vec2(size, emissive);
     gl_Position = projectionMatrix * view;
 }

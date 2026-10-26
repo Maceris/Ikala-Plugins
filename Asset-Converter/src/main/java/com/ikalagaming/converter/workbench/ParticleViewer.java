@@ -233,6 +233,7 @@ public class ParticleViewer {
         drawFile();
         drawMeasure();
         IkGui.textDisabled("Glass stands in front of the emitter's left and behind its right");
+        IkGui.textDisabled("A roof keeps rain and snow off the back left corner");
     }
 
     /**

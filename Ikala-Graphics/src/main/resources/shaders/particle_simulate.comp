@@ -1,14 +1,18 @@
 #version 460
 #extension GL_GOOGLE_include_directive : require
 #extension GL_EXT_buffer_reference : require
+#extension GL_EXT_nonuniform_qualifier : require
 
 // Moves each alive particle through the frame, see ParticleUpdate: one thread per particle in the
 // current alive list, dispatched by the count it holds. Particles past their lifetime go back on
 // the free list; the rest go on the other alive list, which the billboards draw. Particles that
 // collide step into an opaque voxel of the occupancy volume's finest level, which holds the static
-// world near the camera, and bounce, stick or die there.
+// world near the camera, and bounce, stick or die there. Particles around the camera wrap around in
+// their box, and come down onto the highest thing over them as the sky occlusion map has it; under
+// cover they die. Hits of particles whose emitter has a splash are recorded for the splash pass.
 
 #include "particles.glsl"
+#include "particle_cover.glsl"
 
 layout(local_size_x = 64) in;
 
@@ -25,12 +29,15 @@ layout(push_constant) uniform Constants {
     IndexList to;
     IndexList dead;
     Control control;
+    LinkList linkList;
     // How far every particle moves to keep its place when the anchor steps, old minus new
     vec3 shift;
     // How long the frame was, in the particles' own time
     float seconds;
     // Which alive list this reads
     uint current;
+    // The hits recorded for splashes
+    HitList hitList;
     // The occupancy volume's finest level: its corner relative to the anchor, and its voxels' size
     vec4 occupancyOrigin;
     // Its corner's texel in the toroidal image, and nonzero if it can be read
@@ -51,6 +58,11 @@ bool solidAt(vec3 position) {
     return (imageLoad(occupancyVolume, texel).x & OCCUPANCY_OPAQUE) != 0u;
 }
 
+void freeParticle(uint slot) {
+    int free = atomicAdd(control.dead, 1);
+    dead.indices[free] = slot;
+}
+
 void main() {
     uint index = gl_GlobalInvocationID.x;
     if (index >= control.alive[current]) {
@@ -60,8 +72,7 @@ void main() {
     Particle particle = pool.particles[slot];
     particle.age += seconds;
     if (particle.age >= particle.lifetime) {
-        int free = atomicAdd(control.dead, 1);
-        dead.indices[free] = slot;
+        freeParticle(slot);
         return;
     }
     vec3 position = particle.position + shift;
@@ -69,13 +80,15 @@ void main() {
     vec3 previous = position;
     advanceParticle(position, velocity, particle.acceleration, particle.drag, seconds);
     uint collision = behaviorCollision(particle.behavior);
+    uint link = behaviorLink(particle.behavior);
+    bool hit = false;
+    bool dies = false;
+    vec3 hitAt = previous;
     if (collision != COLLISION_NONE && solidAt(position) && !solidAt(previous)) {
+        hit = true;
         if (collision == COLLISION_DIE) {
-            int free = atomicAdd(control.dead, 1);
-            dead.indices[free] = slot;
-            return;
-        }
-        if (collision == COLLISION_STICK) {
+            dies = true;
+        } else if (collision == COLLISION_STICK) {
             velocity = vec3(0.0);
         } else {
             collideParticle(previous - occupancyOrigin.xyz, position - occupancyOrigin.xyz,
@@ -83,6 +96,53 @@ void main() {
                 behaviorFriction(particle.behavior));
         }
         position = previous;
+    }
+    if (link != 0u && !dies && linkList.links[link - 1].center.w != 0.0) {
+        Link record = linkList.links[link - 1];
+        // Only what left the box wraps: wrapping a point inside it can move it by rounding
+        vec3 reach = mix(vec3(3.0e38), record.halfSize, greaterThan(record.halfSize, vec3(0.0)));
+        bool moved = any(greaterThan(abs(position - record.center.xyz), reach));
+        if (moved) {
+            if (all(equal(velocity, vec3(0.0)))) {
+                // Resting where it landed; somewhere else it would hang in the air
+                freeParticle(slot);
+                return;
+            }
+            position = wrapInBox(position, record.center.xyz, record.halfSize);
+        }
+        float covered = coverDepth(linkList, position);
+        if (covered > COVER_BIAS) {
+            if (moved || coverDepth(linkList, previous) > COVER_BIAS) {
+                // Under cover already: it shows nowhere
+                freeParticle(slot);
+                return;
+            }
+            // Come down onto the highest thing over it
+            hit = true;
+            hitAt = position + vec3(0.0, covered, 0.0);
+            if (collision == COLLISION_DIE) {
+                dies = true;
+            } else if (collision == COLLISION_STICK) {
+                position = hitAt;
+                velocity = vec3(0.0);
+            } else if (collision == COLLISION_BOUNCE) {
+                position = hitAt;
+                float friction = behaviorFriction(particle.behavior);
+                velocity = vec3(velocity.x * (1.0 - friction),
+                    max(-velocity.y, 0.0) * behaviorBounce(particle.behavior),
+                    velocity.z * (1.0 - friction));
+            }
+        }
+    }
+    if (hit && link != 0u && linkList.links[link - 1].splashCount > 0u) {
+        uint recorded = atomicAdd(control.hits.x, 1);
+        if (recorded < MAX_HITS) {
+            hitList.hits[recorded] = Hit(hitAt, link);
+        }
+    }
+    if (dies) {
+        freeParticle(slot);
+        return;
     }
     pool.particles[slot].position = position;
     pool.particles[slot].velocity = velocity;

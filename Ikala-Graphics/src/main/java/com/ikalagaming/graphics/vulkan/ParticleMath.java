@@ -77,6 +77,75 @@ public final class ParticleMath {
     /** Where its particles' behavior word is, see {@link #packBehavior}. */
     public static final int EMITTER_BEHAVIOR = EMITTER_COUNT + 2 * Integer.BYTES;
 
+    /** Where how far its billboards stretch along their motion is, in seconds. */
+    public static final int EMITTER_STRETCH = EMITTER_BEHAVIOR + Integer.BYTES;
+
+    /** Where the control buffer keeps how many hits the simulation recorded for splashes. */
+    public static final int CONTROL_HITS = 64;
+
+    /** The most hits recorded in a frame for splashes; past it, hits spawn nothing. */
+    public static final int MAX_HITS = 4096;
+
+    /** The size of a recorded hit: where, relative to the anchor, and the emitter's link. */
+    public static final int HIT_SIZE = 4 * Integer.BYTES;
+
+    /** The most splash particles one hit spawns. */
+    public static final int MAX_SPLASH_COUNT = 16;
+
+    /**
+     * The links table, which particles of linked emitters look up by the link in their behavior
+     * word, see {@code particles.glsl}: from the anchor's space to the sky occlusion map, a mat4.
+     */
+    public static final int LINKS_SKY_MATRIX = 0;
+
+    /** Where in it the sky map's bindless index is, or -1 for none. */
+    public static final int LINKS_SKY_MAP = 64;
+
+    /** Where in it how far down the sky map reaches is, in meters. */
+    public static final int LINKS_SKY_DEPTH = 68;
+
+    /** Where in it this frame's random seed for splashes is. */
+    public static final int LINKS_SEED = 72;
+
+    /** The size of its header, before the links. */
+    public static final int LINKS_HEADER = 80;
+
+    /**
+     * Where in one link its spawn box's middle is, relative to the anchor, then 1 if it follows the
+     * camera.
+     */
+    public static final int LINK_CENTER = 0;
+
+    /** Where in one link its spawn box's half size is, 0 for a ball. */
+    public static final int LINK_HALF_SIZE = 16;
+
+    /** Where in one link how many splash particles a hit spawns is. */
+    public static final int LINK_SPLASH_COUNT = 28;
+
+    /** Where in one link its splash's emitter record is. */
+    public static final int LINK_SPLASH = 32;
+
+    /** The size of one link. */
+    public static final int LINK_SIZE = LINK_SPLASH + EMITTER_SIZE;
+
+    /** Where in the behavior word the particle's emitter link is, 0 for none. */
+    public static final int BEHAVIOR_LINK_SHIFT = 12;
+
+    /** The link bits' mask, once shifted down. */
+    public static final int BEHAVIOR_LINK_MASK = 15;
+
+    /** The most emitters linked at once: every link but 0, which is none. */
+    public static final int MAX_LINKS = BEHAVIOR_LINK_MASK;
+
+    /** The size of the links table. */
+    public static final int LINKS_SIZE = LINKS_HEADER + MAX_LINKS * LINK_SIZE;
+
+    /**
+     * How far below the highest thing over it a particle around the camera must be to count as
+     * under cover, in meters, past the sky map's depth precision.
+     */
+    public static final double COVER_BIAS = 0.05;
+
     /** The size of a particle's light, four half floats, see {@code particle_light.comp}. */
     public static final int RADIANCE_SIZE = 4 * Short.BYTES;
 
@@ -99,7 +168,7 @@ public final class ParticleMath {
     public static final int CONTROL_DRAW_STRIDE = 4 * Integer.BYTES;
 
     /** The size of the control buffer. */
-    public static final int CONTROL_SIZE = 64;
+    public static final int CONTROL_SIZE = 80;
 
     /** Opacity is kept below this, so its optical depth stays finite; matches OitMath. */
     public static final double MAX_OPACITY = 0.999;
@@ -242,6 +311,7 @@ public final class ParticleMath {
      * @param bounce How much of its speed into a surface it keeps, 0 to 1.
      * @param friction How much of its speed along a surface it loses, 0 to 1.
      * @param volumetric Whether it is drawn as smoke in the fog volume rather than a billboard.
+     * @param link Its emitter's link, 1 to {@link #MAX_LINKS}, or 0 for none.
      * @return The word.
      */
     public static int packBehavior(
@@ -250,11 +320,13 @@ public final class ParticleMath {
             int collision,
             float bounce,
             float friction,
-            boolean volumetric) {
+            boolean volumetric,
+            int link) {
         final int g = Math.round(Math.clamp(anisotropy, -1, 1) * SIGNED_BYTE_MAX);
         return (g & BEHAVIOR_ANISOTROPY_MASK)
                 | (lit ? 1 << BEHAVIOR_LIT_SHIFT : 0)
                 | (volumetric ? 1 << BEHAVIOR_VOLUMETRIC_SHIFT : 0)
+                | (link & BEHAVIOR_LINK_MASK) << BEHAVIOR_LINK_SHIFT
                 | (collision & BEHAVIOR_COLLISION_MASK) << BEHAVIOR_COLLISION_SHIFT
                 | Math.round(Math.clamp(bounce, 0, 1) * UNSIGNED_BYTE_MAX) << BEHAVIOR_BOUNCE_SHIFT
                 | Math.round(Math.clamp(friction, 0, 1) * UNSIGNED_BYTE_MAX)
@@ -426,6 +498,49 @@ public final class ParticleMath {
         final double s = distance / radius;
         final double s2 = s * s;
         return radius * s * (1 - 2 * s2 / 3 + s2 * s2 / 5);
+    }
+
+    /**
+     * Wrap a coordinate into a box around a middle, as particles around the camera stay in their
+     * box: one gone past an edge comes back in at the far one.
+     *
+     * @param value The coordinate.
+     * @param middle The box's middle along the same axis.
+     * @param half Half the box's size along it; 0 or less leaves the value as it is.
+     * @return The coordinate in the box, from the middle less the half up to the middle plus it.
+     */
+    public static double wrap(double value, double middle, double half) {
+        if (half <= 0) {
+            return value;
+        }
+        final double size = 2 * half;
+        final double offset = value - middle + half;
+        return middle - half + (offset - size * Math.floor(offset / size));
+    }
+
+    /**
+     * How long a billboard stretched along its motion is: its size, plus how far it moves in the
+     * stretch's time across the view.
+     *
+     * @param size Its size, in meters.
+     * @param speed Its speed across the view, in meters a second.
+     * @param stretch How far it stretches, in seconds of motion.
+     * @return Its length, in meters.
+     */
+    public static float streakLength(float size, float speed, float stretch) {
+        return size + Math.max(0, speed) * Math.max(0, stretch);
+    }
+
+    /**
+     * How much of a stretched billboard's opacity it keeps: what a drop covers smeared out over its
+     * streak, so a streak covers no more of the view than the drop would.
+     *
+     * @param size Its size, in meters.
+     * @param length Its length, from {@link #streakLength}.
+     * @return Its opacity's scale, 0 to 1.
+     */
+    public static float streakOpacity(float size, float length) {
+        return length <= 0 ? 0 : Math.min(1, size / length);
     }
 
     /**

@@ -1535,9 +1535,12 @@ public class ShaderBindings {
 
         /**
          * The simulation: the pool's address, then the alive list read, the one written, the free
-         * list and the control buffer.
+         * list, the control buffer and the links.
          */
         public static final int SIMULATE_POOL_OFFSET = 0;
+
+        /** The links table's address, see ParticleMath.LINKS_HEADER. */
+        public static final int SIMULATE_LINKS_OFFSET = 5 * Long.BYTES;
 
         /** How far particles move when the anchor steps, a vec3 on 16 bytes. */
         public static final int SIMULATE_SHIFT_OFFSET = 6 * Long.BYTES;
@@ -1547,6 +1550,9 @@ public class ShaderBindings {
 
         /** Which alive list it reads. */
         public static final int SIMULATE_CURRENT_OFFSET = SIMULATE_SECONDS_OFFSET + Float.BYTES;
+
+        /** The hits list's address, on 8 bytes. */
+        public static final int SIMULATE_HITS_OFFSET = SIMULATE_CURRENT_OFFSET + Long.BYTES;
 
         /**
          * The occupancy volume's finest level's corner relative to the anchor and its voxel size, a
@@ -1564,12 +1570,15 @@ public class ShaderBindings {
 
         /**
          * The emission: the pool's address, then the alive list written, the free list, the control
-         * buffer and the frame's emitters.
+         * buffer, the frame's emitters and the links.
          */
         public static final int EMIT_POOL_OFFSET = 0;
 
+        /** The links table's address. */
+        public static final int EMIT_LINKS_OFFSET = 5 * Long.BYTES;
+
         /** How many emitters spawn this frame. */
-        public static final int EMIT_EMITTER_COUNT_OFFSET = 5 * Long.BYTES;
+        public static final int EMIT_EMITTER_COUNT_OFFSET = 6 * Long.BYTES;
 
         /** How many particles they spawn in all. */
         public static final int EMIT_TOTAL_OFFSET = EMIT_EMITTER_COUNT_OFFSET + Integer.BYTES;
@@ -1579,6 +1588,18 @@ public class ShaderBindings {
 
         /** The size of the emission's push constants. */
         public static final int EMIT_CONSTANTS_SIZE = EMIT_NEXT_OFFSET + Integer.BYTES;
+
+        /**
+         * The splashes: the pool's address, then the alive list written, the free list, the control
+         * buffer, the links and the hits.
+         */
+        public static final int SPLASH_POOL_OFFSET = 0;
+
+        /** Which alive list it adds to. */
+        public static final int SPLASH_NEXT_OFFSET = 6 * Long.BYTES;
+
+        /** The size of the splashes' push constants. */
+        public static final int SPLASH_CONSTANTS_SIZE = SPLASH_NEXT_OFFSET + Integer.BYTES;
 
         /** The billboards: the pool's address, then the alive list drawn. */
         public static final int DRAW_POOL_OFFSET = 0;

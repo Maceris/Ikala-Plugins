@@ -1,0 +1,50 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_buffer_reference : require
+
+// Spawns splashes where particles hit the world, see ParticleUpdate: one thread per hit the
+// simulation recorded, each spawning its link's splash count of its splash effect's particles
+// there, off the free list onto the alive list the simulation wrote. Dispatched for the most hits
+// a frame holds; threads past this frame's count do nothing. A pass of its own, since the
+// simulation frees particles while it runs.
+
+#include "particles.glsl"
+
+layout(local_size_x = 64) in;
+
+layout(push_constant) uniform Constants {
+    ParticleBuffer pool;
+    IndexList to;
+    IndexList dead;
+    Control control;
+    LinkList linkList;
+    HitList hitList;
+    // Which alive list the simulation just wrote
+    uint next;
+};
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    if (index >= min(control.hits.x, MAX_HITS)) {
+        return;
+    }
+    Hit hit = hitList.hits[index];
+    Link record = linkList.links[hit.link - 1];
+    uint seed = particleHash(linkList.splashSeed ^ particleHash(index));
+    for (uint i = 0; i < record.splashCount; ++i) {
+        int free = atomicAdd(control.dead, -1);
+        if (free <= 0) {
+            atomicAdd(control.dead, 1);
+            atomicAdd(control.dropped, record.splashCount - i);
+            return;
+        }
+        uint slot = dead.indices[free - 1];
+        Particle particle = newParticle(record.splash,
+            hit.position + ballOffset(record.splash.sizes.w, seed), seed);
+        pool.particles[slot] = particle;
+        to.indices[atomicAdd(control.alive[next], 1)] = slot;
+        if (behaviorVolumetric(particle.behavior)) {
+            atomicAdd(control.counts.x, 1);
+        }
+    }
+}

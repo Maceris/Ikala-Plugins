@@ -4,6 +4,7 @@ import com.ikalagaming.graphics.EmitterHandle;
 import com.ikalagaming.graphics.vulkan.ParticleMath;
 
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
 
@@ -17,6 +18,7 @@ import javax.annotation.Nullable;
  * through {@link com.ikalagaming.graphics.Particles}, and the render thread collects each frame's
  * spawns, so every method holds {@link #lock}.
  */
+@Slf4j
 public class EmitterRegistry {
 
     /** The most emitters the scene holds. */
@@ -27,9 +29,11 @@ public class EmitterRegistry {
      *
      * @param effect What it spawns.
      * @param position Where it is, in the world.
-     * @param count How many it spawns this frame.
+     * @param count How many it spawns this frame, perhaps 0 for a linked emitter.
+     * @param link Its link, or 0 for none, see ParticleEffect#needsLink.
      */
-    public record Spawn(@NonNull ParticleEffect effect, @NonNull Vector3dc position, int count) {}
+    public record Spawn(
+            @NonNull ParticleEffect effect, @NonNull Vector3dc position, int count, int link) {}
 
     /** An emitter in a slot. */
     private static final class Emitter {
@@ -44,6 +48,9 @@ public class EmitterRegistry {
 
         /** Particles to spawn at once next frame, from its burst. */
         int pendingBurst;
+
+        /** Its link, 1 to ParticleMath.MAX_LINKS, while its effect needs one; 0 for none. */
+        int link;
 
         /** The owning context's key. */
         String owner;
@@ -60,6 +67,12 @@ public class EmitterRegistry {
 
     /** Slots free to take again. */
     private final List<Integer> freeSlots = new ArrayList<>();
+
+    /** Which links emitters hold, by link; link 0 is none and never held. */
+    private final boolean[] linksHeld = new boolean[ParticleMath.MAX_LINKS + 1];
+
+    /** Whether running out of links was logged, so it is logged once. */
+    private boolean linksFullLogged;
 
     /** How many emitters there are. */
     private int count;
@@ -270,16 +283,20 @@ public class EmitterRegistry {
                     continue;
                 }
                 final ParticleEffect effect = emitter.source.get();
+                updateLink(emitter, effect);
                 final long spawns =
                         (long) ParticleMath.spawns(effect.getRate(), seconds, emitter.carry)
                                 + emitter.pendingBurst;
                 emitter.pendingBurst = 0;
-                if (spawns > 0) {
+                // A linked emitter is listed even when it spawns nothing, so its link stays current
+                // for the particles it spawned before
+                if (spawns > 0 || emitter.link != 0) {
                     into.add(
                             new Spawn(
                                     effect,
                                     new Vector3d(emitter.position),
-                                    (int) Math.min(Integer.MAX_VALUE, spawns)));
+                                    (int) Math.min(Integer.MAX_VALUE, spawns),
+                                    emitter.link));
                 }
             }
         } finally {
@@ -331,7 +348,50 @@ public class EmitterRegistry {
      *
      * @param slot The slot.
      */
+    /**
+     * Take a link for an emitter whose effect needs one, or let go of one it no longer needs. With
+     * every link taken, it goes without: its particles spawn in a ball and don't splash.
+     *
+     * @param emitter The emitter.
+     * @param effect Its effect this frame.
+     */
+    private void updateLink(@NonNull Emitter emitter, @NonNull ParticleEffect effect) {
+        if (!effect.needsLink()) {
+            releaseLink(emitter);
+            return;
+        }
+        if (emitter.link != 0) {
+            return;
+        }
+        for (int link = 1; link < linksHeld.length; ++link) {
+            if (!linksHeld[link]) {
+                linksHeld[link] = true;
+                emitter.link = link;
+                return;
+            }
+        }
+        if (!linksFullLogged) {
+            linksFullLogged = true;
+            log.warn(
+                    "More than {} emitters need links; the rest spawn in a ball, without splashes",
+                    ParticleMath.MAX_LINKS);
+        }
+    }
+
+    /**
+     * Let go of an emitter's link, if it holds one.
+     *
+     * @param emitter The emitter.
+     */
+    private void releaseLink(@NonNull Emitter emitter) {
+        if (emitter.link != 0) {
+            linksHeld[emitter.link] = false;
+            emitter.link = 0;
+        }
+    }
+
     private void free(int slot) {
+        releaseLink(emitters.get(slot));
         emitters.set(slot, null);
         generations.set(slot, generations.get(slot) + 1);
         freeSlots.add(slot);

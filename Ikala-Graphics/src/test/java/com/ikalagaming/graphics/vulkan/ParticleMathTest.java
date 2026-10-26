@@ -159,7 +159,9 @@ class ParticleMathTest {
     /** The behavior word keeps each part apart, to within a byte. */
     @Test
     void testBehaviorWord() {
-        final int word = ParticleMath.packBehavior(-0.4f, true, 2, 0.3f, 0.75f, true);
+        final int word = ParticleMath.packBehavior(-0.4f, true, 2, 0.3f, 0.75f, true, 13);
+        assertEquals(
+                13, word >> ParticleMath.BEHAVIOR_LINK_SHIFT & ParticleMath.BEHAVIOR_LINK_MASK);
         assertEquals(1, word >> ParticleMath.BEHAVIOR_VOLUMETRIC_SHIFT & 1);
         assertEquals(-0.4f, ParticleMath.anisotropyOf(word), 1f / ParticleMath.SIGNED_BYTE_MAX);
         assertEquals(1, word >> ParticleMath.BEHAVIOR_LIT_SHIFT & 1);
@@ -171,10 +173,36 @@ class ParticleMathTest {
                 Math.round(0.3f * 255),
                 word >> ParticleMath.BEHAVIOR_BOUNCE_SHIFT & ParticleMath.UNSIGNED_BYTE_MAX);
         assertEquals(Math.round(0.75f * 255), word >>> ParticleMath.BEHAVIOR_FRICTION_SHIFT);
-        final int unlit = ParticleMath.packBehavior(0.9f, false, 0, 0, 0, false);
+        final int unlit = ParticleMath.packBehavior(0.9f, false, 0, 0, 0, false, 0);
+        assertEquals(
+                0, unlit >> ParticleMath.BEHAVIOR_LINK_SHIFT & ParticleMath.BEHAVIOR_LINK_MASK);
         assertEquals(0, unlit >> ParticleMath.BEHAVIOR_VOLUMETRIC_SHIFT & 1);
         assertEquals(0, unlit >> ParticleMath.BEHAVIOR_LIT_SHIFT & 1);
         assertEquals(0.9f, ParticleMath.anisotropyOf(unlit), 1f / ParticleMath.SIGNED_BYTE_MAX);
+    }
+
+    /** Coordinates past a box's edge come back in at the far one; inside, they stay. */
+    @Test
+    void testWrap() {
+        final double middle = 10;
+        final double half = 4;
+        assertEquals(12, ParticleMath.wrap(12, middle, half), 1e-12);
+        assertEquals(7, ParticleMath.wrap(15, middle, half), 1e-12);
+        assertEquals(13, ParticleMath.wrap(5, middle, half), 1e-12);
+        assertEquals(7, ParticleMath.wrap(15 + 3 * 2 * half, middle, half), 1e-9);
+        assertEquals(6, ParticleMath.wrap(14, middle, half), 1e-12);
+        assertEquals(99, ParticleMath.wrap(99, middle, 0), 1e-12);
+    }
+
+    /** A streak grows with speed, and its opacity shrinks so it covers what the drop did. */
+    @Test
+    void testStreak() {
+        assertEquals(0.02f, ParticleMath.streakLength(0.02f, 8, 0), 1e-7f);
+        final float length = ParticleMath.streakLength(0.02f, 8, 0.05f);
+        assertEquals(0.42f, length, 1e-6f);
+        assertEquals(0.02f / 0.42f, ParticleMath.streakOpacity(0.02f, length), 1e-6f);
+        assertEquals(1, ParticleMath.streakOpacity(0.02f, 0.02f));
+        assertEquals(0.02f, ParticleMath.streakLength(0.02f, -3, 0.05f), 1e-7f);
     }
 
     /**

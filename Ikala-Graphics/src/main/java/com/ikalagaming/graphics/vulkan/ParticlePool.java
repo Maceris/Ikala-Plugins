@@ -39,6 +39,12 @@ public class ParticlePool {
     /** Each particle's light this frame, by its index in the pool. */
     @Getter private final SharedBuffer radiance;
 
+    /**
+     * The hits the simulation recorded this frame for splashes, {@link ParticleMath#MAX_HITS} of
+     * {@link ParticleMath#HIT_SIZE} bytes, see {@code particle_splash.comp}.
+     */
+    @Getter private final SharedBuffer hits;
+
     /** Which alive list the last frame's simulation wrote, and the billboards draw. */
     @Getter private int current;
 
@@ -71,6 +77,11 @@ public class ParticlePool {
         radiance =
                 SharedBuffer.allocateDeviceLocal(
                         (long) capacity * ParticleMath.RADIANCE_SIZE,
+                        state,
+                        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+        hits =
+                SharedBuffer.allocateDeviceLocal(
+                        (long) ParticleMath.MAX_HITS * ParticleMath.HIT_SIZE,
                         state,
                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
         control =
@@ -180,5 +191,6 @@ public class ParticlePool {
         SharedBuffer.free(deadList, state);
         SharedBuffer.free(control, state);
         SharedBuffer.free(radiance, state);
+        SharedBuffer.free(hits, state);
     }
 }

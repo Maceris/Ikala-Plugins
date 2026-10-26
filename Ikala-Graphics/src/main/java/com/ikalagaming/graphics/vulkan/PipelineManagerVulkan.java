@@ -301,6 +301,7 @@ public class PipelineManagerVulkan {
                 new ParticleUpdate(
                         shaders.getShader(RenderStage.Type.PARTICLE_CONTROL),
                         shaders.getShader(RenderStage.Type.PARTICLE_SIMULATE),
+                        shaders.getShader(RenderStage.Type.PARTICLE_SPLASH),
                         shaders.getShader(RenderStage.Type.PARTICLE_EMIT));
         stageParticleUpdate.initialize(state);
         stageOitIntegrate = new OitIntegrate(shaders.getShader(RenderStage.Type.OIT_INTEGRATE));

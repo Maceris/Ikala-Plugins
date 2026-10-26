@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.scene;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -69,6 +70,14 @@ class ParticleEffectLoaderTest {
                         bounce: 0.5
                         friction: 0.1
                         volumetric: true
+                        spawnBox: [30, 20, 30]
+                        aroundCamera: true
+                        stretch: 0.02
+                        splashCount: 3
+                        splash:
+                          rate: 0
+                          lifetime: 0.3
+                          size: [0.05, 0.1]
                         """);
         assertEquals(300, effect.getRate());
         assertEquals(20, effect.getBurst());
@@ -92,6 +101,15 @@ class ParticleEffectLoaderTest {
         assertEquals(0.5f, effect.getBounce());
         assertEquals(0.1f, effect.getFriction());
         assertTrue(effect.isVolumetric());
+        assertEquals(new Vector3f(30, 20, 30), effect.getSpawnBox());
+        assertTrue(effect.isAroundCamera());
+        assertEquals(0.02f, effect.getStretch());
+        assertEquals(3, effect.getSplashCount());
+        assertNotNull(effect.getSplash());
+        assertEquals(0.3f, effect.getSplash().getLifetimeMax());
+        assertEquals(0.1f, effect.getSplash().getSizeEnd());
+        assertTrue(effect.needsLink());
+        assertFalse(ParticleEffect.builder().build().needsLink());
     }
 
     /** Missing keys default, one number stands for both ends, and one color for both. */
@@ -135,6 +153,11 @@ class ParticleEffectLoaderTest {
                 failure("collision: splat")
                         .contains("collision: expected one of none, bounce, stick, die"));
         assertTrue(failure("bounce: 2").contains("bounce: must be from"));
+        assertTrue(failure("spawnBox: [1, -1, 1]").contains("spawnBox: must not be negative"));
+        assertTrue(failure("splash: 3").contains("splash: expected an effect's keys"));
+        assertTrue(failure("splash:\n  splash:\n    rate: 1\n").contains("can't have a splash"));
+        assertTrue(failure("splash:\n  rait: 1\n").contains("splash: unknown key 'rait'"));
+        assertTrue(failure("splashCount: 100").contains("splashCount: must be from"));
     }
 
     /** Every sample writes out and reads back the same. */
@@ -143,29 +166,47 @@ class ParticleEffectLoaderTest {
         for (ParticleSamples.Sample sample : ParticleSamples.ALL) {
             final ParticleEffect original = sample.effect();
             final ParticleEffect copy = read(ParticleEffectLoader.write(original));
-            final String name = sample.name();
-            assertEquals(original.getRate(), copy.getRate(), name);
-            assertEquals(original.getBurst(), copy.getBurst(), name);
-            assertEquals(original.getLifetimeMin(), copy.getLifetimeMin(), name);
-            assertEquals(original.getLifetimeMax(), copy.getLifetimeMax(), name);
-            assertEquals(original.getSpeedMin(), copy.getSpeedMin(), name);
-            assertEquals(original.getSpeedMax(), copy.getSpeedMax(), name);
-            assertEquals(original.getDirection(), copy.getDirection(), name);
-            assertEquals(original.getSpread(), copy.getSpread(), TOLERANCE, name);
-            assertEquals(original.getSpawnRadius(), copy.getSpawnRadius(), name);
-            assertEquals(original.getAcceleration(), copy.getAcceleration(), name);
-            assertEquals(original.getDrag(), copy.getDrag(), name);
-            assertEquals(original.getSizeStart(), copy.getSizeStart(), name);
-            assertEquals(original.getSizeEnd(), copy.getSizeEnd(), name);
-            assertEquals(original.getColorStart(), copy.getColorStart(), name);
-            assertEquals(original.getColorEnd(), copy.getColorEnd(), name);
-            assertEquals(original.getEmissive(), copy.getEmissive(), name);
-            assertEquals(original.isLit(), copy.isLit(), name);
-            assertEquals(original.getAnisotropy(), copy.getAnisotropy(), name);
-            assertEquals(original.getCollision(), copy.getCollision(), name);
-            assertEquals(original.getBounce(), copy.getBounce(), name);
-            assertEquals(original.getFriction(), copy.getFriction(), name);
-            assertEquals(original.isVolumetric(), copy.isVolumetric(), name);
+            assertMatches(original, copy, sample.name());
+        }
+    }
+
+    /**
+     * Check an effect read back matches what was written, its splash too.
+     *
+     * @param original What was written.
+     * @param copy What was read back.
+     * @param name The sample's name, for messages.
+     */
+    private static void assertMatches(ParticleEffect original, ParticleEffect copy, String name) {
+        assertEquals(original.getRate(), copy.getRate(), name);
+        assertEquals(original.getBurst(), copy.getBurst(), name);
+        assertEquals(original.getLifetimeMin(), copy.getLifetimeMin(), name);
+        assertEquals(original.getLifetimeMax(), copy.getLifetimeMax(), name);
+        assertEquals(original.getSpeedMin(), copy.getSpeedMin(), name);
+        assertEquals(original.getSpeedMax(), copy.getSpeedMax(), name);
+        assertEquals(original.getDirection(), copy.getDirection(), name);
+        assertEquals(original.getSpread(), copy.getSpread(), TOLERANCE, name);
+        assertEquals(original.getSpawnRadius(), copy.getSpawnRadius(), name);
+        assertEquals(original.getAcceleration(), copy.getAcceleration(), name);
+        assertEquals(original.getDrag(), copy.getDrag(), name);
+        assertEquals(original.getSizeStart(), copy.getSizeStart(), name);
+        assertEquals(original.getSizeEnd(), copy.getSizeEnd(), name);
+        assertEquals(original.getColorStart(), copy.getColorStart(), name);
+        assertEquals(original.getColorEnd(), copy.getColorEnd(), name);
+        assertEquals(original.getEmissive(), copy.getEmissive(), name);
+        assertEquals(original.isLit(), copy.isLit(), name);
+        assertEquals(original.getAnisotropy(), copy.getAnisotropy(), name);
+        assertEquals(original.getCollision(), copy.getCollision(), name);
+        assertEquals(original.getBounce(), copy.getBounce(), name);
+        assertEquals(original.getFriction(), copy.getFriction(), name);
+        assertEquals(original.isVolumetric(), copy.isVolumetric(), name);
+        assertEquals(original.getSpawnBox(), copy.getSpawnBox(), name);
+        assertEquals(original.isAroundCamera(), copy.isAroundCamera(), name);
+        assertEquals(original.getStretch(), copy.getStretch(), name);
+        assertEquals(original.getSplashCount(), copy.getSplashCount(), name);
+        assertEquals(original.getSplash() == null, copy.getSplash() == null, name);
+        if (original.getSplash() != null) {
+            assertMatches(original.getSplash(), copy.getSplash(), name + " splash");
         }
     }
 
@@ -174,9 +215,15 @@ class ParticleEffectLoaderTest {
     void testWriterUsesTheKeys() {
         final Object document =
                 new Yaml(new SafeConstructor(new LoaderOptions()))
-                        .load(ParticleEffectLoader.write(ParticleSamples.FIRE));
+                        .load(ParticleEffectLoader.write(ParticleSamples.RAIN));
         final Map<?, ?> root = (Map<?, ?>) document;
         assertEquals(ParticleEffectLoader.KEYS, root.keySet());
+        // Without a splash, it is left out
+        final Map<?, ?> fire =
+                (Map<?, ?>)
+                        new Yaml(new SafeConstructor(new LoaderOptions()))
+                                .load(ParticleEffectLoader.write(ParticleSamples.FIRE));
+        assertFalse(fire.containsKey(ParticleEffectLoader.SPLASH));
         final Map<?, ?> color = (Map<?, ?>) root.get(ParticleEffectLoader.COLOR);
         assertTrue(color.containsKey(ParticleEffectLoader.START));
         assertTrue(color.containsKey(ParticleEffectLoader.END));

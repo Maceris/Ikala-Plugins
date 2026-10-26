@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.scene;
 
+import com.ikalagaming.graphics.vulkan.ParticleMath;
+
 import lombok.NonNull;
 import org.joml.Vector3f;
 import org.joml.Vector3fc;
@@ -49,6 +51,12 @@ import java.util.Set;
  * bounce: 0.3                # speed into a surface kept when bouncing, 0 to 1
  * friction: 0.2              # speed along a surface lost when bouncing, 0 to 1
  * volumetric: false          # true to draw them as smoke in the fog volume, not billboards
+ * spawnBox: [0, 0, 0]        # a box to spawn in, its size in meters; zeros for the ball
+ * aroundCamera: false        # true for weather: the emitter follows the camera, as an offset
+ * stretch: 0                 # seconds of motion billboards stretch along, for streaks
+ * splashCount: 0             # particles of the splash spawned where one hits the world
+ * splash:                    # an effect, written the same way, for what hits spawn
+ *   rate: 0
  * </pre>
  */
 public final class ParticleEffectLoader {
@@ -113,6 +121,21 @@ public final class ParticleEffectLoader {
     /** Whether they are smoke in the fog volume. */
     public static final String VOLUMETRIC = "volumetric";
 
+    /** Its spawn box's size. */
+    public static final String SPAWN_BOX = "spawnBox";
+
+    /** Whether its emitters follow the camera. */
+    public static final String AROUND_CAMERA = "aroundCamera";
+
+    /** How far billboards stretch along their motion. */
+    public static final String STRETCH = "stretch";
+
+    /** What hits spawn, an effect of its own. */
+    public static final String SPLASH = "splash";
+
+    /** How many particles a hit spawns. */
+    public static final String SPLASH_COUNT = "splashCount";
+
     /** The most anisotropy can be either way, short of all one way. */
     public static final double MAX_ANISOTROPY = 0.95;
 
@@ -136,7 +159,12 @@ public final class ParticleEffectLoader {
                     COLLISION,
                     BOUNCE,
                     FRICTION,
-                    VOLUMETRIC);
+                    VOLUMETRIC,
+                    SPAWN_BOX,
+                    AROUND_CAMERA,
+                    STRETCH,
+                    SPLASH,
+                    SPLASH_COUNT);
 
     /** The widest spread there is, in degrees: every way. */
     public static final double MAX_SPREAD_DEGREES = 180;
@@ -182,6 +210,19 @@ public final class ParticleEffectLoader {
         if (!(document instanceof Map<?, ?> root)) {
             throw new ParticleEffectException(source + ": expected keys like rate and lifetime");
         }
+        return parse(root, source, true);
+    }
+
+    /**
+     * Read an effect from a YAML map.
+     *
+     * @param root The map.
+     * @param source Where it came from, for messages.
+     * @param splashAllowed Whether it may have a splash, which a splash may not.
+     * @return The effect.
+     * @throws ParticleEffectException If a key is unknown or a value is wrong.
+     */
+    private static ParticleEffect parse(Map<?, ?> root, String source, boolean splashAllowed) {
         for (Object key : root.keySet()) {
             if (!KEYS.contains(String.valueOf(key))) {
                 throw new ParticleEffectException(
@@ -210,6 +251,30 @@ public final class ParticleEffectLoader {
         reader.number(BOUNCE, 0, 1).ifPresent(builder::bounce);
         reader.number(FRICTION, 0, 1).ifPresent(builder::friction);
         reader.bool(VOLUMETRIC).ifPresent(builder::volumetric);
+        final Optional<Vector3fc> box = reader.vector3(SPAWN_BOX);
+        if (box.isPresent()) {
+            final Vector3fc size = box.get();
+            if (size.x() < 0 || size.y() < 0 || size.z() < 0) {
+                throw new ParticleEffectException(
+                        source + ": " + SPAWN_BOX + ": must not be negative");
+            }
+            builder.spawnBox(size);
+        }
+        reader.bool(AROUND_CAMERA).ifPresent(builder::aroundCamera);
+        reader.number(STRETCH, 0, Float.MAX_VALUE).ifPresent(builder::stretch);
+        reader.number(SPLASH_COUNT, 0, ParticleMath.MAX_SPLASH_COUNT)
+                .ifPresent(count -> builder.splashCount(Math.round(count)));
+        if (root.containsKey(SPLASH)) {
+            if (!splashAllowed) {
+                throw new ParticleEffectException(
+                        source + ": " + SPLASH + ": a splash can't have a splash of its own");
+            }
+            if (!(root.get(SPLASH) instanceof Map<?, ?> splash)) {
+                throw new ParticleEffectException(
+                        source + ": " + SPLASH + ": expected an effect's keys");
+            }
+            builder.splash(parse(splash, source + ": " + SPLASH, false));
+        }
         return builder.build();
     }
 
@@ -220,6 +285,18 @@ public final class ParticleEffectLoader {
      * @return The YAML.
      */
     public static String write(@NonNull ParticleEffect effect) {
+        final StringBuilder text = new StringBuilder();
+        append(text, toMap(effect), "");
+        return text.toString();
+    }
+
+    /**
+     * An effect's keys and values, in the order they are written.
+     *
+     * @param effect The effect.
+     * @return Its keys and values, effects and colors as maps of their own.
+     */
+    private static Map<String, Object> toMap(ParticleEffect effect) {
         final Map<String, Object> root = new LinkedHashMap<>();
         root.put(RATE, effect.getRate());
         root.put(BURST, effect.getBurst());
@@ -242,28 +319,40 @@ public final class ParticleEffectLoader {
         root.put(BOUNCE, effect.getBounce());
         root.put(FRICTION, effect.getFriction());
         root.put(VOLUMETRIC, effect.isVolumetric());
-        // Lists of numbers stay on one line, as people write them
+        root.put(SPAWN_BOX, list(effect.getSpawnBox()));
+        root.put(AROUND_CAMERA, effect.isAroundCamera());
+        root.put(STRETCH, effect.getStretch());
+        root.put(SPLASH_COUNT, effect.getSplashCount());
+        if (effect.getSplash() != null) {
+            final Map<String, Object> splash = toMap(effect.getSplash());
+            // A splash's own splash is left out
+            splash.remove(SPLASH);
+            splash.remove(SPLASH_COUNT);
+            root.put(SPLASH, splash);
+        }
+        return root;
+    }
+
+    /**
+     * Write keys and values as YAML, maps nested under their key, lists of numbers on one line, as
+     * people write them.
+     *
+     * @param text Where to write.
+     * @param map The keys and values.
+     * @param indent What each line starts with.
+     */
+    private static void append(StringBuilder text, Map<?, ?> map, String indent) {
         final DumperOptions flow = new DumperOptions();
         flow.setDefaultFlowStyle(DumperOptions.FlowStyle.FLOW);
-        final StringBuilder text = new StringBuilder();
-        for (Map.Entry<String, Object> entry : root.entrySet()) {
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            text.append(indent).append(entry.getKey()).append(':');
             if (entry.getValue() instanceof Map<?, ?> nested) {
-                text.append(entry.getKey()).append(":\n");
-                for (Map.Entry<?, ?> inner : nested.entrySet()) {
-                    text.append("  ")
-                            .append(inner.getKey())
-                            .append(": ")
-                            .append(new Yaml(flow).dump(inner.getValue()).strip())
-                            .append('\n');
-                }
+                text.append('\n');
+                append(text, nested, indent + "  ");
             } else {
-                text.append(entry.getKey())
-                        .append(": ")
-                        .append(new Yaml(flow).dump(entry.getValue()).strip())
-                        .append('\n');
+                text.append(' ').append(new Yaml(flow).dump(entry.getValue()).strip()).append('\n');
             }
         }
-        return text.toString();
     }
 
     /**

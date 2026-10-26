@@ -17,12 +17,86 @@ struct Particle {
     uvec2 colorEnd;
     float sizeStart;
     float sizeEnd;
-    float emissive;
+    // Its emission and how far its billboard stretches along its motion, in seconds, as halves
+    uint emissiveStretch;
     // How it behaves, see ParticleMath.packBehavior: its anisotropy, a signed byte in bits 0 to 7;
-    // whether lights light it, bit 8; what it does when it hits the world, bits 9 and 10; and the
-    // bounce and friction, unsigned bytes in bits 16 to 23 and 24 to 31
+    // whether lights light it, bit 8; what it does when it hits the world, bits 9 and 10; whether
+    // it is smoke in the fog volume, bit 11; its emitter's link, bits 12 to 15; and the bounce and
+    // friction, unsigned bytes in bits 16 to 23 and 24 to 31
     uint behavior;
 };
+
+float particleEmissive(Particle particle) {
+    return unpackHalf2x16(particle.emissiveStretch).x;
+}
+
+float particleStretch(Particle particle) {
+    return unpackHalf2x16(particle.emissiveStretch).y;
+}
+
+// One emitter's spawns this frame, ParticleMath.EMITTER_SIZE bytes, its position relative to the
+// anchor and its first spawn's index among the frame's
+struct Emitter {
+    vec3 position;
+    uint firstSpawn;
+    vec3 direction;
+    float cosSpread;
+    vec3 acceleration;
+    float drag;
+    // Lifetime's range, then speed's
+    vec4 lifetimeSpeed;
+    vec4 colorStart;
+    vec4 colorEnd;
+    // Size at birth and death, emission, and the spawn ball's radius
+    vec4 sizes;
+    uint spawnCount;
+    uint seed;
+    // How its particles behave, see Particle.behavior
+    uint behavior;
+    // How far their billboards stretch along their motion, in seconds
+    float stretch;
+};
+
+// What particles of a linked emitter look up while they live, ParticleMath.LINK_SIZE bytes: its
+// spawn box and the splash its particles' hits spawn
+struct Link {
+    // The box's middle relative to the anchor, and 1 if it follows the camera, so its particles
+    // wrap around in the box and hide under cover
+    vec4 center;
+    // Half the box's size, 0 for the spawn ball
+    vec3 halfSize;
+    // How many splash particles a hit spawns
+    uint splashCount;
+    Emitter splash;
+};
+
+// The frame's links, see ParticleMath.LINKS_HEADER and on: the sky occlusion map, which holds the
+// highest thing over each place, as seen from the anchor's space, then the links by link less 1
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer LinkList {
+    mat4 skyMatrix;
+    int skyMap;
+    float skyDepthRange;
+    uint splashSeed;
+    uint linkPadding;
+    Link links[];
+};
+
+// A hit the simulation recorded for splashes: where, relative to the anchor, and the link
+struct Hit {
+    vec3 position;
+    uint link;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) buffer HitList {
+    Hit hits[];
+};
+
+// The most hits recorded in a frame, ParticleMath.MAX_HITS
+const uint MAX_HITS = 4096;
+
+// How far below the highest thing over it a particle around the camera must be to count as under
+// cover, in meters, ParticleMath.COVER_BIAS
+const float COVER_BIAS = 0.05;
 
 layout(buffer_reference, std430, buffer_reference_align = 16) buffer ParticleBuffer {
     Particle particles[];
@@ -49,6 +123,8 @@ layout(buffer_reference, std430, buffer_reference_align = 16) buffer Control {
     // Alive volumetric particles, which the CPU reads back; then the froxel splat's dispatch, a
     // workgroup per drawn particle
     uvec4 counts;
+    // Hits the simulation recorded this frame for splashes, then unused
+    uvec4 hits;
 };
 
 // Threads in a workgroup, ParticleMath.WORKGROUP_SIZE
@@ -131,6 +207,10 @@ bool behaviorLit(uint behavior) {
 
 bool behaviorVolumetric(uint behavior) {
     return (behavior & (1u << 11)) != 0u;
+}
+
+uint behaviorLink(uint behavior) {
+    return (behavior >> 12) & 15u;
 }
 
 uint behaviorCollision(uint behavior) {
@@ -244,6 +324,47 @@ uint particleHash(uint value) {
 float particleRandom(inout uint seed) {
     seed = particleHash(seed);
     return float(seed >> 8) / 16777216.0;
+}
+
+// A coordinate wrapped into a box around a middle, each axis with a half size above 0, see
+// ParticleMath.wrap
+vec3 wrapInBox(vec3 value, vec3 middle, vec3 halfSize) {
+    vec3 size = 2.0 * halfSize;
+    vec3 wrapped = middle - halfSize + mod(value - middle + halfSize, max(size, vec3(1e-6)));
+    return mix(value, wrapped, greaterThan(halfSize, vec3(0.0)));
+}
+
+// A point even in a ball around the origin: a direction, and a radius by the cube root for even
+// volume
+vec3 ballOffset(float radius, inout uint seed) {
+    return coneDirection(vec3(0.0, 1.0, 0.0), -1.0, particleRandom(seed), particleRandom(seed))
+        * (radius * pow(particleRandom(seed), 1.0 / 3.0));
+}
+
+// A new particle from an emitter at a place, with its own speed, direction, lifetime and look
+Particle newParticle(Emitter emitter, vec3 position, inout uint seed) {
+    vec3 direction = coneDirection(emitter.direction, emitter.cosSpread, particleRandom(seed),
+        particleRandom(seed));
+    float speed = mix(emitter.lifetimeSpeed.z, emitter.lifetimeSpeed.w, particleRandom(seed));
+    Particle particle;
+    particle.position = position;
+    particle.age = 0.0;
+    particle.velocity = direction * speed;
+    particle.lifetime = mix(emitter.lifetimeSpeed.x, emitter.lifetimeSpeed.y, particleRandom(seed));
+    particle.acceleration = emitter.acceleration;
+    particle.drag = emitter.drag;
+    particle.colorStart = packParticleColor(emitter.colorStart);
+    particle.colorEnd = packParticleColor(emitter.colorEnd);
+    particle.sizeStart = emitter.sizes.x;
+    particle.sizeEnd = emitter.sizes.y;
+    particle.emissiveStretch = packHalf2x16(vec2(emitter.sizes.z, emitter.stretch));
+    particle.behavior = emitter.behavior;
+    return particle;
+}
+
+// How long a billboard stretched along its motion is, see ParticleMath.streakLength
+float streakLength(float size, float speed, float stretch) {
+    return size + max(speed, 0.0) * max(stretch, 0.0);
 }
 
 #endif

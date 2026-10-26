@@ -8,6 +8,8 @@ import org.joml.Vector3fc;
 import org.joml.Vector4f;
 import org.joml.Vector4fc;
 
+import javax.annotation.Nullable;
+
 /**
  * What an emitter spawns and how its particles move and look: a rate and an optional burst, how
  * long they live, how fast and which way they start, what pushes them, and their size and color
@@ -125,6 +127,54 @@ public class ParticleEffect {
      * opacity is how much light a line through a particle's middle loses.
      */
     @Builder.Default boolean volumetric = false;
+
+    /**
+     * The box particles spawn in, its size in meters along each axis of the world, centered on the
+     * emitter; all zero to spawn in the {@link #spawnRadius} ball instead.
+     */
+    @Builder.Default @NonNull Vector3fc spawnBox = new Vector3f();
+
+    /**
+     * Whether the emitter goes with the camera, its position an offset from it, for weather such as
+     * rain and snow. Particles stay in its {@link #spawnBox}, wrapping around to the far side as
+     * the camera moves, and none show under cover: below the highest thing over them, as the sky
+     * occlusion map holds it. Coming down onto that highest thing counts as hitting the world.
+     */
+    @Builder.Default boolean aroundCamera = false;
+
+    /**
+     * How far a billboard stretches along its motion across the view, in seconds: its length grows
+     * by its speed times this, and its opacity shrinks to match, for streaks like rain; 0 for none.
+     */
+    @Builder.Default float stretch = 0;
+
+    /**
+     * What spawns where a particle hits the world, like splashes where rain lands, {@link
+     * #splashCount} particles a hit; null for nothing. A splash's own splash is left out.
+     */
+    @Builder.Default @Nullable ParticleEffect splash = null;
+
+    /** How many of the {@link #splash} effect's particles spawn at each hit. */
+    @Builder.Default int splashCount = 0;
+
+    /**
+     * Whether its emitters need a link, a slot of their own the GPU looks up while their particles
+     * live: for a spawn box, following the camera, or splashes.
+     *
+     * @return Whether it needs one.
+     */
+    public boolean needsLink() {
+        return aroundCamera || hasSpawnBox() || (splash != null && splashCount > 0);
+    }
+
+    /**
+     * Whether it spawns in a box rather than a ball.
+     *
+     * @return Whether its spawn box has a size.
+     */
+    public boolean hasSpawnBox() {
+        return spawnBox.x() > 0 || spawnBox.y() > 0 || spawnBox.z() > 0;
+    }
 
     /** Builder methods for ranges and pairs, on top of the generated ones, filled in by Lombok. */
     public static class ParticleEffectBuilder {
