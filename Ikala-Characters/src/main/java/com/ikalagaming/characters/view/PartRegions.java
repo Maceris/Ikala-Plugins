@@ -76,6 +76,23 @@ public record PartRegions(
                 }
             }
         }
+        return of(character, base, wearable);
+    }
+
+    /**
+     * Work out the regions for a character whose parts say what they are, like parts from
+     * definitions: body parts are the base, layers are worn over it.
+     *
+     * @param character The character.
+     * @param base Whether each part is part of the body, which wearable parts hide.
+     * @param wearable Whether each part is worn over the body.
+     * @return The regions.
+     */
+    public static PartRegions of(
+            @NonNull ImportedCharacter character,
+            boolean @NonNull [] base,
+            boolean @NonNull [] wearable) {
+        List<ImportedCharacter.Part> parts = character.parts();
 
         // Regions by bone, in the order they come
         Map<Integer, Integer> boneRegions = new LinkedHashMap<>();

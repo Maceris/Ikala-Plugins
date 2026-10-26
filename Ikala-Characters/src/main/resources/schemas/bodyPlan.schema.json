@@ -371,6 +371,14 @@
             "$ref": "#/$defs/SliderSetting"
           },
           "description": "Slider settings for this variant, by slider ID."
+        },
+        "parts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$"
+          },
+          "description": "The part each body slot or layer starts with, by slot or layer name, which designs that leave a slot out fall back to. Slots left out here start empty."
         }
       },
       "required": [

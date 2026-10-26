@@ -1,35 +1,42 @@
 package com.ikalagaming.characters.editor;
 
+import com.ikalagaming.characters.data.Color;
 import com.ikalagaming.characters.data.ColorCode;
+import com.ikalagaming.characters.data.DataFormat;
+import com.ikalagaming.characters.data.Id;
+import com.ikalagaming.characters.data.Problem;
 import com.ikalagaming.characters.data.Range;
 import com.ikalagaming.characters.definition.BodyPlan;
-import com.ikalagaming.characters.definition.Palette;
+import com.ikalagaming.characters.definition.Design;
+import com.ikalagaming.characters.definition.Part;
 import com.ikalagaming.characters.definition.Slider;
 import com.ikalagaming.characters.demo.CharacterPreview;
+import com.ikalagaming.characters.design.DesignCodec;
 import com.ikalagaming.characters.gltf.ImportedCharacter;
 import com.ikalagaming.characters.pose.Pose;
 import com.ikalagaming.characters.pose.PoseSolver;
 import com.ikalagaming.characters.pose.Proportions;
 import com.ikalagaming.characters.pose.Skeleton;
 import com.ikalagaming.characters.registry.CharacterRegistry;
-import com.ikalagaming.characters.view.CharacterFiles;
+import com.ikalagaming.characters.view.PartAssembler;
 import com.ikalagaming.characters.view.PartCategories;
 import com.ikalagaming.characters.view.PartRegions;
 import com.ikalagaming.characters.view.PartSlots;
 import com.ikalagaming.characters.view.ShownCharacter;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.Skins;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.component.GuiWindow;
 import com.ikalagaming.graphics.gui.data.DrawList;
 import com.ikalagaming.graphics.gui.data.IkIO;
+import com.ikalagaming.graphics.gui.data.IkString;
 import com.ikalagaming.graphics.gui.data.Viewport;
 import com.ikalagaming.graphics.gui.enums.Condition;
 import com.ikalagaming.graphics.gui.enums.MouseButton;
 import com.ikalagaming.graphics.gui.flags.ColorEditFlags;
 import com.ikalagaming.graphics.gui.flags.SelectableFlags;
 import com.ikalagaming.graphics.gui.flags.WindowFlags;
-import com.ikalagaming.graphics.gui.util.Color;
 import com.ikalagaming.graphics.scene.Camera;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.ui.Immediate;
@@ -40,6 +47,7 @@ import com.ikalagaming.graphics.ui.spec.SpecInstance;
 import com.ikalagaming.graphics.ui.spec.SpecLoader;
 import com.ikalagaming.random.SeededRandom;
 
+import com.google.gson.GsonBuilder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4f;
@@ -49,16 +57,22 @@ import org.joml.Vector3f;
 import org.joml.Vector4f;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -209,10 +223,12 @@ public final class CharacterEditor {
     private static final float RULER_MARK = 6;
 
     /** The ruler's color. */
-    private static final int RULER_COLOR = Color.rgba(1.0f, 1.0f, 1.0f, 0.8f);
+    private static final int RULER_COLOR =
+            com.ikalagaming.graphics.gui.util.Color.rgba(1.0f, 1.0f, 1.0f, 0.8f);
 
     /** The color of the line at the character's height. */
-    private static final int HEIGHT_COLOR = Color.rgba(1.0f, 0.75f, 0.2f, 0.95f);
+    private static final int HEIGHT_COLOR =
+            com.ikalagaming.graphics.gui.util.Color.rgba(1.0f, 0.75f, 0.2f, 0.95f);
 
     /** Meters per inch, for showing heights in feet and inches too. */
     private static final double METERS_PER_INCH = 0.0254;
@@ -225,6 +241,12 @@ public final class CharacterEditor {
 
     /** No swatch hovered. */
     private static final int NO_SWATCH = -1;
+
+    /** How many characters the save name holds. */
+    private static final int SAVE_NAME_CAPACITY = 64;
+
+    /** Room left beside the save name for its button, in pixels. */
+    private static final float SAVE_BUTTON_WIDTH = 60;
 
     /** Milliseconds per second, for IkGui's frame time. */
     private static final double MILLISECONDS = 1000;
@@ -247,30 +269,152 @@ public final class CharacterEditor {
     /** Turns the camera. */
     private final OrbitCamera orbit = new OrbitCamera();
 
-    /** Characters read so far, by file, so switching back is quick. */
-    private final Map<Path, Prepared> read = new HashMap<>();
-
     /** What the body under the worn parts hides, for the shown character. */
     private PartRegions regions;
 
     /**
-     * A character read and sorted, ready to show, which is slow enough to do off the render thread.
+     * A design built from its plan's parts and sorted into slots, ready to show, which is slow
+     * enough to do off the render thread. Every part of the plan with a mesh for the design's
+     * variant is loaded, so choosing parts doesn't load anything.
      *
-     * @param character The character, its base parts split along the regions' borders.
-     * @param slots Its parts sorted into slots.
-     * @param regions What the wearable parts cover.
+     * @param design The design.
+     * @param plan Its plan.
+     * @param character Every part's meshes, merged, with base parts split along the regions'
+     *     borders.
+     * @param slots The plan's slots and layers that have parts, each offering the parts that fill
+     *     it first.
+     * @param regions What the layers cover.
+     * @param optionIds For each slot, the part each of its options is.
+     * @param fills For each slot, the places each of its options fills.
+     * @param channels For each of the character's parts, the palette channel each tint mask channel
+     *     takes, as a position in the plan's channels.
+     * @param channelNames The palette channels the parts use, in the plan's order.
      */
-    private record Prepared(ImportedCharacter character, PartSlots slots, PartRegions regions) {
+    private record Prepared(
+            Design design,
+            BodyPlan plan,
+            ImportedCharacter character,
+            PartSlots slots,
+            PartRegions regions,
+            List<List<Id>> optionIds,
+            List<List<Set<String>>> fills,
+            List<int[]> channels,
+            List<String> channelNames) {
         /**
-         * Read a character and sort its parts.
+         * Build a design's parts and sort them.
          *
-         * @param read The character as read.
-         * @return The prepared character.
+         * @param design The design.
+         * @param registry The loaded definitions.
+         * @param reference The rig's reference file.
+         * @param files Files read before, added to.
+         * @return The prepared design.
+         * @throws IllegalArgumentException If its plan or parts can't be loaded.
          */
-        static Prepared of(ImportedCharacter read) {
-            PartSlots slots = PartSlots.of(read);
-            PartRegions regions = PartRegions.of(read, slots);
-            return new Prepared(regions.character(), slots, regions);
+        static Prepared build(
+                Design design,
+                CharacterRegistry registry,
+                Path reference,
+                Map<Path, ImportedCharacter> files) {
+            BodyPlan plan = registry.get(BodyPlan.class, design.plan());
+            if (plan == null) {
+                throw new IllegalArgumentException("No loaded plan " + design.plan());
+            }
+            Map<String, Id> worn = design.worn(plan, id -> registry.get(Part.class, id));
+            Set<Id> wornIds = new HashSet<>(worn.values());
+            // The worn parts first, so their files' clips are the ones kept
+            List<Part> candidates =
+                    registry.all(Part.class).stream()
+                            .filter(
+                                    part ->
+                                            part.plan().equals(plan.id())
+                                                    && part.kind() != Part.PartKind.ACCESSORY
+                                                    && !part.fills().isEmpty()
+                                                    && PartAssembler.meshFor(part, design.variant())
+                                                            != null)
+                            .sorted(Comparator.comparing(part -> !wornIds.contains(part.id())))
+                            .toList();
+            PartAssembler.Assembled assembled =
+                    PartAssembler.assemble(
+                            candidates, plan, design.variant(), registry, reference, files);
+            if (assembled == null) {
+                throw new IllegalArgumentException("None of " + plan.id() + "'s parts loaded");
+            }
+
+            List<String> places = new ArrayList<>();
+            plan.slots().forEach(slot -> places.add(slot.id()));
+            plan.layers().forEach(layer -> places.add(layer.id()));
+            List<PartSlots.Slot> slots = new ArrayList<>();
+            List<List<Id>> optionIds = new ArrayList<>();
+            List<List<Set<String>>> fills = new ArrayList<>();
+            for (String place : places) {
+                boolean layer = plan.layer(place) != null;
+                List<List<Integer>> options = new ArrayList<>();
+                List<String> labels = new ArrayList<>();
+                List<Id> ids = new ArrayList<>();
+                List<Set<String>> optionFills = new ArrayList<>();
+                for (Part part :
+                        candidates.stream().sorted(Comparator.comparing(Part::id)).toList()) {
+                    boolean kind =
+                            part.kind() == (layer ? Part.PartKind.LAYER : Part.PartKind.BODY);
+                    List<Integer> meshes = assembled.partsOf(part.id());
+                    if (!kind || !part.fills().get(0).equals(place) || meshes.isEmpty()) {
+                        continue;
+                    }
+                    options.add(meshes);
+                    labels.add(label(part.id()));
+                    ids.add(part.id());
+                    optionFills.add(Set.copyOf(part.fills()));
+                }
+                if (options.isEmpty()) {
+                    continue;
+                }
+                int initial = ids.indexOf(worn.get(place));
+                // Layers can be empty; body slots only while another part covers them
+                slots.add(new PartSlots.Slot(place, options, labels, layer, initial));
+                optionIds.add(ids);
+                fills.add(optionFills);
+            }
+
+            ImportedCharacter character = assembled.character();
+            boolean[] base = new boolean[character.parts().size()];
+            boolean[] wearable = new boolean[character.parts().size()];
+            for (int p = 0; p < base.length; ++p) {
+                Part part = registry.get(Part.class, assembled.partIds().get(p));
+                base[p] = part.kind() == Part.PartKind.BODY;
+                wearable[p] = part.kind() == Part.PartKind.LAYER;
+            }
+            PartRegions regions = PartRegions.of(character, base, wearable);
+
+            List<String> all = plan.allChannels();
+            Set<Integer> used = new TreeSet<>();
+            for (int[] mapped : assembled.channels()) {
+                for (int channel : mapped) {
+                    if (channel >= 0) {
+                        used.add(channel);
+                    }
+                }
+            }
+            return new Prepared(
+                    design,
+                    plan,
+                    regions.character(),
+                    new PartSlots(slots),
+                    regions,
+                    optionIds,
+                    fills,
+                    assembled.channels(),
+                    used.stream().map(all::get).toList());
+        }
+
+        /**
+         * What an editor calls a part: the last step of its ID's path, with spaces.
+         *
+         * @param id The part's ID.
+         * @return The label.
+         */
+        private static String label(Id id) {
+            String path = id.path();
+            return path.substring(path.lastIndexOf('/') + 1).replace('_', ' ');
         }
     }
 
@@ -301,8 +445,20 @@ public final class CharacterEditor {
     /** The settings while open. */
     private EditorSettings current;
 
-    /** Which character of the settings' list is shown. */
-    private int fileIndex;
+    /** Which of the loaded designs is shown. */
+    private int designIndex;
+
+    /** The design shown, built and sorted, or null while loading. */
+    private Prepared prepared;
+
+    /** Files read while the editor is open, on their plan's rig, for switching designs fast. */
+    private final Map<Path, ImportedCharacter> readFiles = new ConcurrentHashMap<>();
+
+    /** The name to save the design as. */
+    private final IkString saveName = new IkString(SAVE_NAME_CAPACITY);
+
+    /** What the last save did, shown under the name. */
+    private String saveStatus = "";
 
     /** The character shown, or null while loading or if it failed. */
     private ShownCharacter shown;
@@ -367,10 +523,16 @@ public final class CharacterEditor {
     /**
      * What the editor reads from the config.
      *
-     * @param characters The glTF files to choose from.
-     * @param reference The rig reference file, for moving characters onto a rig.
+     * @param reference The rig reference file, for moving characters from other rigs onto it.
+     * @param saveNamespace The namespace saved designs go in, or null if saving is off.
+     * @param saveFolder The content folder saved designs go in, as design/name.json, or null.
+     * @param reload Loads the definitions again, so saved designs show up.
      */
-    public record EditorSettings(@NonNull List<Path> characters, @NonNull Path reference) {}
+    public record EditorSettings(
+            @NonNull Path reference,
+            String saveNamespace,
+            Path saveFolder,
+            @NonNull Runnable reload) {}
 
     /**
      * Set up the editor; nothing is shown until it opens.
@@ -421,7 +583,6 @@ public final class CharacterEditor {
             return;
         }
         back = goBack;
-        read.clear();
         current = settings.get();
         stage.enter();
         Scene scene = GraphicsManager.getScene();
@@ -435,8 +596,8 @@ public final class CharacterEditor {
         GraphicsManager.getWindowManager().show(INPUT_WINDOW);
         SpecBindings bindings =
                 new SpecBindings()
-                        .handler(PREVIOUS_CHARACTER, () -> showFile(fileIndex - 1))
-                        .handler(NEXT_CHARACTER, () -> showFile(fileIndex + 1))
+                        .handler(PREVIOUS_CHARACTER, () -> showDesign(designIndex - 1))
+                        .handler(NEXT_CHARACTER, () -> showDesign(designIndex + 1))
                         .handler(CLOSE, this::close)
                         .handler(UNDO, () -> changeLook(CharacterLook::undo))
                         .handler(
@@ -462,80 +623,88 @@ public final class CharacterEditor {
                     graphics.ui()
                             .open(SpecLoader.loadResource(CharacterEditor.class, spec), bindings));
         }
-        showFile(0);
+        showDesign(0);
     }
 
     /**
-     * Show a character from the settings' list, wrapping around its ends. It is read on another
-     * thread; the old one stays until it is ready.
+     * The designs to choose from: every loaded design.
      *
-     * @param index The character's position in the list.
+     * @return The designs, in ID order.
      */
-    private void showFile(int index) {
-        List<Path> files = current.characters();
-        if (files.isEmpty()) {
-            characterName.set("No characters in the config");
+    private List<Design> designs() {
+        return registry.get().all(Design.class);
+    }
+
+    /**
+     * Show one of the loaded designs, wrapping around the ends of the list.
+     *
+     * @param index The design's position in the list.
+     */
+    private void showDesign(int index) {
+        List<Design> designs = designs();
+        if (designs.isEmpty()) {
+            characterName.set("No designs loaded; add a content folder with some");
             return;
         }
-        fileIndex = Math.floorMod(index, files.size());
-        final Path file = files.get(fileIndex);
+        designIndex = Math.floorMod(index, designs.size());
+        showDesign(designs.get(designIndex));
+    }
+
+    /**
+     * Build a design on another thread and show it; the character shown stays until it is ready.
+     *
+     * @param design The design.
+     */
+    private void showDesign(Design design) {
         final Path reference = current.reference();
         final CharacterRegistry definitions = registry.get();
         final int load = ++loads;
-        characterName.set("Loading " + file.getFileName() + "...");
-        final Prepared cached = read.get(file);
+        characterName.set("Loading " + design.id() + "...");
         CompletableFuture.supplyAsync(
-                        () -> {
-                            if (cached != null) {
-                                return cached;
-                            }
-                            try {
-                                return Prepared.of(
-                                        CharacterFiles.readAny(file, reference, definitions));
-                            } catch (IOException e) {
-                                throw new IllegalArgumentException(e.getMessage(), e);
-                            }
-                        })
+                        () -> Prepared.build(design, definitions, reference, readFiles))
                 .whenComplete(
-                        (prepared, failure) ->
-                                graphics.ui().post(() -> loaded(load, file, prepared, failure)));
+                        (built, failure) ->
+                                graphics.ui().post(() -> loaded(load, design, built, failure)));
     }
 
     /**
-     * Put a character read on another thread on the stage, unless another was asked for since.
+     * Put a design built on another thread on the stage, unless another was asked for since.
      *
      * @param load Which load this was.
-     * @param file The file it came from.
-     * @param prepared The character, or null if it failed.
+     * @param design The design.
+     * @param built The built design, or null if it failed.
      * @param failure Why it failed, or null.
      */
-    private void loaded(int load, Path file, Prepared prepared, Throwable failure) {
+    private void loaded(int load, Design design, Prepared built, Throwable failure) {
         if (back == null || load != loads) {
             return;
         }
-        if (prepared == null) {
+        if (built == null) {
             Throwable cause = failure.getCause() == null ? failure : failure.getCause();
-            log.error("Couldn't show {} in the character editor: {}", file, cause.getMessage());
-            characterName.set("Couldn't read " + file.getFileName());
+            log.error(
+                    "Couldn't show {} in the character editor: {}",
+                    design.id(),
+                    cause.getMessage());
+            characterName.set("Couldn't build " + design.id());
             return;
         }
-        read.put(file, prepared);
         if (shown != null) {
             shown.close();
         }
-        ImportedCharacter character = prepared.character();
-        PartSlots slots = prepared.slots();
-        regions = prepared.regions();
+        prepared = built;
+        plan = built.plan();
+        ImportedCharacter character = built.character();
+        PartSlots slots = built.slots();
+        regions = built.regions();
         categories = PartCategories.of(character, slots);
-        List<Slider> found = findSliders(character);
-        // Masks color their green and blue by the costume's secondary and accent colors
-        List<String> maskChannels =
-                character.materials().stream().anyMatch(data -> data.tintMask() >= 0)
-                        ? List.of(Palette.SECONDARY, Palette.ACCENT)
-                        : List.of();
+        List<Slider> found = findSliders(plan);
         look =
                 new CharacterLook(
-                        slots, found, plan == null ? List.of() : plan.variants(), maskChannels);
+                        slots, found, plan.variants(), built.channelNames(), built.fills());
+        look.start(
+                plan.variants().indexOf(plan.variant(design.variant())),
+                sliderValues(design),
+                colorCodes(design));
         beforeEditVersion = -1;
         editing = false;
         lastWorn = look.worn(CharacterLook.NO_PREVIEW, 0);
@@ -545,21 +714,166 @@ public final class CharacterEditor {
                         plugin,
                         character,
                         regions.regions(),
-                        partChannels(slots, character.parts().size()),
+                        built.channels(),
                         new Vector3d(CharacterStage.origin()),
                         new Quaternionf(),
                         lastWorn);
         shown.setHiddenRegions(regions.hidden(lastWorn));
         shownColorVersion = -1;
-        characterName.set(character.name());
+        characterName.set(design.id().toString());
+        String path = design.id().path();
+        saveName.set(path.substring(path.lastIndexOf('/') + 1));
         if (!applySliders()) {
-            look = new CharacterLook(slots, List.of(), List.of(), maskChannels);
+            look =
+                    new CharacterLook(
+                            slots, List.of(), List.of(), built.channelNames(), built.fills());
             slidersTitle.set("No sliders: the skeleton lacks their bones");
         }
         openCategory = Math.min(openCategory, categories.categories().size() - 1);
         frameOpenCategory();
         ImportedCharacter.ClipData initial = CharacterPreview.pickClip(character, null);
         playClip(initial == null ? -1 : character.clips().indexOf(initial));
+    }
+
+    /**
+     * A design's slider values as the look keeps them.
+     *
+     * @param design The design.
+     * @return The values, by slider ID.
+     */
+    private static Map<Id, float[]> sliderValues(Design design) {
+        Map<Id, float[]> values = new HashMap<>();
+        design.sliders()
+                .forEach(
+                        (id, list) -> {
+                            float[] value = new float[list.size()];
+                            for (int i = 0; i < value.length; ++i) {
+                                value[i] = list.get(i);
+                            }
+                            values.put(Id.parse(id), value);
+                        });
+        return values;
+    }
+
+    /**
+     * A design's colors as the look keeps them.
+     *
+     * @param design The design.
+     * @return The color codes, by palette channel.
+     */
+    private static Map<String, Integer> colorCodes(Design design) {
+        Map<String, Integer> codes = new HashMap<>();
+        design.colors().forEach((channel, color) -> codes.put(channel, ColorCode.encode(color)));
+        return codes;
+    }
+
+    /**
+     * The design the editor shows, as it is now.
+     *
+     * @param id The ID to give it.
+     * @param variant The variant to make it.
+     * @param withSliders Whether to keep the slider values, or leave them for the variant to start.
+     * @return The design.
+     */
+    private Design currentDesign(Id id, String variant, boolean withSliders) {
+        Map<String, Id> parts = new LinkedHashMap<>();
+        Map<String, Id> layers = new LinkedHashMap<>();
+        for (int s = 0; s < look.slots().slots().size(); ++s) {
+            int choice = look.choice(s);
+            if (choice == CharacterLook.EMPTY) {
+                continue;
+            }
+            String place = look.slots().slots().get(s).id();
+            Id part = prepared.optionIds().get(s).get(choice);
+            (plan.layer(place) != null ? layers : parts).put(place, part);
+        }
+        Map<String, List<Float>> sliders = new LinkedHashMap<>();
+        if (withSliders) {
+            BodyPlan.Variant shape = plan.variant(variant);
+            look.values()
+                    .forEach(
+                            (sliderId, value) -> {
+                                // Sliders where the variant starts them are left out
+                                BodyPlan.SliderSetting setting =
+                                        shape == null
+                                                ? null
+                                                : shape.sliders().get(sliderId.toString());
+                                float start = setting == null ? 0 : setting.initial();
+                                List<Float> snapped = new ArrayList<>();
+                                boolean moved = false;
+                                for (float v : value) {
+                                    float step = DesignCodec.snap(v);
+                                    snapped.add(step);
+                                    moved |= step != DesignCodec.snap(start);
+                                }
+                                if (moved) {
+                                    sliders.put(sliderId.toString(), snapped);
+                                }
+                            });
+        }
+        Map<String, Color> colors = new LinkedHashMap<>();
+        for (String channel : look.channels()) {
+            Integer code = look.color(channel);
+            if (code != null) {
+                colors.put(channel, ColorCode.toColor(code));
+            }
+        }
+        return new Design(id, plan.id(), variant, sliders, parts, layers, null, colors);
+    }
+
+    /**
+     * Make the character another variant: the same parts and colors on the variant's meshes, with
+     * the sliders where the variant starts them. The parts are loaded again, so there is nothing to
+     * undo afterward.
+     *
+     * @param index The variant's position in the plan.
+     */
+    private void switchVariant(int index) {
+        if (prepared == null || index == look.variant()) {
+            return;
+        }
+        showDesign(currentDesign(prepared.design().id(), plan.variants().get(index).id(), false));
+    }
+
+    /**
+     * Save the design under the name typed, into the save folder, check it as a player's, and load
+     * the definitions again so it is among the designs.
+     */
+    private void save() {
+        if (current.saveFolder() == null || current.saveNamespace() == null) {
+            saveStatus = "Saving is off; set editor.save-to in the config";
+            return;
+        }
+        String name = saveName.get().trim().toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_]+", "_");
+        if (name.isEmpty()) {
+            saveStatus = "Type a name to save as";
+            return;
+        }
+        Id id = Id.parse(current.saveNamespace() + ":design/" + name);
+        Design design =
+                currentDesign(id, plan.variants().get(Math.max(0, look.variant())).id(), true);
+        List<Problem> problems = design.validate(registry.get(), SLIDER_CONTEXT);
+        if (!problems.isEmpty()) {
+            saveStatus = "Not saved: " + problems.get(0).message();
+            return;
+        }
+        Path file = current.saveFolder().resolve("design").resolve(name + ".json");
+        try {
+            Files.createDirectories(file.getParent());
+            Files.writeString(
+                    file,
+                    new GsonBuilder().setPrettyPrinting().create().toJson(DataFormat.write(design))
+                            + "\n");
+        } catch (IOException e) {
+            saveStatus = "Not saved: " + e.getMessage();
+            return;
+        }
+        int bytes = DesignCodec.encode(design, registry.get()).length;
+        current.reload().run();
+        designIndex = Math.max(0, designs().stream().map(Design::id).toList().indexOf(id));
+        characterName.set(id.toString());
+        saveStatus = "Saved " + id + "; " + bytes + " bytes to send";
+        log.info("Saved the design {} to {}, {} bytes encoded", id, file, bytes);
     }
 
     /**
@@ -654,8 +968,7 @@ public final class CharacterEditor {
                     SelectableFlags.NONE,
                     cardWidth,
                     IkGui.getFrameHeight() * CARD_ROWS)) {
-                final int chosen = v;
-                changeLook(changed -> changed.chooseVariant(chosen));
+                switchVariant(v);
             }
         }
         IkGui.spacing();
@@ -669,6 +982,17 @@ public final class CharacterEditor {
         IkGui.textUnformatted(
                 String.format(
                         Locale.ROOT, "Height: %.2f m (%d' %d\")", characterHeight, feet, rest));
+
+        IkGui.separatorText("Save");
+        IkGui.setNextItemWidth(IkGui.getContentRegionAvailableX() - SAVE_BUTTON_WIDTH);
+        IkGui.inputText("##save-name", saveName);
+        IkGui.sameLine();
+        if (IkGui.button("Save")) {
+            save();
+        }
+        if (!saveStatus.isEmpty()) {
+            IkGui.textWrapped(saveStatus);
+        }
     }
 
     /**
@@ -718,6 +1042,12 @@ public final class CharacterEditor {
         IkGui.alignTextToFramePadding();
         IkGui.textUnformatted(info.id());
         IkGui.sameLine(NAME_COLUMN);
+        int cover = look.coveredBy(slot);
+        if (cover >= 0) {
+            PartSlots.Slot covering = look.slots().slots().get(cover);
+            IkGui.textDisabled("part of " + covering.labels().get(look.choice(cover)));
+            return Integer.MIN_VALUE;
+        }
         if (look.isFixed(slot)) {
             IkGui.textUnformatted(current);
             return Integer.MIN_VALUE;
@@ -779,32 +1109,22 @@ public final class CharacterEditor {
     }
 
     /**
-     * Find the sliders for a character: those of the body plan its rig belongs to.
+     * Find a plan's sliders.
      *
-     * @param character The character.
+     * @param body The plan.
      * @return The sliders, grouped as the panel shows them.
      */
-    private List<Slider> findSliders(ImportedCharacter character) {
-        CharacterRegistry definitions = registry.get();
-        plan =
-                definitions.all(BodyPlan.class).stream()
-                        .filter(candidate -> candidate.rig().equals(character.rig().id()))
-                        .findFirst()
-                        .orElse(null);
-        if (plan == null || plan.sliders() == null) {
-            slidersTitle.set("No sliders: " + character.rig().id() + " has no body plan");
+    private List<Slider> findSliders(BodyPlan body) {
+        if (body.sliders() == null) {
+            slidersTitle.set("No sliders: " + body.id() + " has none");
             return List.of();
         }
-        List<Slider> found = new ArrayList<>();
-        for (Slider slider : definitions.all(Slider.class)) {
-            if (plan.sliders().stream().anyMatch(pattern -> slider.id().matches(pattern))) {
-                found.add(slider);
-            }
-        }
+        List<Slider> found =
+                new ArrayList<>(body.matchingSliders(registry.get().all(Slider.class)));
         // Grouped for the panel, in the order the groups first come
         List<String> groups = found.stream().map(CharacterEditor::groupOf).distinct().toList();
         found.sort(Comparator.comparingInt(slider -> groups.indexOf(groupOf(slider))));
-        slidersTitle.set(plan.id() + ", " + found.size() + " sliders");
+        slidersTitle.set(body.id() + ", " + found.size() + " sliders");
         return found;
     }
 
@@ -1143,27 +1463,6 @@ public final class CharacterEditor {
     }
 
     /**
-     * Each part's own palette channel, as its position in the standard channels.
-     *
-     * @param slots The parts sorted into slots.
-     * @param partCount How many parts there are.
-     * @return The channels, by part.
-     */
-    private static int[] partChannels(PartSlots slots, int partCount) {
-        int[] channels = new int[partCount];
-        Arrays.fill(channels, -1);
-        for (PartSlots.Slot slot : slots.slots()) {
-            int channel = Palette.STANDARD_CHANNELS.indexOf(PartSlots.channelOf(slot));
-            for (List<Integer> option : slot.options()) {
-                for (int part : option) {
-                    channels[part] = channel;
-                }
-            }
-        }
-        return channels;
-    }
-
-    /**
      * A color code as IkGui's RGBA, or a mid gray for the parts' own colors.
      *
      * @param code The code, or null.
@@ -1195,11 +1494,11 @@ public final class CharacterEditor {
         shownPreviewChannel = previewChannel;
         shownPreviewCode = previewCode;
         // One tint per standard channel; channels without a color stay white, changing nothing
-        List<String> channels = Palette.STANDARD_CHANNELS;
-        float[] tints = new float[3 * channels.size()];
+        List<String> channels = plan.allChannels();
+        float[] tints = new float[3 * Math.min(channels.size(), Skins.TINT_SLOTS)];
         Arrays.fill(tints, 1);
         float[] rgb = new float[3];
-        for (int c = 0; c < channels.size(); ++c) {
+        for (int c = 0; c < tints.length / 3; ++c) {
             String channel = channels.get(c);
             Integer code =
                     channel.equals(previewChannel)
@@ -1326,8 +1625,9 @@ public final class CharacterEditor {
             shown.close();
             shown = null;
         }
-        read.clear();
         look = null;
+        prepared = null;
+        readFiles.clear();
         regions = null;
         categories = null;
         openCategory = -1;

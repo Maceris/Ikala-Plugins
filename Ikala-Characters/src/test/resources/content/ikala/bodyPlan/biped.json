@@ -2,7 +2,7 @@
   "id": "ikala:biped",
   "rig": "ikala:rig/biped",
   "variants": [
-    { "id": "male" },
+    { "id": "male", "parts": { "lowerArm.L": "ikala:part/biped/forearm_robot" } },
     { "id": "female" },
     { "id": "small", "sliders": { "ikala:slider/biped/height": { "initial": -0.5, "range": [-1, 0] } } }
   ],

@@ -62,8 +62,9 @@ class TestCharacterLook {
                         List.of(),
                         Map.of(
                                 HEIGHT.toString(),
-                                new BodyPlan.SliderSetting(0.5f, new Range(0, 1))));
-        BodyPlan.Variant plain = new BodyPlan.Variant("plain", List.of(), Map.of());
+                                new BodyPlan.SliderSetting(0.5f, new Range(0, 1))),
+                        Map.of());
+        BodyPlan.Variant plain = new BodyPlan.Variant("plain", List.of(), Map.of(), Map.of());
         return new CharacterLook(slots, List.of(height), List.of(plain, tall));
     }
 

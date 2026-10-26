@@ -46,8 +46,8 @@ public class CharacterPlugin extends Plugin {
     /** The config entry listing content folders, as {@code namespace=folder}. */
     static final String CONTENT_FOLDERS = "content-folders";
 
-    /** The config entry listing the glTF files the character editor offers. */
-    static final String EDITOR_CHARACTERS = "editor.characters";
+    /** The config entry naming where the character editor saves designs, as namespace=folder. */
+    static final String EDITOR_SAVE_TO = "editor.save-to";
 
     /** The config entry naming the rig reference file, for moving characters onto a rig. */
     static final String EDITOR_REFERENCE = "editor.reference";
@@ -156,12 +156,13 @@ public class CharacterPlugin extends Plugin {
      */
     private CharacterEditor.EditorSettings editorSettings() {
         PluginConfig config = ConfigManager.loadConfig(getName());
-        List<Path> files =
-                config.isList(EDITOR_CHARACTERS)
-                        ? config.getStringList(EDITOR_CHARACTERS).stream().map(Path::of).toList()
-                        : List.of();
         String reference = config.getOrDefault(EDITOR_REFERENCE, DEFAULT_REFERENCE);
-        return new CharacterEditor.EditorSettings(files, Path.of(reference));
+        ContentSource saveTo = parseSource(config.getOrDefault(EDITOR_SAVE_TO, ""));
+        return new CharacterEditor.EditorSettings(
+                Path.of(reference),
+                saveTo == null ? null : saveTo.namespace(),
+                saveTo == null ? null : saveTo.root(),
+                this::reload);
     }
 
     /** Open the character editor, or close it if it is open, on the render thread. */

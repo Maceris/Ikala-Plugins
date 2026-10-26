@@ -17,10 +17,12 @@ import lombok.NonNull;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -140,7 +142,14 @@ public final class CharacterLoader {
             }
         }
         List<Definition> usable = loader.check();
-        return new Result(new CharacterRegistry(usable), List.copyOf(loader.problems));
+        // Assets like meshes are found beside the definitions, in folders on disk
+        Map<String, Path> roots = new HashMap<>();
+        for (ContentSource source : sources) {
+            if (source.root().getFileSystem() == FileSystems.getDefault()) {
+                roots.putIfAbsent(source.namespace(), source.root());
+            }
+        }
+        return new Result(new CharacterRegistry(usable, roots), List.copyOf(loader.problems));
     }
 
     /**

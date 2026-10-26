@@ -25,7 +25,9 @@ public enum Kind {
     /** Reusable color themes. */
     PALETTE(Palette.class),
     /** Mappings from another skeleton's bones onto a rig. */
-    RIG_MAP(RigMap.class);
+    RIG_MAP(RigMap.class),
+    /** Saved characters. */
+    DESIGN(Design.class);
 
     /** The record that holds a definition of this kind. */
     @Getter private final Class<? extends Definition> type;

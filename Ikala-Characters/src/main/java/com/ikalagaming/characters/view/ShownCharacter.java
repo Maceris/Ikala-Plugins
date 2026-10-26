@@ -1,6 +1,5 @@
 package com.ikalagaming.characters.view;
 
-import com.ikalagaming.characters.definition.Palette;
 import com.ikalagaming.characters.gltf.ImportedCharacter;
 import com.ikalagaming.characters.pose.Clip;
 import com.ikalagaming.characters.pose.Pose;
@@ -137,8 +136,8 @@ public final class ShownCharacter implements AutoCloseable {
      * @param character The character.
      * @param regions Each part's mask region per vertex, or null for a part never hidden; null for
      *     no regions at all.
-     * @param channels Each part's own palette channel, as its position in {@link
-     *     Palette#STANDARD_CHANNELS}, or -1 for none; null for no tinting. See {@link #tintSlots}.
+     * @param channels For each part, the tint slot each tint mask channel (r, g, b, a) takes, or -1
+     *     for none; null for no tinting. See {@link #tintSlots}.
      * @param position Where its root stands.
      * @param facing Which way it faces; characters face +Z.
      * @param shown The indices of the parts to show.
@@ -147,7 +146,7 @@ public final class ShownCharacter implements AutoCloseable {
             @NonNull String plugin,
             @NonNull ImportedCharacter character,
             List<int[]> regions,
-            int[] channels,
+            List<int[]> channels,
             @NonNull Vector3d position,
             @NonNull Quaternionf facing,
             @NonNull Collection<Integer> shown) {
@@ -207,8 +206,8 @@ public final class ShownCharacter implements AutoCloseable {
             partMaterials.add(material);
             partMasks.add(mask);
             boolean textured = material != null && material.getTexture() != null;
-            int channel = channels == null ? -1 : channels[p];
-            partSlots.add(tintSlots(channel, mask != null, textured));
+            int[] mapped = channels == null ? null : channels.get(p);
+            partSlots.add(tintSlots(mapped, mask != null, textured));
         }
         instance = skins.place(skeleton.size(), position, facing, 1);
         showParts(shown);
@@ -251,29 +250,35 @@ public final class ShownCharacter implements AutoCloseable {
     }
 
     /**
-     * Which tint slot each of a part's mask channels takes, slots being positions in {@link
-     * Palette#STANDARD_CHANNELS}. A part with a mask takes its own channel in red, the costume's
-     * secondary color in green and its accent in blue. A part without one takes its own channel all
-     * over if it is untextured; a textured part without a mask isn't tinted, since one color over a
-     * painted texture only muddies it.
+     * Which tint slot each of a part's mask channels takes. A part with a mask takes them all as
+     * mapped. A part without one takes its red channel's color all over if it is untextured; a
+     * textured part without a mask isn't tinted, since one color over a painted texture only
+     * muddies it. Slots past the instance's tint colors are left out.
      *
-     * @param channel The part's own channel's slot, or -1 for none.
+     * @param channels The tint slot each mask channel (r, g, b, a) takes, or -1; null for none.
      * @param masked Whether it has a tint mask.
      * @param textured Whether its material has a texture.
      * @return The packed slots, see {@link SkinnedPart#slots}.
      */
-    static int tintSlots(int channel, boolean masked, boolean textured) {
-        if (channel < 0) {
+    static int tintSlots(int[] channels, boolean masked, boolean textured) {
+        if (channels == null || channels[0] < 0 && !masked) {
             return SkinnedPart.NO_TINT;
         }
         if (masked) {
             return SkinnedPart.slots(
-                    channel,
-                    Palette.STANDARD_CHANNELS.indexOf(Palette.SECONDARY),
-                    Palette.STANDARD_CHANNELS.indexOf(Palette.ACCENT),
-                    -1);
+                    slot(channels[0]), slot(channels[1]), slot(channels[2]), slot(channels[3]));
         }
-        return textured ? SkinnedPart.NO_TINT : SkinnedPart.slots(channel, -1, -1, -1);
+        return textured ? SkinnedPart.NO_TINT : SkinnedPart.slots(slot(channels[0]), -1, -1, -1);
+    }
+
+    /**
+     * A channel's tint slot, if the instance has one for it.
+     *
+     * @param channel The channel's position, or -1.
+     * @return The slot, or -1.
+     */
+    private static int slot(int channel) {
+        return channel < Skins.TINT_SLOTS ? channel : -1;
     }
 
     /**
@@ -287,7 +292,8 @@ public final class ShownCharacter implements AutoCloseable {
     }
 
     /**
-     * Change the tint colors, one per palette channel in {@link Palette#STANDARD_CHANNELS} order.
+     * Change the tint colors, one per palette channel in the order the parts' channels number them,
+     * up to {@value Skins#TINT_SLOTS}.
      *
      * @param colors sRGB colors, three floats from 0 to 1 per channel; white changes nothing.
      */

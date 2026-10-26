@@ -118,6 +118,7 @@ public record BodyPlan(
      * @param id The variant's name.
      * @param tags Tags of the parts it allows, or empty to allow any.
      * @param sliders Slider defaults and ranges that differ from the slider's own.
+     * @param parts The part each body slot or layer starts with, by slot or layer name.
      */
     @Doc("A variant, sharing the plan's bones with its own proportions and limits.")
     public record Variant(
@@ -126,9 +127,47 @@ public record BodyPlan(
                     @Optional
                     List<String> tags,
             @Doc("Slider settings for this variant, by slider ID.") @Optional
-                    Map<String, SliderSetting> sliders) {
+                    Map<String, SliderSetting> sliders,
+            @Doc(
+                            "The part each body slot or layer starts with, by slot or layer name,"
+                                    + " which designs that leave a slot out fall back to. Slots"
+                                    + " left out here start empty.")
+                    @Optional
+                    Map<String, Id> parts) {
         /** The field for the slider settings. */
         public static final String FIELD_SLIDERS = "sliders";
+
+        /** The field for the default parts. */
+        public static final String FIELD_PARTS = "parts";
+
+        /**
+         * Whether a part may be used on this variant, by its tags.
+         *
+         * @param part The part.
+         * @return True if the variant allows any part, or the part has one of its tags.
+         */
+        public boolean allows(@NonNull Part part) {
+            return tags.isEmpty() || part.tags().stream().anyMatch(tags::contains);
+        }
+
+        /**
+         * The values a slider may take on this variant: its own range for a context, narrowed by
+         * the variant's setting for it.
+         *
+         * @param slider The slider.
+         * @param context The context, like "player".
+         * @return The range.
+         */
+        public Range range(@NonNull Slider slider, @NonNull String context) {
+            Range own = slider.range(context);
+            SliderSetting setting = sliders.get(slider.id().toString());
+            if (setting == null || setting.range() == null) {
+                return own;
+            }
+            return new Range(
+                    Math.max(own.min(), setting.range().min()),
+                    Math.min(own.max(), setting.range().max()));
+        }
     }
 
     /**
@@ -293,6 +332,18 @@ public record BodyPlan(
     }
 
     /**
+     * Every palette channel the plan has: the standard ones, then its own, in the order tint colors
+     * and design bytes number them.
+     *
+     * @return The channels.
+     */
+    public List<String> allChannels() {
+        List<String> all = new ArrayList<>(Palette.STANDARD_CHANNELS);
+        channels.stream().filter(c -> !all.contains(c)).forEach(all::add);
+        return all;
+    }
+
+    /**
      * Find a variant.
      *
      * @param name The variant's name.
@@ -440,7 +491,51 @@ public record BodyPlan(
                                             "The initial value is outside the variant's range");
                                 }
                             });
+            checkDefaultParts(checks, variant, JsonPath.field(path, Variant.FIELD_PARTS));
         }
+    }
+
+    /**
+     * Check a variant's default parts: each fills the slot or layer it is listed under, is for this
+     * plan, and is allowed on the variant. Problems with them are warnings, so a broken part leaves
+     * its slot empty rather than taking the whole plan, and every part on it, down too.
+     *
+     * @param checks Where problems go.
+     * @param variant The variant.
+     * @param partsPath Where its default parts are.
+     */
+    private void checkDefaultParts(Checks checks, Variant variant, String partsPath) {
+        Map<Id, Part> usable = new HashMap<>();
+        checks.all(Part.class).forEach(part -> usable.put(part.id(), part));
+        variant.parts()
+                .forEach(
+                        (place, partId) -> {
+                            String path = JsonPath.field(partsPath, place);
+                            if (slot(place) == null && layer(place) == null) {
+                                checks.error(
+                                        path, "The plan has no body slot or layer '" + place + "'");
+                                return;
+                            }
+                            Part part = usable.get(partId);
+                            if (part == null) {
+                                checks.warning(
+                                        path,
+                                        partId
+                                                + " isn't loaded or has errors, so '"
+                                                + place
+                                                + "' starts empty");
+                            } else if (!part.plan().equals(id)) {
+                                checks.warning(path, partId + " is for " + part.plan());
+                            } else if (!part.fills().contains(place)) {
+                                checks.warning(path, partId + " doesn't fill '" + place + "'");
+                            } else if (!variant.allows(part)) {
+                                checks.warning(
+                                        path,
+                                        partId
+                                                + " has none of the variant's tags "
+                                                + variant.tags());
+                            }
+                        });
     }
 
     /**

@@ -18,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * What a character in the editor looks like: the part in each slot and each slider's value, with a
@@ -70,6 +71,9 @@ final class CharacterLook {
     /** Which variant the body is, or -1 if the plan has none. */
     private int variant = -1;
 
+    /** For each slot, the places each of its options fills, its own among them. */
+    private final List<List<Set<String>>> fills;
+
     /** The palette channels the slots' parts take, in the order editors list them. */
     private final List<String> channels;
 
@@ -94,31 +98,61 @@ final class CharacterLook {
             @NonNull PartSlots slots,
             @NonNull List<Slider> sliders,
             @NonNull List<BodyPlan.Variant> variants) {
-        this(slots, sliders, variants, List.of());
+        this(slots, sliders, variants, derivedChannels(slots), ownFills(slots));
+    }
+
+    /**
+     * The palette channels slots' parts take, by {@link PartSlots#channelOf}.
+     *
+     * @param slots The slots.
+     * @return The channels, in the order editors list them.
+     */
+    private static List<String> derivedChannels(PartSlots slots) {
+        List<String> used = new ArrayList<>();
+        for (PartSlots.Slot slot : slots.slots()) {
+            used.add(PartSlots.channelOf(slot));
+        }
+        return Palette.STANDARD_CHANNELS.stream().filter(used::contains).toList();
+    }
+
+    /**
+     * Fills where every option fills only its own slot.
+     *
+     * @param slots The slots.
+     * @return The fills.
+     */
+    private static List<List<Set<String>>> ownFills(PartSlots slots) {
+        List<List<Set<String>>> fills = new ArrayList<>();
+        for (PartSlots.Slot slot : slots.slots()) {
+            List<Set<String>> options = new ArrayList<>();
+            slot.options().forEach(option -> options.add(Set.of(slot.id())));
+            fills.add(options);
+        }
+        return fills;
     }
 
     /**
      * Start a look with the slots' initial parts and the sliders where the first variant starts
-     * them, or at 0, offering more palette channels than the slots' own, like those tint masks use.
+     * them, or at 0, where options may fill more places than their own slot, like a body that fills
+     * the torso, arms and legs. Choosing one empties the slots it covers.
      *
      * @param slots The slots.
      * @param sliders The sliders.
      * @param variants The body plan's variants, which may be none.
-     * @param moreChannels Palette channels to offer besides the slots' own.
+     * @param channels The palette channels to offer, in the order editors list them.
+     * @param fills For each slot, the places each of its options fills, its own among them.
      */
     CharacterLook(
             @NonNull PartSlots slots,
             @NonNull List<Slider> sliders,
             @NonNull List<BodyPlan.Variant> variants,
-            @NonNull List<String> moreChannels) {
+            @NonNull List<String> channels,
+            @NonNull List<List<Set<String>>> fills) {
         this.slots = slots;
         this.sliders = List.copyOf(sliders);
         this.variants = List.copyOf(variants);
-        List<String> used = new ArrayList<>(moreChannels);
-        for (PartSlots.Slot slot : slots.slots()) {
-            used.add(PartSlots.channelOf(slot));
-        }
-        channels = Palette.STANDARD_CHANNELS.stream().filter(used::contains).toList();
+        this.channels = List.copyOf(channels);
+        this.fills = fills;
         choices = new int[slots.slots().size()];
         for (int i = 0; i < choices.length; ++i) {
             choices[i] = slots.slots().get(i).initial();
@@ -130,6 +164,35 @@ final class CharacterLook {
             variant = 0;
             startSliders();
         }
+    }
+
+    /**
+     * Start from a design: its variant, its slider values over the variant's starting ones, and its
+     * colors, with nothing to undo.
+     *
+     * @param variantIndex The variant's position in {@link #variants()}, or -1 for the first.
+     * @param startValues Slider values by ID; sliders left out start where the variant says.
+     * @param startColors Color codes by palette channel.
+     */
+    void start(
+            int variantIndex,
+            @NonNull Map<Id, float[]> startValues,
+            @NonNull Map<String, Integer> startColors) {
+        if (!variants.isEmpty()) {
+            variant = variantIndex < 0 ? 0 : variantIndex;
+            startSliders();
+        }
+        startValues.forEach(
+                (id, value) -> {
+                    float[] own = values.get(id);
+                    if (own != null && own.length == value.length) {
+                        System.arraycopy(value, 0, own, 0, own.length);
+                    }
+                });
+        colors.clear();
+        colors.putAll(startColors);
+        history.clear();
+        ++version;
     }
 
     /**
@@ -324,7 +387,53 @@ final class CharacterLook {
         }
         remember();
         choices[slot] = choice;
+        uncover(slot);
         ++version;
+    }
+
+    /**
+     * Empty the slots a slot's choice covers or overlaps.
+     *
+     * @param slot The slot just filled.
+     */
+    private void uncover(int slot) {
+        Set<String> filled = filled(slot);
+        for (int other = 0; other < choices.length; ++other) {
+            if (other == slot) {
+                continue;
+            }
+            boolean covered = filled.contains(slots.slots().get(other).id());
+            boolean overlaps = filled(other).stream().anyMatch(filled::contains);
+            if (covered || overlaps) {
+                choices[other] = EMPTY;
+            }
+        }
+    }
+
+    /**
+     * The places a slot's choice fills.
+     *
+     * @param slot The slot.
+     * @return The places, or none if it is empty.
+     */
+    private Set<String> filled(int slot) {
+        return choices[slot] == EMPTY ? Set.of() : fills.get(slot).get(choices[slot]);
+    }
+
+    /**
+     * Which slot's choice covers a slot, like a body covering the arms.
+     *
+     * @param slot The slot.
+     * @return The covering slot's position, or -1 if nothing else covers it.
+     */
+    int coveredBy(int slot) {
+        String place = slots.slots().get(slot).id();
+        for (int other = 0; other < choices.length; ++other) {
+            if (other != slot && filled(other).contains(place)) {
+                return other;
+            }
+        }
+        return -1;
     }
 
     /**
@@ -465,6 +574,14 @@ final class CharacterLook {
         }
         for (String channel : channels) {
             colors.put(channel, Swatches.random(channel, random));
+        }
+        // Earlier slots win where random choices overlap
+        for (int i = 0; i < choices.length; ++i) {
+            if (choices[i] != EMPTY && coveredBy(i) >= 0 && coveredBy(i) < i) {
+                choices[i] = EMPTY;
+            } else if (choices[i] != EMPTY) {
+                uncover(i);
+            }
         }
         ++version;
     }

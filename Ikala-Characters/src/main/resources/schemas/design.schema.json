@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ikala character design",
+  "description": "A saved character: its body plan and variant, the part in each slot and layer, its slider values and its colors. Slots left out fall back to the variant's default parts.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Design"
+    },
+    {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Design"
+      }
+    }
+  ],
+  "$defs": {
+    "Design": {
+      "type": "object",
+      "description": "A saved character: its body plan and variant, the part in each slot and layer, its slider values and its colors. Slots left out fall back to the variant's default parts.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "This design's ID, like \"ikala:design/test_knight\"."
+        },
+        "plan": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "The body plan."
+        },
+        "variant": {
+          "type": "string",
+          "description": "The plan's variant, like \"female\"."
+        },
+        "sliders": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "description": "Slider values by slider ID: one value, or three for sliders with width, height and depth. Sliders left out are where the variant starts them."
+        },
+        "parts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$"
+          },
+          "description": "Body parts by slot. A part that fills several slots is listed once, under the first it fills."
+        },
+        "layers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$"
+          },
+          "description": "Layer parts, like a jacket or boots, by layer."
+        },
+        "palette": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "A palette whose colors fill channels the design doesn't color itself."
+        },
+        "colors": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "description": "Colors by palette channel, like {\"skin\": \"#c58c62\"}."
+        },
+        "extends": {
+          "type": "string",
+          "description": "The ID of a definition of the same kind to start from. Fields written here replace the parent's, and objects merge field by field."
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "extends"
+          ]
+        },
+        {
+          "required": [
+            "id",
+            "plan",
+            "variant"
+          ]
+        }
+      ]
+    }
+  }
+}

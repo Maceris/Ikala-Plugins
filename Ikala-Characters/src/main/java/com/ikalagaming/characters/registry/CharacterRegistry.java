@@ -13,6 +13,7 @@ import lombok.NonNull;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -42,6 +43,9 @@ public final class CharacterRegistry {
     /** Numeric IDs of each kind, by ID. */
     private final Map<Kind, Map<Id, Integer>> numeric = new EnumMap<>(Kind.class);
 
+    /** Each namespace's content folder on disk, which its assets' paths are relative to. */
+    private final Map<String, Path> roots;
+
     /** A hash of every definition's content, as hex. */
     private final String contentHash;
 
@@ -51,6 +55,18 @@ public final class CharacterRegistry {
      * @param definitions The definitions, which must have unique IDs within each kind.
      */
     CharacterRegistry(@NonNull List<? extends Definition> definitions) {
+        this(definitions, Map.of());
+    }
+
+    /**
+     * Create a registry that can find assets beside its definitions.
+     *
+     * @param definitions The definitions, which must have unique IDs within each kind.
+     * @param roots Each namespace's content folder on disk.
+     */
+    CharacterRegistry(
+            @NonNull List<? extends Definition> definitions, @NonNull Map<String, Path> roots) {
+        this.roots = Map.copyOf(roots);
         for (Kind kind : Kind.values()) {
             byKind.put(kind, new ArrayList<>());
             numeric.put(kind, new HashMap<>());
@@ -121,6 +137,20 @@ public final class CharacterRegistry {
             // Every Java platform is required to have SHA-256
             throw new IllegalStateException(e);
         }
+    }
+
+    /**
+     * Find an asset, like a mesh file, that a definition names. Asset paths are relative to the
+     * content folder of the definition's namespace.
+     *
+     * @param namespace The namespace of the definition that names it.
+     * @param path The asset's path, with / between folders.
+     * @return The file, or null if the namespace has no folder on disk, like the built-in content
+     *     inside the plugin.
+     */
+    public Path asset(@NonNull String namespace, @NonNull String path) {
+        Path root = roots.get(namespace);
+        return root == null ? null : root.resolve(path).normalize();
     }
 
     /**

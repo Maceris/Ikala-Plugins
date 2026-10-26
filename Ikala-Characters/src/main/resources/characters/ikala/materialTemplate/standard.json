@@ -1,0 +1,5 @@
+// The plain material: base color, normal and ORM textures, and a tint mask whose channels take
+// palette colors. More specific templates, like skin or metal, come with their own parameters.
+{
+  "id": "ikala:mat/standard"
+}
