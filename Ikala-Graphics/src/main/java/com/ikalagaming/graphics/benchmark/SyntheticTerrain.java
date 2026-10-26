@@ -123,6 +123,24 @@ public final class SyntheticTerrain {
     /** How tall a hut's walls are, in blocks. */
     private static final int HUT_HEIGHT = 3;
 
+    /** How high the island recipe's sea stands, in world y: seven eighths up block 0. */
+    public static final double SEA_LEVEL = 0.875;
+
+    /** How high the island's hill rises above the sea floor's slope, at its middle, in blocks. */
+    private static final int ISLAND_TOP = 10;
+
+    /** How deep the island recipe's sea floor gets, in blocks below y 0. */
+    private static final int ISLAND_DEPTH = 24;
+
+    /** How far from the island's middle the sea floor reaches its full depth, in blocks. */
+    private static final double ISLAND_REACH = 110;
+
+    /** How far the island's shore wanders in and out, in blocks. */
+    private static final double ISLAND_WOBBLE = 18;
+
+    /** How large the shore's wandering is, in blocks. */
+    private static final double ISLAND_WOBBLE_SCALE = 48;
+
     /** How tall a hut's door is, in blocks. */
     private static final int DOOR_HEIGHT = 2;
 
@@ -203,6 +221,12 @@ public final class SyntheticTerrain {
          * huts or glass, so the land itself can be seen from afar.
          */
         HILLS,
+        /**
+         * A small hilly island in a wide sea: grass above the water, a stone sea floor sloping down
+         * to its full depth well out from the shore. The water itself is drawn by graphics as water
+         * tiles over {@link #SEA_LEVEL}, see the gate's water option.
+         */
+        ISLAND,
         /**
          * The hills recipe's land, its top few blocks an even jumble of cubes (solid, glass and
          * leaves), slabs, stairs of every shape and facing, glass panes, lecterns and chests, so
@@ -291,6 +315,7 @@ public final class SyntheticTerrain {
             case CAVES -> 34;
             case GLASS -> GLASS_WALL_HEIGHT;
             case HUTS -> HUT_HEIGHT;
+            case ISLAND -> ISLAND_TOP;
         };
     }
 
@@ -306,6 +331,7 @@ public final class SyntheticTerrain {
             case CHECKERBOARD -> 0;
             case CAVES -> -96;
             case GLASS, HUTS -> 0;
+            case ISLAND -> -ISLAND_DEPTH - 1;
         };
     }
 
@@ -330,6 +356,7 @@ public final class SyntheticTerrain {
             case CAVES -> 42;
             case GLASS -> GLASS_WALL_HEIGHT / 2.0;
             case HUTS -> HUT_HEIGHT * 2.0;
+            case ISLAND -> Math.floor(islandHeight(0, 0)) + 1 + 6;
         };
     }
 
@@ -361,6 +388,7 @@ public final class SyntheticTerrain {
             case GLASS -> glass(x, y, z);
             case HUTS -> huts(x, y, z);
             case JUMBLE -> jumble(x, y, z);
+            case ISLAND -> island(x, y, z);
         };
     }
 
@@ -648,7 +676,7 @@ public final class SyntheticTerrain {
      * @return The hut's middle x, the y of its floor, and its middle z, or null for none.
      */
     public int[] hutNear(int x, int z, int cells) {
-        if (recipe == Recipe.HILLS || recipe == Recipe.JUMBLE) {
+        if (recipe == Recipe.HILLS || recipe == Recipe.JUMBLE || recipe == Recipe.ISLAND) {
             return null;
         }
         if (recipe == Recipe.HUTS) {
@@ -794,6 +822,45 @@ public final class SyntheticTerrain {
         final int middleX = Math.floorDiv(x, HUT_GRID) * HUT_GRID + HUT_GRID / 2;
         final int middleZ = Math.floorDiv(z, HUT_GRID) * HUT_GRID + HUT_GRID / 2;
         return hutAt(x, y, z, middleX, 1, middleZ);
+    }
+
+    /**
+     * The island recipe's ground at a column: a hill at the origin sloping smoothly down to the sea
+     * floor, its shore wandering in and out.
+     *
+     * @param x The column's x.
+     * @param z The column's z.
+     * @return The ground's height, a fractional block y.
+     */
+    public double islandHeight(int x, int z) {
+        final double wobble =
+                ISLAND_WOBBLE
+                        * (fbm2(x / ISLAND_WOBBLE_SCALE, z / ISLAND_WOBBLE_SCALE, 2) - 0.5)
+                        * 2;
+        final double reach = Math.clamp((Math.hypot(x, z) + wobble) / ISLAND_REACH, 0, 1);
+        return ISLAND_TOP - (ISLAND_TOP + ISLAND_DEPTH) * smooth(reach);
+    }
+
+    /**
+     * The island recipe: grass over dirt on land, bare stone under the sea.
+     *
+     * @param x The block's x.
+     * @param y The block's y.
+     * @param z The block's z.
+     * @return The block type.
+     */
+    private byte island(int x, int y, int z) {
+        final int top = (int) Math.floor(islandHeight(x, z));
+        if (y > top) {
+            return AIR;
+        }
+        if (top < 0) {
+            return STONE;
+        }
+        if (y == top) {
+            return GRASS;
+        }
+        return y >= top - DIRT_DEPTH ? DIRT : STONE;
     }
 
     /**

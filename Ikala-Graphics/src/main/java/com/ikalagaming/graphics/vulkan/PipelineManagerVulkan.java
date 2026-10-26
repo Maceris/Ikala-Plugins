@@ -175,6 +175,10 @@ public class PipelineManagerVulkan {
     private final SceneRender stageSceneRender;
     private final ShadowRender stageShadowRender;
     private final SkyboxRender stageSkyboxRender;
+
+    /** Draws water tiles over the lit scene and the sky. */
+    private final WaterRender stageWaterRender;
+
     private final SwapchainPresent stageSwapchainPresent;
 
     private final LongBuffer longOutput = MemoryUtil.memAllocLong(1);
@@ -288,6 +292,12 @@ public class PipelineManagerVulkan {
                         stageLightRender,
                         new ParticleDraw(shaders.getShader(RenderStage.Type.PARTICLE), true));
         stageTranslucentRender.initialize(state);
+        stageWaterRender =
+                new WaterRender(
+                        shaders.getShader(RenderStage.Type.WATER),
+                        stageSceneRender,
+                        stageLightRender);
+        stageWaterRender.initialize(state);
         stageOitSplat =
                 new OitSplat(
                         shaders.getShader(RenderStage.Type.OIT_SPLAT),
@@ -402,6 +412,8 @@ public class PipelineManagerVulkan {
             stages.add(stageLightRender);
             // The sky the world is lit by, behind it
             stages.add(stageSkyboxRender);
+            // Water over both, seeing them through its surface, under what is translucent
+            stages.add(stageWaterRender);
             // Translucent geometry, over the sky too, in any order: what is in front of each
             // surface first, then the surfaces weighted by it
             // Distant cut out and translucent blocks as volumes
@@ -837,12 +849,37 @@ public class PipelineManagerVulkan {
                         imageExtent.width(),
                         imageExtent.height(),
                         SCENE_COLOR_FORMAT,
-                        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+                                | VK_IMAGE_USAGE_SAMPLED_BIT
+                                | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
                         VK_IMAGE_ASPECT_COLOR_BIT,
                         VK_FILTER_NEAREST,
                         VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
         // Read through the bindless array by the tone map stage
         state.bindlessTextures.register(state, data.sceneColor);
+        // What lies behind the water, copied before it is drawn, read by the water stage
+        data.waterBehindColor =
+                createRenderTarget(
+                        state,
+                        imageExtent.width(),
+                        imageExtent.height(),
+                        SCENE_COLOR_FORMAT,
+                        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                        VK_IMAGE_ASPECT_COLOR_BIT,
+                        VK_FILTER_LINEAR,
+                        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+        state.bindlessTextures.register(state, data.waterBehindColor);
+        data.waterBehindDepth =
+                createRenderTarget(
+                        state,
+                        imageExtent.width(),
+                        imageExtent.height(),
+                        DEPTH_FORMAT,
+                        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                        VK_IMAGE_ASPECT_DEPTH_BIT,
+                        VK_FILTER_NEAREST,
+                        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+        state.bindlessTextures.register(state, data.waterBehindDepth);
         // Read through the bindless array, filtered, by the next frame's anti-aliasing as history,
         // and by the tone map stage
         data.taaColor =
@@ -944,6 +981,7 @@ public class PipelineManagerVulkan {
         stageSceneRender.cleanup(state);
         stageShadowRender.cleanup(state);
         stageSkyboxRender.cleanup(state);
+        stageWaterRender.cleanup(state);
         stageSwapchainPresent.cleanup(state);
         cleanupShadowMaps(state);
         state.depthPyramid.cleanup(state);
@@ -1013,6 +1051,16 @@ public class PipelineManagerVulkan {
             state.bindlessTextures.release(state, data.sceneColor);
             data.sceneColor.destroy(state);
             data.sceneColor = null;
+        }
+        if (data.waterBehindColor != null) {
+            state.bindlessTextures.release(state, data.waterBehindColor);
+            data.waterBehindColor.destroy(state);
+            data.waterBehindColor = null;
+        }
+        if (data.waterBehindDepth != null) {
+            state.bindlessTextures.release(state, data.waterBehindDepth);
+            data.waterBehindDepth.destroy(state);
+            data.waterBehindDepth = null;
         }
         if (data.taaColor != null) {
             state.bindlessTextures.release(state, data.taaColor);
@@ -1162,7 +1210,9 @@ public class PipelineManagerVulkan {
                         width,
                         height,
                         DEPTH_FORMAT,
-                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+                                | VK_IMAGE_USAGE_SAMPLED_BIT
+                                | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
                         VK_IMAGE_ASPECT_DEPTH_BIT,
                         VK_FILTER_NEAREST,
                         VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);

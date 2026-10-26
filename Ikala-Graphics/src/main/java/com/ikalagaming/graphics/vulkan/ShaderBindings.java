@@ -453,6 +453,54 @@ public class ShaderBindings {
         }
     }
 
+    /** Water surface shader variables, see {@code water.vert} and {@code water.frag}. */
+    public static class Water {
+        /** The tile list's address, see {@link #TILE_SIZE}. */
+        public static final int PUSH_CONSTANT_TILES_OFFSET = 0;
+
+        /** The size of the area drawn, in pixels, two floats. */
+        public static final int PUSH_CONSTANT_SCREEN_SIZE_OFFSET =
+                PUSH_CONSTANT_TILES_OFFSET + Long.BYTES;
+
+        /** The bindless index of the scene's color behind the water. */
+        public static final int PUSH_CONSTANT_BEHIND_COLOR_OFFSET =
+                PUSH_CONSTANT_SCREEN_SIZE_OFFSET + 2 * Float.BYTES;
+
+        /** The bindless index of the scene's depth behind the water. */
+        public static final int PUSH_CONSTANT_BEHIND_DEPTH_OFFSET =
+                PUSH_CONSTANT_BEHIND_COLOR_OFFSET + Integer.BYTES;
+
+        /** The surface's roughness. */
+        public static final int PUSH_CONSTANT_ROUGHNESS_OFFSET =
+                PUSH_CONSTANT_BEHIND_DEPTH_OFFSET + Integer.BYTES;
+
+        /** The size of the push constants. */
+        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_ROUGHNESS_OFFSET + Float.BYTES;
+
+        /** Where in a tile's entry its corner relative to the camera is, a vec4. */
+        public static final int TILE_OFFSET = 0;
+
+        /** Where its absorption at red, green and blue is, a vec4. */
+        public static final int TILE_ABSORPTION = 16;
+
+        /** Where its scattering is, a vec4. */
+        public static final int TILE_SCATTERING = 32;
+
+        /** Where its backscattering is, a vec4. */
+        public static final int TILE_BACKSCATTERING = 48;
+
+        /** The size of one tile's entry. */
+        public static final int TILE_SIZE = 64;
+
+        /** The size of a vertex: its place relative to its tile's corner, and its tile. */
+        public static final int VERTEX_SIZE = 3 * Float.BYTES + Integer.BYTES;
+
+        /** Private constructor so this class is not instantiated. */
+        private Water() {
+            cutItOut();
+        }
+    }
+
     /** Transparent stage shader variables, see {@code translucent.frag}. */
     public static class Translucent {
         /** The size of the area drawn, in pixels, two floats. */

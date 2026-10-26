@@ -240,6 +240,18 @@ public class PerFrameData {
     public TextureInfoVulkan sceneColor;
 
     /**
+     * The scene's color behind the water, copied from {@link #sceneColor} before the water stage
+     * draws over it, which the water shows through its surface. Registered in the bindless array.
+     */
+    public TextureInfoVulkan waterBehindColor;
+
+    /**
+     * The scene's depth behind the water, copied from the G-buffer's before the water stage writes
+     * its own. Registered in the bindless array.
+     */
+    public TextureInfoVulkan waterBehindDepth;
+
+    /**
      * The scene color after temporal anti-aliasing, in linear light: what the tone map stage reads
      * while it runs, and the history the next frame blends into. Registered in the bindless array.
      */

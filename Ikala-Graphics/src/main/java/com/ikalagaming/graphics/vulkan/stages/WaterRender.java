@@ -1,0 +1,574 @@
+package com.ikalagaming.graphics.vulkan.stages;
+
+import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
+import static org.lwjgl.vulkan.VK13.*;
+
+import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.RenderConfig;
+import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.scene.WaterTile;
+import com.ikalagaming.graphics.vulkan.PerFrameData;
+import com.ikalagaming.graphics.vulkan.PipelineManagerVulkan;
+import com.ikalagaming.graphics.vulkan.RenderStage;
+import com.ikalagaming.graphics.vulkan.SceneTarget;
+import com.ikalagaming.graphics.vulkan.ShaderBindings;
+import com.ikalagaming.graphics.vulkan.ShaderVulkan;
+import com.ikalagaming.graphics.vulkan.SharedBuffer;
+import com.ikalagaming.graphics.vulkan.TextureInfoVulkan;
+import com.ikalagaming.graphics.vulkan.VulkanState;
+import com.ikalagaming.graphics.vulkan.WaterMath;
+
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import org.joml.Vector3dc;
+import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
+import org.lwjgl.vulkan.*;
+
+import java.nio.ByteBuffer;
+import java.nio.LongBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+/**
+ * Draws the scene's water tiles over the lit scene and the sky, before the transparency passes, so
+ * glass, particles and volume bricks in front of the water blend over it. The scene's color and
+ * depth are copied first, for the shader to see what lies behind the surface through it; the water
+ * writes its own depth, so what is under it stays under it. The surfaces are built on the CPU from
+ * the tiles whenever they change, for each frame in flight; each frame the tiles' places relative
+ * to the camera and their optics are written to a small list. See {@code water.frag}.
+ */
+@Slf4j
+public class WaterRender implements RenderStage {
+
+    /** A calm surface's roughness, until waves set it. */
+    private static final float CALM_ROUGHNESS = 0.02f;
+
+    /** Vertices a water cell is drawn with: two triangles. */
+    private static final int CELL_VERTICES = 6;
+
+    /** The shader. */
+    @NonNull private final ShaderVulkan shader;
+
+    /** The scene stage, for its matrices' set. */
+    @NonNull private final SceneRender sceneRender;
+
+    /** The light stage, for its inputs' set. */
+    @NonNull private final LightRender lightRender;
+
+    /** The pipeline layout, VK_NULL_HANDLE until set up. */
+    private long pipelineLayout = VK_NULL_HANDLE;
+
+    /** The pipeline, VK_NULL_HANDLE until set up. */
+    private long pipeline = VK_NULL_HANDLE;
+
+    /** Each frame in flight's surface vertices, or null before its first water. */
+    private final SharedBuffer[] vertexBuffers =
+            new SharedBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
+    /** Which version of the tiles each frame's vertices hold, -1 for none. */
+    private final long[] vertexVersions = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
+    /** How many vertices each frame's buffer holds. */
+    private final int[] vertexCounts = new int[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
+    /** Each frame in flight's tile list, or null before its first water. */
+    private final SharedBuffer[] tileBuffers =
+            new SharedBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
+    /** The tiles, as of {@link #version}. */
+    private final List<WaterTile> tiles = new ArrayList<>();
+
+    /** Each tile's optics, in step with {@link #tiles}. */
+    private final List<WaterMath.Optics> optics = new ArrayList<>();
+
+    /** The version of the tiles last copied, -1 for none. */
+    private long version = -1;
+
+    /**
+     * Set up the stage.
+     *
+     * @param shader The water shader.
+     * @param sceneRender The scene stage, whose matrices' set the shader reads.
+     * @param lightRender The light stage, whose inputs' set the shader reads.
+     */
+    public WaterRender(
+            @NonNull ShaderVulkan shader,
+            @NonNull SceneRender sceneRender,
+            @NonNull LightRender lightRender) {
+        this.shader = shader;
+        this.sceneRender = sceneRender;
+        this.lightRender = lightRender;
+        Arrays.fill(vertexVersions, -1);
+    }
+
+    @Override
+    public void initialize(@NonNull VulkanState state) {
+        log.debug("Initializing water render");
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            LongBuffer longOutput = stack.callocLong(1);
+            VkPushConstantRange.Buffer ranges = VkPushConstantRange.calloc(1, stack);
+            ranges.get(0)
+                    .stageFlags(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+                    .offset(0)
+                    .size(ShaderBindings.Water.PUSH_CONSTANTS_SIZE);
+            final long[] setLayouts = {
+                lightRender.getDescriptorSetLayout(),
+                state.bindlessTextures.getDescriptorSetLayout(),
+                sceneRender.getDescriptorSetLayout(),
+                state.environment.getSetLayout(),
+                state.fogVolume.getReadSetLayout()
+            };
+            checkError(
+                    vkCreatePipelineLayout(
+                            state.device.logical,
+                            VkPipelineLayoutCreateInfo.calloc(stack)
+                                    .sType$Default()
+                                    .pSetLayouts(stack.longs(setLayouts))
+                                    .pPushConstantRanges(ranges),
+                            null,
+                            longOutput));
+            pipelineLayout = longOutput.get(0);
+            pipeline = createPipeline(state, stack);
+        }
+    }
+
+    @Override
+    public void cleanup(@NonNull VulkanState state) {
+        for (SharedBuffer[] buffers : new SharedBuffer[][] {vertexBuffers, tileBuffers}) {
+            for (int i = 0; i < buffers.length; ++i) {
+                if (buffers[i] != null) {
+                    SharedBuffer.free(buffers[i], state);
+                    buffers[i] = null;
+                }
+            }
+        }
+        Arrays.fill(vertexVersions, -1);
+        vkDestroyPipeline(state.device.logical, pipeline, null);
+        pipeline = VK_NULL_HANDLE;
+        vkDestroyPipelineLayout(state.device.logical, pipelineLayout, null);
+        pipelineLayout = VK_NULL_HANDLE;
+    }
+
+    @Override
+    public void render(
+            Scene scene,
+            @NonNull SceneTarget sceneTarget,
+            @NonNull VulkanState state,
+            RenderConfig renderConfig) {
+        if (scene == null || renderConfig == null || !renderConfig.world()) {
+            return;
+        }
+        final long now = scene.getWaterRegistry().snapshotIfChanged(version, tiles);
+        if (now != version) {
+            version = now;
+            optics.clear();
+            for (WaterTile tile : tiles) {
+                optics.add(WaterMath.optics(tile.body()));
+            }
+        }
+        if (tiles.isEmpty()) {
+            return;
+        }
+        final int frame = state.frameIndex;
+        if (vertexVersions[frame] != version) {
+            writeVertices(state, frame);
+            vertexVersions[frame] = version;
+        }
+        final int width = Math.min(sceneTarget.width(), state.realSize.width());
+        final int height = Math.min(sceneTarget.height(), state.realSize.height());
+        if (vertexCounts[frame] == 0 || width <= 0 || height <= 0) {
+            return;
+        }
+        writeTiles(state, frame, scene.getCamera().getPosition());
+
+        final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[frame];
+        final PerFrameData frameData = state.perFrameData[frame];
+        final TextureInfoVulkan color = frameData.sceneColor;
+        final TextureInfoVulkan depth = frameData.gBuffer.depth();
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            copyBehind(commandBuffer, frameData, width, height, stack);
+
+            VkRenderingAttachmentInfo.Buffer colorAttachments =
+                    VkRenderingAttachmentInfo.calloc(1, stack);
+            colorAttachments
+                    .get(0)
+                    .sType$Default()
+                    .imageView(color.view)
+                    .imageLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+                    .loadOp(VK_ATTACHMENT_LOAD_OP_LOAD)
+                    .storeOp(VK_ATTACHMENT_STORE_OP_STORE);
+            VkRenderingAttachmentInfo depthAttachment =
+                    VkRenderingAttachmentInfo.calloc(stack)
+                            .sType$Default()
+                            .imageView(depth.view)
+                            .imageLayout(VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL)
+                            .loadOp(VK_ATTACHMENT_LOAD_OP_LOAD)
+                            .storeOp(VK_ATTACHMENT_STORE_OP_STORE);
+            vkCmdBeginRendering(
+                    commandBuffer,
+                    VkRenderingInfo.calloc(stack)
+                            .sType$Default()
+                            .renderArea(area -> area.extent().set(width, height))
+                            .layerCount(1)
+                            .pColorAttachments(colorAttachments)
+                            .pDepthAttachment(depthAttachment));
+            TranslucentRender.setViewport(commandBuffer, width, height, stack);
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+            vkCmdBindDescriptorSets(
+                    commandBuffer,
+                    VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    pipelineLayout,
+                    0,
+                    stack.longs(
+                            lightRender.getDescriptorSet(frame),
+                            state.bindlessTextures.getDescriptorSet(),
+                            sceneRender.getDescriptorSet(frame),
+                            state.environment.getSet(),
+                            state.fogVolume.getReadSet()),
+                    null);
+            ByteBuffer constants = stack.calloc(ShaderBindings.Water.PUSH_CONSTANTS_SIZE);
+            constants.putLong(
+                    ShaderBindings.Water.PUSH_CONSTANT_TILES_OFFSET,
+                    tileBuffers[frame].deviceAddress);
+            constants.putFloat(ShaderBindings.Water.PUSH_CONSTANT_SCREEN_SIZE_OFFSET, width);
+            constants.putFloat(
+                    ShaderBindings.Water.PUSH_CONSTANT_SCREEN_SIZE_OFFSET + Float.BYTES, height);
+            constants.putInt(
+                    ShaderBindings.Water.PUSH_CONSTANT_BEHIND_COLOR_OFFSET,
+                    frameData.waterBehindColor.bindlessIndex);
+            constants.putInt(
+                    ShaderBindings.Water.PUSH_CONSTANT_BEHIND_DEPTH_OFFSET,
+                    frameData.waterBehindDepth.bindlessIndex);
+            constants.putFloat(ShaderBindings.Water.PUSH_CONSTANT_ROUGHNESS_OFFSET, CALM_ROUGHNESS);
+            vkCmdPushConstants(
+                    commandBuffer,
+                    pipelineLayout,
+                    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                    0,
+                    constants);
+            vkCmdBindVertexBuffers(
+                    commandBuffer, 0, stack.longs(vertexBuffers[frame].buffer), stack.longs(0));
+            vkCmdDraw(commandBuffer, vertexCounts[frame], 1, 0, 0);
+            vkCmdEndRendering(commandBuffer);
+
+            // Read only again, as the transparency passes and filters expect it
+            VkImageMemoryBarrier2.Buffer barriers = VkImageMemoryBarrier2.calloc(1, stack);
+            SceneRender.imageBarrier(
+                    barriers.get(0),
+                    depth.texture,
+                    VK_IMAGE_ASPECT_DEPTH_BIT,
+                    VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
+                            | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                    VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                    VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
+                            | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT
+                            | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
+                            | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT
+                            | VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                    VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                    VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+            vkCmdPipelineBarrier2(
+                    commandBuffer,
+                    VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barriers));
+        }
+    }
+
+    /**
+     * Copy the scene's color and depth, as the light and skybox stages left them, for the water to
+     * see through, and leave the scene's color ready to draw on and its depth to write.
+     *
+     * @param commandBuffer The command buffer.
+     * @param frameData This frame's data.
+     * @param width The width drawn, in pixels.
+     * @param height The height drawn, in pixels.
+     * @param stack The stack to allocate on.
+     */
+    private static void copyBehind(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull PerFrameData frameData,
+            int width,
+            int height,
+            @NonNull MemoryStack stack) {
+        final TextureInfoVulkan color = frameData.sceneColor;
+        final TextureInfoVulkan depth = frameData.gBuffer.depth();
+        final TextureInfoVulkan behindColor = frameData.waterBehindColor;
+        final TextureInfoVulkan behindDepth = frameData.waterBehindDepth;
+        VkImageMemoryBarrier2.Buffer before = VkImageMemoryBarrier2.calloc(4, stack);
+        SceneRender.imageBarrier(
+                before.get(0),
+                color.texture,
+                VK_IMAGE_ASPECT_COLOR_BIT,
+                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COPY_BIT,
+                VK_ACCESS_2_TRANSFER_READ_BIT,
+                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+        SceneRender.imageBarrier(
+                before.get(1),
+                depth.texture,
+                VK_IMAGE_ASPECT_DEPTH_BIT,
+                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
+                        | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT
+                        | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
+                        | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_NONE,
+                VK_PIPELINE_STAGE_2_COPY_BIT,
+                VK_ACCESS_2_TRANSFER_READ_BIT,
+                VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+        for (int i = 0; i < 2; ++i) {
+            SceneRender.imageBarrier(
+                    before.get(2 + i),
+                    i == 0 ? behindColor.texture : behindDepth.texture,
+                    i == 0 ? VK_IMAGE_ASPECT_COLOR_BIT : VK_IMAGE_ASPECT_DEPTH_BIT,
+                    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                    VK_ACCESS_2_NONE,
+                    VK_PIPELINE_STAGE_2_COPY_BIT,
+                    VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        }
+        vkCmdPipelineBarrier2(
+                commandBuffer,
+                VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(before));
+
+        for (int i = 0; i < 2; ++i) {
+            final int aspect = i == 0 ? VK_IMAGE_ASPECT_COLOR_BIT : VK_IMAGE_ASPECT_DEPTH_BIT;
+            VkImageCopy.Buffer region = VkImageCopy.calloc(1, stack);
+            region.get(0).srcSubresource(layers -> layers.aspectMask(aspect).layerCount(1));
+            region.get(0).dstSubresource(layers -> layers.aspectMask(aspect).layerCount(1));
+            region.get(0).extent().set(width, height, 1);
+            vkCmdCopyImage(
+                    commandBuffer,
+                    i == 0 ? color.texture : depth.texture,
+                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    i == 0 ? behindColor.texture : behindDepth.texture,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    region);
+        }
+
+        VkImageMemoryBarrier2.Buffer after = VkImageMemoryBarrier2.calloc(4, stack);
+        SceneRender.imageBarrier(
+                after.get(0),
+                color.texture,
+                VK_IMAGE_ASPECT_COLOR_BIT,
+                VK_PIPELINE_STAGE_2_COPY_BIT,
+                VK_ACCESS_2_NONE,
+                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        SceneRender.imageBarrier(
+                after.get(1),
+                depth.texture,
+                VK_IMAGE_ASPECT_DEPTH_BIT,
+                VK_PIPELINE_STAGE_2_COPY_BIT,
+                VK_ACCESS_2_NONE,
+                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
+                        | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT
+                        | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+        for (int i = 0; i < 2; ++i) {
+            SceneRender.imageBarrier(
+                    after.get(2 + i),
+                    i == 0 ? behindColor.texture : behindDepth.texture,
+                    i == 0 ? VK_IMAGE_ASPECT_COLOR_BIT : VK_IMAGE_ASPECT_DEPTH_BIT,
+                    VK_PIPELINE_STAGE_2_COPY_BIT,
+                    VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                    VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+        }
+        vkCmdPipelineBarrier2(
+                commandBuffer,
+                VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(after));
+    }
+
+    /**
+     * Build this frame's surface vertices from the tiles: two triangles for each cell that holds
+     * water, each corner at its height, relative to its tile's corner.
+     *
+     * @param state The Vulkan state.
+     * @param frame The frame in flight.
+     */
+    private void writeVertices(@NonNull VulkanState state, int frame) {
+        int cells = 0;
+        for (WaterTile tile : tiles) {
+            cells += tile.waterCells();
+        }
+        final int count = cells * CELL_VERTICES;
+        vertexCounts[frame] = count;
+        if (count == 0) {
+            return;
+        }
+        final long bytes = (long) count * ShaderBindings.Water.VERTEX_SIZE;
+        SharedBuffer buffer = vertexBuffers[frame];
+        if (buffer == null) {
+            buffer = SharedBuffer.allocate(bytes, state, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+            vertexBuffers[frame] = buffer;
+        }
+        buffer.ensureCapacity(bytes, state);
+        long at = buffer.allocationInfo.pMappedData();
+        final int[][] corners = {{0, 0}, {1, 0}, {1, 1}, {0, 0}, {1, 1}, {0, 1}};
+        for (int index = 0; index < tiles.size(); ++index) {
+            final WaterTile tile = tiles.get(index);
+            for (int z = 0; z < tile.cellsZ(); ++z) {
+                for (int x = 0; x < tile.cellsX(); ++x) {
+                    if (!tile.isWater(x, z)) {
+                        continue;
+                    }
+                    for (int[] corner : corners) {
+                        final int cx = x + corner[0];
+                        final int cz = z + corner[1];
+                        MemoryUtil.memPutFloat(at, cx * tile.cellSize());
+                        MemoryUtil.memPutFloat(at + Float.BYTES, tile.heightAt(cx, cz));
+                        MemoryUtil.memPutFloat(at + 2 * Float.BYTES, cz * tile.cellSize());
+                        MemoryUtil.memPutInt(at + 3 * Float.BYTES, index);
+                        at += ShaderBindings.Water.VERTEX_SIZE;
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Write this frame's tile list: each tile's corner relative to the camera, and its optics.
+     *
+     * @param state The Vulkan state.
+     * @param frame The frame in flight.
+     * @param camera The camera's position.
+     */
+    private void writeTiles(@NonNull VulkanState state, int frame, @NonNull Vector3dc camera) {
+        final long bytes = (long) tiles.size() * ShaderBindings.Water.TILE_SIZE;
+        SharedBuffer buffer = tileBuffers[frame];
+        if (buffer == null) {
+            buffer = SharedBuffer.allocate(bytes, state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+            tileBuffers[frame] = buffer;
+        }
+        buffer.ensureCapacity(bytes, state);
+        final long address = buffer.allocationInfo.pMappedData();
+        for (int index = 0; index < tiles.size(); ++index) {
+            final long at = address + (long) index * ShaderBindings.Water.TILE_SIZE;
+            final Vector3dc origin = tiles.get(index).origin();
+            MemoryUtil.memPutFloat(at, (float) (origin.x() - camera.x()));
+            MemoryUtil.memPutFloat(at + Float.BYTES, (float) (origin.y() - camera.y()));
+            MemoryUtil.memPutFloat(at + 2 * Float.BYTES, (float) (origin.z() - camera.z()));
+            final WaterMath.Optics tileOptics = optics.get(index);
+            for (int channel = 0; channel < WaterMath.CHANNELS; ++channel) {
+                final long offset = (long) channel * Float.BYTES;
+                MemoryUtil.memPutFloat(
+                        at + ShaderBindings.Water.TILE_ABSORPTION + offset,
+                        (float) tileOptics.absorption()[channel]);
+                MemoryUtil.memPutFloat(
+                        at + ShaderBindings.Water.TILE_SCATTERING + offset,
+                        (float) tileOptics.scattering()[channel]);
+                MemoryUtil.memPutFloat(
+                        at + ShaderBindings.Water.TILE_BACKSCATTERING + offset,
+                        (float) tileOptics.backscattering()[channel]);
+            }
+        }
+    }
+
+    /**
+     * Create the pipeline: water cells as triangles, both sides, depth tested and written, drawn
+     * over the scene's color.
+     *
+     * @param state The Vulkan state.
+     * @param stack The stack to allocate on.
+     * @return The VkPipeline.
+     */
+    private long createPipeline(@NonNull VulkanState state, @NonNull MemoryStack stack) {
+        final int count = shader.shaderModules.length;
+        VkPipelineShaderStageCreateInfo.Buffer stages =
+                VkPipelineShaderStageCreateInfo.calloc(count, stack);
+        for (int i = 0; i < count; ++i) {
+            stages.get(i).set(shader.shaderStages.get(i));
+        }
+        VkVertexInputBindingDescription.Buffer bindings =
+                VkVertexInputBindingDescription.calloc(1, stack);
+        bindings.get(0)
+                .binding(0)
+                .stride(ShaderBindings.Water.VERTEX_SIZE)
+                .inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
+        VkVertexInputAttributeDescription.Buffer attributes =
+                VkVertexInputAttributeDescription.calloc(2, stack);
+        attributes.get(0).binding(0).location(0).format(VK_FORMAT_R32G32B32_SFLOAT).offset(0);
+        attributes.get(1).binding(0).location(1).format(VK_FORMAT_R32_UINT).offset(3 * Float.BYTES);
+        VkPipelineColorBlendAttachmentState.Buffer blend =
+                VkPipelineColorBlendAttachmentState.calloc(1, stack);
+        blend.get(0)
+                .blendEnable(false)
+                .colorWriteMask(
+                        VK_COLOR_COMPONENT_R_BIT
+                                | VK_COLOR_COMPONENT_G_BIT
+                                | VK_COLOR_COMPONENT_B_BIT
+                                | VK_COLOR_COMPONENT_A_BIT);
+        VkGraphicsPipelineCreateInfo.Buffer infos = VkGraphicsPipelineCreateInfo.calloc(1, stack);
+        infos.get(0)
+                .sType$Default()
+                .pNext(
+                        VkPipelineRenderingCreateInfo.calloc(stack)
+                                .sType$Default()
+                                .pColorAttachmentFormats(
+                                        stack.ints(PipelineManagerVulkan.SCENE_COLOR_FORMAT))
+                                .depthAttachmentFormat(PipelineManagerVulkan.DEPTH_FORMAT))
+                .stageCount(count)
+                .pStages(stages)
+                .pVertexInputState(
+                        VkPipelineVertexInputStateCreateInfo.calloc(stack)
+                                .sType$Default()
+                                .pVertexBindingDescriptions(bindings)
+                                .pVertexAttributeDescriptions(attributes))
+                .pInputAssemblyState(
+                        VkPipelineInputAssemblyStateCreateInfo.calloc(stack)
+                                .sType$Default()
+                                .topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST))
+                .pViewportState(
+                        VkPipelineViewportStateCreateInfo.calloc(stack)
+                                .sType$Default()
+                                .viewportCount(1)
+                                .scissorCount(1))
+                .pRasterizationState(
+                        VkPipelineRasterizationStateCreateInfo.calloc(stack)
+                                .sType$Default()
+                                .polygonMode(VK_POLYGON_MODE_FILL)
+                                .cullMode(VK_CULL_MODE_NONE)
+                                .frontFace(VK_FRONT_FACE_COUNTER_CLOCKWISE)
+                                .lineWidth(1.0f))
+                .pMultisampleState(
+                        VkPipelineMultisampleStateCreateInfo.calloc(stack)
+                                .sType$Default()
+                                .rasterizationSamples(VK_SAMPLE_COUNT_1_BIT))
+                .pDepthStencilState(
+                        VkPipelineDepthStencilStateCreateInfo.calloc(stack)
+                                .sType$Default()
+                                .depthTestEnable(true)
+                                .depthWriteEnable(true)
+                                .depthCompareOp(VK_COMPARE_OP_LESS))
+                .pColorBlendState(
+                        VkPipelineColorBlendStateCreateInfo.calloc(stack)
+                                .sType$Default()
+                                .pAttachments(blend))
+                .pDynamicState(
+                        VkPipelineDynamicStateCreateInfo.calloc(stack)
+                                .sType$Default()
+                                .pDynamicStates(
+                                        stack.ints(
+                                                VK_DYNAMIC_STATE_VIEWPORT,
+                                                VK_DYNAMIC_STATE_SCISSOR)))
+                .layout(pipelineLayout)
+                .renderPass(VK_NULL_HANDLE);
+        LongBuffer longOutput = stack.callocLong(1);
+        checkError(
+                vkCreateGraphicsPipelines(
+                        state.device.logical, VK_NULL_HANDLE, infos, null, longOutput));
+        return longOutput.get(0);
+    }
+}

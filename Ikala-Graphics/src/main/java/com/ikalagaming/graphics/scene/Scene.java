@@ -93,6 +93,13 @@ public class Scene {
     private final EmitterRegistry emitterRegistry;
 
     /**
+     * The water tiles plugins placed, through {@link com.ikalagaming.graphics.Water}.
+     *
+     * @return The water registry.
+     */
+    private final WaterRegistry waterRegistry;
+
+    /**
      * The particles' time: paused, stepped, slowed or cleared, and the live count.
      *
      * @return The particle clock.
@@ -192,6 +199,7 @@ public class Scene {
         lightRegistry = new LightRegistry();
         mediumRegistry = new MediumRegistry();
         emitterRegistry = new EmitterRegistry();
+        waterRegistry = new WaterRegistry();
         particleClock = new ParticleClock();
         effectLibrary = new EffectLibrary();
         viewDistance = DEFAULT_VIEW_DISTANCE;

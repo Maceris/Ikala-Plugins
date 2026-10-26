@@ -65,6 +65,9 @@ public final class GraphicsContext {
     /** The particles API for this plugin. */
     private final Particles particles;
 
+    /** The water API for this plugin. */
+    private final Water water;
+
     /** The sections API for this plugin. */
     private final Sections sections;
 
@@ -99,6 +102,7 @@ public final class GraphicsContext {
         lights = new Lights(this);
         media = new Media(this);
         particles = new Particles(this);
+        water = new Water(this);
         sections = new Sections(this);
         lods = new Lods(this);
         skins = new Skins(this);
@@ -171,6 +175,18 @@ public final class GraphicsContext {
     public Particles particles() {
         checkOpen();
         return particles;
+    }
+
+    /**
+     * Place water, as height-field tiles of a surface and what the water holds, owned by this
+     * plugin.
+     *
+     * @return The water API for this plugin.
+     * @throws IllegalStateException If the plugin was unloaded.
+     */
+    public Water water() {
+        checkOpen();
+        return water;
     }
 
     /**

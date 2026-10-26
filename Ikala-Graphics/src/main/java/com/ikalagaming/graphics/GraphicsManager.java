@@ -341,6 +341,10 @@ public class GraphicsManager {
             if (media > 0) {
                 log.debug("Removed {} medium volumes owned by {}", media, context.getOwnerKey());
             }
+            int water = scene.getWaterRegistry().removeAllOwnedBy(context.getOwnerKey());
+            if (water > 0) {
+                log.debug("Removed {} water tiles owned by {}", water, context.getOwnerKey());
+            }
             scene.getEffectLibrary().removeAllOwnedBy(context.getOwnerKey());
             int emitters = scene.getEmitterRegistry().removeAllOwnedBy(context.getOwnerKey());
             if (emitters > 0) {

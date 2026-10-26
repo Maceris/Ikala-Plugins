@@ -135,6 +135,17 @@ already run this way.
     acceleration: [0, -9.81, 0]
     size: 0.015
   ```
+- **Water:** plugins place water as height-field tiles through `graphics.water()`: a `WaterTile`
+  is a grid of up to 64 by 64 cells with the surface's height at each corner, which cells hold
+  water, optionally the bottom's height, and a `WaterBody`, what the water holds: chlorophyll,
+  dissolved organic matter and sediment, which set its color and clarity. Game water of blocks,
+  levels and slopes is just heights. `add()` returns a `WaterHandle` to `update()` or `remove()`
+  it; a plugin's tiles are removed when it unloads.
+
+  ```java
+  WaterHandle pond = graphics.water().add(
+          WaterTile.flat(corner, 1, 16, 16, 0.875f, WaterBody.ofChlorophyll(3)));
+  ```
 - **Debug views:** the Graphics Debug window shows frame timings, lights, LOD colorings, volume
   sources, G-buffer views and benchmark controls.
 
@@ -266,7 +277,23 @@ What the renderer does and the work it builds on.
   around the camera tests the sky occlusion map, so rain and snow stop on roofs, and splashes come
   from the hits.
 
-**Planned**: stochastic lightcuts for light visibility (Yuksel 2019).
+**Water**
+
+- Drawn over the lit scene and the sky before the transparency passes, with a copy of them and of
+  their depth behind it, so glass, particles and fog in front blend over it, and it writes its own
+  depth.
+- What the water holds gives its absorption, scattering and backscattering at red, green and blue
+  through the bio-optical model of Ma et al. 2016 (pure water from Pope and Fry 1997 and Morel 1974,
+  phytoplankton from Prieur and Sathyendranath 1981, Mobley's case 1 particles, CDOM and sediment).
+- The surface reflects the sky and the sun by Fresnel (GGX highlight). Under it, the bottom is
+  dimmed along the view and along the light's way down; the column sends back its deep reflectance
+  0.33 b_b / (a + b_b) (Gordon et al. 1975, Morel and Prieur 1977), reached with depth as in
+  Maritorena, Morel and Gentili 1994; light leaving the water loses n^2 of its radiance. The air's
+  fog the light stage put on the bottom is taken back off. `WaterMath` has the math in Java, with
+  tests.
+
+**Planned**: water waves, flow and underwater views (see the design doc); stochastic lightcuts for
+light visibility (Yuksel 2019).
 
 ## Graphics Manager
 
@@ -312,7 +339,7 @@ These are Java system properties, given before `-jar`:
 
 | Option | Default | What it does |
 | --- | --- | --- |
-| `-Dikala.benchmark=<recipe>` | not set | Runs the benchmark at startup. `<recipe>` is the world: `TERRAIN` (hills, caves, plants and trees, tuned to the expected load), `CHECKERBOARD` (a block in every other cell, the worst case for face culling), `CAVES` (rock full of caves under a solid roof, the worst case for occlusion) `GLASS` (walls of clear and tinted glass every few blocks, the worst case for transparency) or `JUMBLE` (the hills, their top six blocks an even mix of cubes, slabs, stairs of every shape and facing, glass panes, lecterns and chests, the worst case for face culling and level of detail on real shapes). |
+| `-Dikala.benchmark=<recipe>` | not set | Runs the benchmark at startup. `<recipe>` is the world: `TERRAIN` (hills, caves, plants and trees, tuned to the expected load), `CHECKERBOARD` (a block in every other cell, the worst case for face culling), `CAVES` (rock full of caves under a solid roof, the worst case for occlusion) `GLASS` (walls of clear and tinted glass every few blocks, the worst case for transparency), `ISLAND` (a small hilly island in a wide sea, its water drawn as water tiles; see `.waterBody`) or `JUMBLE` (the hills, their top six blocks an even mix of cubes, slabs, stairs of every shape and facing, glass panes, lecterns and chests, the worst case for face culling and level of detail on real shapes). |
 | `-Dikala.benchmark.radius=<sections>` | `12` | The view distance, in 16-block sections. |
 | `-Dikala.benchmark.lights=<count>` | `0` | Scatters this many torches (point lights reaching 10 m) over the ground, the same ones every run, to measure many lights. |
 | `-Dikala.benchmark.lod=true` | `false` | Draws far sections through level of detail, built live from the sections, and frees their own opaque meshes on the GPU. Without it every section's meshes stay on the GPU, which dense worlds like `JUMBLE` outgrow past a small radius (the run fails with sections that didn't fit in the baked geometry buffers). |
@@ -328,6 +355,8 @@ These are Java system properties, given before `-jar`:
 | `-Dikala.benchmark.smoke=<x>,<y>,<z>` | not set | Places test media there: a column of white smoke drifting up, a glowing orange sphere 25 m along -x and a fog bank in front. |
 | `-Dikala.benchmark.particles=<x>,<y>,<z>` | not set | Places test particle emitters: a fountain there, sparks 6 m along x, smoke puffs 6 m along -x, thick smoke drawn in the fog volume 8 m along -z and a fire 6 m along z. |
 | `-Dikala.benchmark.weather=<rain or snow>` | not set | Makes it rain or snow around the camera, stopped by roofs and the ground. |
+| `-Dikala.benchmark.waterBody=<ocean, green or muddy>` | `ocean` | What the `ISLAND` recipe's sea holds: clear ocean, a green lake's phytoplankton, or a muddy river's sediment. |
+| `-Dikala.benchmark.water=<x>,<y>,<z>` | not set | Places test water tiles with a corner there, on the ground at y: a 3 by 3 grid of 6 m tiles 12 m apart (between the `HUTS` recipe's huts at 9,1,9), clear ocean, green and muddy water along z, 0.5, 2 and 6 m deep along x. |
 | `-Dikala.vulkan.validation=false` | `true` | Not a benchmark option: runs without the Vulkan validation layers. Their checks can cost milliseconds of CPU a frame, so time the CPU without them, and keep them for correctness runs. |
 
 For example, from the asset editor's folder:

@@ -15,6 +15,7 @@ import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.SectionHandle;
 import com.ikalagaming.graphics.Sections;
 import com.ikalagaming.graphics.TextureHandle;
+import com.ikalagaming.graphics.WaterHandle;
 import com.ikalagaming.graphics.bake.BakeSource;
 import com.ikalagaming.graphics.bake.SectionBaker;
 import com.ikalagaming.graphics.graph.Material;
@@ -30,6 +31,8 @@ import com.ikalagaming.graphics.scene.ParticleEffect;
 import com.ikalagaming.graphics.scene.ParticleSamples;
 import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.scene.WaterBody;
+import com.ikalagaming.graphics.scene.WaterTile;
 import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
@@ -657,6 +660,30 @@ public final class GateBenchmark {
 
     /** Where the test weather's box is centered, from the camera, in meters: a little above it. */
     private static final Vector3d WEATHER_OFFSET = new Vector3d(0, 2, 0);
+
+    /** The test water tiles the run placed, removed when it ends. */
+    private final List<WaterHandle> testWater = new ArrayList<>();
+
+    /** How far apart the test water tiles are, in meters: the huts' grid in HUTS. */
+    private static final double WATER_SPACING = 12;
+
+    /** How many cells across each test water tile is, of a meter. */
+    private static final int WATER_CELLS = 6;
+
+    /** How deep the test water tiles' columns are, in meters above the ground. */
+    private static final float[] WATER_DEPTHS = {0.5f, 2, 6};
+
+    /** What the test water tiles' rows hold. */
+    private static final WaterBody[] WATER_BODIES = {
+        WaterBody.OCEAN, WaterBody.GREEN, WaterBody.MUDDY
+    };
+
+    /** The {@code .waterBody} property's values, by what the ocean holds. */
+    private static final Map<String, WaterBody> WATER_BODY_NAMES =
+            Map.of("ocean", WaterBody.OCEAN, "green", WaterBody.GREEN, "muddy", WaterBody.MUDDY);
+
+    /** How many cells across the ocean's tiles are, of a meter. */
+    private static final int OCEAN_CELLS = WaterTile.MAX_CELLS;
 
     /** The {@code .weather} property's value for rain. */
     public static final String WEATHER_RAIN = "rain";
@@ -1366,6 +1393,119 @@ public final class GateBenchmark {
         placeFog(scene.getFog());
         placeTestMedia();
         placeTestParticles();
+        placeTestWater();
+    }
+
+    /**
+     * In the island recipe, fill the sea with water tiles out to the view distance: every cell
+     * whose ground is under {@link SyntheticTerrain#SEA_LEVEL}, the bottom at the ground's top. The
+     * {@code .waterBody} property picks what it holds: ocean (the default), green or muddy.
+     */
+    private void placeOcean() {
+        final SyntheticTerrain world = terrain;
+        if (world == null || world.getRecipe() != SyntheticTerrain.Recipe.ISLAND) {
+            return;
+        }
+        final String name = System.getProperty(PROPERTY + ".waterBody", "ocean");
+        WaterBody body = WATER_BODY_NAMES.get(name.trim().toLowerCase(Locale.ROOT));
+        if (body == null) {
+            log.warn(
+                    "The benchmark's water body must be one of {}, not {}",
+                    WATER_BODY_NAMES.keySet(),
+                    name);
+            body = WaterBody.OCEAN;
+        }
+        final int reach = radius * SyntheticTerrain.SECTION;
+        final int tiles = (2 * reach + OCEAN_CELLS - 1) / OCEAN_CELLS;
+        final int corners = OCEAN_CELLS + 1;
+        for (int tileZ = 0; tileZ < tiles; ++tileZ) {
+            for (int tileX = 0; tileX < tiles; ++tileX) {
+                final int startX = -reach + tileX * OCEAN_CELLS;
+                final int startZ = -reach + tileZ * OCEAN_CELLS;
+                final float[] heights = new float[corners * corners];
+                final float[] bottoms = new float[corners * corners];
+                final boolean[] mask = new boolean[OCEAN_CELLS * OCEAN_CELLS];
+                boolean any = false;
+                for (int z = 0; z < corners; ++z) {
+                    for (int x = 0; x < corners; ++x) {
+                        heights[z * corners + x] = (float) SyntheticTerrain.SEA_LEVEL;
+                        bottoms[z * corners + x] =
+                                (float) Math.floor(world.islandHeight(startX + x, startZ + z)) + 1;
+                    }
+                }
+                for (int z = 0; z < OCEAN_CELLS; ++z) {
+                    for (int x = 0; x < OCEAN_CELLS; ++x) {
+                        final boolean water =
+                                Math.floor(world.islandHeight(startX + x, startZ + z)) + 1
+                                        < SyntheticTerrain.SEA_LEVEL;
+                        mask[z * OCEAN_CELLS + x] = water;
+                        any |= water;
+                    }
+                }
+                if (!any) {
+                    continue;
+                }
+                final WaterHandle handle =
+                        graphics.water()
+                                .add(
+                                        new WaterTile(
+                                                new Vector3d(startX, 0, startZ),
+                                                1,
+                                                OCEAN_CELLS,
+                                                OCEAN_CELLS,
+                                                heights,
+                                                bottoms,
+                                                mask,
+                                                body));
+                if (handle != null) {
+                    testWater.add(handle);
+                }
+            }
+        }
+    }
+
+    /**
+     * Place test water from the startup property: {@code .water=x,y,z} puts a grid of 6 m tiles
+     * with a corner there, on the ground at y, 12 m apart: clear ocean, green and muddy water from
+     * front to back, 0.5, 2 and 6 m deep from left to right, so their colors can be compared.
+     */
+    private void placeTestWater() {
+        placeOcean();
+        final String value = System.getProperty(PROPERTY + ".water");
+        if (value == null) {
+            return;
+        }
+        final String[] parts = value.split(",");
+        if (parts.length != 3) {
+            log.warn("The benchmark's water must be x,y,z, not {}", value);
+            return;
+        }
+        final Vector3d corner =
+                new Vector3d(
+                        Double.parseDouble(parts[0].trim()),
+                        Double.parseDouble(parts[1].trim()),
+                        Double.parseDouble(parts[2].trim()));
+        for (int row = 0; row < WATER_BODIES.length; ++row) {
+            for (int column = 0; column < WATER_DEPTHS.length; ++column) {
+                final WaterHandle handle =
+                        graphics.water()
+                                .add(
+                                        WaterTile.flat(
+                                                new Vector3d(corner)
+                                                        .add(
+                                                                column * WATER_SPACING,
+                                                                0,
+                                                                row * WATER_SPACING),
+                                                1,
+                                                WATER_CELLS,
+                                                WATER_CELLS,
+                                                WATER_DEPTHS[column],
+                                                WATER_BODIES[row]));
+                if (handle != null) {
+                    testWater.add(handle);
+                }
+            }
+        }
     }
 
     /**
@@ -2628,6 +2768,8 @@ public final class GateBenchmark {
             testMedia.clear();
             testEmitters.forEach(graphics.particles()::stop);
             testEmitters.clear();
+            testWater.forEach(graphics.water()::remove);
+            testWater.clear();
         }
         if (scene != null && !Double.isNaN(previousViewDistance)) {
             scene.setViewDistance(previousViewDistance);

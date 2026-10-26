@@ -234,6 +234,17 @@ class ShaderBindingsTest {
         // 6 addresses; uint next;
         assertEquals(48, ShaderBindings.Particles.SPLASH_NEXT_OFFSET);
         assertEquals(52, ShaderBindings.Particles.SPLASH_CONSTANTS_SIZE);
+        // Water: address tileList; vec2 screenSize; int behindColorIndex; int behindDepthIndex;
+        // float roughness;
+        assertEquals(8, ShaderBindings.Water.PUSH_CONSTANT_SCREEN_SIZE_OFFSET);
+        assertEquals(16, ShaderBindings.Water.PUSH_CONSTANT_BEHIND_COLOR_OFFSET);
+        assertEquals(20, ShaderBindings.Water.PUSH_CONSTANT_BEHIND_DEPTH_OFFSET);
+        assertEquals(24, ShaderBindings.Water.PUSH_CONSTANT_ROUGHNESS_OFFSET);
+        assertEquals(28, ShaderBindings.Water.PUSH_CONSTANTS_SIZE);
+        // WaterTileData: four vec4s, backscattering last; a vertex: vec3 position, uint tile
+        assertEquals(48, ShaderBindings.Water.TILE_BACKSCATTERING);
+        assertEquals(64, ShaderBindings.Water.TILE_SIZE);
+        assertEquals(16, ShaderBindings.Water.VERTEX_SIZE);
         // 2 addresses; vec3 anchor; float softScale; vec2 screenSize; vec2 tiles; float logScale;
         // int voxelWeights; float pixelScale; uint padding; address splat;
         assertEquals(16, ShaderBindings.Particles.DRAW_ANCHOR_OFFSET);

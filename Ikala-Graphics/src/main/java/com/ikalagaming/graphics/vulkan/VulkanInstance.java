@@ -1346,6 +1346,19 @@ public class VulkanInstance {
                                         ShaderVulkan.Location.BUNDLED)),
                         state));
         shaderMap.addShader(
+                RenderStage.Type.WATER,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/water.vert",
+                                        ShaderVulkan.Type.VERTEX,
+                                        ShaderVulkan.Location.BUNDLED),
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/water.frag",
+                                        ShaderVulkan.Type.FRAGMENT,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
                 RenderStage.Type.PARTICLE_SPLASH,
                 new ShaderVulkan(
                         List.of(

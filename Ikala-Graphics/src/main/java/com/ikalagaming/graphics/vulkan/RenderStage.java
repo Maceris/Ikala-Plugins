@@ -27,6 +27,7 @@ public interface RenderStage {
         PARTICLE_LIGHT,
         PARTICLE_SIMULATE,
         PARTICLE_SPLASH,
+        WATER,
         PARTICLE_SPLAT,
         FILTER_BASE_COLOR,
         FILTER_DEPTH,
