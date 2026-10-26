@@ -27,7 +27,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -35,7 +34,6 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.function.BiConsumer;
 
@@ -280,15 +278,6 @@ public class VolumeBricks {
 
     /** Their version when it was. */
     private long sortedVersion;
-
-    /**
-     * One brick to draw.
-     *
-     * @param position Its section.
-     * @param slot Its slot in the atlas.
-     * @param distance How far its middle is from the camera, squared.
-     */
-    private record Draw(LodStore.@NonNull SectionPos position, int slot, double distance) {}
 
     /**
      * The bricks to draw, nearest first: each one's squared distance as float bits in the high
@@ -722,30 +711,61 @@ public class VolumeBricks {
      * @param farthest Whether the farthest rather than the nearest.
      * @return They, nearest first, or farthest first.
      */
-    private static List<LodStore.SectionPos> extremes(
+    static List<LodStore.SectionPos> extremes(
             @NonNull Collection<LodStore.SectionPos> sections,
             @NonNull Vector3dc camera,
             int most,
             boolean farthest) {
-        // Keyed so that the heap's head is the one to drop first: the farthest of the nearest kept
-        final double sign = farthest ? -1 : 1;
-        final PriorityQueue<Draw> kept =
-                new PriorityQueue<>(
-                        most + 1, Comparator.comparingDouble(Draw::distance).reversed());
+        // Each kept one's key, smaller first wanted: its squared distance as float bits, which sort
+        // as the distances do since they are never negative, turned around for the farthest. The
+        // keys are a heap with the largest, the one to drop first, at its head, and each kept
+        // section is at its key's index, moved along with it
+        final int[] keys = new int[Math.max(0, most)];
+        final LodStore.SectionPos[] kept = new LodStore.SectionPos[keys.length];
+        int size = 0;
         for (LodStore.SectionPos position : sections) {
-            final double key = sign * distanceSquared(position, camera);
-            if (kept.size() < most) {
-                kept.add(new Draw(position, 0, key));
-            } else if (key < kept.peek().distance()) {
-                kept.poll();
-                kept.add(new Draw(position, 0, key));
+            final int bits = Float.floatToRawIntBits((float) distanceSquared(position, camera));
+            final int key = farthest ? Integer.MAX_VALUE - bits : bits;
+            if (size < keys.length) {
+                // Up from the end
+                int at = size++;
+                while (at > 0 && keys[(at - 1) / 2] < key) {
+                    keys[at] = keys[(at - 1) / 2];
+                    kept[at] = kept[(at - 1) / 2];
+                    at = (at - 1) / 2;
+                }
+                keys[at] = key;
+                kept[at] = position;
+            } else if (size > 0 && key < keys[0]) {
+                // In place of the head, then down
+                int at = 0;
+                while (true) {
+                    final int left = 2 * at + 1;
+                    if (left >= size) {
+                        break;
+                    }
+                    final int larger =
+                            left + 1 < size && keys[left + 1] > keys[left] ? left + 1 : left;
+                    if (keys[larger] <= key) {
+                        break;
+                    }
+                    keys[at] = keys[larger];
+                    kept[at] = kept[larger];
+                    at = larger;
+                }
+                keys[at] = key;
+                kept[at] = position;
             }
         }
-        final List<Draw> ordered = new ArrayList<>(kept);
-        ordered.sort(Comparator.comparingDouble(Draw::distance));
-        final List<LodStore.SectionPos> out = new ArrayList<>(ordered.size());
-        for (Draw draw : ordered) {
-            out.add(draw.position());
+        // Wanted first: each key with its index in the low half
+        final long[] order = new long[size];
+        for (int i = 0; i < size; ++i) {
+            order[i] = ((long) keys[i] << Integer.SIZE) | i;
+        }
+        Arrays.sort(order);
+        final List<LodStore.SectionPos> out = new ArrayList<>(size);
+        for (long entry : order) {
+            out.add(kept[(int) entry]);
         }
         return out;
     }
@@ -835,21 +855,20 @@ public class VolumeBricks {
             final VolumeVoxelizer.Brick brick = batch.get(i).brick();
             final int base = blocks + i * STAGED_SIZE;
             data.put(base, brick.texels());
-            for (int mask = 0; mask < brick.cellMasks().length; ++mask) {
-                data.putInt(base + TEXELS_SIZE + mask * Integer.BYTES, brick.cellMasks()[mask]);
-            }
-            final short[] voxelMaterials = brick.materials();
-            for (int voxel = 0; voxel < voxelMaterials.length; ++voxel) {
-                data.putShort(
-                        base + TEXELS_SIZE + MASKS_SIZE + voxel * Short.BYTES,
-                        voxelMaterials[voxel]);
-            }
-            final int[] voxelSurfaces = brick.surfaces();
-            for (int word = 0; word < voxelSurfaces.length; ++word) {
-                data.putInt(
-                        base + TEXELS_SIZE + MASKS_SIZE + MATERIALS_SIZE + word * Integer.BYTES,
-                        voxelSurfaces[word]);
-            }
+            // Bulk copies, in the buffer's byte order: a rebalance uploads hundreds of bricks at
+            // once, and a call per value took most of a frame
+            data.slice(base + TEXELS_SIZE, MASKS_SIZE)
+                    .order(data.order())
+                    .asIntBuffer()
+                    .put(brick.cellMasks());
+            data.slice(base + TEXELS_SIZE + MASKS_SIZE, MATERIALS_SIZE)
+                    .order(data.order())
+                    .asShortBuffer()
+                    .put(brick.materials());
+            data.slice(base + TEXELS_SIZE + MASKS_SIZE + MATERIALS_SIZE, SURFACES_SIZE)
+                    .order(data.order())
+                    .asIntBuffer()
+                    .put(brick.surfaces());
         }
         return buffer;
     }

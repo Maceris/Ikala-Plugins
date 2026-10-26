@@ -77,9 +77,12 @@ public class VulkanInstance {
 
     /**
      * Whether to try to enable validation layers and logging. If the layers aren't installed, as
-     * when running directly on MoltenVK without a loader, we log a warning and run without them.
+     * when running directly on MoltenVK without a loader, we log a warning and run without them. On
+     * unless {@code -Dikala.vulkan.validation=false}, for measuring the CPU without the layers' own
+     * checks, which can cost several milliseconds a frame.
      */
-    private static final boolean ENABLE_VALIDATION = true;
+    private static final boolean ENABLE_VALIDATION =
+            Boolean.parseBoolean(System.getProperty("ikala.vulkan.validation", "true"));
 
     /**
      * Check for an error, and if there is one then log it and throw an exception.
