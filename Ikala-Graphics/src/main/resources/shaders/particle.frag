@@ -56,5 +56,6 @@ void main() {
         color = fogApply(color, gl_FragCoord.xy, depth, fog.logScale);
     }
     accum = vec4(color * alpha * w, alpha * w);
-    extinction = vec2(-log(1.0 - alpha));
+    // The anti-aliasing reads the second as how far to trust this frame, see particleReactive
+    extinction = vec2(-log(1.0 - alpha), -log(1.0 - particleReactive(alpha)));
 }

@@ -111,16 +111,16 @@ public final class ParticleSamples {
                     .spread(0.9f)
                     .acceleration(GRAVITY)
                     .size(0.015f, 0.01f)
-                    .colors(
-                            new Vector4f(0.7f, 0.75f, 0.8f, 0.6f),
-                            new Vector4f(0.7f, 0.75f, 0.8f, 0))
-                    .anisotropy(0.5f)
+                    .colors(new Vector4f(0.95f, 0.97f, 1, 0.6f), new Vector4f(0.95f, 0.97f, 1, 0))
+                    .anisotropy(0)
                     .stretch(0.03f)
                     .build();
 
     /**
      * Rain around the camera: thin streaks falling through a box that follows it, stopped by roofs
-     * and splashing where they land.
+     * and splashing where they land. A drop is a small lens showing the light from all around it,
+     * so it scatters evenly and is nearly white; scattering forward, it would vanish with the sun
+     * behind the camera.
      */
     public static final ParticleEffect RAIN =
             ParticleEffect.builder()
@@ -129,15 +129,13 @@ public final class ParticleSamples {
                     .speed(8, 10)
                     .direction(new Vector3f(0, -1, 0))
                     .spread(0.05f)
-                    .size(0.02f, 0.02f)
-                    .colors(
-                            new Vector4f(0.8f, 0.85f, 0.9f, 0.8f),
-                            new Vector4f(0.8f, 0.85f, 0.9f, 0.8f))
-                    .anisotropy(0.5f)
+                    .size(0.03f, 0.03f)
+                    .colors(new Vector4f(0.95f, 0.97f, 1, 1), new Vector4f(0.95f, 0.97f, 1, 1))
+                    .anisotropy(0)
                     .collision(ParticleEffect.Collision.DIE)
                     .spawnBox(new Vector3f(24, 16, 24))
                     .aroundCamera(true)
-                    .stretch(0.025f)
+                    .stretch(0.012f)
                     .splash(RAIN_SPLASH)
                     .splashCount(2)
                     .build();

@@ -106,6 +106,35 @@ already run this way.
           MediumVolume.of(MediumVolume.Shape.CYLINDER, chimneyTop, new Vector3f(1.5f, 6, 0))
                   .withNoise(2, 4, 0.7f, new Vector3f(0, 2, 0)));
   ```
+- **Particles:** GPU particles for effects, weather and spray, which game logic never reads
+  back. A `ParticleEffect` says what an emitter spawns and how its particles move, collide and
+  look; build one in Java, or write it as a YAML file (`*.effect.yml`, see `ParticleEffectLoader`
+  for every key) and load it with `graphics.particles().loadEffect()`, which reloads it when the
+  file changes. `spawn()` places an emitter and returns an `EmitterHandle` to `move()`, `burst()`
+  or `stop()`; a plugin's emitters and effects go when it unloads. `ParticleSamples` has a few to
+  start from, and the asset workbench's particle viewer (its Particles button, or opening an
+  effect file) shows one on a stage with walls, glass, a roof and fog, with time controls and a
+  repeatable measurement.
+
+  ```yaml
+  rate: 20000
+  lifetime: [1.6, 2]
+  speed: [8, 10]
+  direction: [0, -1, 0]
+  size: 0.03
+  color: [0.95, 0.97, 1, 1]
+  collision: die
+  spawnBox: [24, 16, 24]
+  aroundCamera: true          # weather: the box follows the camera; none falls under cover
+  stretch: 0.012              # streaks along the motion
+  splashCount: 2
+  splash:
+    rate: 0
+    lifetime: [0.2, 0.35]
+    speed: [1, 2]
+    acceleration: [0, -9.81, 0]
+    size: 0.015
+  ```
 - **Debug views:** the Graphics Debug window shows frame timings, lights, LOD colorings, volume
   sources, G-buffer views and benchmark controls.
 
@@ -219,7 +248,25 @@ What the renderer does and the work it builds on.
   Volumetric*, SIGGRAPH 2013), weighted by albedo and the volume's thickness. `FogMath` has the
   math in Java, with tests.
 
-**Planned**: a particle system; stochastic lightcuts for light visibility (Yuksel 2019).
+**Particles**
+
+- One GPU pool with free and alive lists; each frame a compute pass moves every alive particle
+  (closed-form motion under constant acceleration and linear drag), a splash pass spawns where
+  particles hit the world, and an emission pass spawns each emitter's particles, all sized by
+  indirect dispatches. Positions are kept relative to an anchor near the camera, so they stay
+  precise anywhere in the world. `ParticleMath` has the math in Java, with tests.
+- Billboards are drawn through the transparency passes, weighted by the voxel transmittance like
+  any translucent surface, soft where they meet the opaque scene, fogged at their own depth, and
+  stretched along their motion for streaks. Lit particles are lit once each, in compute, by the
+  sun through its cascades, the sky, and the clustered lights with a Henyey-Greenstein phase.
+- Volumetric particles are soft balls splatted into the fog's froxels instead, lit and shaded as
+  fog, with their optical depth toward the sun and out to their edges in closed form, for broad
+  thick smoke.
+- Collisions test the occupancy volume's finest voxels near the camera (baked sections); weather
+  around the camera tests the sky occlusion map, so rain and snow stop on roofs, and splashes come
+  from the hits.
+
+**Planned**: stochastic lightcuts for light visibility (Yuksel 2019).
 
 ## Graphics Manager
 
@@ -279,6 +326,8 @@ These are Java system properties, given before `-jar`:
 | `-Dikala.benchmark.fog=<density>[,<falloff>,<base>,<anisotropy>]` | not set | Turns the scene's fog on with this density (per meter) and, optionally, height falloff (per meter), base height and anisotropy. |
 | `-Dikala.benchmark.haze=true` | `false` | Adds the physical sky's haze to the fog; it only shows with a physical sky (`-Dikala.benchmark.physicalSky=true`). |
 | `-Dikala.benchmark.smoke=<x>,<y>,<z>` | not set | Places test media there: a column of white smoke drifting up, a glowing orange sphere 25 m along -x and a fog bank in front. |
+| `-Dikala.benchmark.particles=<x>,<y>,<z>` | not set | Places test particle emitters: a fountain there, sparks 6 m along x, smoke puffs 6 m along -x, thick smoke drawn in the fog volume 8 m along -z and a fire 6 m along z. |
+| `-Dikala.benchmark.weather=<rain or snow>` | not set | Makes it rain or snow around the camera, stopped by roofs and the ground. |
 | `-Dikala.vulkan.validation=false` | `true` | Not a benchmark option: runs without the Vulkan validation layers. Their checks can cost milliseconds of CPU a frame, so time the CPU without them, and keep them for correctness runs. |
 
 For example, from the asset editor's folder:

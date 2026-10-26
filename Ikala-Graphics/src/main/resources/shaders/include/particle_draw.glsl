@@ -45,5 +45,7 @@ layout(push_constant) uniform Constants {
 #define PARTICLE_VARYING_VIEW 2
 // Its size, then its emission
 #define PARTICLE_VARYING_SIZE 3
+// How much of its streak is motion, 0 for an unstretched billboard: history can't follow it there
+#define PARTICLE_VARYING_REACTIVE 4
 
 #endif

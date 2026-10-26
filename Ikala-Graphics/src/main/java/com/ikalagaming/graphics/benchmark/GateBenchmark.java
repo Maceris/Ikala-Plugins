@@ -26,6 +26,7 @@ import com.ikalagaming.graphics.lod.LodCache;
 import com.ikalagaming.graphics.lod.LodStore;
 import com.ikalagaming.graphics.scene.Fog;
 import com.ikalagaming.graphics.scene.MediumVolume;
+import com.ikalagaming.graphics.scene.ParticleEffect;
 import com.ikalagaming.graphics.scene.ParticleSamples;
 import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
@@ -61,6 +62,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.SplittableRandom;
@@ -646,6 +648,21 @@ public final class GateBenchmark {
 
     /** Where the test smoke puffs are from the fountain, in meters. */
     private static final Vector3d PUFFS_OFFSET = new Vector3d(-6, 0, 0);
+
+    /** Where the test thick smoke, drawn in the fog volume, is from the fountain, in meters. */
+    private static final Vector3d THICK_SMOKE_OFFSET = new Vector3d(0, 0, -8);
+
+    /** Where the test fire is from the fountain, in meters. */
+    private static final Vector3d FIRE_OFFSET = new Vector3d(0, 0, 6);
+
+    /** Where the test weather's box is centered, from the camera, in meters: a little above it. */
+    private static final Vector3d WEATHER_OFFSET = new Vector3d(0, 2, 0);
+
+    /** The {@code .weather} property's value for rain. */
+    public static final String WEATHER_RAIN = "rain";
+
+    /** The {@code .weather} property's value for snow. */
+    public static final String WEATHER_SNOW = "snow";
 
     /** How tall the test smoke column is, half of it, in meters. */
     private static final float SMOKE_HALF_HEIGHT = 20;
@@ -1352,11 +1369,34 @@ public final class GateBenchmark {
     }
 
     /**
-     * Place test particle emitters from the startup property: {@code .particles=x,y,z} puts a
-     * fountain there, glowing sparks 6 m along x and rising smoke puffs 6 m back, for looking at
-     * particles with the fog, the lights and transparency.
+     * Place test particle emitters from the startup properties: {@code .particles=x,y,z} puts a
+     * fountain there, glowing sparks 6 m along x, rising smoke puffs 6 m along -x, thick smoke in
+     * the fog volume 8 m along -z and a fire 6 m along z, for looking at particles with the fog,
+     * the lights and transparency; {@code .weather=rain} or {@code snow} makes it rain or snow
+     * around the camera.
      */
     private void placeTestParticles() {
+        final String weather = System.getProperty(PROPERTY + ".weather");
+        if (weather != null) {
+            final ParticleEffect effect =
+                    switch (weather.trim().toLowerCase(Locale.ROOT)) {
+                        case WEATHER_RAIN -> ParticleSamples.RAIN;
+                        case WEATHER_SNOW -> ParticleSamples.SNOW;
+                        default -> null;
+                    };
+            if (effect == null) {
+                log.warn(
+                        "The benchmark's weather must be {} or {}, not {}",
+                        WEATHER_RAIN,
+                        WEATHER_SNOW,
+                        weather);
+            } else {
+                final EmitterHandle handle = graphics.particles().spawn(effect, WEATHER_OFFSET);
+                if (handle != null) {
+                    testEmitters.add(handle);
+                }
+            }
+        }
         final String value = System.getProperty(PROPERTY + ".particles");
         if (value == null) {
             return;
@@ -1374,7 +1414,10 @@ public final class GateBenchmark {
         final EmitterHandle[] handles = {
             graphics.particles().spawn(ParticleSamples.FOUNTAIN, at),
             graphics.particles().spawn(ParticleSamples.SPARKS, new Vector3d(at).add(SPARKS_OFFSET)),
-            graphics.particles().spawn(ParticleSamples.SMOKE, new Vector3d(at).add(PUFFS_OFFSET))
+            graphics.particles().spawn(ParticleSamples.SMOKE, new Vector3d(at).add(PUFFS_OFFSET)),
+            graphics.particles()
+                    .spawn(ParticleSamples.THICK_SMOKE, new Vector3d(at).add(THICK_SMOKE_OFFSET)),
+            graphics.particles().spawn(ParticleSamples.FIRE, new Vector3d(at).add(FIRE_OFFSET))
         };
         for (EmitterHandle handle : handles) {
             if (handle != null) {
