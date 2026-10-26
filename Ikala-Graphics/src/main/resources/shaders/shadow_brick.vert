@@ -24,6 +24,8 @@ layout(location = 3) flat out vec3 outDirection;
 // How much the map's depth grows per meter along its direction: the maps are orthographic, so the
 // fragment shader finds a point's depth from its own without the matrix
 layout(location = 4) flat out float outDepthStep;
+// How wide the brick's voxels are, in meters
+layout(location = 5) flat out float outScale;
 
 // The 8 corners by bit (x, y, z), and the 12 triangles facing out, counter-clockwise from outside
 const int CORNERS[36] = int[36](
@@ -38,11 +40,14 @@ void main()
 {
     VolumeDraw draw = draws.volumeDraws[gl_InstanceIndex];
     int corner = CORNERS[gl_VertexIndex];
-    vec3 offset = vec3(corner & 1, (corner >> 1) & 1, (corner >> 2) & 1) * float(VOLUME_BRICK);
+    float scale = volumeDrawScale(draw);
+    vec3 offset = vec3(corner & 1, (corner >> 1) & 1, (corner >> 2) & 1) * float(VOLUME_BRICK)
+        * scale;
     vec3 render = draw.corner + offset;
     outRender = render;
     outCorner = draw.corner;
-    outSlot = draw.slot;
+    outSlot = volumeDrawSlot(draw);
+    outScale = scale;
     gl_Position = projViewMatrix * vec4(render, 1.0);
     // The map's direction: from its near end to its far end at this vertex's spot
     mat4 inverseMatrix = inverse(projViewMatrix);

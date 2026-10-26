@@ -6,6 +6,7 @@ import static org.lwjgl.vulkan.VK13.*;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.Sections;
+import com.ikalagaming.graphics.graph.CoarseBricks;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.VolumeMaterials;
@@ -126,13 +127,33 @@ public class VolumeUpload implements RenderStage {
             return;
         }
         publishMaterials(state, scene.getMaterialCache());
-        // The nearest sections first, while the atlas is full
-        bricks.rebalance(scene.getCamera().getPosition());
+        // The nearest sections first, while the atlas is full; far ones as coarse bricks, by how
+        // big a voxel is on screen. m11 is 1 / tan(fov / 2), negative with Vulkan's y flip
+        final double pixelsPerMeter =
+                Math.abs(scene.getObserver().getProjectionMatrix().m11())
+                        * sceneTarget.height()
+                        / 2.0;
+        bricks.rebalance(scene.getCamera().getPosition(), pixelsPerMeter);
         final List<VolumeBricks.Upload> uploads = bricks.takeUploads(MAX_BRICKS);
         upload(state, uploads);
         // Bricks standing in for meshes off the GPU stand in for them in the occupancy volume and
         // the shadow maps too, which draw them again where a new one came in
         for (VolumeBricks.Upload upload : uploads) {
+            if (upload.position().level() > 0) {
+                // A coarse brick, far past the occupancy volume, stands in for all its sections
+                if (state.shadowInvalidation != null) {
+                    final double size = Sections.SECTION_SIZE;
+                    final double span = size * CoarseBricks.span(upload.position().level());
+                    final double[] min = {
+                        upload.position().x() * size,
+                        upload.position().y() * size,
+                        upload.position().z() * size
+                    };
+                    state.shadowInvalidation.add(
+                            min, new double[] {min[0] + span, min[1] + span, min[2] + span});
+                }
+                continue;
+            }
             if (!state.sections.bricksStandIn(upload.position())) {
                 continue;
             }

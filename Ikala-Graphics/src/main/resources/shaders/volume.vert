@@ -37,7 +37,8 @@ void main()
 {
     VolumeDraw draw = draws.volumeDraws[gl_InstanceIndex];
     int corner = CORNERS[gl_VertexIndex];
-    vec3 offset = vec3(corner & 1, (corner >> 1) & 1, (corner >> 2) & 1) * float(VOLUME_BRICK);
+    vec3 offset = vec3(corner & 1, (corner >> 1) & 1, (corner >> 2) & 1) * float(VOLUME_BRICK)
+        * volumeDrawScale(draw);
     vec3 renderPosition = draw.corner + offset;
     outRenderPosition = renderPosition;
     outDraw = gl_InstanceIndex;

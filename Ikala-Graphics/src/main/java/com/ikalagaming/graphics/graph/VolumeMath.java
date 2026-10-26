@@ -54,7 +54,7 @@ public final class VolumeMath {
     public static final int SLOTS_Y = 16;
 
     /** Brick slots along the atlas's z. */
-    public static final int SLOTS_Z = 16;
+    public static final int SLOTS_Z = 24;
 
     /** How many bricks the atlas holds. */
     public static final int SLOTS = SLOTS_X * SLOTS_Y * SLOTS_Z;

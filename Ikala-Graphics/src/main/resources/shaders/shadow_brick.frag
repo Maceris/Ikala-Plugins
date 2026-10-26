@@ -19,8 +19,9 @@ layout(location = 1) flat in vec3 outCorner;
 layout(location = 2) flat in uint outSlot;
 layout(location = 3) flat in vec3 outDirection;
 layout(location = 4) flat in float outDepthStep;
+layout(location = 5) flat in float outScale;
 
-// How far past a solid voxel's face its shadow starts, in meters: half a voxel
+// How far past a solid voxel's face its shadow starts, in voxels: half a voxel
 const float SHADOW_OFFSET = 0.5;
 
 // A well spread hash (PCG)
@@ -35,9 +36,10 @@ void main()
 {
     // No component exactly 0, which would make 0 times infinity where the ray lies in a face
     vec3 direction = mix(outDirection, vec3(1e-20), equal(outDirection, vec3(0.0)));
-    // The walk's rays start at the origin, so the origin moves to this fragment's point
+    // The walk's rays start at the origin, so the origin moves to this fragment's point; distances
+    // along the ray are in the brick's voxels, outScale meters each
     vec3 origin = outRender;
-    vec3 corner = outCorner - origin;
+    vec3 corner = (outCorner - origin) / outScale;
     vec2 span = volumeRayBox(direction, corner, corner + float(VOLUME_BRICK));
     float start = max(span.x, 0.0);
     float end = span.y;
@@ -95,7 +97,7 @@ void main()
         discard;
     }
     // The walk's origin is this fragment's point
-    float depth = gl_FragCoord.z + outDepthStep * (t + SHADOW_OFFSET);
+    float depth = gl_FragCoord.z + outDepthStep * (t + SHADOW_OFFSET) * outScale;
     if (!(depth >= 0.0 && depth <= 1.0)) {
         discard;
     }

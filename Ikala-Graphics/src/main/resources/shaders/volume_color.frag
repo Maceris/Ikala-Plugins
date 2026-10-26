@@ -91,33 +91,39 @@ vec3 renderToView(vec3 renderPoint) {
     return transpose(mat3(invViewMatrix)) * (renderPoint - invViewMatrix[3].xyz);
 }
 
-// How much gets through what a brick holds a little way from a point toward a direction
-float selfShade(uint slot, vec3 local, vec3 toward) {
+// How much gets through what a brick holds a little way from a point toward a direction, its
+// voxels scale meters wide
+float selfShade(uint slot, vec3 local, vec3 toward, float scale) {
     float held = volumeDensity(slot, local + toward * SHADE_NEAR)
         + volumeDensity(slot, local + toward * SHADE_FAR);
-    return exp(-held * SHADE_LENGTH);
+    return exp(-held * SHADE_LENGTH * scale);
 }
 
 // How much of the sun (x) and the sky (y) reach a point, from the shadow cascades, the sky map past
 // them, and the brick itself
 vec2 visibility(uint slot, vec3 renderPoint, vec3 normal, vec3 local, vec3 renderSun,
-    float shadowDistance) {
+    float shadowDistance, float scale) {
     vec3 viewPoint = renderToView(renderPoint);
     float sunVisible = sunVisibility(viewPoint, renderPoint, normal);
     float sky = skyVisibility(renderPoint, normal);
     if (-viewPoint.z >= shadowDistance) {
         sunVisible = min(sunVisible, sky);
     }
-    return vec2(sunVisible * selfShade(slot, local, renderSun), sky * selfShade(slot, local, UP));
+    return vec2(sunVisible * selfShade(slot, local, renderSun, scale),
+        sky * selfShade(slot, local, UP, scale));
 }
 
 void main() {
     VolumeDraw draw = draws.volumeDraws[outDraw];
-    vec3 boxMax = draw.corner + float(VOLUME_BRICK);
+    uint slot = volumeDrawSlot(draw);
+    // Distances along the ray in the brick's voxels, scale meters each
+    float scale = volumeDrawScale(draw);
+    vec3 corner = draw.corner / scale;
+    vec3 boxMax = corner + float(VOLUME_BRICK);
     vec3 direction = normalize(outRenderPosition);
-    vec2 span = volumeRayBox(direction, draw.corner, boxMax);
+    vec2 span = volumeRayBox(direction, corner, boxMax);
     // Nothing before the hand over starts is the brick's to draw
-    float start = max(span.x, max(fadeStart, 0.0));
+    float start = max(span.x, max(fadeStart, 0.0) / scale);
     float end = span.y;
     // The opaque scene stops the ray
     ivec2 pixel = ivec2(gl_FragCoord.xy);
@@ -127,11 +133,11 @@ void main() {
         vec4 view = invProjectionMatrix * vec4(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, depth, 1.0);
         // Past it by a little: the depth also holds the bricks' own solid faces, written by
         // volume_depth.frag, less precisely than their distances in the hit buffer
-        end = min(end, length(view.xyz / view.w) * (1.0 + DEPTH_SLACK));
+        end = min(end, length(view.xyz / view.w) * (1.0 + DEPTH_SLACK) / scale);
     }
     // A brick's solid face nearer than the opaque scene stops the ray too
     float hit = uintBitsToFloat(hitBuffer.hits[uint(pixel.x) + uint(screenSize.x) * uint(pixel.y)]);
-    end = min(end, hit * (1.0 + HIT_SLACK));
+    end = min(end, hit * (1.0 + HIT_SLACK) / scale);
     if (end <= start) {
         discard;
     }
@@ -146,44 +152,46 @@ void main() {
     float shadowDistance = -cascadeShadowSplits[NUM_CASCADES - 1].splitDistance;
 
     // How much gets through from the camera to the brick
-    float entryDepth = -renderToView(direction * start).z;
+    float entryDepth = -renderToView(direction * start * scale).z;
     float inFront = voxelWeights != 0
         ? transmittanceInFront(gl_FragCoord.xy, entryDepth, logScale, tiles)
         : 1.0;
     float through = 1.0;
     vec4 sum = vec4(0.0);
     float optical = 0.0;
-    VolumeWalk walk = volumeWalkStart(direction, draw.corner, start);
+    VolumeWalk walk = volumeWalkStart(direction, corner, start);
     // The axis of the face the ray last crossed into a voxel through
-    int axis = volumeEntryAxis(direction, draw.corner, boxMax);
+    int axis = volumeEntryAxis(direction, corner, boxMax);
     // The cells holding anything
-    uvec2 filledCells = volumeCellMasks[draw.slot].zw;
+    uvec2 filledCells = volumeCellMasks[slot].zw;
     float t = start;
     for (int i = 0; i < VOLUME_MAX_VOXELS; ++i) {
         if (!volumeCellSet(filledCells, walk.voxel / VOLUME_CELL)) {
-            t = volumeWalkSkipCell(walk, direction, draw.corner, axis);
+            t = volumeWalkSkipCell(walk, direction, corner, axis);
             if (t >= end || volumeWalkOutside(walk)) {
                 break;
             }
             continue;
         }
         float leave = min(volumeWalkNext(walk), end);
-        vec4 stored = volumeStored(draw.slot, walk.voxel);
+        vec4 stored = volumeStored(slot, walk.voxel);
         vec4 voxel = vec4(stored.rgb, volumeDecode(stored.a));
-        if (voxel.a > 0.0 && volumeTakes(gl_FragCoord.xy, frame, t, fadeStart, fadeLength)) {
+        if (voxel.a > 0.0 && volumeTakes(gl_FragCoord.xy, frame, t * scale, fadeStart, fadeLength)) {
             if (volumeIsSolid(stored.a)) {
                 // A block's face, textured as its mesh is: lit as one, and nothing behind it
                 // shows, unless the ray meets a hole cut in it and goes on through the block
                 vec3 normal = vec3(0.0);
                 normal[axis] = -float(walk.stepTo[axis]);
-                vec3 hit = direction * t;
+                // In the brick's voxels, and in render space
+                vec3 inVoxels = direction * t;
+                vec3 hit = inVoxels * scale;
                 vec4 texel;
-                bool textured = volumeFaceTexel(draw.slot, walk.voxel, hit - draw.corner, axis,
+                bool textured = volumeFaceTexel(slot, walk.voxel, inVoxels - corner, axis,
                     normal[axis], direction, t, screenSize.y, texel);
                 if (!textured || !volumeFaceHole(texel)) {
-                    vec3 local = hit - draw.corner + normal * FACE_OFFSET;
-                    vec2 seen = visibility(draw.slot, hit, normal, local, renderSun,
-                        shadowDistance);
+                    vec3 local = inVoxels - corner + normal * FACE_OFFSET;
+                    vec2 seen = visibility(slot, hit, normal, local, renderSun,
+                        shadowDistance, scale);
                     float facing = max(dot(normal, renderSun), 0.0);
                     vec3 light = sun * (facing / PI) * seen.x
                         + ambient * mix(skyLightFloor, 1.0, seen.y);
@@ -205,11 +213,13 @@ void main() {
                     break;
                 }
             } else {
-                float segment = leave - t;
+                // In meters, through the voxel
+                float segment = (leave - t) * scale;
                 float alpha = 1.0 - exp(-voxel.a * segment);
-                vec3 renderPoint = direction * (t + 0.5 * segment);
-                vec2 seen = visibility(draw.slot, renderPoint, UP, renderPoint - draw.corner,
-                    renderSun, shadowDistance);
+                vec3 inVoxels = direction * (0.5 * (t + leave));
+                vec3 renderPoint = inVoxels * scale;
+                vec2 seen = visibility(slot, renderPoint, UP, inVoxels - corner,
+                    renderSun, shadowDistance, scale);
                 vec3 color = voxel.rgb * (sun * SUN_SCATTER * seen.x
                     + ambient * mix(skyLightFloor, 1.0, seen.y));
                 float weight = voxelWeights != 0

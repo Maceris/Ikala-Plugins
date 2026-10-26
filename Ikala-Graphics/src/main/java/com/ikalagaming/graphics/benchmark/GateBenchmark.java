@@ -880,6 +880,10 @@ public final class GateBenchmark {
                     GraphicsManager.getSettings().sunShadowCache = Boolean.parseBoolean(sunCache);
                 }
                 // Off, far leaves whose meshes are off the GPU cast no sun shadow
+                final String coarseBricks = System.getProperty(PROPERTY + ".coarseBricks");
+                if (coarseBricks != null) {
+                    GraphicsManager.getSettings().coarseBricks = Boolean.parseBoolean(coarseBricks);
+                }
                 final String volumeShadows = System.getProperty(PROPERTY + ".volumeShadows");
                 if (volumeShadows != null) {
                     GraphicsManager.getSettings().volumeShadows =
@@ -1805,10 +1809,14 @@ public final class GateBenchmark {
         final var bricks = renderer().getState().volumeBricks;
         if (bricks != null) {
             log.info(
-                    "Gate benchmark volumes at {} m: {} bricks ({} queued, {} without a slot), {}"
-                            + " drawn, {} MiB atlas, {} section triangles placed",
+                    "Gate benchmark volumes at {} m: {} bricks ({} of sections, {} at level 1, {}"
+                            + " at level 2; {} queued, {} without a slot), {} drawn, {} MiB atlas,"
+                            + " {} section triangles placed",
                     GraphicsManager.getSettings().volumeDistance,
                     bricks.brickCount(),
+                    bricks.brickCount(0),
+                    bricks.brickCount(1),
+                    bricks.brickCount(2),
                     bricks.queuedCount(),
                     bricks.withoutSlotCount(),
                     bricks.drawCount(renderer().getState().frameIndex),

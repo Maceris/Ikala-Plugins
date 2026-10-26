@@ -114,6 +114,14 @@ public class GraphicsSettings {
     public boolean volumeShadows = true;
 
     /**
+     * Whether coarse volume bricks stand in for far sections' bricks, each covering several
+     * sections with wider voxels where they are too small on screen to tell apart, so the brick
+     * atlas reaches much further. Off, every section has its own brick, and the farthest go without
+     * once the atlas is full.
+     */
+    public boolean coarseBricks = true;
+
+    /**
      * Whether live worlds' level of detail turns parts finer than a group's resolution into
      * coverage volumes, as the asset workbench can, instead of keeping them as triangles that stop
      * the DAG halving. Read when a plugin's live world starts. Sparse volumes fill their bricks

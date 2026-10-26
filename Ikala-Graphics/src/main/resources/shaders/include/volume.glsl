@@ -5,6 +5,11 @@
 // brick of VOLUME_BRICK cubed voxels a section, each voxel its surfaces' color and extinction, in
 // slots of one 3D atlas. VolumeMath has the same math in Java; keep them in step.
 //
+// Far out, a coarse brick of level L stands in for 2^L sections along each side, its voxels 2^L
+// meters wide (CoarseBricks): a draw's level rides above its slot. Walks run in the brick's own
+// voxels, so they divide the corner and their distances along the ray by the voxel's width going
+// in, and multiply back to meters for anything physical: extinction is per meter.
+//
 // A voxel inside a cut out block, like leaves, holds the most extinction there is, which marks it
 // solid: rays walking the brick a voxel at a time stop at its face and light it as a block's face.
 // Other voxels, of plants, water and glass, let light through by their extinction.
@@ -38,11 +43,25 @@ const float VOLUME_SOLID_DEPTH = 8.0;
 // Once this little light gets through a brick, the rest of it is skipped
 const float VOLUME_OPAQUE_ENOUGH = 0.01;
 
-// One brick to draw: its minimum corner relative to the camera, and its slot
+// One brick to draw: its minimum corner relative to the camera, and its slot, with its level above
+// VOLUME_LEVEL_SHIFT
 struct VolumeDraw {
     vec3 corner;
     uint slot;
 };
+
+// Where a draw's level sits in its slot word, see VolumeBricks.LEVEL_SHIFT
+const uint VOLUME_LEVEL_SHIFT = 28u;
+
+// A draw's slot in the atlas
+uint volumeDrawSlot(VolumeDraw draw) {
+    return draw.slot & ((1u << VOLUME_LEVEL_SHIFT) - 1u);
+}
+
+// How wide a draw's voxels are, in meters: 2^level
+float volumeDrawScale(VolumeDraw draw) {
+    return float(1u << (draw.slot >> VOLUME_LEVEL_SHIFT));
+}
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer VolumeDraws {
     VolumeDraw volumeDraws[];

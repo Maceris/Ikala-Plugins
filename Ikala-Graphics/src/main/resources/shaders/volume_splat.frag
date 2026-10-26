@@ -55,11 +55,15 @@ vec3 renderToView(vec3 renderPoint) {
 
 void main() {
     VolumeDraw draw = draws.volumeDraws[outDraw];
-    vec3 boxMax = draw.corner + float(VOLUME_BRICK);
+    uint slot = volumeDrawSlot(draw);
+    // Distances along the ray in the brick's voxels, scale meters each
+    float scale = volumeDrawScale(draw);
+    vec3 corner = draw.corner / scale;
+    vec3 boxMax = corner + float(VOLUME_BRICK);
     vec3 direction = normalize(outRenderPosition);
-    vec2 span = volumeRayBox(direction, draw.corner, boxMax);
+    vec2 span = volumeRayBox(direction, corner, boxMax);
     // Nothing before the hand over starts is the brick's to draw
-    float start = max(span.x, max(fadeStart, 0.0));
+    float start = max(span.x, max(fadeStart, 0.0) / scale);
     float end = span.y;
     uvec2 tile = uvec2(gl_FragCoord.xy);
     vec2 middle = min((vec2(tile) + 0.5) * float(TILE_SIZE), screenSize - 0.5);
@@ -70,40 +74,40 @@ void main() {
         vec4 view = invProjectionMatrix * vec4(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, depth, 1.0);
         // Past it by a little: the depth also holds the bricks' own solid faces, written by
         // volume_depth.frag, less precisely than their distances in the hit buffer
-        end = min(end, length(view.xyz / view.w) * (1.0 + DEPTH_SLACK));
+        end = min(end, length(view.xyz / view.w) * (1.0 + DEPTH_SLACK) / scale);
     }
     // A brick's solid face nearer than the opaque scene stops the ray too
     float hit = uintBitsToFloat(hitBuffer.hits[uint(pixel.x) + uint(screenSize.x) * uint(pixel.y)]);
-    end = min(end, hit * (1.0 + HIT_SLACK));
+    end = min(end, hit * (1.0 + HIT_SLACK) / scale);
     if (end <= start) {
         return;
     }
     uint column = tile.x + tiles.x * tile.y;
     uint sliceStride = tiles.x * tiles.y;
-    VolumeWalk walk = volumeWalkStart(direction, draw.corner, start);
+    VolumeWalk walk = volumeWalkStart(direction, corner, start);
     // The cells holding anything
-    uvec2 filledCells = volumeCellMasks[draw.slot].zw;
+    uvec2 filledCells = volumeCellMasks[slot].zw;
     float t = start;
     for (int i = 0; i < VOLUME_MAX_VOXELS; ++i) {
         if (!volumeCellSet(filledCells, walk.voxel / VOLUME_CELL)) {
             int crossed;
-            t = volumeWalkSkipCell(walk, direction, draw.corner, crossed);
+            t = volumeWalkSkipCell(walk, direction, corner, crossed);
             if (t >= end || volumeWalkOutside(walk)) {
                 break;
             }
             continue;
         }
         float leave = min(volumeWalkNext(walk), end);
-        vec4 stored = volumeStored(draw.slot, walk.voxel);
+        vec4 stored = volumeStored(slot, walk.voxel);
         vec4 voxel = vec4(stored.rgb, volumeDecode(stored.a));
-        if (voxel.a > 0.0 && volumeTakes(gl_FragCoord.xy, frame, t, fadeStart, fadeLength)) {
+        if (voxel.a > 0.0 && volumeTakes(gl_FragCoord.xy, frame, t * scale, fadeStart, fadeLength)) {
             // A solid voxel hides everything behind it, at its face
             bool solid = volumeIsSolid(stored.a);
             float at = solid ? t : 0.5 * (t + leave);
-            float center = sliceCoordinate(-renderToView(direction * at).z, logScale) - 0.5;
+            float center = sliceCoordinate(-renderToView(direction * at * scale).z, logScale) - 0.5;
             float lowerSlice = floor(center);
             float fraction = center - lowerSlice;
-            float amount = solid ? VOLUME_SOLID_DEPTH : voxel.a * (leave - t);
+            float amount = solid ? VOLUME_SOLID_DEPTH : voxel.a * (leave - t) * scale;
             uint total = uint(amount * FIXED_POINT_SCALE + 0.5);
             uint upperPart = uint(float(total) * fraction + 0.5);
             uint lower = uint(clamp(int(lowerSlice), 0, int(SLICES) - 1));

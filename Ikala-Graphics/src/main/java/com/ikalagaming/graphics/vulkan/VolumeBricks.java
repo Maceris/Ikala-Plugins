@@ -5,6 +5,8 @@ import static org.lwjgl.util.vma.Vma.*;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.graph.CoarseBricks;
+import com.ikalagaming.graphics.graph.OccupancyClipmap;
 import com.ikalagaming.graphics.graph.VolumeMath;
 import com.ikalagaming.graphics.graph.VolumeVoxelizer;
 import com.ikalagaming.graphics.lod.LodStore;
@@ -31,8 +33,15 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 
 /**
@@ -47,6 +56,12 @@ import java.util.function.BiConsumer;
  * sections that don't draw their own blocks now, which the transparency stages ray march, and the
  * bricks to cast shadows: those of sections whose own cut out and translucent meshes are off the
  * GPU, which the shadow stage walks along the sun.
+ *
+ * <p>Far out, where a voxel is too small on screen to tell apart, coarse bricks stand in for
+ * several sections' bricks: a brick of level L covers 2^L sections along each side with voxels 2^L
+ * meters wide, downsampled from theirs (see {@link CoarseBricks}), so the atlas covers far more
+ * ground. Each cell of 2 cubed sections picks its level by its distance from the camera, the cells
+ * of a level 2 brick all together, and keeps its old bricks drawn until the new ones are in.
  *
  * <p>The atlas stays in the general layout, which compute writes it in, as uploads do. Render
  * thread only.
@@ -355,6 +370,160 @@ public class VolumeBricks {
     private static final int MAX_SWAPS = 256;
 
     /**
+     * Where a draw's level sits in its slot word, above the slot: the shaders scale the brick's box
+     * and walk by 2^level.
+     */
+    public static final int LEVEL_SHIFT = 28;
+
+    /** How far the camera moves before cells pick their levels again, in meters. */
+    private static final double RING_DISTANCE = 8;
+
+    /**
+     * How far past where a level starts a cell must be to start drawing at it, and how far inside
+     * to stop, in meters, so cells at the edge don't flip back and forth.
+     */
+    private static final double RING_MARGIN = 16;
+
+    /**
+     * How far past the volume distance and the occupancy volume coarse bricks start at least, in
+     * meters: nearer, sections' own bricks feed the occupancy volume and hand over to their blocks.
+     */
+    private static final double COARSE_CLEARANCE = 32;
+
+    /** The most frames a cell keeps its old bricks drawn while its new ones come in. */
+    private static final int HANDOVER_FRAMES = 120;
+
+    /** Threads building coarse bricks. */
+    private static final int COARSE_THREADS = 2;
+
+    /** Each slot's brick's level: 0 for a section's own, more for a coarse brick. */
+    private final int[] slotLevels = new int[VolumeMath.SLOTS];
+
+    /** How many slots hold bricks of each level. */
+    private final int[] levelCounts = new int[CoarseBricks.MAX_LEVEL + 1];
+
+    /**
+     * How many times each brick is wanted drawn: a section's own by its cell, a level 1 brick by
+     * its cell, a level 2 brick by each of its cells drawn at level 2, and each of them once more
+     * while a hand over keeps it.
+     */
+    private final Map<LodStore.SectionPos, Integer> wanted = new HashMap<>();
+
+    /** Coarse bricks built for wanted coarse keys. */
+    private final Map<LodStore.SectionPos, VolumeVoxelizer.Brick> coarse = new HashMap<>();
+
+    /** The build of each coarse key being built now, whose result is the one taken. */
+    private final Map<LodStore.SectionPos, Integer> building = new HashMap<>();
+
+    /**
+     * Coarse keys to build, as their sections' bricks change: while a world loads, a level 2
+     * brick's 64 sections come in one by one, so builds start a few a frame, one at a time for each
+     * key.
+     */
+    private final Set<LodStore.SectionPos> dirty = new LinkedHashSet<>();
+
+    /** The most coarse builds started in a frame. */
+    private static final int BUILDS_PER_FRAME = 64;
+
+    /** Builds handed out, for numbering them. */
+    private int builds;
+
+    /**
+     * A coarse brick built on a worker.
+     *
+     * @param key Its key.
+     * @param build Which build it was.
+     * @param brick The brick, or null if its sections have nothing.
+     */
+    private record Built(
+            LodStore.@NonNull SectionPos key, int build, VolumeVoxelizer.Brick brick) {}
+
+    /** Coarse bricks built, waiting for the render thread. */
+    private final Queue<Built> built = new ConcurrentLinkedQueue<>();
+
+    /** The threads building coarse bricks, or null before the first build. */
+    private ExecutorService coarseWorkers;
+
+    /** A cell of 2 cubed sections, of those holding a brick, and the level it draws at. */
+    private static final class Cell {
+        /** Its key: its corner, in sections, at level 1. */
+        final LodStore.SectionPos key;
+
+        /** How many of its sections hold a brick. */
+        int members;
+
+        /** The level it draws at: 0 for its sections' own bricks, 1 its own, 2 its parent's. */
+        int level;
+
+        Cell(LodStore.@NonNull SectionPos key) {
+            this.key = key;
+        }
+    }
+
+    /** A cell of 4 cubed sections, of the cells inside it, which draw at level 2 together. */
+    private static final class Parent {
+        /** Its key: its corner, in sections, at level 2. */
+        final LodStore.SectionPos key;
+
+        /** Its cells, x fastest, null where none holds a brick. */
+        final Cell[] cells = new Cell[CHILDREN];
+
+        /** How many of its cells there are. */
+        int count;
+
+        /** How many of its cells draw at level 1 or coarser. */
+        int coarseCells;
+
+        /** Whether it draws whole at level 2. */
+        boolean whole;
+
+        /** Its place in {@link #parentList}. */
+        int index;
+
+        Parent(LodStore.@NonNull SectionPos key) {
+            this.key = key;
+        }
+    }
+
+    /** Cells along a side of a parent, and cells in it. */
+    private static final int CHILDREN_SPAN = 2;
+
+    private static final int CHILDREN = CHILDREN_SPAN * CHILDREN_SPAN * CHILDREN_SPAN;
+
+    /** The cells, by key. */
+    private final Map<LodStore.SectionPos, Cell> cells = new HashMap<>();
+
+    /** The parents, by key, and in a list to go through. */
+    private final Map<LodStore.SectionPos, Parent> parents = new HashMap<>();
+
+    private final List<Parent> parentList = new ArrayList<>();
+
+    /** Where each level starts drawing, in meters, as of the last time the rings were weighed. */
+    private double[] ringDistances = {0, Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY};
+
+    /** Where the camera was when the rings were last weighed, or null. */
+    private Vector3d ringsAt;
+
+    /**
+     * A cell's change of level: the bricks it drew from, released once the bricks it draws now are
+     * in, or after {@link #HANDOVER_FRAMES}.
+     *
+     * @param from The bricks it drew from.
+     * @param to The bricks it draws now.
+     * @param deadline The frame they are released at, at the latest.
+     */
+    private record Handover(
+            @NonNull List<LodStore.SectionPos> from,
+            @NonNull List<LodStore.SectionPos> to,
+            long deadline) {}
+
+    /** Hand overs not done yet. */
+    private final List<Handover> handovers = new ArrayList<>();
+
+    /** Frames counted by {@link #rebalance}. */
+    private long frameCount;
+
+    /**
      * Set up the atlas, cleared to empty in the general layout.
      *
      * @param state The Vulkan state.
@@ -615,25 +784,19 @@ public class VolumeBricks {
             remove(position);
             return;
         }
-        held.put(position, brick);
-        if (!slots.containsKey(position)) {
-            if (free.isEmpty()) {
-                if (!warnedFull) {
-                    log.warn(
-                            "The volume atlas is full, at {} bricks; the sections nearest the"
-                                    + " camera keep theirs, and the rest go without their cut out"
-                                    + " and translucent blocks",
-                            VolumeMath.SLOTS);
-                    warnedFull = true;
-                }
-                withoutSlot.add(position);
-                waitingChanged = true;
-                return;
+        final boolean added = held.put(position, brick) == null;
+        final Cell cell = added ? join(position) : cells.get(keyAt(position, 1));
+        if (wanted.containsKey(position)) {
+            // Drawn now, or kept by a hand over: the new brick replaces the old
+            if (slots.containsKey(position)) {
+                uploads.put(position, brick);
+            } else if (!withoutSlot.contains(position)) {
+                giveSlot(position, brick);
             }
-            take(position);
-            withoutSlot.remove(position);
+        } else if (cell.level == 0) {
+            want(position);
         }
-        uploads.put(position, brick);
+        rebuildCoarse(position);
     }
 
     /**
@@ -643,19 +806,526 @@ public class VolumeBricks {
      */
     public void remove(LodStore.@NonNull SectionPos position) {
         uploads.remove(position);
-        held.remove(position);
         release(position);
+        if (held.remove(position) == null) {
+            return;
+        }
+        final Cell cell = cells.get(keyAt(position, 1));
+        if (cell.level == 0) {
+            unwant(position);
+        }
+        leave(cell);
+        rebuildCoarse(position);
+    }
+
+    /**
+     * Give a key its slot, or a free one, and queue its brick to be copied in; when the atlas is
+     * full it waits for one.
+     *
+     * @param key The key.
+     * @param brick Its brick.
+     */
+    private void giveSlot(LodStore.@NonNull SectionPos key, VolumeVoxelizer.@NonNull Brick brick) {
+        if (!slots.containsKey(key)) {
+            if (free.isEmpty()) {
+                if (!warnedFull) {
+                    log.warn(
+                            "The volume atlas is full, at {} bricks; the sections nearest the"
+                                    + " camera keep theirs, and the rest go without their cut out"
+                                    + " and translucent blocks",
+                            VolumeMath.SLOTS);
+                    warnedFull = true;
+                }
+                withoutSlot.add(key);
+                waitingChanged = true;
+                return;
+            }
+            take(key);
+            withoutSlot.remove(key);
+        }
+        uploads.put(key, brick);
+    }
+
+    /**
+     * The key of the brick of a level covering a section: the corner, in sections, of the cube of
+     * 2^level sections along each side it is in.
+     *
+     * @param position The section.
+     * @param level The level.
+     * @return The key.
+     */
+    static LodStore.SectionPos keyAt(LodStore.@NonNull SectionPos position, int level) {
+        final int span = CoarseBricks.span(level);
+        return new LodStore.SectionPos(
+                Math.floorDiv(position.x(), span) * span,
+                Math.floorDiv(position.y(), span) * span,
+                Math.floorDiv(position.z(), span) * span,
+                level);
+    }
+
+    /**
+     * Note a section that now holds a brick in its cell, making the cell, and its parent, if it is
+     * the first; a new cell picks its level from the last rings weighed.
+     *
+     * @param position The section.
+     * @return Its cell.
+     */
+    private Cell join(LodStore.@NonNull SectionPos position) {
+        final LodStore.SectionPos key = keyAt(position, 1);
+        Cell cell = cells.get(key);
+        if (cell == null) {
+            cell = new Cell(key);
+            cells.put(key, cell);
+            final LodStore.SectionPos parentKey = keyAt(key, 2);
+            Parent parent = parents.get(parentKey);
+            if (parent == null) {
+                parent = new Parent(parentKey);
+                parent.index = parentList.size();
+                parents.put(parentKey, parent);
+                parentList.add(parent);
+                if (ringsAt != null) {
+                    parent.whole =
+                            CoarseBricks.reaches(
+                                    boxDistance(parentKey, ringsAt),
+                                    ringDistances[2],
+                                    false,
+                                    RING_MARGIN);
+                }
+            }
+            parent.cells[childIndex(key)] = cell;
+            ++parent.count;
+            ++cell.members;
+            final int level = ringsAt == null ? 0 : levelOf(cell, parent, ringsAt);
+            if (level > 0) {
+                cell.level = level;
+                ++parent.coarseCells;
+                want(represented(cell, level).getFirst());
+            }
+            return cell;
+        }
+        ++cell.members;
+        return cell;
+    }
+
+    /**
+     * Note that a section of a cell no longer holds a brick, taking the cell, and its parent, out
+     * once they have none.
+     *
+     * @param cell The cell.
+     */
+    private void leave(@NonNull Cell cell) {
+        if (--cell.members > 0) {
+            return;
+        }
+        if (cell.level > 0) {
+            unwant(represented(cell, cell.level).getFirst());
+        }
+        cells.remove(cell.key);
+        final Parent parent = parents.get(keyAt(cell.key, 2));
+        parent.cells[childIndex(cell.key)] = null;
+        if (cell.level > 0) {
+            --parent.coarseCells;
+        }
+        if (--parent.count == 0) {
+            parents.remove(parent.key);
+            final Parent last = parentList.removeLast();
+            if (last != parent) {
+                parentList.set(parent.index, last);
+                last.index = parent.index;
+            }
+        }
+    }
+
+    /**
+     * Where a cell sits in its parent, x fastest.
+     *
+     * @param key The cell's key.
+     * @return Its index.
+     */
+    private static int childIndex(LodStore.@NonNull SectionPos key) {
+        final int span = CoarseBricks.span(1);
+        return Math.floorMod(key.x() / span, CHILDREN_SPAN)
+                + CHILDREN_SPAN
+                        * (Math.floorMod(key.y() / span, CHILDREN_SPAN)
+                                + CHILDREN_SPAN * Math.floorMod(key.z() / span, CHILDREN_SPAN));
+    }
+
+    /**
+     * The bricks a cell draws from at a level: its sections' own, its own, or its parent's.
+     *
+     * @param cell The cell.
+     * @param level The level.
+     * @return The keys.
+     */
+    private List<LodStore.SectionPos> represented(@NonNull Cell cell, int level) {
+        if (level > 0) {
+            return List.of(keyAt(cell.key, level));
+        }
+        final List<LodStore.SectionPos> out = new ArrayList<>();
+        final int span = CoarseBricks.span(1);
+        for (int z = 0; z < span; ++z) {
+            for (int y = 0; y < span; ++y) {
+                for (int x = 0; x < span; ++x) {
+                    final LodStore.SectionPos position =
+                            new LodStore.SectionPos(
+                                    cell.key.x() + x, cell.key.y() + y, cell.key.z() + z);
+                    if (held.containsKey(position)) {
+                        out.add(position);
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Want a brick drawn once more; the first time, give it a slot, or build it if it is coarse.
+     *
+     * @param key The brick's key.
+     */
+    private void want(LodStore.@NonNull SectionPos key) {
+        if (wanted.merge(key, 1, Integer::sum) > 1) {
+            return;
+        }
+        if (key.level() == 0) {
+            final VolumeVoxelizer.Brick brick = held.get(key);
+            if (brick != null) {
+                giveSlot(key, brick);
+            }
+        } else {
+            build(key);
+        }
+    }
+
+    /**
+     * Want a brick drawn once less; once it isn't wanted, give its slot back.
+     *
+     * @param key The brick's key.
+     */
+    private void unwant(LodStore.@NonNull SectionPos key) {
+        final Integer count = wanted.get(key);
+        if (count == null) {
+            return;
+        }
+        if (count > 1) {
+            wanted.put(key, count - 1);
+            return;
+        }
+        wanted.remove(key);
+        uploads.remove(key);
+        release(key);
+        if (key.level() > 0) {
+            coarse.remove(key);
+            building.remove(key);
+            dirty.remove(key);
+        }
+    }
+
+    /**
+     * Build again the coarse bricks over a section whose brick changed, those that are wanted.
+     *
+     * @param position The section.
+     */
+    private void rebuildCoarse(LodStore.@NonNull SectionPos position) {
+        for (int level = 1; level <= CoarseBricks.MAX_LEVEL; ++level) {
+            final LodStore.SectionPos key = keyAt(position, level);
+            if (wanted.containsKey(key)) {
+                build(key);
+            }
+        }
+    }
+
+    /**
+     * Have a coarse brick built from its sections' bricks as they are now, soon.
+     *
+     * @param key The coarse brick's key.
+     */
+    private void build(LodStore.@NonNull SectionPos key) {
+        dirty.add(key);
+    }
+
+    /**
+     * Start building the coarse bricks marked, a budget a frame, each only once its last build is
+     * back, so a key's builds don't pile up.
+     */
+    private void startBuilds() {
+        final Iterator<LodStore.SectionPos> it = dirty.iterator();
+        int started = 0;
+        while (it.hasNext() && started < BUILDS_PER_FRAME) {
+            final LodStore.SectionPos key = it.next();
+            if (!wanted.containsKey(key)) {
+                it.remove();
+                continue;
+            }
+            if (building.containsKey(key)) {
+                continue;
+            }
+            it.remove();
+            startBuild(key);
+            ++started;
+        }
+    }
+
+    /**
+     * Build a coarse brick on the workers from its sections' bricks as they are now.
+     *
+     * @param key The coarse brick's key.
+     */
+    private void startBuild(LodStore.@NonNull SectionPos key) {
+        final int span = CoarseBricks.span(key.level());
+        final VolumeVoxelizer.Brick[] children = new VolumeVoxelizer.Brick[span * span * span];
+        for (int z = 0; z < span; ++z) {
+            for (int y = 0; y < span; ++y) {
+                for (int x = 0; x < span; ++x) {
+                    children[x + span * (y + span * z)] =
+                            held.get(
+                                    new LodStore.SectionPos(key.x() + x, key.y() + y, key.z() + z));
+                }
+            }
+        }
+        final int build = ++builds;
+        building.put(key, build);
+        coarseWorkers()
+                .execute(
+                        () ->
+                                built.add(
+                                        new Built(
+                                                key,
+                                                build,
+                                                CoarseBricks.downsample(key.level(), children))));
+    }
+
+    /**
+     * The threads building coarse bricks, started the first time.
+     *
+     * @return The threads.
+     */
+    private ExecutorService coarseWorkers() {
+        if (coarseWorkers == null) {
+            final AtomicInteger count = new AtomicInteger();
+            coarseWorkers =
+                    Executors.newFixedThreadPool(
+                            COARSE_THREADS,
+                            runnable -> {
+                                final Thread thread =
+                                        new Thread(
+                                                runnable,
+                                                "Coarse bricks " + count.incrementAndGet());
+                                thread.setDaemon(true);
+                                thread.setPriority(Thread.MIN_PRIORITY);
+                                return thread;
+                            });
+        }
+        return coarseWorkers;
+    }
+
+    /** Take in the coarse bricks built since, those still wanted from their latest builds. */
+    private void takeBuilt() {
+        Built done;
+        while ((done = built.poll()) != null) {
+            final Integer latest = building.get(done.key());
+            if (latest == null || latest != done.build()) {
+                continue;
+            }
+            building.remove(done.key());
+            if (!wanted.containsKey(done.key())) {
+                continue;
+            }
+            if (done.brick() == null) {
+                // Its sections have nothing to draw now
+                coarse.remove(done.key());
+                uploads.remove(done.key());
+                release(done.key());
+            } else {
+                coarse.put(done.key(), done.brick());
+                giveSlot(done.key(), done.brick());
+            }
+        }
+    }
+
+    /**
+     * Weigh again which level each cell draws at, once the camera moved far enough or the rings
+     * changed: a parent draws whole at level 2 past where it starts, otherwise each cell of it at
+     * level 1 past where that starts, or as its sections' own bricks.
+     *
+     * @param camera The camera's position, in the world.
+     * @param pixelsPerMeter Pixels a meter covers at a distance of one meter.
+     */
+    private void weighRings(@NonNull Vector3dc camera, double pixelsPerMeter) {
+        final double volumeDistance = GraphicsManager.getSettings().volumeDistance;
+        final double[] distances;
+        if (volumeDistance <= 0
+                || pixelsPerMeter <= 0
+                || !GraphicsManager.getSettings().coarseBricks) {
+            distances = new double[] {0, Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY};
+        } else {
+            final double occupancyReach =
+                    OccupancyClipmap.SIZE
+                            * OccupancyClipmap.VOXEL_SIZES[OccupancyClipmap.LEVELS - 1]
+                            / 2.0;
+            distances =
+                    CoarseBricks.distances(
+                            pixelsPerMeter,
+                            GraphicsManager.getSettings().lodThresholdPixels,
+                            Math.max(VolumeMath.fadeEnd(volumeDistance), occupancyReach)
+                                    + COARSE_CLEARANCE);
+        }
+        final boolean changed = !Arrays.equals(distances, ringDistances);
+        if (!changed && ringsAt != null && ringsAt.distance(camera) <= RING_DISTANCE) {
+            return;
+        }
+        ringDistances = distances;
+        ringsAt = new Vector3d(camera);
+        for (Parent parent : parentList) {
+            final double away = boxDistance(parent.key, camera);
+            parent.whole = CoarseBricks.reaches(away, distances[2], parent.whole, RING_MARGIN);
+            // Its cells only change if it is whole, was, or one of them is or could be coarse
+            final double diagonal =
+                    Math.sqrt(3) * CoarseBricks.span(2) * VolumeMath.BRICK * VolumeMath.VOXEL_SIZE;
+            if (!parent.whole
+                    && parent.coarseCells == 0
+                    && away + diagonal < distances[1] - RING_MARGIN) {
+                continue;
+            }
+            for (Cell cell : parent.cells) {
+                if (cell != null) {
+                    final int level = levelOf(cell, parent, camera);
+                    if (level != cell.level) {
+                        changeLevel(cell, parent, level);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * The level a cell draws at now.
+     *
+     * @param cell The cell.
+     * @param parent Its parent, whose {@link Parent#whole} is up to date.
+     * @param camera The camera's position.
+     * @return The level.
+     */
+    private int levelOf(@NonNull Cell cell, @NonNull Parent parent, @NonNull Vector3dc camera) {
+        if (parent.whole) {
+            return 2;
+        }
+        return CoarseBricks.reaches(
+                        boxDistance(cell.key, camera),
+                        ringDistances[1],
+                        cell.level >= 1,
+                        RING_MARGIN)
+                ? 1
+                : 0;
+    }
+
+    /**
+     * Have a cell draw at another level: want its new bricks now, and release the old ones once the
+     * new are in.
+     *
+     * @param cell The cell.
+     * @param parent Its parent.
+     * @param level The new level.
+     */
+    private void changeLevel(@NonNull Cell cell, @NonNull Parent parent, int level) {
+        final List<LodStore.SectionPos> from = represented(cell, cell.level);
+        final List<LodStore.SectionPos> to = represented(cell, level);
+        for (LodStore.SectionPos key : to) {
+            want(key);
+        }
+        parent.coarseCells += (level > 0 ? 1 : 0) - (cell.level > 0 ? 1 : 0);
+        cell.level = level;
+        handovers.add(new Handover(from, to, frameCount + HANDOVER_FRAMES));
+    }
+
+    /** Release the old bricks of hand overs whose new bricks are in, or that waited long enough. */
+    private void finishHandovers() {
+        final Iterator<Handover> it = handovers.iterator();
+        while (it.hasNext()) {
+            final Handover handover = it.next();
+            boolean ready = frameCount >= handover.deadline();
+            if (!ready) {
+                ready = true;
+                for (LodStore.SectionPos key : handover.to()) {
+                    ready &= settled(key);
+                }
+            }
+            if (ready) {
+                for (LodStore.SectionPos key : handover.from()) {
+                    unwant(key);
+                }
+                it.remove();
+            }
+        }
+    }
+
+    /**
+     * Whether a wanted brick is as drawn as it will get for now: copied in, or with nothing to
+     * draw, or waiting for a slot in a full atlas.
+     *
+     * @param key The brick's key.
+     * @return True if so.
+     */
+    private boolean settled(LodStore.@NonNull SectionPos key) {
+        if (!wanted.containsKey(key) || withoutSlot.contains(key)) {
+            return true;
+        }
+        if (key.level() > 0 && (building.containsKey(key) || dirty.contains(key))) {
+            return false;
+        }
+        if (key.level() == 0 ? !held.containsKey(key) : !coarse.containsKey(key)) {
+            return true;
+        }
+        return isIn(key);
+    }
+
+    /**
+     * How far a brick's box is from a point, 0 inside it.
+     *
+     * @param key The brick's key, whose level gives its size.
+     * @param point The point, in the world.
+     * @return The distance, in meters.
+     */
+    private static double boxDistance(LodStore.@NonNull SectionPos key, @NonNull Vector3dc point) {
+        final double section = VolumeMath.BRICK * VolumeMath.VOXEL_SIZE;
+        final double size = section * CoarseBricks.span(key.level());
+        final double[] min = {key.x() * section, key.y() * section, key.z() * section};
+        final double[] at = {point.x(), point.y(), point.z()};
+        double sum = 0;
+        for (int axis = 0; axis < at.length; ++axis) {
+            final double d =
+                    Math.max(0, Math.max(min[axis] - at[axis], at[axis] - (min[axis] + size)));
+            sum += d * d;
+        }
+        return Math.sqrt(sum);
+    }
+
+    /**
+     * A wanted brick's brick on the CPU: a section's own, or a coarse one built.
+     *
+     * @param key The brick's key.
+     * @return The brick, or null if there is none yet.
+     */
+    private VolumeVoxelizer.Brick brickOf(LodStore.@NonNull SectionPos key) {
+        return key.level() == 0 ? held.get(key) : coarse.get(key);
     }
 
     /**
      * While the atlas is full, hand its slots to the sections nearest the camera: free slots to the
      * nearest without one, then each farthest slotted section's to a nearer one without, by more
      * than a margin. Weighed again once the camera moves, now and then while new sections wait, and
-     * whenever a slot is free. Render thread, before the frame's uploads are taken.
+     * whenever a slot is free. First, the cells pick their levels, and coarse bricks built come in.
+     * Render thread, before the frame's uploads are taken.
      *
      * @param camera The camera's position, in the world.
+     * @param pixelsPerMeter Pixels a meter covers at a distance of one meter, for the levels.
      */
-    public void rebalance(@NonNull Vector3dc camera) {
+    public void rebalance(@NonNull Vector3dc camera, double pixelsPerMeter) {
+        ++frameCount;
+        takeBuilt();
+        weighRings(camera, pixelsPerMeter);
+        startBuilds();
+        finishHandovers();
         ++framesSinceBalance;
         if (withoutSlot.isEmpty()) {
             return;
@@ -820,7 +1490,7 @@ public class VolumeBricks {
      * @param position The section.
      */
     private void assign(LodStore.@NonNull SectionPos position) {
-        final VolumeVoxelizer.Brick brick = held.get(position);
+        final VolumeVoxelizer.Brick brick = brickOf(position);
         withoutSlot.remove(position);
         if (brick == null) {
             return;
@@ -838,10 +1508,11 @@ public class VolumeBricks {
      */
     private static double distanceSquared(
             LodStore.@NonNull SectionPos position, @NonNull Vector3dc camera) {
-        final double size = VolumeMath.BRICK * VolumeMath.VOXEL_SIZE;
-        final double dx = position.x() * size + size / 2 - camera.x();
-        final double dy = position.y() * size + size / 2 - camera.y();
-        final double dz = position.z() * size + size / 2 - camera.z();
+        final double section = VolumeMath.BRICK * VolumeMath.VOXEL_SIZE;
+        final double half = section * CoarseBricks.span(position.level()) / 2;
+        final double dx = position.x() * section + half - camera.x();
+        final double dy = position.y() * section + half - camera.y();
+        final double dz = position.z() * section + half - camera.z();
         return dx * dx + dy * dy + dz * dz;
     }
 
@@ -979,6 +1650,7 @@ public class VolumeBricks {
         withoutSlot.remove(position);
         final Integer slot = slots.remove(position);
         if (slot != null) {
+            --levelCounts[slotLevels[slot]];
             filled[slot] = false;
             slotsChanged = true;
             ++slotVersion;
@@ -1082,7 +1754,8 @@ public class VolumeBricks {
     }
 
     /**
-     * Write one brick of a draw list: its corner relative to the camera, and its slot.
+     * Write one brick of a draw list: its corner relative to the camera, and its slot with its
+     * level above {@link #LEVEL_SHIFT}.
      *
      * @param out The list's address, with room for the brick.
      * @param index Where in the list.
@@ -1098,7 +1771,7 @@ public class VolumeBricks {
                 base + Float.BYTES, (float) (slotCorners[corner + 1] * size - camera.y()));
         MemoryUtil.memPutFloat(
                 base + 2 * Float.BYTES, (float) (slotCorners[corner + 2] * size - camera.z()));
-        MemoryUtil.memPutInt(base + 3 * Float.BYTES, slot);
+        MemoryUtil.memPutInt(base + 3 * Float.BYTES, slot | slotLevels[slot] << LEVEL_SHIFT);
     }
 
     /**
@@ -1152,7 +1825,10 @@ public class VolumeBricks {
         }
         int count = 0;
         for (int slot = 0; slot < VolumeMath.SLOTS; ++slot) {
-            if (set.in[slot] && filled[slot] && slotPositions[slot] != null) {
+            // Coarse bricks stand in far past where every section is drawn as a volume
+            if ((set.in[slot] || slotLevels[slot] > 0)
+                    && filled[slot]
+                    && slotPositions[slot] != null) {
                 into[count++] = slot;
             }
         }
@@ -1171,6 +1847,8 @@ public class VolumeBricks {
         slotCorners[slot * CORNER_VALUES] = position.x();
         slotCorners[slot * CORNER_VALUES + 1] = position.y();
         slotCorners[slot * CORNER_VALUES + 2] = position.z();
+        slotLevels[slot] = position.level();
+        ++levelCounts[position.level()];
         slotsChanged = true;
         ++slotVersion;
         for (Tracked set : tracked.values()) {
@@ -1245,14 +1923,38 @@ public class VolumeBricks {
     }
 
     /**
-     * Whether a section's brick shows its blocks as they are now: copied in, and no newer one
-     * waiting.
+     * Whether a section's brick, or a coarse brick standing in for it, shows its blocks as they are
+     * now: copied in, and no newer one waiting or being built.
      *
      * @param position The section.
      * @return True if it is up to date.
      */
     public boolean isCurrent(LodStore.@NonNull SectionPos position) {
-        return currentSlot(position) >= 0;
+        if (currentSlot(position) >= 0) {
+            return true;
+        }
+        // Or a coarse brick standing in for it, built from its brick as it is now
+        for (int level = 1; level <= CoarseBricks.MAX_LEVEL; ++level) {
+            final LodStore.SectionPos key = keyAt(position, level);
+            if (wanted.containsKey(key)
+                    && !building.containsKey(key)
+                    && !dirty.contains(key)
+                    && isIn(key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether a brick is copied into its slot, with no newer one waiting.
+     *
+     * @param key The brick's key.
+     * @return True if so.
+     */
+    private boolean isIn(LodStore.@NonNull SectionPos key) {
+        final Integer slot = slots.get(key);
+        return slot != null && filled[slot] && !uploads.containsKey(key);
     }
 
     /**
@@ -1273,6 +1975,16 @@ public class VolumeBricks {
      */
     public int brickCount() {
         return slots.size();
+    }
+
+    /**
+     * How many slots hold bricks of a level.
+     *
+     * @param level The level, 0 for sections' own bricks.
+     * @return The count.
+     */
+    public int brickCount(int level) {
+        return levelCounts[level];
     }
 
     /**
@@ -1299,6 +2011,10 @@ public class VolumeBricks {
      * @param state The Vulkan state.
      */
     public void cleanup(@NonNull VulkanState state) {
+        if (coarseWorkers != null) {
+            coarseWorkers.shutdownNow();
+            coarseWorkers = null;
+        }
         for (int i = 0; i < drawLists.length; ++i) {
             SharedBuffer.free(drawLists[i], state);
             drawLists[i] = null;

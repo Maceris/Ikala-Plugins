@@ -44,38 +44,43 @@ vec3 renderToView(vec3 renderPoint) {
 
 void main() {
     VolumeDraw draw = draws.volumeDraws[outDraw];
-    vec3 boxMax = draw.corner + float(VOLUME_BRICK);
+    uint slot = volumeDrawSlot(draw);
+    // Distances along the ray in the brick's voxels, scale meters each
+    float scale = volumeDrawScale(draw);
+    vec3 corner = draw.corner / scale;
+    vec3 boxMax = corner + float(VOLUME_BRICK);
     vec3 direction = normalize(outRenderPosition);
-    vec2 span = volumeRayBox(direction, draw.corner, boxMax);
+    vec2 span = volumeRayBox(direction, corner, boxMax);
     // Nothing before the hand over starts is the brick's to draw
-    float start = max(span.x, max(fadeStart, 0.0));
+    float start = max(span.x, max(fadeStart, 0.0) / scale);
     // Nothing past a face another brick already found here
     ivec2 pixel = ivec2(gl_FragCoord.xy);
     uint hitIndex = uint(pixel.x) + hitWidth * uint(pixel.y);
-    float end = min(span.y, uintBitsToFloat(hitBuffer.hits[hitIndex]));
+    float end = min(span.y, uintBitsToFloat(hitBuffer.hits[hitIndex]) / scale);
     if (end <= start) {
         discard;
     }
-    VolumeWalk walk = volumeWalkStart(direction, draw.corner, start);
+    VolumeWalk walk = volumeWalkStart(direction, corner, start);
     // The axis of the face the ray last crossed into a voxel through
-    int axis = volumeEntryAxis(direction, draw.corner, boxMax);
+    int axis = volumeEntryAxis(direction, corner, boxMax);
     // The cells holding something solid
-    uvec2 solidCells = volumeCellMasks[draw.slot].xy;
+    uvec2 solidCells = volumeCellMasks[slot].xy;
     float t = start;
     bool found = false;
     for (int i = 0; i < VOLUME_MAX_VOXELS; ++i) {
         if (!volumeCellSet(solidCells, walk.voxel / VOLUME_CELL)) {
-            t = volumeWalkSkipCell(walk, direction, draw.corner, axis);
+            t = volumeWalkSkipCell(walk, direction, corner, axis);
             if (t >= end || volumeWalkOutside(walk)) {
                 break;
             }
             continue;
         }
-        float stored = volumeStored(draw.slot, walk.voxel).a;
-        if (volumeIsSolid(stored) && volumeTakes(gl_FragCoord.xy, frame, t, fadeStart, fadeLength)) {
+        float stored = volumeStored(slot, walk.voxel).a;
+        if (volumeIsSolid(stored)
+                && volumeTakes(gl_FragCoord.xy, frame, t * scale, fadeStart, fadeLength)) {
             // Unless the ray meets a hole cut in its face, as the color pass decides
             vec4 texel;
-            bool textured = volumeFaceTexel(draw.slot, walk.voxel, direction * t - draw.corner,
+            bool textured = volumeFaceTexel(slot, walk.voxel, direction * t - corner,
                 axis, -float(walk.stepTo[axis]), direction, t, screenHeight, texel);
             if (!textured || !volumeFaceHole(texel)) {
                 found = true;
@@ -95,7 +100,8 @@ void main() {
     if (!found) {
         discard;
     }
-    float z = renderToView(direction * t).z;
+    float meters = t * scale;
+    float z = renderToView(direction * meters).z;
     gl_FragDepth = (outDepthTerms.x * z + outDepthTerms.y) / (outDepthTerms.z * z + outDepthTerms.w);
-    atomicMin(hitBuffer.hits[hitIndex], floatBitsToUint(t));
+    atomicMin(hitBuffer.hits[hitIndex], floatBitsToUint(meters));
 }
