@@ -3,14 +3,18 @@
 #extension GL_EXT_buffer_reference : require
 
 // Fills each wave climate's profiles for this frame, see WaterRender and WaveMath.profile: one
-// thread per sample of a profile, x along it and y the climate, summing the climate's waves, each
-// layer leaving out the waves shorter than its cutoff. Height is a cos (k p + phase) summed; the
+// thread per sample of a profile, x along it and y the climate's direction, summing the climate's
+// waves, each turned by the direction's own phase, each layer leaving out the waves shorter than
+// its cutoff. Height is a cos (k p + phase) summed; the
 // slope along the profile its derivative, -a k sin (k p + phase). The phases come wrapped to a turn
 // from the CPU, so they stay precise.
 
 #include "water.glsl"
 
 layout(local_size_x = 64) in;
+
+// The waves a climate's samples hold, WaveMath.WAVES, which spaces the directions' phases
+const int WAVE_SAMPLES = 128;
 
 // One wave of a climate: its wavenumber, amplitude, phase now and wavelength
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer WaveSampleList {
@@ -28,9 +32,19 @@ layout(push_constant) uniform Constants {
     uint waveCount;
 };
 
+// How much a direction's profile turns a wave's phase, see WaveMath.directionPhase: Jarzynski and
+// Olano's PCG hash
+float directionPhase(uint direction, uint wave) {
+    uint state = (direction * uint(WAVE_SAMPLES) + wave) * 747796405u + 2891336453u;
+    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    word = (word >> 22u) ^ word;
+    return 6.28318530718 * float(word >> 8) / 16777216.0;
+}
+
 void main() {
     uint sampleIndex = gl_GlobalInvocationID.x;
-    uint climate = gl_GlobalInvocationID.y;
+    uint climate = gl_GlobalInvocationID.y / uint(WAVE_DIRECTIONS);
+    uint direction = gl_GlobalInvocationID.y % uint(WAVE_DIRECTIONS);
     if (sampleIndex >= uint(WAVE_PROFILE_SAMPLES)) {
         return;
     }
@@ -44,7 +58,7 @@ void main() {
         if (wave.y <= 0.0) {
             continue;
         }
-        float angle = wave.x * distance + wave.z;
+        float angle = wave.x * distance + wave.z + directionPhase(direction, i);
         vec2 value = vec2(wave.y * cos(angle), -wave.y * wave.x * sin(angle));
         for (int layer = 0; layer < WAVE_LAYERS; ++layer) {
             if (wave.w >= WAVE_LAYER_CUTOFFS[layer]) {
@@ -53,7 +67,8 @@ void main() {
         }
     }
     for (int layer = 0; layer < WAVE_LAYERS; ++layer) {
-        profiles.values[(climate * uint(WAVE_LAYERS) + uint(layer)) * uint(WAVE_PROFILE_SAMPLES)
-            + sampleIndex] = sums[layer];
+        uint profile = (climate * uint(WAVE_DIRECTIONS) + direction) * uint(WAVE_LAYERS)
+            + uint(layer);
+        profiles.values[profile * uint(WAVE_PROFILE_SAMPLES) + sampleIndex] = sums[layer];
     }
 }

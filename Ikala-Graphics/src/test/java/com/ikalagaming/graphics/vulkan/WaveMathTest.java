@@ -8,6 +8,18 @@ import org.junit.jupiter.api.Test;
 /** Wind waves: the spectrum, its spreading, and the profiles sampled from it. */
 class WaveMathTest {
 
+    /**
+     * Jarzynski and Olano's PCG hash, written out here as the shader has it.
+     *
+     * @param value What to hash, as 32 unsigned bits.
+     * @return The hash, as 32 unsigned bits.
+     */
+    private static int pcg(int value) {
+        final long state = (value * 747796405L + 2891336453L) & 0xFFFFFFFFL;
+        final long word = (((state >>> ((state >>> 28) + 4)) ^ state) * 277803737L) & 0xFFFFFFFFL;
+        return (int) ((word >>> 22) ^ word);
+    }
+
     /** A moderate breeze, in meters a second. */
     private static final double WIND = 8;
 
@@ -76,8 +88,8 @@ class WaveMathTest {
         }
         for (double d : new double[] {0, 3.7, 91}) {
             assertEquals(
-                    WaveMath.profile(waves, 0, d, 12.5),
-                    WaveMath.profile(waves, 0, d + WaveMath.PROFILE_LENGTH, 12.5),
+                    WaveMath.profile(waves, 3, 0, d, 12.5),
+                    WaveMath.profile(waves, 3, 0, d + WaveMath.PROFILE_LENGTH, 12.5),
                     1e-9);
         }
         assertEquals(0, WaveMath.missingSlopeVariance(waves, 0));
@@ -87,6 +99,19 @@ class WaveMathTest {
             assertTrue(variance > last);
             last = variance;
         }
+        // Each direction has its own profile
+        assertTrue(
+                Math.abs(WaveMath.profile(waves, 0, 0, 5, 1) - WaveMath.profile(waves, 1, 0, 5, 1))
+                        > 1e-3);
+        for (int b = 0; b < WaveMath.DIRECTIONS; ++b) {
+            final double phase = WaveMath.directionPhase(b, 7);
+            assertTrue(phase >= 0 && phase < 2 * Math.PI);
+        }
+        // The same hash as the shader's: PCG of 1 * WAVES + 7
+        assertEquals(
+                2 * Math.PI * (pcg(WaveMath.WAVES + 7) >>> 8) / (double) (1 << 24),
+                WaveMath.directionPhase(1, 7),
+                1e-12);
         // Phases wrap to a turn, the same wave as the unwrapped one
         final double time = 1e6 + 0.3;
         final double k = waves.wavenumbers()[5];

@@ -484,6 +484,7 @@ public class WaterRender implements RenderStage {
                         state,
                         profileBuffers[frame],
                         (long) count
+                                * WaveMath.DIRECTIONS
                                 * WaveMath.LAYERS
                                 * WaveMath.PROFILE_SAMPLES
                                 * ShaderBindings.Water.PROFILE_SAMPLE_SIZE,
@@ -560,7 +561,7 @@ public class WaterRender implements RenderStage {
         vkCmdDispatch(
                 commandBuffer,
                 WaveMath.PROFILE_SAMPLES / WaveMath.WORKGROUP_SIZE,
-                climates.size(),
+                climates.size() * WaveMath.DIRECTIONS,
                 1);
         VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
         barrier.get(0)

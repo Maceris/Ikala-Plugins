@@ -6,7 +6,9 @@ package com.ikalagaming.graphics.vulkan;
  * after Water Surface Wavelets (Jeschke et al. 2018). The surface's height at a point is the sum
  * over 16 directions of each direction's amplitude times its profile at the point's distance along
  * it; each profile sums the spectrum's waves, at whole harmonics of the profile's length so it
- * tiles exactly, each with a fixed random phase. Keep in step with the shaders.
+ * tiles exactly, each with a fixed random phase, and each direction's profile turns every wave's
+ * phase by its own amount, so no two directions share a profile and no crest pattern repeats across
+ * them. Keep in step with the shaders.
  *
  * <p>The spectrum is JONSWAP (Hasselmann et al. 1973) for a wind blowing over a fetch, becoming
  * Pierson-Moskowitz (1964) for a fully developed sea: S(w) = alpha g^2 w^-5 exp(-5/4 (wp / w)^4)
@@ -57,7 +59,7 @@ public final class WaveMath {
     public static final int WAVES = 128;
 
     /** How many samples a profile holds over its length. */
-    public static final int PROFILE_SAMPLES = 8192;
+    public static final int PROFILE_SAMPLES = 4096;
 
     /** A profile's length, in meters: at least twice the longest wave it holds. */
     public static final double PROFILE_LENGTH = 160;
@@ -77,6 +79,22 @@ public final class WaveMath {
 
     /** The profile's longest wave, as a harmonic of its length: half the length. */
     private static final double LONGEST_HARMONIC = 2;
+
+    /** The PCG hash's constants, see {@link #directionPhase}. */
+    private static final int PCG_MULTIPLIER = 747_796_405;
+
+    private static final int PCG_INCREMENT = (int) 2891336453L;
+
+    private static final int PCG_SHIFT_BITS = 28;
+
+    private static final int PCG_SHIFT_BASE = 4;
+
+    private static final int PCG_WORD = 277_803_737;
+
+    private static final int PCG_FINAL_SHIFT = 22;
+
+    /** Bits dropped from the hash to make a fraction, keeping 24, a float's precision. */
+    private static final int PCG_DROP_BITS = 8;
 
     /** A full turn. */
     private static final double TURN = 2 * Math.PI;
@@ -287,23 +305,46 @@ public final class WaveMath {
     }
 
     /**
-     * A profile's height at a distance along it: the sum of its layer's waves at a time.
+     * A direction's profile's height at a distance along it: the sum of its layer's waves at a
+     * time, each turned by the direction's own phase for it.
      *
      * @param waves The waves.
+     * @param direction Which direction, 0 to {@link #DIRECTIONS}.
      * @param layer Which layer: waves shorter than its cutoff are left out.
      * @param distance How far along the profile, in meters.
      * @param time The time, in seconds.
      * @return The height, in meters.
      */
-    public static double profile(Waves waves, int layer, double distance, double time) {
+    public static double profile(
+            Waves waves, int direction, int layer, double distance, double time) {
         double sum = 0;
         for (int i = 0; i < waves.wavenumbers().length; ++i) {
             final double k = waves.wavenumbers()[i];
             if (TURN / k >= LAYER_CUTOFFS[layer]) {
-                sum += waves.amplitudes()[i] * Math.cos(k * distance + phaseAt(waves, i, time));
+                sum +=
+                        waves.amplitudes()[i]
+                                * Math.cos(
+                                        k * distance
+                                                + phaseAt(waves, i, time)
+                                                + directionPhase(direction, i));
             }
         }
         return sum;
+    }
+
+    /**
+     * How much a direction's profile turns a wave's phase, from a 32-bit hash of the two, as {@code
+     * water_waves.comp} works it out (Jarzynski and Olano's PCG hash).
+     *
+     * @param direction The direction.
+     * @param wave The wave's index.
+     * @return The phase, 0 to 2 pi.
+     */
+    public static double directionPhase(int direction, int wave) {
+        int state = (direction * WAVES + wave) * PCG_MULTIPLIER + PCG_INCREMENT;
+        int word = ((state >>> ((state >>> PCG_SHIFT_BITS) + PCG_SHIFT_BASE)) ^ state) * PCG_WORD;
+        word = (word >>> PCG_FINAL_SHIFT) ^ word;
+        return TURN * (word >>> PCG_DROP_BITS) / (double) (1 << (Integer.SIZE - PCG_DROP_BITS));
     }
 
     /**

@@ -24,7 +24,7 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Wa
 // Wind waves, see WaveMath: the directions the surface sums, the samples and length of each
 // profile, its layers, and the shortest wave each layer holds, in meters
 const int WAVE_DIRECTIONS = 16;
-const int WAVE_PROFILE_SAMPLES = 8192;
+const int WAVE_PROFILE_SAMPLES = 4096;
 const float WAVE_PROFILE_LENGTH = 160.0;
 const int WAVE_LAYERS = 4;
 const float WAVE_LAYER_CUTOFFS[WAVE_LAYERS] = float[](0.0, 0.25, 1.0, 4.0);
@@ -47,18 +47,20 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Wa
     WaveClimate climates[];
 };
 
-// Each climate's profiles, layer after layer, each WAVE_PROFILE_SAMPLES of height and slope
+// Each climate's profiles, direction after direction, and in each layer after layer, each
+// WAVE_PROFILE_SAMPLES of height and slope
 layout(buffer_reference, std430, buffer_reference_align = 8) readonly buffer WaveProfileList {
     vec2 profiles[];
 };
 
 // A profile's height and slope at a distance along it, between its two nearest samples, wrapping
-vec2 waveProfile(WaveProfileList list, int climate, int layer, float distance) {
+vec2 waveProfile(WaveProfileList list, int climate, int direction, int layer, float distance) {
     float at = distance / WAVE_PROFILE_LENGTH * float(WAVE_PROFILE_SAMPLES);
     float lower = floor(at);
     int i0 = int(lower) & (WAVE_PROFILE_SAMPLES - 1);
     int i1 = (i0 + 1) & (WAVE_PROFILE_SAMPLES - 1);
-    int base = (climate * WAVE_LAYERS + layer) * WAVE_PROFILE_SAMPLES;
+    int base = ((climate * WAVE_DIRECTIONS + direction) * WAVE_LAYERS + layer)
+        * WAVE_PROFILE_SAMPLES;
     return mix(list.profiles[base + i0], list.profiles[base + i1], at - lower);
 }
 
@@ -78,7 +80,7 @@ float waveHeight(WaveClimateList climates, WaveProfileList profiles, int climate
             continue;
         }
         float distance = dot(renderXZ, waveDirection(b)) + c.offsets[b];
-        height += c.amplitudes[b] * waveProfile(profiles, climate, layer, distance).x;
+        height += c.amplitudes[b] * waveProfile(profiles, climate, b, layer, distance).x;
     }
     return height;
 }
@@ -94,7 +96,7 @@ vec2 waveSlope(WaveClimateList climates, WaveProfileList profiles, int climate, 
         }
         vec2 direction = waveDirection(b);
         float distance = dot(renderXZ, direction) + c.offsets[b];
-        slope += c.amplitudes[b] * waveProfile(profiles, climate, layer, distance).y * direction;
+        slope += c.amplitudes[b] * waveProfile(profiles, climate, b, layer, distance).y * direction;
     }
     return slope;
 }
