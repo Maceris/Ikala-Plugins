@@ -72,6 +72,12 @@ hovered, held, focused, selected and disabled states. Plugins add tools to the e
 `registerTool`. The `ui.automation` package drives UIs with real input from tests, finding nodes
 by selectors.
 
+A plugin's drawing that throws, such as an `Immediate` node's content, a `GuiWindow` or the
+toolbar, doesn't end the frame or the editor: IkGui is unwound to where it was, the error is logged
+once with the plugin's name, and what threw stops drawing (a surface or window is hidden until its
+plugin shows it again, a toolbar is removed). Actions fired from the UI and posted changes were
+already run this way.
+
 ### Scene rendering
 
 - **Meshes and instances:** models are uploaded into a shared geometry arena and drawn by
@@ -83,7 +89,9 @@ by selectors.
   feed as they bake. Far away, a section's opaque regions are drawn from simplified clusters instead
   of its own meshes. Built cells are cached on disk (see `lod-cache-folder`, `lod-cache-max-mb`).
 - **Volume bricks:** past the volume distance (96 m), a section's cut out and see-through meshes,
-  like leaves, glass and water, are drawn from a 16^3 voxel brick instead of meshes.
+  like leaves, glass and water, are drawn from a 16^3 voxel brick instead of meshes. Farther out,
+  coarse bricks with 2 m or 4 m voxels each stand in for 8 or 64 sections, so foliage reaches the
+  horizon at large view distances (`GraphicsSettings.coarseBricks`, on by default).
 - **Lighting:** physically based, with a sun, sky light, point and spot lights, shadows,
   transparency and anti-aliasing (see below). `GraphicsSettings` holds the switches and budgets.
 - **Debug views:** the Graphics Debug window shows frame timings, lights, LOD colorings, volume
@@ -142,6 +150,10 @@ What the renderer does and the work it builds on.
 - Hashed alpha testing past the first mips, so distant leaves keep their coverage (Wyman and McGuire,
   *Hashed Alpha Testing*, I3D 2017).
 - Ideas for the brick format and volumetric shadows from Smolder (Mueller, SIGGRAPH 2026).
+- Coarse bricks for far sections, downsampled from theirs: a coarse voxel is solid when at least half
+  its voxels are, and otherwise holds their average extinction, which keeps the light a ray loses
+  crossing it. Each level starts where its voxels project under the LOD's pixel threshold, with a
+  margin at ring edges, and old bricks stay drawn until their replacements are in.
 
 **Lighting and shadows**
 
@@ -168,9 +180,8 @@ What the renderer does and the work it builds on.
   and Salvi, *A Survey of Temporal Antialiasing Techniques*, 2020). Depth rejection of history taps
   is from VRRT (Olejnik, SIGGRAPH 2026). Glass and water make history more reactive.
 
-**Planned**: image-based sky lighting, stochastic lightcuts for
-light visibility (Yuksel 2019), and far content folded into color splats or volumes with SGGX
-microflake distributions (Loubet and Neyret, Eurographics 2017; Heitz et al. 2015).
+**Planned**: volumetric fog and smoke lit by the sun, sky and lights, composited with the
+transparency passes; a particle system; stochastic lightcuts for light visibility (Yuksel 2019).
 
 ## Graphics Manager
 
@@ -204,7 +215,9 @@ The gate benchmark measures how long the renderer takes to draw a made-up world 
 It builds a deterministic synthetic terrain out to a radius, bakes every section with something in it,
 waits for everything to be on the GPU, then turns the camera once around while recording how long each
 frame takes on the GPU (from timestamps around each render stage) and on the CPU. It passes if the GPU's
-95th percentile frame is within 8 ms.
+95th percentile frame is within 8 ms. With `-Dikala.benchmark.gate=true` it also checks level of detail
+cuts for cracks from several views, times edits until they are drawn, and reloads the world from the
+level of detail cache.
 
 It can be run from the Benchmark section of the Graphics Debug window, or from the command line.
 
@@ -220,6 +233,12 @@ These are Java system properties, given before `-jar`:
 | `-Dikala.benchmark.lod=true` | `false` | Draws far sections through level of detail, built live from the sections, and frees their own opaque meshes on the GPU. Without it every section's meshes stay on the GPU, which dense worlds like `JUMBLE` outgrow past a small radius (the run fails with sections that didn't fit in the baked geometry buffers). |
 | `-Dikala.benchmark.average=<true or false>` | `true` | With level of detail, whether far groups blend their materials' looks per vertex. |
 | `-Dikala.benchmark.keep=true` | `false` | Keeps the world once the run finishes, so you can fly around it, and hides plugin menus that would cover it. Without this, the app closes when the run finishes. |
+| `-Dikala.benchmark.gate=true` | `false` | Runs the full gate after measuring: crack checks, timed edits and a reload from the cache. |
+| `-Dikala.benchmark.walk=<m/s>` | `0` | Walks the camera along x while it turns, at this speed, to measure streaming. |
+| `-Dikala.benchmark.cracks=<views>` | `4` | With the gate, checks only the first this many views for cracks, 0 to skip them; each takes minutes at a large radius. |
+| `-Dikala.benchmark.editCracks=false` | `true` | With the gate, skips the crack check over the edits; the edits are still made and timed. A run that checks nothing reports "Cracks: not checked". |
+| `-Dikala.benchmark.coarseBricks=false` | `true` | Turns coarse volume bricks off, for comparing. |
+| `-Dikala.vulkan.validation=false` | `true` | Not a benchmark option: runs without the Vulkan validation layers. Their checks can cost milliseconds of CPU a frame, so time the CPU without them, and keep them for correctness runs. |
 
 For example, from the asset editor's folder:
 
@@ -239,7 +258,8 @@ working directory. Each entry has:
 **In the Graphics Debug window**
 
 - **Frame timing** shows each render stage's GPU time and the CPU time, over the last 120 frames, at any
-  time.
+  time. *Wait* is how long a frame waits for its fence and swapchain image before recording (where vsync
+  and a GPU running behind show), and *Between frames* is the rest of the main loop.
 - **Lights** shows how many lights there are, how they were sorted into clusters (the busiest cluster, and
   whether any had more lights than it can list), and a *Cluster heat map* that tints each pixel by how many
   lights can reach it.
