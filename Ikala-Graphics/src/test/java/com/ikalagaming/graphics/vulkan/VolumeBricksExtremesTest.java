@@ -83,6 +83,36 @@ class VolumeBricksExtremesTest {
         }
     }
 
+    /**
+     * From arrays, as the atlas's slots are, the empty places are skipped and the rest picked as
+     * from a set.
+     */
+    @Test
+    void testArraysSkipEmptyPlaces() {
+        final List<LodStore.SectionPos> all = sections();
+        final LodStore.SectionPos[] positions = new LodStore.SectionPos[all.size() * 2];
+        final int[] corners = new int[positions.length * PackedPositions.CORNER_VALUES];
+        for (int i = 0; i < all.size(); ++i) {
+            // Every other place empty, its corner at the camera to catch a missed skip
+            final LodStore.SectionPos position = all.get(i);
+            positions[2 * i + 1] = position;
+            corners[(2 * i + 1) * PackedPositions.CORNER_VALUES] = position.x();
+            corners[(2 * i + 1) * PackedPositions.CORNER_VALUES + 1] = position.y();
+            corners[(2 * i + 1) * PackedPositions.CORNER_VALUES + 2] = position.z();
+        }
+        for (boolean farthest : new boolean[] {false, true}) {
+            assertEquals(
+                    VolumeBricks.extremes(all, CAMERA, 256, farthest).stream()
+                            .map(VolumeBricksExtremesTest::distance)
+                            .toList(),
+                    VolumeBricks.extremes(
+                                    positions, corners, positions.length, CAMERA, 256, farthest)
+                            .stream()
+                            .map(VolumeBricksExtremesTest::distance)
+                            .toList());
+        }
+    }
+
     /** Nothing to pick from gives nothing. */
     @Test
     void testEmpty() {

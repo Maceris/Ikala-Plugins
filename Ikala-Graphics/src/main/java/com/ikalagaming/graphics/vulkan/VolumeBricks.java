@@ -28,13 +28,11 @@ import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.BiConsumer;
 
 /**
@@ -265,7 +263,7 @@ public class VolumeBricks {
     private final LodStore.SectionPos[] slotPositions = new LodStore.SectionPos[VolumeMath.SLOTS];
 
     /** How many values a slot's corner has in {@link #slotCorners}. */
-    private static final int CORNER_VALUES = 3;
+    private static final int CORNER_VALUES = PackedPositions.CORNER_VALUES;
 
     /**
      * Each slot's section's place, x, y and z, in sections, set as it is taken: the draw lists are
@@ -322,7 +320,7 @@ public class VolumeBricks {
     private boolean warnedFull;
 
     /** Sections that wanted a brick while the atlas was full, and still have none. */
-    private final Set<LodStore.SectionPos> withoutSlot = new HashSet<>();
+    private final PackedPositions withoutSlot = new PackedPositions();
 
     /**
      * Every section's brick, slotted or not, kept on the CPU so slots can move to the sections
@@ -673,7 +671,14 @@ public class VolumeBricks {
         framesSinceBalance = 0;
         // No more than MAX_SWAPS move, so only that many of the nearest waiting and the farthest
         // slotted are needed, out of what can be tens of thousands
-        final List<LodStore.SectionPos> waiting = extremes(withoutSlot, camera, MAX_SWAPS, false);
+        final List<LodStore.SectionPos> waiting =
+                extremes(
+                        withoutSlot.positions(),
+                        withoutSlot.corners(),
+                        withoutSlot.size(),
+                        camera,
+                        MAX_SWAPS,
+                        false);
         int next = 0;
         int moves = 0;
         while (next < waiting.size() && !free.isEmpty() && moves < MAX_SWAPS) {
@@ -683,7 +688,8 @@ public class VolumeBricks {
         if (next >= waiting.size() || moves >= MAX_SWAPS) {
             return;
         }
-        final List<LodStore.SectionPos> slotted = extremes(slots.keySet(), camera, MAX_SWAPS, true);
+        final List<LodStore.SectionPos> slotted =
+                extremes(slotPositions, slotCorners, VolumeMath.SLOTS, camera, MAX_SWAPS, true);
         for (int far = 0; far < slotted.size() && next < waiting.size() && moves < MAX_SWAPS; ) {
             final LodStore.SectionPos near = waiting.get(next);
             final LodStore.SectionPos out = slotted.get(far);
@@ -716,36 +722,74 @@ public class VolumeBricks {
             @NonNull Vector3dc camera,
             int most,
             boolean farthest) {
+        final LodStore.SectionPos[] positions = sections.toArray(new LodStore.SectionPos[0]);
+        final int[] corners = new int[positions.length * CORNER_VALUES];
+        for (int i = 0; i < positions.length; ++i) {
+            corners[i * CORNER_VALUES] = positions[i].x();
+            corners[i * CORNER_VALUES + 1] = positions[i].y();
+            corners[i * CORNER_VALUES + 2] = positions[i].z();
+        }
+        return extremes(positions, corners, positions.length, camera, most, farthest);
+    }
+
+    /**
+     * The sections nearest the camera, or farthest from it, from flat arrays, which go through tens
+     * of thousands far faster than a set does.
+     *
+     * @param positions The sections, null where there is none, which is skipped.
+     * @param corners Each one's corner, x, y and z in sections, in the same order.
+     * @param count How many of the arrays to look at.
+     * @param camera The camera's position.
+     * @param most How many at most.
+     * @param farthest Whether the farthest rather than the nearest.
+     * @return They, nearest first, or farthest first.
+     */
+    static List<LodStore.SectionPos> extremes(
+            LodStore.SectionPos @NonNull [] positions,
+            int @NonNull [] corners,
+            int count,
+            @NonNull Vector3dc camera,
+            int most,
+            boolean farthest) {
+        final double size = VolumeMath.BRICK * VolumeMath.VOXEL_SIZE;
+        final double half = size / 2;
         // Each kept one's key, smaller first wanted: its squared distance as float bits, which sort
         // as the distances do since they are never negative, turned around for the farthest. The
         // keys are a heap with the largest, the one to drop first, at its head, and each kept
-        // section is at its key's index, moved along with it
+        // section's index is at its key's index, moved along with it
         final int[] keys = new int[Math.max(0, most)];
-        final LodStore.SectionPos[] kept = new LodStore.SectionPos[keys.length];
-        int size = 0;
-        for (LodStore.SectionPos position : sections) {
-            final int bits = Float.floatToRawIntBits((float) distanceSquared(position, camera));
+        final int[] kept = new int[keys.length];
+        int heapSize = 0;
+        for (int i = 0; i < count; ++i) {
+            if (positions[i] == null) {
+                continue;
+            }
+            final int corner = i * CORNER_VALUES;
+            final double dx = corners[corner] * size + half - camera.x();
+            final double dy = corners[corner + 1] * size + half - camera.y();
+            final double dz = corners[corner + 2] * size + half - camera.z();
+            final int bits = Float.floatToRawIntBits((float) (dx * dx + dy * dy + dz * dz));
             final int key = farthest ? Integer.MAX_VALUE - bits : bits;
-            if (size < keys.length) {
+            if (heapSize < keys.length) {
                 // Up from the end
-                int at = size++;
+                int at = heapSize++;
                 while (at > 0 && keys[(at - 1) / 2] < key) {
                     keys[at] = keys[(at - 1) / 2];
                     kept[at] = kept[(at - 1) / 2];
                     at = (at - 1) / 2;
                 }
                 keys[at] = key;
-                kept[at] = position;
-            } else if (size > 0 && key < keys[0]) {
+                kept[at] = i;
+            } else if (heapSize > 0 && key < keys[0]) {
                 // In place of the head, then down
                 int at = 0;
                 while (true) {
                     final int left = 2 * at + 1;
-                    if (left >= size) {
+                    if (left >= heapSize) {
                         break;
                     }
                     final int larger =
-                            left + 1 < size && keys[left + 1] > keys[left] ? left + 1 : left;
+                            left + 1 < heapSize && keys[left + 1] > keys[left] ? left + 1 : left;
                     if (keys[larger] <= key) {
                         break;
                     }
@@ -754,18 +798,18 @@ public class VolumeBricks {
                     at = larger;
                 }
                 keys[at] = key;
-                kept[at] = position;
+                kept[at] = i;
             }
         }
-        // Wanted first: each key with its index in the low half
-        final long[] order = new long[size];
-        for (int i = 0; i < size; ++i) {
+        // Wanted first: each key with its place in the heap in the low half
+        final long[] order = new long[heapSize];
+        for (int i = 0; i < heapSize; ++i) {
             order[i] = ((long) keys[i] << Integer.SIZE) | i;
         }
         Arrays.sort(order);
-        final List<LodStore.SectionPos> out = new ArrayList<>(size);
+        final List<LodStore.SectionPos> out = new ArrayList<>(heapSize);
         for (long entry : order) {
-            out.add(kept[(int) entry]);
+            out.add(positions[kept[(int) entry]]);
         }
         return out;
     }
