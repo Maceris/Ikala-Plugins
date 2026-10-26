@@ -38,7 +38,7 @@ import java.nio.LongBuffer;
  * both sides. The stage reads the light stage's descriptor set (set 0), the bindless textures (set
  * 1), the scene stage's descriptor set (set 2), all written earlier in the frame, and the
  * transparency volume (set 3), which {@link OitSplat} and {@link OitIntegrate} filled this frame
- * when it weights by the volume.
+ * when it weights by the volume. Particles are drawn after the surfaces, see {@link ParticleDraw}.
  */
 @Slf4j
 public class TranslucentRender implements RenderStage {
@@ -67,6 +67,9 @@ public class TranslucentRender implements RenderStage {
     /** VkPipeline for baked sections, will be VK_NULL_HANDLE if not set up. */
     private long bakedPipeline;
 
+    /** Draws the particles' billboards into the same targets. */
+    @NonNull private final ParticleDraw particles;
+
     /**
      * Set up the stage.
      *
@@ -74,16 +77,19 @@ public class TranslucentRender implements RenderStage {
      * @param bakedShader The shaders for baked sections.
      * @param sceneRender The scene stage, whose descriptor sets this reads.
      * @param lightRender The light stage, whose descriptor sets this reads.
+     * @param particles Draws the particles' billboards, with their color shaders.
      */
     public TranslucentRender(
             @NonNull ShaderVulkan shader,
             @NonNull ShaderVulkan bakedShader,
             @NonNull SceneRender sceneRender,
-            @NonNull LightRender lightRender) {
+            @NonNull LightRender lightRender,
+            @NonNull ParticleDraw particles) {
         this.shader = shader;
         this.bakedShader = bakedShader;
         this.sceneRender = sceneRender;
         this.lightRender = lightRender;
+        this.particles = particles;
         pipelineLayout = VK_NULL_HANDLE;
         pipeline = VK_NULL_HANDLE;
         bakedPipeline = VK_NULL_HANDLE;
@@ -100,21 +106,23 @@ public class TranslucentRender implements RenderStage {
                     .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT)
                     .offset(0)
                     .size(ShaderBindings.Translucent.PUSH_CONSTANTS_SIZE);
+            final long[] setLayouts = {
+                lightRender.getDescriptorSetLayout(),
+                state.bindlessTextures.getDescriptorSetLayout(),
+                sceneRender.getDescriptorSetLayout(),
+                state.oitVolume.getReadSetLayout(),
+                state.occupancy.getSetLayout(),
+                state.environment.getSetLayout(),
+                state.fogVolume.getReadSetLayout()
+            };
             VkPipelineLayoutCreateInfo layoutInfo =
                     VkPipelineLayoutCreateInfo.calloc(stack)
                             .sType$Default()
-                            .pSetLayouts(
-                                    stack.longs(
-                                            lightRender.getDescriptorSetLayout(),
-                                            state.bindlessTextures.getDescriptorSetLayout(),
-                                            sceneRender.getDescriptorSetLayout(),
-                                            state.oitVolume.getReadSetLayout(),
-                                            state.occupancy.getSetLayout(),
-                                            state.environment.getSetLayout(),
-                                            state.fogVolume.getReadSetLayout()))
+                            .pSetLayouts(stack.longs(setLayouts))
                             .pPushConstantRanges(pushConstantRanges);
             checkError(vkCreatePipelineLayout(state.device.logical, layoutInfo, null, longOutput));
             pipelineLayout = longOutput.get(0);
+            particles.initialize(state, setLayouts);
         }
         pipeline = createPipeline(state, shader, pipelineLayout, false, true);
         bakedPipeline = createPipeline(state, bakedShader, pipelineLayout, true, true);
@@ -122,6 +130,7 @@ public class TranslucentRender implements RenderStage {
 
     @Override
     public void cleanup(@NonNull VulkanState state) {
+        particles.cleanup(state);
         vkDestroyPipeline(state.device.logical, bakedPipeline, null);
         bakedPipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(state.device.logical, pipeline, null);
@@ -196,19 +205,21 @@ public class TranslucentRender implements RenderStage {
             vkCmdBeginRendering(commandBuffer, renderingInfo);
             if (width > 0 && height > 0) {
                 setViewport(commandBuffer, width, height, stack);
+                final long[] sets = {
+                    lightRender.getDescriptorSet(state.frameIndex),
+                    state.bindlessTextures.getDescriptorSet(),
+                    sceneRender.getDescriptorSet(state.frameIndex),
+                    state.oitVolume.getReadSet(),
+                    state.occupancy.getSet(),
+                    state.environment.getSet(),
+                    state.fogVolume.getReadSet()
+                };
                 vkCmdBindDescriptorSets(
                         commandBuffer,
                         VK_PIPELINE_BIND_POINT_GRAPHICS,
                         pipelineLayout,
                         0,
-                        stack.longs(
-                                lightRender.getDescriptorSet(state.frameIndex),
-                                state.bindlessTextures.getDescriptorSet(),
-                                sceneRender.getDescriptorSet(state.frameIndex),
-                                state.oitVolume.getReadSet(),
-                                state.occupancy.getSet(),
-                                state.environment.getSet(),
-                                state.fogVolume.getReadSet()),
+                        stack.longs(sets),
                         null);
                 ByteBuffer constants = stack.calloc(ShaderBindings.Translucent.PUSH_CONSTANTS_SIZE);
                 constants.putFloat(
@@ -240,6 +251,15 @@ public class TranslucentRender implements RenderStage {
                 vkCmdPushConstants(
                         commandBuffer, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, constants);
                 drawList(commandBuffer, state, frameData, pipeline, bakedPipeline, stack);
+                particles.record(
+                        commandBuffer,
+                        state,
+                        scene,
+                        sets,
+                        width,
+                        height,
+                        frameData.voxelTransparency,
+                        stack);
             }
             vkCmdEndRendering(commandBuffer);
         }

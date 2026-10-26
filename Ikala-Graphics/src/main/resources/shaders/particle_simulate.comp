@@ -1,0 +1,47 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_buffer_reference : require
+
+// Moves each alive particle through the frame, see ParticleUpdate: one thread per particle in the
+// current alive list, dispatched by the count it holds. Particles past their lifetime go back on
+// the free list; the rest go on the other alive list, which the billboards draw.
+
+#include "particles.glsl"
+
+layout(local_size_x = 64) in;
+
+layout(push_constant) uniform Constants {
+    ParticleBuffer pool;
+    IndexList from;
+    IndexList to;
+    IndexList dead;
+    Control control;
+    // How far every particle moves to keep its place when the anchor steps, old minus new
+    vec3 shift;
+    // How long the frame was, in the particles' own time
+    float seconds;
+    // Which alive list this reads
+    uint current;
+};
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    if (index >= control.alive[current]) {
+        return;
+    }
+    uint slot = from.indices[index];
+    Particle particle = pool.particles[slot];
+    particle.age += seconds;
+    if (particle.age >= particle.lifetime) {
+        int free = atomicAdd(control.dead, 1);
+        dead.indices[free] = slot;
+        return;
+    }
+    vec3 position = particle.position + shift;
+    vec3 velocity = particle.velocity;
+    advanceParticle(position, velocity, particle.acceleration, particle.drag, seconds);
+    pool.particles[slot].position = position;
+    pool.particles[slot].velocity = velocity;
+    pool.particles[slot].age = particle.age;
+    to.indices[atomicAdd(control.alive[1 - current], 1)] = slot;
+}

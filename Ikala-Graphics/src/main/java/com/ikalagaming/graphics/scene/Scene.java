@@ -86,6 +86,20 @@ public class Scene {
     private final MediumRegistry mediumRegistry;
 
     /**
+     * The particle emitters plugins placed, through {@link com.ikalagaming.graphics.Particles}.
+     *
+     * @return The emitter registry.
+     */
+    private final EmitterRegistry emitterRegistry;
+
+    /**
+     * The particles' time: paused, stepped, slowed or cleared, and the live count.
+     *
+     * @return The particle clock.
+     */
+    private final ParticleClock particleClock;
+
+    /**
      * The texture of the skybox, which may be null if we want the sky to be just a single diffuse
      * color.
      */
@@ -170,6 +184,8 @@ public class Scene {
         sceneLights = new SceneLights();
         lightRegistry = new LightRegistry();
         mediumRegistry = new MediumRegistry();
+        emitterRegistry = new EmitterRegistry();
+        particleClock = new ParticleClock();
         viewDistance = DEFAULT_VIEW_DISTANCE;
         exposure = 1;
         camera = new Camera();

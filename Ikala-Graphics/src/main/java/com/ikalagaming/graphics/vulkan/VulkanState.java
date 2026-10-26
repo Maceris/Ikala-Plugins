@@ -116,6 +116,9 @@ public class VulkanState {
     /** The fog volume, see {@link FogVolume}. */
     public FogVolume fogVolume = null;
 
+    /** The GPU's particles, kept across frames, see {@link ParticlePool}. */
+    public ParticlePool particlePool = null;
+
     /** For submitting work outside the frame, like texture uploads. */
     public ImmediateCommands immediateCommands = null;
 

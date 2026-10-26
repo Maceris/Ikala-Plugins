@@ -2,6 +2,7 @@ package com.ikalagaming.converter.workbench;
 
 import com.ikalagaming.converter.scene.ImportedScene;
 import com.ikalagaming.converter.scene.ImportedScene.Node;
+import com.ikalagaming.converter.scene.PreviewShapes;
 import com.ikalagaming.converter.scene.ScenePicker;
 import com.ikalagaming.converter.scene.ScenePlacement;
 import com.ikalagaming.graphics.CameraManager;
@@ -93,6 +94,9 @@ public class SceneView {
 
     /** Builds and shows level of detail of the scene. */
     private final LodSection lod;
+
+    /** Watches particles on the particle stage. */
+    private final ParticleViewer particles;
 
     /** The selected mesh of the selected node, a scene mesh index, or -1. */
     private int selectedMesh = -1;
@@ -207,6 +211,7 @@ public class SceneView {
         this.graphics = graphics;
         this.materials = materials;
         lod = new LodSection(graphics);
+        particles = new ParticleViewer(graphics);
     }
 
     /**
@@ -221,6 +226,9 @@ public class SceneView {
         enter();
         useFileSun();
         frame(newPlacement.getImported().root());
+        if (PreviewShapes.PARTICLE_STAGE.equals(newPlacement.getImported().file())) {
+            particles.start();
+        }
     }
 
     /**
@@ -244,6 +252,7 @@ public class SceneView {
 
     /** Take the shown scene out of the world, if there is one, leaving the renderer as it is. */
     public void clear() {
+        particles.stop();
         select(null, -1);
         materials.clear();
         lod.close();
@@ -573,6 +582,10 @@ public class SceneView {
             return;
         }
         final ImportedScene imported = shown.getImported();
+        if (particles.isActive()
+                && IkGui.collapsingHeader("Particles###particles", TreeNodeFlags.DEFAULT_OPEN)) {
+            particles.draw();
+        }
         if (IkGui.collapsingHeader("Scene###scene", TreeNodeFlags.DEFAULT_OPEN)) {
             drawScene(frame, shown, imported, closeScene);
         }

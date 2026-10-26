@@ -213,4 +213,10 @@ public class GraphicsSettings {
      * blended into the history of the frames before.
      */
     public boolean taa = true;
+
+    /**
+     * How many particles the GPU's pool holds, all emitters together; spawns past it are dropped.
+     * Read when graphics starts. 80 bytes each, plus 12 bytes of lists.
+     */
+    public int maxParticles = 1 << 18;
 }

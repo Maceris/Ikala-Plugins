@@ -1328,6 +1328,59 @@ public class VulkanInstance {
                                         ShaderVulkan.Location.BUNDLED)),
                         state));
         shaderMap.addShader(
+                RenderStage.Type.PARTICLE_CONTROL,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/particle_control.comp",
+                                        ShaderVulkan.Type.COMPUTE,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
+                RenderStage.Type.PARTICLE_SIMULATE,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/particle_simulate.comp",
+                                        ShaderVulkan.Type.COMPUTE,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
+                RenderStage.Type.PARTICLE_EMIT,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/particle_emit.comp",
+                                        ShaderVulkan.Type.COMPUTE,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
+                RenderStage.Type.PARTICLE,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/particle.vert",
+                                        ShaderVulkan.Type.VERTEX,
+                                        ShaderVulkan.Location.BUNDLED),
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/particle.frag",
+                                        ShaderVulkan.Type.FRAGMENT,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
+                RenderStage.Type.PARTICLE_SPLAT,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/particle.vert",
+                                        ShaderVulkan.Type.VERTEX,
+                                        ShaderVulkan.Location.BUNDLED),
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/particle_splat.frag",
+                                        ShaderVulkan.Type.FRAGMENT,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
                 RenderStage.Type.OIT_INTEGRATE,
                 new ShaderVulkan(
                         List.of(

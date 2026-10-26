@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.benchmark;
 
 import static org.lwjgl.util.vma.Vma.vmaCalculateStatistics;
 
+import com.ikalagaming.graphics.EmitterHandle;
 import com.ikalagaming.graphics.Format;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
@@ -25,6 +26,7 @@ import com.ikalagaming.graphics.lod.LodCache;
 import com.ikalagaming.graphics.lod.LodStore;
 import com.ikalagaming.graphics.scene.Fog;
 import com.ikalagaming.graphics.scene.MediumVolume;
+import com.ikalagaming.graphics.scene.ParticleSamples;
 import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
@@ -635,6 +637,15 @@ public final class GateBenchmark {
 
     /** The test medium volumes the run placed, removed when it ends. */
     private final List<MediumHandle> testMedia = new ArrayList<>();
+
+    /** The test particle emitters the run placed, stopped when it ends. */
+    private final List<EmitterHandle> testEmitters = new ArrayList<>();
+
+    /** Where the test sparks are from the fountain, in meters. */
+    private static final Vector3d SPARKS_OFFSET = new Vector3d(6, 0, 0);
+
+    /** Where the test smoke puffs are from the fountain, in meters. */
+    private static final Vector3d PUFFS_OFFSET = new Vector3d(-6, 0, 0);
 
     /** How tall the test smoke column is, half of it, in meters. */
     private static final float SMOKE_HALF_HEIGHT = 20;
@@ -1337,6 +1348,39 @@ public final class GateBenchmark {
         previousFog = scene.getFog().isActive();
         placeFog(scene.getFog());
         placeTestMedia();
+        placeTestParticles();
+    }
+
+    /**
+     * Place test particle emitters from the startup property: {@code .particles=x,y,z} puts a
+     * fountain there, glowing sparks 6 m along x and rising smoke puffs 6 m back, for looking at
+     * particles with the fog, the lights and transparency.
+     */
+    private void placeTestParticles() {
+        final String value = System.getProperty(PROPERTY + ".particles");
+        if (value == null) {
+            return;
+        }
+        final String[] parts = value.split(",");
+        if (parts.length != 3) {
+            log.warn("The benchmark's particles must be x,y,z, not {}", value);
+            return;
+        }
+        final Vector3d at =
+                new Vector3d(
+                        Double.parseDouble(parts[0].trim()),
+                        Double.parseDouble(parts[1].trim()),
+                        Double.parseDouble(parts[2].trim()));
+        final EmitterHandle[] handles = {
+            graphics.particles().spawn(ParticleSamples.FOUNTAIN, at),
+            graphics.particles().spawn(ParticleSamples.SPARKS, new Vector3d(at).add(SPARKS_OFFSET)),
+            graphics.particles().spawn(ParticleSamples.SMOKE, new Vector3d(at).add(PUFFS_OFFSET))
+        };
+        for (EmitterHandle handle : handles) {
+            if (handle != null) {
+                testEmitters.add(handle);
+            }
+        }
     }
 
     /**
@@ -2539,6 +2583,8 @@ public final class GateBenchmark {
         if (!graphics.isClosed()) {
             testMedia.forEach(graphics.media()::remove);
             testMedia.clear();
+            testEmitters.forEach(graphics.particles()::stop);
+            testEmitters.clear();
         }
         if (scene != null && !Double.isNaN(previousViewDistance)) {
             scene.setViewDistance(previousViewDistance);

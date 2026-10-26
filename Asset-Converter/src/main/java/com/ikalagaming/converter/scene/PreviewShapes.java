@@ -18,7 +18,8 @@ import java.util.Map;
 /**
  * Simple shapes to try materials on, made in memory as scenes the workbench shows like any file: a
  * sphere, a cube or a plane, each standing on a floor so shadows show. Every vertex has a normal,
- * tangents and texture coordinates, so textured materials and normal maps work on them.
+ * tangents and texture coordinates, so textured materials and normal maps work on them. Also a
+ * stage to watch particles on, see {@link #particleStage()}.
  */
 public final class PreviewShapes {
     /** The shapes there are. */
@@ -49,6 +50,34 @@ public final class PreviewShapes {
 
     /** Half the floor's width. */
     private static final float FLOOR_HALF = 3;
+
+    /** What the particle stage's scene is called, which tells the workbench to run the viewer. */
+    public static final Path PARTICLE_STAGE = Path.of("Particle stage");
+
+    /** Half the particle stage's floor's width. */
+    private static final float STAGE_HALF = 6;
+
+    /** How tall the stage's walls are. */
+    private static final double WALL_HEIGHT = 3;
+
+    /** How thick the stage's walls are. */
+    private static final double WALL_THICKNESS = 0.2;
+
+    /** How far behind the emitter the back wall stands, and how far left the side wall. */
+    private static final double WALL_DISTANCE = 3.5;
+
+    /** How wide and tall the glass panes are. */
+    private static final double PANE_WIDTH = 2;
+
+    private static final double PANE_HEIGHT = 2.4;
+
+    /** How thick the panes are. */
+    private static final double PANE_THICKNESS = 0.04;
+
+    /** How far in front of and behind the emitter the panes stand, and off to each side. */
+    private static final double PANE_DISTANCE = 1.5;
+
+    private static final double PANE_SIDE = 1;
 
     /** Not to be made. */
     private PreviewShapes() {}
@@ -105,6 +134,125 @@ public final class PreviewShapes {
                 1,
                 List.of(),
                 0);
+    }
+
+    /**
+     * Make the stage particles are watched on: a floor, a wall behind and one to the left, and two
+     * panes of blue glass, one in front of the emitter's left side and one behind its right, so
+     * particles show in front of, behind and through translucent surfaces. The emitter stands at
+     * the origin.
+     *
+     * @return The scene, named {@link #PARTICLE_STAGE}.
+     */
+    public static ImportedScene particleStage() {
+        final List<Mesh> meshes = new ArrayList<>();
+        meshes.add(new Mesh("Floor", plane(STAGE_HALF, 0), 0));
+        meshes.add(new Mesh("Wall", cube(0.5f), 1));
+        meshes.add(new Mesh("Glass", cube(0.5f), 2));
+
+        final List<ImportedMaterial> materials = new ArrayList<>();
+        materials.add(
+                new ImportedMaterial(
+                        "Floor",
+                        new Vector4f(0.35f, 0.35f, 0.35f, 1),
+                        0.8f,
+                        0,
+                        new Vector3f(),
+                        Map.of()));
+        materials.add(
+                new ImportedMaterial(
+                        "Wall",
+                        new Vector4f(0.6f, 0.58f, 0.55f, 1),
+                        0.9f,
+                        0,
+                        new Vector3f(),
+                        Map.of()));
+        materials.add(
+                new ImportedMaterial(
+                        "Glass",
+                        new Vector4f(0.55f, 0.75f, 1, 0.3f),
+                        0.05f,
+                        0,
+                        new Vector3f(),
+                        Map.of()));
+
+        final Matrix4d identity = new Matrix4d();
+        final Node root = new Node("Particle stage", identity, null, identity, new int[0]);
+        root.addChild(new Node("Floor", identity, root, root.world(), new int[] {0}));
+        root.addChild(
+                box(
+                        root,
+                        "Back wall",
+                        1,
+                        0,
+                        WALL_HEIGHT / 2,
+                        -WALL_DISTANCE,
+                        2 * STAGE_HALF,
+                        WALL_HEIGHT,
+                        WALL_THICKNESS));
+        root.addChild(
+                box(
+                        root,
+                        "Side wall",
+                        1,
+                        -WALL_DISTANCE,
+                        WALL_HEIGHT / 2,
+                        0,
+                        WALL_THICKNESS,
+                        WALL_HEIGHT,
+                        2 * STAGE_HALF));
+        root.addChild(
+                box(
+                        root,
+                        "Glass in front",
+                        2,
+                        -PANE_SIDE,
+                        PANE_HEIGHT / 2,
+                        PANE_DISTANCE,
+                        PANE_WIDTH,
+                        PANE_HEIGHT,
+                        PANE_THICKNESS));
+        root.addChild(
+                box(
+                        root,
+                        "Glass behind",
+                        2,
+                        PANE_SIDE,
+                        PANE_HEIGHT / 2,
+                        -PANE_DISTANCE,
+                        PANE_WIDTH,
+                        PANE_HEIGHT,
+                        PANE_THICKNESS));
+        return new ImportedScene(
+                PARTICLE_STAGE, meshes, materials, root, List.of(), 1, 1, List.of(), 0);
+    }
+
+    /**
+     * A node drawing the unit cube mesh moved and stretched into a box.
+     *
+     * @param root Its parent.
+     * @param name Its name.
+     * @param mesh The cube mesh, with its material.
+     * @param x Its middle's x.
+     * @param y Its middle's y.
+     * @param z Its middle's z.
+     * @param width Its size along x.
+     * @param height Its size along y.
+     * @param depth Its size along z.
+     * @return The node.
+     */
+    private static Node box(
+            Node root,
+            String name,
+            int mesh,
+            double x,
+            double y,
+            double z,
+            double width,
+            double height,
+            double depth) {
+        final Matrix4d transform = new Matrix4d().translation(x, y, z).scale(width, height, depth);
+        return new Node(name, transform, root, root.world(), new int[] {mesh});
     }
 
     /**

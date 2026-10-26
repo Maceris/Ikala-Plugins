@@ -135,6 +135,9 @@ public class PipelineManagerVulkan {
     /** Adds translucent surfaces' extinction into the transparency volume. */
     private final OitSplat stageOitSplat;
 
+    /** Moves and spawns the particles, which the transparency passes draw. */
+    private final ParticleUpdate stageParticleUpdate;
+
     /** Integrates the transparency volume into the weights the transparent stage reads. */
     private final OitIntegrate stageOitIntegrate;
 
@@ -280,15 +283,24 @@ public class PipelineManagerVulkan {
                         shaders.getShader(RenderStage.Type.TRANSLUCENT),
                         shaders.getShader(RenderStage.Type.TRANSLUCENT_BAKED),
                         stageSceneRender,
-                        stageLightRender);
+                        stageLightRender,
+                        new ParticleDraw(shaders.getShader(RenderStage.Type.PARTICLE), true));
         stageTranslucentRender.initialize(state);
         stageOitSplat =
                 new OitSplat(
                         shaders.getShader(RenderStage.Type.OIT_SPLAT),
                         shaders.getShader(RenderStage.Type.OIT_SPLAT_BAKED),
                         stageSceneRender,
-                        stageLightRender);
+                        stageLightRender,
+                        new ParticleDraw(
+                                shaders.getShader(RenderStage.Type.PARTICLE_SPLAT), false));
         stageOitSplat.initialize(state);
+        stageParticleUpdate =
+                new ParticleUpdate(
+                        shaders.getShader(RenderStage.Type.PARTICLE_CONTROL),
+                        shaders.getShader(RenderStage.Type.PARTICLE_SIMULATE),
+                        shaders.getShader(RenderStage.Type.PARTICLE_EMIT));
+        stageParticleUpdate.initialize(state);
         stageOitIntegrate = new OitIntegrate(shaders.getShader(RenderStage.Type.OIT_INTEGRATE));
         stageOitIntegrate.initialize(state);
         stageVolumeUpload = new VolumeUpload(shaders.getShader(RenderStage.Type.VOLUME_UPLOAD));
@@ -364,6 +376,9 @@ public class PipelineManagerVulkan {
         final boolean world = configuration.world();
         if (world) {
             // Bakes first, so what they write is drawn this frame
+            // Particles first, when waiting on what came before costs nearly nothing: last
+            // frame's draws are done by then, where later this frame's would hold them up
+            stages.add(stageParticleUpdate);
             stages.add(stageLodBake);
             stages.add(stageInstanceDrawUpdate);
             stages.add(stageOccupancyVoxelize);
@@ -686,6 +701,9 @@ public class PipelineManagerVulkan {
             state.oitVolume.resize(state, width, height);
             state.fogVolume = new FogVolume(state);
             state.fogVolume.resize(state, width, height);
+            state.particlePool =
+                    new ParticlePool(
+                            state, Math.max(1, GraphicsManager.getSettings().maxParticles));
             state.occupancy = new OccupancyVolume(state);
             state.environment = new Environment(state);
             state.volumeBricks = new VolumeBricks(state);
@@ -901,6 +919,7 @@ public class PipelineManagerVulkan {
         stageOitResolve.cleanup(state);
         stageTranslucentRender.cleanup(state);
         stageOitSplat.cleanup(state);
+        stageParticleUpdate.cleanup(state);
         stageOitIntegrate.cleanup(state);
         stageVolumeUpload.cleanup(state);
         stageLodBake.cleanup(state);
@@ -930,6 +949,8 @@ public class PipelineManagerVulkan {
         state.oitVolume = null;
         state.fogVolume.cleanup(state);
         state.fogVolume = null;
+        state.particlePool.cleanup(state);
+        state.particlePool = null;
         state.occupancy.cleanup(state);
         state.occupancy = null;
         state.environment.cleanup(state);

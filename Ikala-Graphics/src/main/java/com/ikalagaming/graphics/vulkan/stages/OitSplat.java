@@ -60,6 +60,9 @@ public class OitSplat implements RenderStage {
     /** VkPipeline for baked sections, will be VK_NULL_HANDLE if not set up. */
     private long bakedPipeline;
 
+    /** Splats the particles' billboards too. */
+    @NonNull private final ParticleDraw particles;
+
     /**
      * Set up the stage.
      *
@@ -67,16 +70,19 @@ public class OitSplat implements RenderStage {
      * @param bakedShader The shaders for baked sections.
      * @param sceneRender The scene stage, whose descriptor sets this reads.
      * @param lightRender The light stage, whose descriptor sets this reads.
+     * @param particles Splats the particles' billboards, with their splat shaders.
      */
     public OitSplat(
             @NonNull ShaderVulkan shader,
             @NonNull ShaderVulkan bakedShader,
             @NonNull SceneRender sceneRender,
-            @NonNull LightRender lightRender) {
+            @NonNull LightRender lightRender,
+            @NonNull ParticleDraw particles) {
         this.shader = shader;
         this.bakedShader = bakedShader;
         this.sceneRender = sceneRender;
         this.lightRender = lightRender;
+        this.particles = particles;
         pipelineLayout = VK_NULL_HANDLE;
         pipeline = VK_NULL_HANDLE;
         bakedPipeline = VK_NULL_HANDLE;
@@ -93,17 +99,19 @@ public class OitSplat implements RenderStage {
                     .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT)
                     .offset(0)
                     .size(ShaderBindings.OitVolume.SPLAT_PUSH_CONSTANTS_SIZE);
+            final long[] setLayouts = {
+                lightRender.getDescriptorSetLayout(),
+                state.bindlessTextures.getDescriptorSetLayout(),
+                sceneRender.getDescriptorSetLayout()
+            };
             VkPipelineLayoutCreateInfo layoutInfo =
                     VkPipelineLayoutCreateInfo.calloc(stack)
                             .sType$Default()
-                            .pSetLayouts(
-                                    stack.longs(
-                                            lightRender.getDescriptorSetLayout(),
-                                            state.bindlessTextures.getDescriptorSetLayout(),
-                                            sceneRender.getDescriptorSetLayout()))
+                            .pSetLayouts(stack.longs(setLayouts))
                             .pPushConstantRanges(pushConstantRanges);
             checkError(vkCreatePipelineLayout(state.device.logical, layoutInfo, null, longOutput));
             pipelineLayout = longOutput.get(0);
+            particles.initialize(state, setLayouts);
         }
         pipeline = TranslucentRender.createPipeline(state, shader, pipelineLayout, false, false);
         bakedPipeline =
@@ -112,6 +120,7 @@ public class OitSplat implements RenderStage {
 
     @Override
     public void cleanup(@NonNull VulkanState state) {
+        particles.cleanup(state);
         vkDestroyPipeline(state.device.logical, bakedPipeline, null);
         bakedPipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(state.device.logical, pipeline, null);
@@ -161,15 +170,17 @@ public class OitSplat implements RenderStage {
                             .layerCount(1);
             vkCmdBeginRendering(commandBuffer, renderingInfo);
             TranslucentRender.setViewport(commandBuffer, tilesX, tilesY, stack);
+            final long[] sets = {
+                lightRender.getDescriptorSet(state.frameIndex),
+                state.bindlessTextures.getDescriptorSet(),
+                sceneRender.getDescriptorSet(state.frameIndex)
+            };
             vkCmdBindDescriptorSets(
                     commandBuffer,
                     VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipelineLayout,
                     0,
-                    stack.longs(
-                            lightRender.getDescriptorSet(state.frameIndex),
-                            state.bindlessTextures.getDescriptorSet(),
-                            sceneRender.getDescriptorSet(state.frameIndex)),
+                    stack.longs(sets),
                     null);
             ByteBuffer constants = stack.calloc(ShaderBindings.OitVolume.SPLAT_PUSH_CONSTANTS_SIZE);
             constants.putLong(
@@ -193,6 +204,7 @@ public class OitSplat implements RenderStage {
                     commandBuffer, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, constants);
             TranslucentRender.drawList(
                     commandBuffer, state, frameData, pipeline, bakedPipeline, stack);
+            particles.record(commandBuffer, state, scene, sets, width, height, true, stack);
             vkCmdEndRendering(commandBuffer);
         }
     }

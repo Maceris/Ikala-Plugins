@@ -207,4 +207,33 @@ class ShaderBindingsTest {
         assertEquals(32, ShaderBindings.GUI.PUSH_CONSTANT_FRAMEBUFFER_SCALE_OFFSET);
         assertEquals(40, ShaderBindings.GUI.PUSH_CONSTANTS_SIZE);
     }
+
+    /** As glslang reflects the particle shaders' push constants, buffer addresses 8 bytes each. */
+    @Test
+    void testParticlePushConstantOffsets() {
+        // Control control; IndexList dead; uint mode; uint capacity; uint current;
+        assertEquals(16, ShaderBindings.Particles.CONTROL_MODE_OFFSET);
+        assertEquals(24, ShaderBindings.Particles.CONTROL_CURRENT_OFFSET);
+        assertEquals(28, ShaderBindings.Particles.CONTROL_CONSTANTS_SIZE);
+        // 5 addresses; vec3 shift on 16 bytes; float seconds; uint current;
+        assertEquals(48, ShaderBindings.Particles.SIMULATE_SHIFT_OFFSET);
+        assertEquals(60, ShaderBindings.Particles.SIMULATE_SECONDS_OFFSET);
+        assertEquals(64, ShaderBindings.Particles.SIMULATE_CURRENT_OFFSET);
+        assertEquals(68, ShaderBindings.Particles.SIMULATE_CONSTANTS_SIZE);
+        // 5 addresses; uint emitterCount; uint total; uint next;
+        assertEquals(40, ShaderBindings.Particles.EMIT_EMITTER_COUNT_OFFSET);
+        assertEquals(48, ShaderBindings.Particles.EMIT_NEXT_OFFSET);
+        assertEquals(52, ShaderBindings.Particles.EMIT_CONSTANTS_SIZE);
+        // 2 addresses; vec3 anchor; float softScale; vec2 screenSize; vec2 tiles; float logScale;
+        // int voxelWeights; float pixelScale; uint padding; address splat;
+        assertEquals(16, ShaderBindings.Particles.DRAW_ANCHOR_OFFSET);
+        assertEquals(28, ShaderBindings.Particles.DRAW_SOFT_SCALE_OFFSET);
+        assertEquals(32, ShaderBindings.Particles.DRAW_SCREEN_SIZE_OFFSET);
+        assertEquals(40, ShaderBindings.Particles.DRAW_TILES_OFFSET);
+        assertEquals(48, ShaderBindings.Particles.DRAW_LOG_SCALE_OFFSET);
+        assertEquals(52, ShaderBindings.Particles.DRAW_VOXEL_WEIGHTS_OFFSET);
+        assertEquals(56, ShaderBindings.Particles.DRAW_PIXEL_SCALE_OFFSET);
+        assertEquals(64, ShaderBindings.Particles.DRAW_SPLAT_OFFSET);
+        assertEquals(72, ShaderBindings.Particles.DRAW_CONSTANTS_SIZE);
+    }
 }

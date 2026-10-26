@@ -242,7 +242,9 @@ public class Workbench {
                                                 previewButton(PreviewShapes.Shape.CUBE),
                                                 previewButton(PreviewShapes.Shape.PLANE),
                                                 new Button("shader-ball", "Shader ball")
-                                                        .onClick(this::openShaderBall)));
+                                                        .onClick(this::openShaderBall),
+                                                new Button("particle-stage", "Particles")
+                                                        .onClick(this::openParticleStage)));
         ui.show(
                 ui.surface(SURFACE_ID)
                         .anchors(edges(0, 0, 1, 0, 0, 0, 0, 0))
@@ -468,13 +470,20 @@ public class Workbench {
      */
     static final String PREVIEW_PREFIX = "preview:";
 
+    /** The name after {@link #PREVIEW_PREFIX} that opens the particle stage. */
+    static final String PARTICLE_PREVIEW = "particles";
+
     /**
-     * Open what a script names: a file, or a preview shape as "preview:sphere", "preview:cube" or
-     * "preview:plane".
+     * Open what a script names: a file, a preview shape as "preview:sphere", "preview:cube" or
+     * "preview:plane", or the particle stage as "preview:particles".
      *
      * @param what The file or preview.
      */
     public void openNamed(@NonNull String what) {
+        if (what.equals(PREVIEW_PREFIX + PARTICLE_PREVIEW)) {
+            openParticleStage();
+            return;
+        }
         if (what.startsWith(PREVIEW_PREFIX)) {
             final String name = what.substring(PREVIEW_PREFIX.length()).toUpperCase();
             try {
@@ -499,6 +508,18 @@ public class Workbench {
                 () -> {
                     final ScenePlacement placement =
                             ScenePlacement.prepare(graphics, PreviewShapes.scene(shape));
+                    post(() -> sceneLoaded(request, placement));
+                });
+    }
+
+    /** Show the stage particles are watched on, with the particle viewer. */
+    private void openParticleStage() {
+        final int request = requests.incrementAndGet();
+        status.text("Making the particle stage...");
+        loader.execute(
+                () -> {
+                    final ScenePlacement placement =
+                            ScenePlacement.prepare(graphics, PreviewShapes.particleStage());
                     post(() -> sceneLoaded(request, placement));
                 });
     }

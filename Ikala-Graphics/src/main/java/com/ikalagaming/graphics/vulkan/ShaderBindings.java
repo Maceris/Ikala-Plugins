@@ -1500,6 +1500,111 @@ public class ShaderBindings {
         }
     }
 
+    /**
+     * The particle passes' push constants, see {@code particle_control.comp}, {@code
+     * particle_simulate.comp}, {@code particle_emit.comp} and {@code particle_draw.glsl}. Buffers
+     * are device addresses, 8 bytes each.
+     */
+    public static class Particles {
+        /** The control pass: the control buffer's address. */
+        public static final int CONTROL_CONTROL_OFFSET = 0;
+
+        /** The free list's address. */
+        public static final int CONTROL_DEAD_OFFSET = CONTROL_CONTROL_OFFSET + Long.BYTES;
+
+        /** What it does: reset, prepare or finish. */
+        public static final int CONTROL_MODE_OFFSET = CONTROL_DEAD_OFFSET + Long.BYTES;
+
+        /** How many particles the pool holds. */
+        public static final int CONTROL_CAPACITY_OFFSET = CONTROL_MODE_OFFSET + Integer.BYTES;
+
+        /** Which alive list the simulation reads. */
+        public static final int CONTROL_CURRENT_OFFSET = CONTROL_CAPACITY_OFFSET + Integer.BYTES;
+
+        /** The size of the control pass's push constants. */
+        public static final int CONTROL_CONSTANTS_SIZE = CONTROL_CURRENT_OFFSET + Integer.BYTES;
+
+        /** The control pass's mode that frees every particle. */
+        public static final int MODE_RESET = 0;
+
+        /** The mode that sets up the simulation's dispatch. */
+        public static final int MODE_PREPARE = 1;
+
+        /** The mode that sets up the billboards' draw. */
+        public static final int MODE_FINISH = 2;
+
+        /**
+         * The simulation: the pool's address, then the alive list read, the one written, the free
+         * list and the control buffer.
+         */
+        public static final int SIMULATE_POOL_OFFSET = 0;
+
+        /** How far particles move when the anchor steps, a vec3 on 16 bytes. */
+        public static final int SIMULATE_SHIFT_OFFSET = 6 * Long.BYTES;
+
+        /** How long the frame was. */
+        public static final int SIMULATE_SECONDS_OFFSET = SIMULATE_SHIFT_OFFSET + 3 * Float.BYTES;
+
+        /** Which alive list it reads. */
+        public static final int SIMULATE_CURRENT_OFFSET = SIMULATE_SECONDS_OFFSET + Float.BYTES;
+
+        /** The size of the simulation's push constants. */
+        public static final int SIMULATE_CONSTANTS_SIZE = SIMULATE_CURRENT_OFFSET + Integer.BYTES;
+
+        /**
+         * The emission: the pool's address, then the alive list written, the free list, the control
+         * buffer and the frame's emitters.
+         */
+        public static final int EMIT_POOL_OFFSET = 0;
+
+        /** How many emitters spawn this frame. */
+        public static final int EMIT_EMITTER_COUNT_OFFSET = 5 * Long.BYTES;
+
+        /** How many particles they spawn in all. */
+        public static final int EMIT_TOTAL_OFFSET = EMIT_EMITTER_COUNT_OFFSET + Integer.BYTES;
+
+        /** Which alive list it adds to. */
+        public static final int EMIT_NEXT_OFFSET = EMIT_TOTAL_OFFSET + Integer.BYTES;
+
+        /** The size of the emission's push constants. */
+        public static final int EMIT_CONSTANTS_SIZE = EMIT_NEXT_OFFSET + Integer.BYTES;
+
+        /** The billboards: the pool's address, then the alive list drawn. */
+        public static final int DRAW_POOL_OFFSET = 0;
+
+        /** The anchor in render space, a vec3 on 16 bytes. */
+        public static final int DRAW_ANCHOR_OFFSET = 2 * Long.BYTES;
+
+        /** How far from the opaque scene particles fade, per meter of size. */
+        public static final int DRAW_SOFT_SCALE_OFFSET = DRAW_ANCHOR_OFFSET + 3 * Float.BYTES;
+
+        /** The size of the area drawn, in pixels, two floats. */
+        public static final int DRAW_SCREEN_SIZE_OFFSET = DRAW_SOFT_SCALE_OFFSET + Float.BYTES;
+
+        /** The transparency volume's tiles across and down, two floats. */
+        public static final int DRAW_TILES_OFFSET = DRAW_SCREEN_SIZE_OFFSET + 2 * Float.BYTES;
+
+        /** The slices' log scale. */
+        public static final int DRAW_LOG_SCALE_OFFSET = DRAW_TILES_OFFSET + 2 * Float.BYTES;
+
+        /** Nonzero to weight by the transparency volume. */
+        public static final int DRAW_VOXEL_WEIGHTS_OFFSET = DRAW_LOG_SCALE_OFFSET + Float.BYTES;
+
+        /** Pixels per fragment along each side. */
+        public static final int DRAW_PIXEL_SCALE_OFFSET = DRAW_VOXEL_WEIGHTS_OFFSET + Integer.BYTES;
+
+        /** The transparency volume's extinction buffer's address, for the splat. */
+        public static final int DRAW_SPLAT_OFFSET = DRAW_PIXEL_SCALE_OFFSET + 2 * Integer.BYTES;
+
+        /** The size of the billboards' push constants. */
+        public static final int DRAW_CONSTANTS_SIZE = DRAW_SPLAT_OFFSET + Long.BYTES;
+
+        /** Private constructor so this class is not instantiated. */
+        private Particles() {
+            cutItOut();
+        }
+    }
+
     /** Private constructor so this class is not instantiated. */
     private ShaderBindings() {
         cutItOut();

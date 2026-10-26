@@ -62,6 +62,9 @@ public final class GraphicsContext {
     /** The medium volumes API for this plugin. */
     private final Media media;
 
+    /** The particles API for this plugin. */
+    private final Particles particles;
+
     /** The sections API for this plugin. */
     private final Sections sections;
 
@@ -95,6 +98,7 @@ public final class GraphicsContext {
         instances = new Instances(this);
         lights = new Lights(this);
         media = new Media(this);
+        particles = new Particles(this);
         sections = new Sections(this);
         lods = new Lods(this);
         skins = new Skins(this);
@@ -156,6 +160,17 @@ public final class GraphicsContext {
     public Media media() {
         checkOpen();
         return media;
+    }
+
+    /**
+     * Place particle emitters, like smoke, sparks and dust, in the scene, owned by this plugin.
+     *
+     * @return The particles API for this plugin.
+     * @throws IllegalStateException If the plugin was unloaded.
+     */
+    public Particles particles() {
+        checkOpen();
+        return particles;
     }
 
     /**

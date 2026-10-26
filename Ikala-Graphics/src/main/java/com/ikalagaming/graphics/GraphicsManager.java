@@ -341,6 +341,13 @@ public class GraphicsManager {
             if (media > 0) {
                 log.debug("Removed {} medium volumes owned by {}", media, context.getOwnerKey());
             }
+            int emitters = scene.getEmitterRegistry().removeAllOwnedBy(context.getOwnerKey());
+            if (emitters > 0) {
+                log.debug(
+                        "Removed {} particle emitters owned by {}",
+                        emitters,
+                        context.getOwnerKey());
+            }
             if (lights > 0) {
                 log.debug("Removed {} lights owned by {}", lights, context.getOwnerKey());
             }
