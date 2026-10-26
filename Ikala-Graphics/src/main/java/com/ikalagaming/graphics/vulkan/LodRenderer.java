@@ -59,6 +59,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
@@ -722,6 +723,12 @@ public class LodRenderer {
 
         /** The newest generation of each section the pieces show. Render thread. */
         final Map<LodStore.SectionPos, Long> covered = new HashMap<>();
+
+        /**
+         * The sections whose generation in {@link #covered} changed since the section manager last
+         * took them. Render thread.
+         */
+        final List<LodStore.SectionPos> coveredChanges = new ArrayList<>();
 
         /** Whether it is drawn. */
         volatile boolean visible = true;
@@ -2761,6 +2768,7 @@ public class LodRenderer {
         world.batchStale = new HashSet<>(batch.stale());
         for (Map.Entry<LodStore.SectionPos, Long> entry : batch.covered().entrySet()) {
             world.covered.merge(entry.getKey(), entry.getValue(), Math::max);
+            world.coveredChanges.add(entry.getKey());
         }
         world.shown = !world.pieces.isEmpty();
         world.pieceCount = world.pieces.size();
@@ -3099,6 +3107,25 @@ public class LodRenderer {
         }
         final Long generation = world.covered.get(section);
         return generation == null ? -1 : generation;
+    }
+
+    /**
+     * Hand over the sections whose newest generation shown changed since the last call, so the
+     * section manager looks at only those again rather than at every section it waits on. Render
+     * thread.
+     *
+     * @param id The world.
+     * @param into Receives each section, possibly more than once.
+     */
+    public void takeCoveredChanges(long id, @NonNull Consumer<LodStore.SectionPos> into) {
+        final World world = world(id);
+        if (world == null) {
+            return;
+        }
+        for (LodStore.SectionPos section : world.coveredChanges) {
+            into.accept(section);
+        }
+        world.coveredChanges.clear();
     }
 
     /**

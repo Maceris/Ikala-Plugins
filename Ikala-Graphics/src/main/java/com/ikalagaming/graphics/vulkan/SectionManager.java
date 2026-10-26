@@ -478,10 +478,17 @@ public class SectionManager {
     private int failedCount;
 
     /**
-     * Sections feeding level of detail whose drawn bake may be newer than the level of detail
-     * shows; once it shows it, which only ever catches up, they leave. Guarded by {@link #lock}.
+     * Sections feeding level of detail whose drawn bake is newer than the level of detail shows;
+     * once it shows it, which only ever catches up, they leave. Guarded by {@link #lock}.
      */
     private final Set<Section> behind = new HashSet<>();
+
+    /**
+     * Sections of {@link #behind} to look at again: those that joined it, and those the level of
+     * detail showed something newer of, the only ones whose waiting can have ended. Guarded by
+     * {@link #lock}.
+     */
+    private final Set<Section> recheck = new HashSet<>();
 
     /** Sections that are overrides now. Guarded by {@link #lock}. */
     private final Set<Section> overriding = new HashSet<>();
@@ -611,7 +618,7 @@ public class SectionManager {
             if (section.position != null) {
                 byPosition.put(section.position, section);
                 if (live.containsKey(owner)) {
-                    behind.add(section);
+                    markBehind(section);
                 }
             }
         } finally {
@@ -943,6 +950,7 @@ public class SectionManager {
         setBricked(section, false);
         updateStandIn(section);
         behind.remove(section);
+        recheck.remove(section);
         overriding.remove(section);
     }
 
@@ -1446,7 +1454,7 @@ public class SectionManager {
                     // What its distance decides is checked again for the new bake
                     queueCheck(section, travel);
                     if (live.containsKey(section.owner)) {
-                        behind.add(section);
+                        markBehind(section);
                     }
                 }
                 shadows.addSection(pending.origin());
@@ -1521,7 +1529,7 @@ public class SectionManager {
                     rebake.add(new long[] {entry.getKey()});
                 }
                 if (entry.getValue().owner.equals(owner) && entry.getValue().position != null) {
-                    behind.add(entry.getValue());
+                    markBehind(entry.getValue());
                 }
             }
         } finally {
@@ -1556,6 +1564,7 @@ public class SectionManager {
                 }
             }
             behind.removeIf(section -> section.owner.equals(owner));
+            recheck.removeIf(section -> section.owner.equals(owner));
         } finally {
             lock.unlock();
         }
@@ -1641,29 +1650,38 @@ public class SectionManager {
                 entry.getValue().lod().setNear(eye.x(), eye.y(), eye.z());
                 overrides.put(entry.getKey(), new HashSet<>());
             }
-            // Only a section whose bake may be newer than the level of detail shows can be an
-            // override, or one that is one now and may stop being
-            final List<Section> candidates = new ArrayList<>(behind);
-            for (Section section : overriding) {
-                if (!behind.contains(section)) {
-                    candidates.add(section);
+            // Only sections that joined the waiting, or that the level of detail now shows newer,
+            // can have stopped waiting: while loading, tens of thousands wait at once
+            for (Live world : live.values()) {
+                state.lods.takeCoveredChanges(
+                        world.world(),
+                        position -> {
+                            final Section section = byPosition.get(position);
+                            if (section != null && behind.contains(section)) {
+                                recheck.add(section);
+                            }
+                        });
+            }
+            for (Section section : recheck) {
+                if (behind.contains(section) && !waiting(state, section)) {
+                    behind.remove(section);
                 }
             }
+            recheck.clear();
+            // Only a waiting section within reach of the observer can be an override, or one that
+            // is one now and may stop being
+            final List<Section> candidates = new ArrayList<>(overriding);
+            addWaitingNear(eye, reach, candidates);
             for (Section section : candidates) {
                 final Live world = live.get(section.owner);
                 if (world == null || section.position == null) {
                     behind.remove(section);
+                    overriding.remove(section);
                     continue;
                 }
                 final Version current = section.current;
-                final boolean newer =
-                        current == null
-                                || current.generation()
-                                        > state.lods.coveredGeneration(
-                                                world.world(), section.position);
-                if (newer) {
-                    ++behindCount;
-                } else {
+                final boolean newer = waiting(state, section);
+                if (!newer) {
                     behind.remove(section);
                 }
                 final boolean override =
@@ -1726,11 +1744,88 @@ public class SectionManager {
                 }
                 state.lods.setOverrides(world.world(), overrides.get(entry.getKey()));
             }
+            behindCount = behind.size();
         } finally {
             lock.unlock();
         }
         overrideCount = count;
         lodBehind = behindCount;
+    }
+
+    /**
+     * Note that a section's drawn bake may be newer than the level of detail shows, so it waits for
+     * the level of detail to catch up. Call with {@link #lock} held.
+     *
+     * @param section The section, which feeds level of detail.
+     */
+    private void markBehind(@NonNull Section section) {
+        behind.add(section);
+        recheck.add(section);
+    }
+
+    /**
+     * Whether a section's drawn bake, or the lack of one, is newer than its level of detail world
+     * shows. Render thread, with {@link #lock} held.
+     *
+     * @param state The Vulkan state.
+     * @param section The section.
+     * @return True if it waits for the level of detail, false if caught up or no longer feeding it.
+     */
+    private boolean waiting(@NonNull VulkanState state, @NonNull Section section) {
+        final Live world = live.get(section.owner);
+        if (world == null || section.position == null) {
+            return false;
+        }
+        final Version current = section.current;
+        return current == null
+                || current.generation()
+                        > state.lods.coveredGeneration(world.world(), section.position);
+    }
+
+    /**
+     * Add the waiting sections within reach of a point that aren't in a list yet: by looking up the
+     * grid around it, or by going through every waiting section when there are fewer of those. Call
+     * with {@link #lock} held.
+     *
+     * @param eye The point.
+     * @param reach How far from it, to a section's box.
+     * @param into The list, whose sections aren't added again.
+     */
+    private void addWaitingNear(@NonNull Vector3dc eye, double reach, @NonNull List<Section> into) {
+        final Set<Section> already = new HashSet<>(into);
+        final double[] at = {eye.x(), eye.y(), eye.z()};
+        final int[] low = new int[at.length];
+        final int[] high = new int[at.length];
+        long cells = 1;
+        for (int axis = 0; axis < at.length; ++axis) {
+            low[axis] = (int) Math.floor((at[axis] - reach) / SECTION_SIZE);
+            high[axis] = (int) Math.floor((at[axis] + reach) / SECTION_SIZE);
+            cells *= high[axis] - low[axis] + 1L;
+        }
+        if (cells > behind.size()) {
+            for (Section section : behind) {
+                if (section.position != null
+                        && distance(eye, section.position) <= reach
+                        && already.add(section)) {
+                    into.add(section);
+                }
+            }
+            return;
+        }
+        for (int x = low[0]; x <= high[0]; ++x) {
+            for (int y = low[1]; y <= high[1]; ++y) {
+                for (int z = low[2]; z <= high[2]; ++z) {
+                    final LodStore.SectionPos position = new LodStore.SectionPos(x, y, z);
+                    final Section section = byPosition.get(position);
+                    if (section != null
+                            && behind.contains(section)
+                            && distance(eye, position) <= reach
+                            && already.add(section)) {
+                        into.add(section);
+                    }
+                }
+            }
+        }
     }
 
     /**
