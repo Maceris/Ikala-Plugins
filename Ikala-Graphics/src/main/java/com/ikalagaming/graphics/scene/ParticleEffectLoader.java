@@ -42,6 +42,8 @@ import java.util.Set;
  *   start: [1, 0.6, 0.2, 1]
  *   end: [1, 0.2, 0.05, 0]
  * emissive: 6                # light given off, times the color
+ * lit: false                 # true for lit by the sun, sky and lights, the color their albedo
+ * anisotropy: 0.2            # which way lit ones scatter, -1 back to 1 onward
  * </pre>
  */
 public final class ParticleEffectLoader {
@@ -88,6 +90,15 @@ public final class ParticleEffectLoader {
     /** How much light they give off. */
     public static final String EMISSIVE = "emissive";
 
+    /** Whether lights light them. */
+    public static final String LIT = "lit";
+
+    /** Which way lit ones scatter. */
+    public static final String ANISOTROPY = "anisotropy";
+
+    /** The most anisotropy can be either way, short of all one way. */
+    public static final double MAX_ANISOTROPY = 0.95;
+
     /** Every key allowed at the top of an effect file. */
     public static final Set<String> KEYS =
             Set.of(
@@ -102,7 +113,9 @@ public final class ParticleEffectLoader {
                     DRAG,
                     SIZE,
                     COLOR,
-                    EMISSIVE);
+                    EMISSIVE,
+                    LIT,
+                    ANISOTROPY);
 
     /** The widest spread there is, in degrees: every way. */
     public static final double MAX_SPREAD_DEGREES = 180;
@@ -170,6 +183,8 @@ public final class ParticleEffectLoader {
         reader.startEnd(SIZE).ifPresent(sizes -> builder.size(sizes[0], sizes[1]));
         reader.colors(COLOR).ifPresent(colors -> builder.colors(colors[0], colors[1]));
         reader.number(EMISSIVE, 0, Float.MAX_VALUE).ifPresent(builder::emissive);
+        reader.bool(LIT).ifPresent(builder::lit);
+        reader.number(ANISOTROPY, -MAX_ANISOTROPY, MAX_ANISOTROPY).ifPresent(builder::anisotropy);
         return builder.build();
     }
 
@@ -196,6 +211,8 @@ public final class ParticleEffectLoader {
         color.put(END, list(effect.getColorEnd()));
         root.put(COLOR, color);
         root.put(EMISSIVE, effect.getEmissive());
+        root.put(LIT, effect.isLit());
+        root.put(ANISOTROPY, effect.getAnisotropy());
         // Lists of numbers stay on one line, as people write them
         final DumperOptions flow = new DumperOptions();
         flow.setDefaultFlowStyle(DumperOptions.FlowStyle.FLOW);
@@ -266,6 +283,22 @@ public final class ParticleEffectLoader {
                 return Optional.empty();
             }
             return Optional.of(checked(key, root.get(key), min, max));
+        }
+
+        /**
+         * True or false.
+         *
+         * @param key Its key.
+         * @return The value, or empty if the key is missing.
+         */
+        Optional<Boolean> bool(String key) {
+            if (!root.containsKey(key)) {
+                return Optional.empty();
+            }
+            if (!(root.get(key) instanceof Boolean value)) {
+                throw error(key, "expected true or false");
+            }
+            return Optional.of(value);
         }
 
         /**

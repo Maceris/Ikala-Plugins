@@ -33,6 +33,8 @@ layout(push_constant) uniform Constants {
     uint padding;
     // The transparency volume's extinction, for the splat
     SplatExtinction splat;
+    // Each particle's light, see particle_light.comp
+    RadianceList radianceList;
 };
 
 // Where the corner is across the billboard, -1 to 1 each way

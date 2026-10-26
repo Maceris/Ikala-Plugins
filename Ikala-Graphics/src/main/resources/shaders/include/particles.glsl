@@ -18,11 +18,18 @@ struct Particle {
     float sizeStart;
     float sizeEnd;
     float emissive;
-    uint seed;
+    // Half floats: its anisotropy, and 1 if lights light it or 0 if it shows its color as is
+    uint lighting;
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 16) buffer ParticleBuffer {
     Particle particles[];
+};
+
+// Each particle's light, by its index in the pool: half floats, red, green, blue and unused. What
+// lights a lit particle per unit of its color, or 1 for an unlit one, see particle_light.comp.
+layout(buffer_reference, std430, buffer_reference_align = 8) buffer RadianceList {
+    uvec2 radiance[];
 };
 
 // A list of particle indices: an alive list or the free list

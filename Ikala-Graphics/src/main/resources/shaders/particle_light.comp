@@ -1,0 +1,120 @@
+#version 460
+#extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_buffer_reference : require
+
+// Lights each particle the billboards draw this frame, once, so overlapping billboards cost
+// nothing more to light: one thread per particle in the drawn list, dispatched by its count, see
+// ParticleLight. A lit particle is lit the way the fog lights a froxel (see fog_inject.comp): the
+// sun through the shadow cascades with its phase and light scattered more than once in the
+// particle, the sky's light dimmed under cover, and the point lights and spotlights of its light
+// cluster with their shadows. Its light is per unit of its color, its albedo; an unlit particle
+// gets 1, so it shows its color as it is.
+
+// The sets as the light stage binds them, see FogRender
+#define OCCUPANCY_SET 2
+#define ENVIRONMENT_SET 3
+#include "lighting.glsl"
+#include "fog.glsl"
+#include "particles.glsl"
+
+layout(local_size_x = 64) in;
+
+layout(push_constant) uniform Constants {
+    ParticleBuffer pool;
+    // The alive list the billboards draw, with its count in the control buffer
+    IndexList drawn;
+    Control control;
+    RadianceList radianceList;
+    // The pool's anchor in render space: the anchor minus the camera
+    vec3 anchor;
+    float padding;
+};
+
+const vec3 UP = vec3(0.0, 1.0, 0.0);
+
+// Opacity is kept below 1, so the optical depth stays finite. Matches OitMath.MAX_OPACITY.
+const float MAX_OPACITY = 0.999;
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    if (index >= control.drawArgs.y) {
+        return;
+    }
+    uint slot = drawn.indices[index];
+    Particle particle = pool.particles[slot];
+    vec2 lighting = unpackHalf2x16(particle.lighting);
+    if (lighting.y < 0.5) {
+        radianceList.radiance[slot] = packParticleColor(vec4(1.0));
+        return;
+    }
+    float anisotropy = lighting.x;
+    vec3 renderPosition = particle.position + anchor;
+    // In render space the view only turns, so its inverse is its transpose
+    vec3 viewPosition = transpose(mat3(invViewMatrix)) * renderPosition;
+    float depth = -viewPosition.z;
+    vec3 toCamera = normalize(-renderPosition);
+
+    // How thick the particle is, from its opacity now, and how much of its light it scatters
+    float life = lifeFraction(particle.age, particle.lifetime);
+    vec4 color = mix(unpackParticleColor(particle.colorStart),
+        unpackParticleColor(particle.colorEnd), life);
+    float thickness = -log(1.0 - min(color.a, MAX_OPACITY));
+    float albedo = clamp(dot(color.rgb, vec3(1.0 / 3.0)), 0.0, 1.0);
+
+    // The sun: through the cascades, and past them the sky map stands in for its shadow. Light
+    // reaching the middle of the particle crossed half of it.
+    vec3 renderSun = normalize((invViewMatrix * vec4(-directionalLight.direction, 0.0)).xyz);
+    float cosTheta = dot(-renderSun, toCamera);
+    float shadowDistance = -cascadeShadowSplits[NUM_CASCADES - 1].splitDistance;
+    float sunVisible = sunVisibility(viewPosition, renderPosition, vec3(0.0));
+    float sky = skyVisibility(renderPosition, UP);
+    if (depth >= shadowDistance) {
+        sunVisible = min(sunVisible, sky);
+    }
+    vec3 light = directionalLight.color * directionalLight.intensity * sunVisible
+        * multipleScattering(0.5 * thickness, thickness, cosTheta, anisotropy, albedo);
+
+    // The sky, the same from every way, which scattering keeps as it is
+    vec3 ambient = environmentEnabled != 0 && environmentScale.w > 0.5
+        ? environmentScale.rgb * environmentAverage()
+        : ambientLight.color * ambientLight.intensity;
+    light += ambient * mix(skyLightFloor, 1.0, sky);
+
+    // The lights of the cluster it is in on the screen
+    vec4 clip = inverse(invProjectionMatrix) * vec4(viewPosition, 1.0);
+    if (clip.w > 0.0) {
+        vec2 ndc = clip.xy / clip.w;
+        vec2 screen = clamp(vec2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5), 0.0, 1.0);
+        uint cluster = findCluster(screen, depth);
+        uint count = clusterData[cluster];
+        uint firstIndex = CLUSTER_COUNT + cluster * MAX_LIGHTS_PER_CLUSTER;
+        for (uint i = 0; i < count; ++i) {
+            Light pointLight = lights[clusterData[firstIndex + i]];
+            vec3 toLight = pointLight.position - viewPosition;
+            float distance = length(toLight);
+            if (distance >= pointLight.range) {
+                continue;
+            }
+            toLight /= distance;
+            float intensity = scaleIntensity(distance, pointLight.range) * pointLight.intensity;
+            if (pointLight.type == LIGHT_TYPE_SPOT) {
+                float spotAlpha = dot(-toLight, normalize(pointLight.direction));
+                if (spotAlpha <= pointLight.cosOuter) {
+                    continue;
+                }
+                float fadeWidth = pointLight.cosInner - pointLight.cosOuter;
+                if (fadeWidth > 0.0) {
+                    intensity *= clamp((spotAlpha - pointLight.cosOuter) / fadeWidth, 0.0, 1.0);
+                }
+            }
+            if (pointLight.shadowMap >= 0) {
+                intensity *= pointVisibility(pointLight, renderPosition, vec3(0.0));
+            }
+            float cosLight = dot(-toLight, normalize(-viewPosition));
+            light += pointLight.color * intensity
+                * multipleScattering(0.5 * thickness, thickness, cosLight, anisotropy, albedo);
+        }
+    }
+    radianceList.radiance[slot] = packParticleColor(vec4(light, 1.0));
+}

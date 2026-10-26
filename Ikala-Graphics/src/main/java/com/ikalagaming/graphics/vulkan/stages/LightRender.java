@@ -42,6 +42,9 @@ public class LightRender implements RenderStage {
     /** The name of the fog's part of the frame timings. */
     public static final String FOG_TIMING = "Fog";
 
+    /** What the particles' lighting is called in frame timings. */
+    public static final String PARTICLE_LIGHT_TIMING = "ParticleLight";
+
     /** The most the fog's phase anisotropy goes either way, short of all one way. */
     private static final float MAX_ANISOTROPY = 0.95f;
 
@@ -61,6 +64,9 @@ public class LightRender implements RenderStage {
 
     /** Fills the fog volume, which the scene is lit through. */
     @NonNull private final FogRender fogRender;
+
+    /** Lights the particles, with this stage's sets, before they are drawn. */
+    @NonNull private final ParticleLight particleLight;
 
     /** VkDescriptorSetLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long descriptorSetLayout;
@@ -89,14 +95,17 @@ public class LightRender implements RenderStage {
      * @param shader Shader to use for rendering.
      * @param quadMesh Mesh for rendering onto.
      * @param fogRender Fills the fog volume, before the scene is lit through it.
+     * @param particleLight Lights the particles, with the same sets.
      */
     public LightRender(
             final @NonNull ShaderVulkan shader,
             final @NonNull QuadMesh quadMesh,
-            final @NonNull FogRender fogRender) {
+            final @NonNull FogRender fogRender,
+            final @NonNull ParticleLight particleLight) {
         this.shader = shader;
         this.quadMesh = quadMesh;
         this.fogRender = fogRender;
+        this.particleLight = particleLight;
 
         this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
@@ -119,11 +128,13 @@ public class LightRender implements RenderStage {
                         PipelineManagerVulkan.SCENE_COLOR_FORMAT,
                         null);
         fogRender.initialize(vulkanState, descriptorSetLayout);
+        particleLight.initialize(vulkanState, descriptorSetLayout);
     }
 
     @Override
     public void cleanup(@NonNull VulkanState vulkanState) {
         fogRender.cleanup(vulkanState);
+        particleLight.cleanup(vulkanState);
         // Freed along with the pool
         Arrays.fill(descriptorSets, VK_NULL_HANDLE);
         vkDestroyDescriptorPool(vulkanState.device.logical, descriptorPool, null);
@@ -178,6 +189,9 @@ public class LightRender implements RenderStage {
         } else {
             fogRender.skip(vulkanState);
         }
+        // The particles, lit once each by the same lights, before the billboards draw them
+        particleLight.record(commandBuffer, vulkanState, sets, scene);
+        vulkanState.frameTimings.mark(commandBuffer, vulkanState.frameIndex, PARTICLE_LIGHT_TIMING);
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             // Last read by the tone map stage, a frame or more ago

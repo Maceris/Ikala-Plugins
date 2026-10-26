@@ -159,6 +159,8 @@ public class ParticleDraw {
         constants.putLong(
                 ShaderBindings.Particles.DRAW_SPLAT_OFFSET,
                 state.oitVolume.getExtinction().deviceAddress);
+        constants.putLong(
+                ShaderBindings.Particles.DRAW_RADIANCE_OFFSET, pool.getRadiance().deviceAddress);
         vkCmdPushConstants(
                 commandBuffer,
                 pipelineLayout,

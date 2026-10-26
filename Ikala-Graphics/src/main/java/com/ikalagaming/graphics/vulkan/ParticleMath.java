@@ -53,6 +53,12 @@ public final class ParticleMath {
     /** Where its spawn count and random seed are. */
     public static final int EMITTER_COUNT = 112;
 
+    /** Where its anisotropy, a float, and whether lights light it, an int, are. */
+    public static final int EMITTER_LIGHTING = EMITTER_COUNT + 2 * Integer.BYTES;
+
+    /** The size of a particle's light, four half floats, see {@code particle_light.comp}. */
+    public static final int RADIANCE_SIZE = 4 * Short.BYTES;
+
     /** Where the control buffer keeps the two alive lists' counts. */
     public static final int CONTROL_ALIVE = 0;
 

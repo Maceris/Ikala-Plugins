@@ -30,6 +30,12 @@ public class ParticleClock {
     /** Whether every particle is to be removed on the next frame. */
     private boolean clearPending;
 
+    /**
+     * Whether time moves {@link #STEP_SECONDS} a frame however long frames take, so a run repeats
+     * exactly, for measuring.
+     */
+    private boolean fixedStep;
+
     /** How many particles were alive in the last frame the GPU reported. */
     private volatile int liveParticles;
 
@@ -92,6 +98,35 @@ public class ParticleClock {
         }
     }
 
+    /**
+     * Move time {@link #STEP_SECONDS} a frame however long frames take, so the same emitters spawn
+     * the same particles each run, for measuring; or with the frames' own time again.
+     *
+     * @param fixed True for fixed steps.
+     */
+    public void setFixedStep(boolean fixed) {
+        lock.lock();
+        try {
+            fixedStep = fixed;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Whether time moves fixed steps.
+     *
+     * @return True if it does.
+     */
+    public boolean isFixedStep() {
+        lock.lock();
+        try {
+            return fixedStep;
+        } finally {
+            lock.unlock();
+        }
+    }
+
     /** Move particles one {@link #STEP_SECONDS} step on the next frame, even while paused. */
     public void step() {
         lock.lock();
@@ -122,7 +157,11 @@ public class ParticleClock {
         lock.lock();
         try {
             if (!paused) {
-                return Math.min(Math.max(0, realSeconds), MAX_FRAME_SECONDS) * timeScale;
+                final double frame =
+                        fixedStep
+                                ? STEP_SECONDS
+                                : Math.min(Math.max(0, realSeconds), MAX_FRAME_SECONDS);
+                return frame * timeScale;
             }
             if (pendingSteps > 0) {
                 --pendingSteps;

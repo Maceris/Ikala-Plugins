@@ -1596,8 +1596,23 @@ public class ShaderBindings {
         /** The transparency volume's extinction buffer's address, for the splat. */
         public static final int DRAW_SPLAT_OFFSET = DRAW_PIXEL_SCALE_OFFSET + 2 * Integer.BYTES;
 
+        /** Each particle's light's address. */
+        public static final int DRAW_RADIANCE_OFFSET = DRAW_SPLAT_OFFSET + Long.BYTES;
+
         /** The size of the billboards' push constants. */
-        public static final int DRAW_CONSTANTS_SIZE = DRAW_SPLAT_OFFSET + Long.BYTES;
+        public static final int DRAW_CONSTANTS_SIZE = DRAW_RADIANCE_OFFSET + Long.BYTES;
+
+        /**
+         * The lighting: the pool's address, then the alive list drawn, the control buffer and the
+         * light list.
+         */
+        public static final int LIGHT_POOL_OFFSET = 0;
+
+        /** The anchor in render space, a vec3 on 16 bytes after the four addresses. */
+        public static final int LIGHT_ANCHOR_OFFSET = 4 * Long.BYTES;
+
+        /** The size of the lighting's push constants, padded past the anchor. */
+        public static final int LIGHT_CONSTANTS_SIZE = LIGHT_ANCHOR_OFFSET + 4 * Float.BYTES;
 
         /** Private constructor so this class is not instantiated. */
         private Particles() {

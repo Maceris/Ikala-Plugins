@@ -36,6 +36,9 @@ public class ParticlePool {
     /** Counts and indirect arguments, see {@link ParticleMath#CONTROL_ALIVE} and on. */
     @Getter private final SharedBuffer control;
 
+    /** Each particle's light this frame, by its index in the pool. */
+    @Getter private final SharedBuffer radiance;
+
     /** Which alive list the last frame's simulation wrote, and the billboards draw. */
     @Getter private int current;
 
@@ -65,6 +68,11 @@ public class ParticlePool {
         deadList =
                 SharedBuffer.allocateDeviceLocal(
                         (long) capacity * Integer.BYTES, state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+        radiance =
+                SharedBuffer.allocateDeviceLocal(
+                        (long) capacity * ParticleMath.RADIANCE_SIZE,
+                        state,
+                        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
         control =
                 SharedBuffer.allocate(
                         ParticleMath.CONTROL_SIZE,
@@ -160,5 +168,6 @@ public class ParticlePool {
         SharedBuffer.free(aliveLists, state);
         SharedBuffer.free(deadList, state);
         SharedBuffer.free(control, state);
+        SharedBuffer.free(radiance, state);
     }
 }

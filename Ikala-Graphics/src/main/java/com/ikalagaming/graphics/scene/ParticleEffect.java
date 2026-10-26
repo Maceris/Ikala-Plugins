@@ -83,6 +83,18 @@ public class ParticleEffect {
     /** How much light it gives off, times its color: 0 for none. */
     @Builder.Default float emissive = 0;
 
+    /**
+     * Whether the sun, the sky and the lights light it, its color then being how much of their
+     * light it scatters; unlit particles show their color as it is, like sparks and flames.
+     */
+    @Builder.Default boolean lit = true;
+
+    /**
+     * Which way a lit particle scatters light, its Henyey-Greenstein g: 0 the same every way,
+     * toward 1 mostly onward, so it glows with the sun behind it, toward -1 mostly back.
+     */
+    @Builder.Default float anisotropy = 0.2f;
+
     /** Builder methods for ranges and pairs, on top of the generated ones, filled in by Lombok. */
     public static class ParticleEffectBuilder {
 

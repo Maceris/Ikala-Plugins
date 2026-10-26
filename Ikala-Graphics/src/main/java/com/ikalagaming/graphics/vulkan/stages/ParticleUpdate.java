@@ -8,6 +8,7 @@ import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.scene.EmitterRegistry;
 import com.ikalagaming.graphics.scene.ParticleClock;
 import com.ikalagaming.graphics.scene.ParticleEffect;
+import com.ikalagaming.graphics.scene.ParticleEffectLoader;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.ParticleMath;
 import com.ikalagaming.graphics.vulkan.ParticlePool;
@@ -154,6 +155,10 @@ public class ParticleUpdate implements RenderStage {
         final double seconds = clock.advance(realSeconds);
         scene.getEmitterRegistry().collect(seconds, spawns);
         final boolean reset = pool.takeReset() | clock.takeClear();
+        if (reset) {
+            // Spawns are seeded from the frame count, so a cleared run repeats its particles
+            frames = 0;
+        }
         final Vector3d shift = new Vector3d();
         pool.follow(scene.getCamera().getPosition(), shift);
         ++frames;
@@ -404,6 +409,15 @@ public class ParticleUpdate implements RenderStage {
             MemoryUtil.memPutInt(at + ParticleMath.EMITTER_COUNT, count);
             MemoryUtil.memPutInt(
                     at + ParticleMath.EMITTER_COUNT + Integer.BYTES, frames * 0x9E3779B9 + written);
+            MemoryUtil.memPutFloat(
+                    at + ParticleMath.EMITTER_LIGHTING,
+                    (float)
+                            Math.clamp(
+                                    effect.getAnisotropy(),
+                                    -ParticleEffectLoader.MAX_ANISOTROPY,
+                                    ParticleEffectLoader.MAX_ANISOTROPY));
+            MemoryUtil.memPutInt(
+                    at + ParticleMath.EMITTER_LIGHTING + Float.BYTES, effect.isLit() ? 1 : 0);
             first += count;
             ++written;
         }

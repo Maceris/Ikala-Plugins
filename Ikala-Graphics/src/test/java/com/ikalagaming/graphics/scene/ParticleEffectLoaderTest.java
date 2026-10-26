@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.scene;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -62,6 +63,8 @@ class ParticleEffectLoaderTest {
                           start: [1, 0.6, 0.2, 1]
                           end: [1, 0.2, 0.05, 0]
                         emissive: 6
+                        lit: false
+                        anisotropy: -0.3
                         """);
         assertEquals(300, effect.getRate());
         assertEquals(20, effect.getBurst());
@@ -79,6 +82,8 @@ class ParticleEffectLoaderTest {
         assertEquals(new Vector4f(1, 0.6f, 0.2f, 1), effect.getColorStart());
         assertEquals(new Vector4f(1, 0.2f, 0.05f, 0), effect.getColorEnd());
         assertEquals(6, effect.getEmissive());
+        assertFalse(effect.isLit());
+        assertEquals(-0.3f, effect.getAnisotropy());
     }
 
     /** Missing keys default, one number stands for both ends, and one color for both. */
@@ -116,6 +121,8 @@ class ParticleEffectLoaderTest {
         assertTrue(failure("color: [1, 1, 1, 2]").contains("opacity must be at most 1"));
         assertTrue(failure("- 1\n- 2\n").contains("expected keys"));
         assertTrue(failure("rate: [").contains("not valid YAML"));
+        assertTrue(failure("lit: yes please").contains("lit: expected true or false"));
+        assertTrue(failure("anisotropy: 1").contains("anisotropy: must be from"));
     }
 
     /** Every sample writes out and reads back the same. */
@@ -141,6 +148,8 @@ class ParticleEffectLoaderTest {
             assertEquals(original.getColorStart(), copy.getColorStart(), name);
             assertEquals(original.getColorEnd(), copy.getColorEnd(), name);
             assertEquals(original.getEmissive(), copy.getEmissive(), name);
+            assertEquals(original.isLit(), copy.isLit(), name);
+            assertEquals(original.getAnisotropy(), copy.getAnisotropy(), name);
         }
     }
 

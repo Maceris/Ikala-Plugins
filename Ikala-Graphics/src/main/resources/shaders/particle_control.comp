@@ -24,7 +24,7 @@ layout(push_constant) uniform Constants {
 const uint MODE_RESET = 0;
 // The simulation's dispatch from the alive count, the list it writes emptied; one thread
 const uint MODE_PREPARE = 1;
-// The billboards' draw from the list just written; one thread
+// The billboards' draw from the list just written, and the lighting's dispatch over it; one thread
 const uint MODE_FINISH = 2;
 
 void main() {
@@ -52,6 +52,9 @@ void main() {
         control.alive[1 - current] = 0;
         control.dropped = 0;
     } else {
-        control.drawArgs = uvec4(BILLBOARD_VERTICES, control.alive[1 - current], 0, 0);
+        uint drawn = control.alive[1 - current];
+        control.drawArgs = uvec4(BILLBOARD_VERTICES, drawn, 0, 0);
+        // The simulation is done with its dispatch, so the lighting takes the slot
+        control.dispatchArgs = uvec4((drawn + PARTICLE_WORKGROUP - 1) / PARTICLE_WORKGROUP, 1, 1, 0);
     }
 }

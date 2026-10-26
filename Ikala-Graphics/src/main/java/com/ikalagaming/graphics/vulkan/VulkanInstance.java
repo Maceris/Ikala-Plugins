@@ -1355,6 +1355,15 @@ public class VulkanInstance {
                                         ShaderVulkan.Location.BUNDLED)),
                         state));
         shaderMap.addShader(
+                RenderStage.Type.PARTICLE_LIGHT,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/particle_light.comp",
+                                        ShaderVulkan.Type.COMPUTE,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
                 RenderStage.Type.PARTICLE,
                 new ShaderVulkan(
                         List.of(

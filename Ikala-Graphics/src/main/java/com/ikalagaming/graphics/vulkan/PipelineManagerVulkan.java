@@ -268,7 +268,8 @@ public class PipelineManagerVulkan {
                         quadMesh,
                         new FogRender(
                                 shaders.getShader(RenderStage.Type.FOG_INJECT),
-                                shaders.getShader(RenderStage.Type.FOG_INTEGRATE)));
+                                shaders.getShader(RenderStage.Type.FOG_INTEGRATE)),
+                        new ParticleLight(shaders.getShader(RenderStage.Type.PARTICLE_LIGHT)));
         stageLightRender.initialize(state);
         stageToneMap =
                 new ToneMap(

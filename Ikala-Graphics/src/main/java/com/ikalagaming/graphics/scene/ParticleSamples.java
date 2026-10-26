@@ -47,6 +47,7 @@ public final class ParticleSamples {
                     .size(0.06f, 0.02f)
                     .colors(new Vector4f(1, 0.6f, 0.2f, 1), new Vector4f(1, 0.2f, 0.05f, 0.6f))
                     .emissive(6)
+                    .lit(false)
                     .build();
 
     /** Big gray puffs rising slowly, growing and fading. */
@@ -75,6 +76,7 @@ public final class ParticleSamples {
                     .size(0.5f, 0.15f)
                     .colors(new Vector4f(1, 0.55f, 0.15f, 0.7f), new Vector4f(0.6f, 0.1f, 0.02f, 0))
                     .emissive(3)
+                    .lit(false)
                     .build();
 
     /** Every sample, in the order lists show them. */

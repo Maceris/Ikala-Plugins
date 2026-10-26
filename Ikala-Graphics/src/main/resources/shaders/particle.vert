@@ -4,7 +4,7 @@
 
 // A particle's billboard, facing the camera: six vertices per particle, one instance per entry of
 // the alive list the simulation just wrote, drawn indirectly with its count. Its size and color
-// follow its life, see ParticleDraw.
+// follow its life, see ParticleDraw; its color is lit by its light, plus its own emission.
 
 #include "particle_draw.glsl"
 
@@ -23,15 +23,18 @@ const vec2 CORNERS[6] = vec2[](vec2(-1.0, -1.0), vec2(1.0, -1.0), vec2(1.0, 1.0)
     vec2(-1.0, -1.0), vec2(1.0, 1.0), vec2(-1.0, 1.0));
 
 void main() {
-    Particle particle = pool.particles[drawn.indices[gl_InstanceIndex]];
+    uint slot = drawn.indices[gl_InstanceIndex];
+    Particle particle = pool.particles[slot];
     float life = lifeFraction(particle.age, particle.lifetime);
     float size = mix(particle.sizeStart, particle.sizeEnd, life);
     vec2 corner = CORNERS[gl_VertexIndex % BILLBOARD_VERTICES];
     vec4 view = viewMatrix * vec4(particle.position + anchor, 1.0);
     view.xy += corner * (0.5 * size);
     outCorner = corner;
-    outColor = mix(unpackParticleColor(particle.colorStart), unpackParticleColor(particle.colorEnd),
-        life);
+    vec4 color = mix(unpackParticleColor(particle.colorStart),
+        unpackParticleColor(particle.colorEnd), life);
+    vec3 light = unpackParticleColor(radianceList.radiance[slot]).rgb;
+    outColor = vec4(color.rgb * (light + particle.emissive), color.a);
     outViewPosition = view;
     outSizeEmissive = vec2(size, particle.emissive);
     gl_Position = projectionMatrix * view;

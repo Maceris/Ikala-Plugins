@@ -56,6 +56,20 @@ public class ParticleViewer {
     /** Which entry in the effect list is the open file rather than a sample. */
     private static final int FILE_ENTRY = -1;
 
+    /** Where the camera stands to measure, looking at the emitter from in front. */
+    private static final Vector3d MEASURE_CAMERA = new Vector3d(0, 1.6, 5);
+
+    /** How far down the camera looks to measure, in radians: at the emitter's middle. */
+    private static final float MEASURE_PITCH = 0.08f;
+
+    /** Frames run before measuring, for the effect to fill out. */
+    private static final int MEASURE_WARM_UP = 300;
+
+    /** The frame timings measured, the particles' passes and the frame's total. */
+    private static final String[] MEASURED = {
+        SIMULATION_STAGE, "ParticleLight", "OitSplat", "TranslucentRender", FrameTimings.GPU_TOTAL
+    };
+
     /** The workbench's graphics context, which owns the emitter and the loaded file. */
     private final GraphicsContext graphics;
 
@@ -92,6 +106,12 @@ public class ParticleViewer {
 
     /** A slider's value. */
     private final float[] value = new float[1];
+
+    /** Frames left to run before the measurement is read, or 0 when not measuring. */
+    private int measuring;
+
+    /** The last measurement, or empty. */
+    private String measurement = "";
 
     /**
      * Make a viewer.
@@ -141,6 +161,8 @@ public class ParticleViewer {
         clock.setTimeScale(1);
         clock.clear();
         graphics.particles().setHotReload(false);
+        clock.setFixedStep(false);
+        measuring = 0;
         setFog(false);
     }
 
@@ -209,7 +231,91 @@ public class ParticleViewer {
             IkGui.endTable();
         }
         drawFile();
+        drawMeasure();
         IkGui.textDisabled("Glass stands in front of the emitter's left and behind its right");
+    }
+
+    /**
+     * Draw the measure button and the last measurement, and read the measurement when its run ends.
+     * A run repeats exactly: fixed time steps, the same seeds and the same camera.
+     */
+    private void drawMeasure() {
+        if (measuring > 0) {
+            --measuring;
+            if (measuring == 0) {
+                finishMeasuring();
+            }
+            IkGui.text(String.format("Measuring, %d frames left", measuring));
+            return;
+        }
+        if (IkGui.button("Measure")) {
+            startMeasuring();
+        }
+        IkGui.setItemTooltip(
+                "Restarts the effect with fixed time steps, puts the camera in front of it, and"
+                        + " times the particles' passes over the last "
+                        + FrameTimings.WINDOW
+                        + " of "
+                        + (MEASURE_WARM_UP + FrameTimings.WINDOW)
+                        + " frames");
+        if (!measurement.isEmpty()) {
+            IkGui.textWrapped(measurement);
+        }
+    }
+
+    /** Start a measured run. */
+    private void startMeasuring() {
+        final Scene scene = GraphicsManager.getScene();
+        if (scene == null) {
+            return;
+        }
+        scene.getCamera().setPosition(MEASURE_CAMERA.x, MEASURE_CAMERA.y, MEASURE_CAMERA.z);
+        scene.getCamera().setRotation(MEASURE_PITCH, 0);
+        final ParticleClock clock = graphics.particles().clock();
+        clock.setPaused(false);
+        clock.setTimeScale(1);
+        clock.setFixedStep(true);
+        restart();
+        measuring = MEASURE_WARM_UP + FrameTimings.WINDOW;
+        measurement = "";
+    }
+
+    /** Read the timings at the end of a measured run, show them and log them. */
+    private void finishMeasuring() {
+        graphics.particles().clock().setFixedStep(false);
+        final VulkanInstance renderer = GraphicsManager.getRenderInstance();
+        if (renderer == null || renderer.getState().frameTimings == null) {
+            measurement = "The GPU can't time the passes";
+            return;
+        }
+        final StringBuilder text =
+                new StringBuilder()
+                        .append(
+                                String.format(
+                                        "%,d particles. Average and p95 ms:",
+                                        graphics.particles().clock().getLiveParticles()));
+        for (String name : MEASURED) {
+            for (FrameTimings.Timing timing : renderer.getState().frameTimings.snapshot()) {
+                if (name.equals(timing.name())) {
+                    text.append(
+                            String.format(
+                                    " %s %.3f / %.3f;", name, timing.average(), timing.p95()));
+                }
+            }
+        }
+        measurement = text.toString();
+        log.info("Particle benchmark {}: {}", currentName(), measurement);
+    }
+
+    /**
+     * What the shown effect is called.
+     *
+     * @return The sample's name, or the file's.
+     */
+    private String currentName() {
+        return shown == FILE_ENTRY && file != null
+                ? String.valueOf(file.getFileName())
+                : ParticleSamples.ALL.get(shown).name();
     }
 
     /** Draw the list of effects: the samples, and the open file. */

@@ -234,6 +234,10 @@ class ShaderBindingsTest {
         assertEquals(52, ShaderBindings.Particles.DRAW_VOXEL_WEIGHTS_OFFSET);
         assertEquals(56, ShaderBindings.Particles.DRAW_PIXEL_SCALE_OFFSET);
         assertEquals(64, ShaderBindings.Particles.DRAW_SPLAT_OFFSET);
-        assertEquals(72, ShaderBindings.Particles.DRAW_CONSTANTS_SIZE);
+        assertEquals(72, ShaderBindings.Particles.DRAW_RADIANCE_OFFSET);
+        assertEquals(80, ShaderBindings.Particles.DRAW_CONSTANTS_SIZE);
+        // 4 addresses; vec3 anchor; float padding;
+        assertEquals(32, ShaderBindings.Particles.LIGHT_ANCHOR_OFFSET);
+        assertEquals(48, ShaderBindings.Particles.LIGHT_CONSTANTS_SIZE);
     }
 }

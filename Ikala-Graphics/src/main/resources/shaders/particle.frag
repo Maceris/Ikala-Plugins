@@ -4,8 +4,8 @@
 #extension GL_EXT_buffer_reference : require
 
 // A particle's billboard in the transparent color pass, weighted and added up like translucent
-// surfaces (see translucent.frag) and composited by the resolve. Not lit yet: its color shows as it
-// is, plus its emission, seen through the fog in front of it. The cheap tests come first, so
+// surfaces (see translucent.frag) and composited by the resolve. Its color comes lit, see
+// particle.vert, and is seen through the fog in front of it. The cheap tests come first, so
 // fragments that can't show stop before the scene's depth and the fog are read: the billboard's
 // clear corners, and, weighted by the transparency volume, fragments behind so much that next to
 // nothing of them gets through (Drobot's zero transmittance early out, done per fragment).
@@ -51,7 +51,7 @@ void main() {
     if (voxelWeights == 0) {
         w = depthWeight(alpha, depth);
     }
-    vec3 color = outColor.rgb * (1.0 + outSizeEmissive.y);
+    vec3 color = outColor.rgb;
     if ((fog.enabled & FOG_ENABLED) != 0) {
         color = fogApply(color, gl_FragCoord.xy, depth, fog.logScale);
     }
