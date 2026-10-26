@@ -35,6 +35,31 @@ float henyeyGreenstein(float cosTheta, float g) {
     return (1.0 - gg) / (4.0 * 3.14159265359 * denominator * sqrt(denominator));
 }
 
+// Scattering orders followed in multipleScattering, and how each octave changes from the one
+// before, see FogMath
+const int SCATTER_OCTAVES = 4;
+const float SCATTER_ATTENUATION = 0.5;
+const float SCATTER_CONTRIBUTION = 0.5;
+const float SCATTER_ECCENTRICITY = 0.5;
+
+// The sun's light scattered toward the camera per unit of scattering and sunlight, counting light
+// scattered more than once, after Wrenninge's octaves, see FogMath.multipleScattering
+float multipleScattering(float opticalDepth, float thickness, float cosTheta, float g, float albedo) {
+    float scattered = albedo * (1.0 - exp(-thickness));
+    float attenuation = 1.0;
+    float contribution = 1.0;
+    float eccentricity = 1.0;
+    float total = 0.0;
+    for (int octave = 0; octave < SCATTER_OCTAVES; ++octave) {
+        total += contribution * henyeyGreenstein(cosTheta, g * eccentricity)
+            * exp(-attenuation * opticalDepth);
+        attenuation *= SCATTER_ATTENUATION;
+        contribution *= SCATTER_CONTRIBUTION * scattered;
+        eccentricity *= SCATTER_ECCENTRICITY;
+    }
+    return total;
+}
+
 #ifdef FOG_SET
 // Each froxel's light scattered toward the camera in front of its far end (rgb) and how much light
 // gets through to it (a)

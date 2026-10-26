@@ -11,9 +11,10 @@
 // The media are the scene's fog, thick at and below its base height and thinning above it; the
 // medium volumes plugins placed, shapes with soft edges and drifting noise, like smoke; and, with a
 // physical sky, the air and haze it is made of at sea level, so far land fades into the sky. The
-// fog and the volumes shade themselves: the sun's and the sky's light reaching a point is dimmed by
-// what of them lies toward the sun and straight up, worked out for each shape and for the fog's
-// fall off with height rather than marched. Their extinction is kept as one value, the air's averaged over its colors; the air's color
+// fog and the volumes shade themselves, worked out for each shape and for the fog's fall off with
+// height rather than marched: the sun's light reaching a point is dimmed by what of them lies toward
+// the sun, with the light scattered more than once on its way (see multipleScattering), and the
+// sky's, which comes from all around, by how deep inside each volume the point is. Their extinction is kept as one value, the air's averaged over its colors; the air's color
 // comes from the light it scatters, which is by color.
 
 // The light stage's sets, see LightRender
@@ -27,7 +28,7 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 // One medium volume, see FogRender.writeMedia: its middle in render space and its shape; the
 // rotation from render space to its own frame; its half size and soft edge's width; its albedo and
-// density; its emission and noise feature size; and its noise's drift and strength
+// density; its emission and noise feature size; its noise's drift and strength; and its anisotropy
 struct MediumVolume {
     vec4 centerShape;
     vec4 toLocal;
@@ -35,6 +36,8 @@ struct MediumVolume {
     vec4 albedoDensity;
     vec4 emissionNoiseScale;
     vec4 noiseOffsetStrength;
+    // x: its anisotropy
+    vec4 phase;
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer MediaList {
@@ -174,9 +177,14 @@ void main() {
     // What scatters light from the sun, the sky and the lights alike, and what gives off its own
     vec3 scattering = vec3(0.0);
     vec3 emitted = vec3(0.0);
-    // How much of the fog and the volumes lies toward the sun and straight up from here
+    // The optical depth of the fog and the volumes toward the sun, and to the nearest way out of the
+    // volumes, which stands in for the sky's light from all around
     float towardSun = 0.0;
-    float overhead = 0.0;
+    float sheltered = 0.0;
+    // The optical thickness of the media around here, across each, for multiple scattering
+    float thickness = 0.0;
+    // The anisotropies of what scatters here, weighted by how much each scatters
+    float weightedAnisotropy = 0.0;
 
     vec3 renderSun = normalize((invViewMatrix * vec4(-directionalLight.direction, 0.0)).xyz);
     // From the sun's direction of travel to the camera
@@ -188,6 +196,7 @@ void main() {
         // Past the cascades, the sky map stands in for the sun's shadow
         sunVisible = min(sunVisible, sky);
     }
+
     vec3 sun = directionalLight.color * directionalLight.intensity * sunVisible;
     // The sky's average light, which for the skybox is the ambient light, and for the physical sky
     // follows the sun, dimmed under cover
@@ -200,12 +209,14 @@ void main() {
         float density = fog.density * exp(-fog.shape.x * max(0.0, renderPosition.y - fog.shape.y));
         extinction += density;
         scattering += density * fog.color;
+        weightedAnisotropy += density * dot(fog.color, vec3(1.0 / 3.0)) * fog.shape.z;
         // Fog falling off with height thins out toward a high sun: e^-(falloff h) integrates to
         // the density over falloff times how fast the ray climbs
         float sunPath = fog.shape.x > 0.0 && renderSun.y > LOW_SUN
             ? min(1.0 / (fog.shape.x * renderSun.y), SUN_PATH)
             : SUN_PATH;
         towardSun += density * sunPath;
+        thickness += density * sunPath;
     }
     uint mediumCount = mediaList.mediumCount;
     for (uint i = 0; i < mediumCount; ++i) {
@@ -213,8 +224,8 @@ void main() {
         vec3 offset = renderPosition - medium.centerShape.xyz;
         vec3 local = rotateBy(medium.toLocal, offset);
         int shape = int(medium.centerShape.w);
-        float inside = edgeWeight(shapeDistance(shape, local, medium.halfSizeEdge.xyz),
-            medium.halfSizeEdge.w);
+        float distance = shapeDistance(shape, local, medium.halfSizeEdge.xyz);
+        float inside = edgeWeight(distance, medium.halfSizeEdge.w);
         if (inside <= 0.0) {
             continue;
         }
@@ -225,16 +236,23 @@ void main() {
         float density = medium.albedoDensity.w * inside * (1.0 - strength * (1.0 - noise));
         extinction += density;
         scattering += density * medium.albedoDensity.rgb;
+        weightedAnisotropy += density * dot(medium.albedoDensity.rgb, vec3(1.0 / 3.0))
+            * medium.phase.x;
         emitted += density * medium.emissionNoiseScale.rgb;
-        // Its shade, from its average density along each way out
+        // Its shade, from its average density toward the sun and to its nearest edge
         float average = medium.albedoDensity.w * (1.0 - 0.5 * strength);
         towardSun += average * shapeChord(shape, local, rotateBy(medium.toLocal, renderSun),
             medium.halfSizeEdge.xyz);
-        overhead += average * shapeChord(shape, local, rotateBy(medium.toLocal, UP),
-            medium.halfSizeEdge.xyz);
+        sheltered += average * max(0.0, -distance);
+        vec3 size = medium.halfSizeEdge.xyz;
+        float across = shape == SHAPE_BOX ? min(size.x, min(size.y, size.z)) : size.x;
+        thickness += inside * average * across;
     }
-    scattered += scattering * (sun * exp(-towardSun) * henyeyGreenstein(cosTheta, fog.shape.z)
-        + ambient * exp(-overhead)) + emitted;
+    float scatteringAverage = dot(scattering, vec3(1.0 / 3.0));
+    float albedo = extinction > 0.0 ? scatteringAverage / extinction : 0.0;
+    float anisotropy = scatteringAverage > 0.0 ? weightedAnisotropy / scatteringAverage : 0.0;
+    float fromSun = multipleScattering(towardSun, thickness, cosTheta, anisotropy, albedo);
+    scattered += scattering * (sun * fromSun + ambient * exp(-sheltered)) + emitted;
     if ((fog.enabled & FOG_HAZE) != 0) {
         vec3 rayleigh = RAYLEIGH_SCATTERING * PER_KILOMETER;
         float mie = MIE_SCATTERING * PER_KILOMETER;
@@ -273,7 +291,7 @@ void main() {
             // From the light's direction of travel to the camera, both in view space
             float cosLight = dot(-toLight, normalize(-viewPosition));
             scattered += scattering * light.color * intensity
-                * henyeyGreenstein(cosLight, fog.shape.z);
+                * henyeyGreenstein(cosLight, anisotropy);
         }
     }
     vec4 sampled = vec4(scattered, extinction);

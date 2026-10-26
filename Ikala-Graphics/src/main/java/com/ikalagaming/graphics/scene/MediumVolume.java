@@ -31,6 +31,8 @@ import org.joml.Vector3fc;
  * @param noiseStrength How much the noise takes from its density, 0 for none to 1 for patches of
  *     nothing.
  * @param wind How fast the noise drifts, in meters a second, in the world.
+ * @param anisotropy Which way it scatters light, its Henyey-Greenstein g: 0 the same every way,
+ *     toward 1 mostly onward, as haze glows around the sun, toward -1 mostly back.
  */
 public record MediumVolume(
         @NonNull Shape shape,
@@ -43,7 +45,8 @@ public record MediumVolume(
         float edge,
         float noiseScale,
         float noiseStrength,
-        @NonNull Vector3fc wind) {
+        @NonNull Vector3fc wind,
+        float anisotropy) {
 
     /** A medium volume's shape, in its own frame around its middle. */
     public enum Shape {
@@ -67,6 +70,12 @@ public record MediumVolume(
     /** How much a new volume's noise takes from its density. */
     public static final float DEFAULT_NOISE_STRENGTH = 0.5f;
 
+    /** Which way a new volume scatters light: a little onward, as smoke does. */
+    public static final float DEFAULT_ANISOTROPY = 0.2f;
+
+    /** The most a volume's anisotropy can be either way, short of all one way. */
+    public static final float MAX_ANISOTROPY = 0.95f;
+
     /**
      * Make defensive copies of the vectors and rotation.
      *
@@ -81,6 +90,7 @@ public record MediumVolume(
      * @param noiseScale Its noise's size.
      * @param noiseStrength Its noise's strength.
      * @param wind Its noise's drift.
+     * @param anisotropy Which way it scatters light.
      */
     public MediumVolume {
         center = new Vector3d(center);
@@ -93,11 +103,12 @@ public record MediumVolume(
         edge = Math.max(0, edge);
         noiseScale = Math.max(Float.MIN_NORMAL, noiseScale);
         noiseStrength = Math.clamp(noiseStrength, 0, 1);
+        anisotropy = Math.clamp(anisotropy, -MAX_ANISOTROPY, MAX_ANISOTROPY);
     }
 
     /**
-     * A volume of gray smoke filling a shape, unturned, with the default density, edge and noise,
-     * and no wind.
+     * A volume of gray smoke filling a shape, unturned, with the default density, edge, noise and
+     * anisotropy, and no wind.
      *
      * @param shape The shape.
      * @param center Where its middle is, in the world.
@@ -117,7 +128,8 @@ public record MediumVolume(
                 DEFAULT_EDGE,
                 DEFAULT_NOISE_SCALE,
                 DEFAULT_NOISE_STRENGTH,
-                new Vector3f());
+                new Vector3f(),
+                DEFAULT_ANISOTROPY);
     }
 
     /**
@@ -138,7 +150,8 @@ public record MediumVolume(
                 edge,
                 noiseScale,
                 noiseStrength,
-                wind);
+                wind,
+                anisotropy);
     }
 
     /**
@@ -159,7 +172,8 @@ public record MediumVolume(
                 edge,
                 noiseScale,
                 noiseStrength,
-                wind);
+                wind,
+                anisotropy);
     }
 
     /**
@@ -180,7 +194,8 @@ public record MediumVolume(
                 edge,
                 noiseScale,
                 noiseStrength,
-                wind);
+                wind,
+                anisotropy);
     }
 
     /**
@@ -204,7 +219,8 @@ public record MediumVolume(
                 edge,
                 noiseScale,
                 noiseStrength,
-                wind);
+                wind,
+                anisotropy);
     }
 
     /**
@@ -232,7 +248,30 @@ public record MediumVolume(
                 newEdge,
                 newNoiseScale,
                 newNoiseStrength,
-                newWind);
+                newWind,
+                anisotropy);
+    }
+
+    /**
+     * A copy that scatters light another way.
+     *
+     * @param newAnisotropy Its Henyey-Greenstein g, see {@link #anisotropy()}.
+     * @return The copy.
+     */
+    public MediumVolume withAnisotropy(float newAnisotropy) {
+        return new MediumVolume(
+                shape,
+                center,
+                rotation,
+                halfSize,
+                density,
+                albedo,
+                emission,
+                edge,
+                noiseScale,
+                noiseStrength,
+                wind,
+                newAnisotropy);
     }
 
     /**

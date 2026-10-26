@@ -440,9 +440,10 @@ public class LightRender implements RenderStage {
         uniformData.putInt(
                 ShaderBindings.Light.ENVIRONMENT_ENABLED_OFFSET,
                 GraphicsManager.getSettings().environmentLighting ? 1 : 0);
-        // A physical sky's light is per unit of the sun's, so it follows the sun
+        // A physical sky's light is per unit of the sun's, so it follows the sun; w stays 0 for a
+        // skybox, scaled to the ambient light in the shader (JOML's new Vector4f() has w 1)
         final PhysicalSky physicalSky = scene.getPhysicalSky();
-        final Vector4f environmentScale = new Vector4f();
+        final Vector4f environmentScale = new Vector4f(0, 0, 0, 0);
         if (physicalSky != null) {
             final DirectionalLight sun = scene.getSceneLights().getDirLight();
             environmentScale.set(

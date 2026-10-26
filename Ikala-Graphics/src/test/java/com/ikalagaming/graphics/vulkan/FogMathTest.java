@@ -107,6 +107,35 @@ class FogMathTest {
         assertTrue(FogMath.henyeyGreenstein(1, 0.5) > FogMath.henyeyGreenstein(-1, 0.5));
     }
 
+    /**
+     * Multiple scattering is single scattering in thin media, brightens the sunlit skin of thick
+     * media, and keeps their insides from going black.
+     */
+    @Test
+    void testMultipleScattering() {
+        final double g = 0.6;
+        final double cos = 0.2;
+        final double thick = 4;
+        for (double albedo : new double[] {0, 0.5, 1}) {
+            assertEquals(
+                    FogMath.henyeyGreenstein(cos, g),
+                    FogMath.multipleScattering(0, 0, cos, g, albedo),
+                    1e-12);
+        }
+        assertTrue(
+                FogMath.multipleScattering(0, thick, cos, g, 0.9)
+                        > 1.2 * FogMath.henyeyGreenstein(cos, g),
+                "the skin of thick smoke gets light back from inside");
+        final double depth = 6;
+        final double single = FogMath.henyeyGreenstein(cos, g) * Math.exp(-depth);
+        assertEquals(single, FogMath.multipleScattering(depth, thick, cos, g, 0), 1e-12);
+        final double multiple = FogMath.multipleScattering(depth, thick, cos, g, 0.9);
+        assertTrue(multiple > 10 * single, "dense smoke stays lit: " + multiple);
+        assertTrue(
+                multiple > FogMath.multipleScattering(depth, thick, cos, g, 0.3),
+                "whiter smoke is brighter inside");
+    }
+
     /** Height fog is its density at and below the base, and falls off by e every 1 / falloff. */
     @Test
     void testHeightFog() {

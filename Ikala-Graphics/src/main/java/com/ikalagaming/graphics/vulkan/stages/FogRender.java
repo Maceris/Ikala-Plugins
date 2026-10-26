@@ -81,8 +81,8 @@ public class FogRender {
      */
     private static final int MEDIA_HEADER_SIZE = 4 * Integer.BYTES;
 
-    /** The size of one medium volume in the buffer: six vec4s. */
-    private static final int MEDIUM_SIZE = 6 * 4 * Float.BYTES;
+    /** The size of one medium volume in the buffer: seven vec4s. */
+    private static final int MEDIUM_SIZE = 7 * 4 * Float.BYTES;
 
     /** The values of a vec4. */
     private static final int VEC4 = 4;
@@ -405,8 +405,8 @@ public class FogRender {
     /**
      * Write this frame's medium volumes, those that reach within the view distance, in render
      * space: for each, its middle and shape, the rotation from the world to its own frame, its half
-     * size and edge, its albedo and density, its emission and noise scale, and its noise's offset
-     * and strength.
+     * size and edge, its albedo and density, its emission and noise scale, its noise's offset and
+     * strength, and its anisotropy.
      *
      * @param state The Vulkan state.
      * @param registry The scene's medium volumes.
@@ -465,7 +465,11 @@ public class FogRender {
                 (float) (volume.wind().x() * seconds),
                 (float) (volume.wind().y() * seconds),
                 (float) (volume.wind().z() * seconds),
-                volume.noiseStrength()
+                volume.noiseStrength(),
+                volume.anisotropy(),
+                0,
+                0,
+                0
             };
             volume.rotation().invert(toLocal);
             values[VEC4] = toLocal.x;

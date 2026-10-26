@@ -24,6 +24,23 @@ public final class FogMath {
     /** Below this extinction, per meter, a slice's scattering is integrated as if clear. */
     public static final double CLEAR = 1e-6;
 
+    /**
+     * Scattering orders the sun's light is followed through in {@link #multipleScattering}: the
+     * first, single scattering, and the octaves after it.
+     */
+    public static final int SCATTER_OCTAVES = 4;
+
+    /**
+     * How much less each octave of multiple scattering is dimmed by the medium than the one before.
+     */
+    public static final double SCATTER_ATTENUATION = 0.5;
+
+    /** How much less each octave of multiple scattering adds than the one before. */
+    public static final double SCATTER_CONTRIBUTION = 0.5;
+
+    /** How much less forward each octave of multiple scattering scatters than the one before. */
+    public static final double SCATTER_ECCENTRICITY = 0.5;
+
     /** Static helpers only. */
     private FogMath() {}
 
@@ -53,6 +70,45 @@ public final class FogMath {
         final double gg = g * g;
         final double denominator = 1 + gg - 2 * g * cosTheta;
         return (1 - gg) / (4 * Math.PI * denominator * Math.sqrt(denominator));
+    }
+
+    /**
+     * The sun's light scattered toward the camera at a point in a medium, per unit of scattering
+     * coefficient and of sunlight, counting light scattered more than once. Single scattering alone
+     * makes dense smoke dark, since the medium in front of a point toward the sun stops nearly all
+     * of the sun's light; light that scattered on the way gets deeper. This follows Wrenninge's
+     * octaves ("Oz: The Great and Volumetric", SIGGRAPH 2013), as Frostbite's clouds do: each
+     * octave after the first is dimmed less by the medium, adds less, and scatters less forward.
+     * Higher orders need light to have scattered again around the point, so each is weighted by the
+     * albedo and by how much light the medium around the point stops, its thickness, which keeps
+     * thin fog at single scattering while the sunlit skin of thick smoke still gets the light
+     * scattered back out from inside it.
+     *
+     * @param opticalDepth The medium's optical depth from the point toward the sun.
+     * @param thickness The optical thickness of the medium around the point, across the volume it
+     *     is in.
+     * @param cosTheta The cosine between the sun's light's direction and the way toward the camera.
+     * @param g The medium's Henyey-Greenstein anisotropy.
+     * @param albedo The medium's albedo, its scattering over its extinction.
+     * @return The light scattered toward the camera, per steradian.
+     */
+    public static double multipleScattering(
+            double opticalDepth, double thickness, double cosTheta, double g, double albedo) {
+        final double scattered = albedo * (1 - Math.exp(-thickness));
+        double attenuation = 1;
+        double contribution = 1;
+        double eccentricity = 1;
+        double total = 0;
+        for (int octave = 0; octave < SCATTER_OCTAVES; ++octave) {
+            total +=
+                    contribution
+                            * henyeyGreenstein(cosTheta, g * eccentricity)
+                            * Math.exp(-attenuation * opticalDepth);
+            attenuation *= SCATTER_ATTENUATION;
+            contribution *= SCATTER_CONTRIBUTION * scattered;
+            eccentricity *= SCATTER_ECCENTRICITY;
+        }
+        return total;
     }
 
     /**

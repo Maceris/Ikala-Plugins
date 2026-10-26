@@ -645,6 +645,9 @@ public final class GateBenchmark {
     /** How dense the test smoke is, per meter. */
     private static final float SMOKE_DENSITY = 0.4f;
 
+    /** How much of the light the test smoke stops it scatters: white smoke, like steam. */
+    private static final Vector3fc SMOKE_ALBEDO = new Vector3f(0.9f);
+
     /** The test smoke's drift, up and along x, in meters a second. */
     private static final Vector3fc SMOKE_WIND = new Vector3f(1, 3, 0);
 
@@ -655,6 +658,9 @@ public final class GateBenchmark {
 
     /** The glowing sphere's light per unit of density: an orange glow, as over a fire. */
     private static final Vector3fc GLOW_EMISSION = new Vector3f(4, 1.5f, 0.3f);
+
+    /** How fast the glowing sphere's noise rises, in meters a second. */
+    private static final Vector3fc GLOW_DRIFT = new Vector3f(0, 1, 0);
 
     /** Where the fog bank is from the smoke, and its half size, in meters. */
     private static final Vector3d BANK_OFFSET = new Vector3d(0, -12, 40);
@@ -1358,7 +1364,7 @@ public final class GateBenchmark {
                                 MediumVolume.Shape.CYLINDER,
                                 at,
                                 new Vector3f(SMOKE_RADIUS, SMOKE_HALF_HEIGHT, 0))
-                        .withMedium(SMOKE_DENSITY, new Vector3f(0.6f), new Vector3f())
+                        .withMedium(SMOKE_DENSITY, SMOKE_ALBEDO, new Vector3f())
                         .withNoise(
                                 MediumVolume.DEFAULT_EDGE * 2,
                                 MediumVolume.DEFAULT_NOISE_SCALE,
@@ -1369,7 +1375,12 @@ public final class GateBenchmark {
                                 MediumVolume.Shape.SPHERE,
                                 new Vector3d(at).add(GLOW_OFFSET),
                                 new Vector3f(GLOW_RADIUS))
-                        .withMedium(SMOKE_DENSITY / 2, new Vector3f(0.5f), GLOW_EMISSION);
+                        .withMedium(SMOKE_DENSITY / 2, new Vector3f(0.5f), GLOW_EMISSION)
+                        .withNoise(
+                                GLOW_RADIUS / 2,
+                                MediumVolume.DEFAULT_NOISE_SCALE,
+                                MediumVolume.DEFAULT_NOISE_STRENGTH,
+                                GLOW_DRIFT);
         final MediumVolume bank =
                 MediumVolume.of(
                                 MediumVolume.Shape.BOX,
