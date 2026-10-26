@@ -19,24 +19,56 @@ import com.ikalagaming.graphics.vulkan.WaterMath;
  *     open ocean, 0.1 to 1 in coastal water, up to 10 in brown bog water.
  * @param sediment The suspended mineral sediment's concentration, in grams a cubic meter: 0 in the
  *     open ocean, 1 to 10 in coastal water, 10 to 100 or more in muddy rivers.
+ * @param windSpeed The wind's speed 10 m above the water, in meters a second, which raises its
+ *     waves: 0 for still water, 3 for a light breeze, 8 for a moderate one, 15 for a gale.
+ * @param windDirection The way the wind blows, in radians from +x toward +z.
+ * @param fetch How far the wind has blown over the water, in meters, which limits how big its waves
+ *     grow: a pond's or a lake's width, or infinite for the open sea.
  */
-public record WaterBody(float chlorophyll, float cdom, float sediment) {
+public record WaterBody(
+        float chlorophyll,
+        float cdom,
+        float sediment,
+        float windSpeed,
+        float windDirection,
+        float fetch) {
 
-    /** Clear open ocean, deep blue. */
-    public static final WaterBody OCEAN = ofChlorophyll(0.05f);
+    /** Clear open ocean, deep blue, in a moderate breeze. */
+    public static final WaterBody OCEAN =
+            ofChlorophyll(0.05f).withWind(8, 0, Float.POSITIVE_INFINITY);
 
-    /** Green lake water, rich in phytoplankton. */
-    public static final WaterBody GREEN = ofChlorophyll(8);
+    /** Green lake water, rich in phytoplankton, in a light breeze across a kilometer. */
+    public static final WaterBody GREEN = ofChlorophyll(8).withWind(4, 0, 1000);
 
-    /** A muddy river, thick with sediment and some dissolved organic matter. */
-    public static final WaterBody MUDDY = new WaterBody(1, 0.5f, 40);
+    /** A muddy river, thick with sediment and some dissolved organic matter, nearly still. */
+    public static final WaterBody MUDDY = new WaterBody(1, 0.5f, 40).withWind(2, 0, 200);
 
     /**
-     * Check every concentration is a number and not negative.
+     * Still water: no wind.
+     *
+     * @param chlorophyll The chlorophyll concentration, in milligrams a cubic meter.
+     * @param cdom The dissolved organic matter's absorption at 440 nm, per meter.
+     * @param sediment The sediment concentration, in grams a cubic meter.
+     */
+    public WaterBody(float chlorophyll, float cdom, float sediment) {
+        this(chlorophyll, cdom, sediment, 0, 0, Float.POSITIVE_INFINITY);
+    }
+
+    /**
+     * Check every concentration and the wind are numbers and not negative.
      *
      * @throws IllegalArgumentException If one isn't.
      */
     public WaterBody {
+        if (windSpeed < 0 || fetch <= 0 || !Float.isFinite(windDirection)) {
+            throw new IllegalArgumentException(
+                    "Wind must have a speed, a fetch and a direction: "
+                            + windSpeed
+                            + " m/s over "
+                            + fetch
+                            + " m toward "
+                            + windDirection);
+        }
         if (chlorophyll < 0 || cdom < 0 || sediment < 0) {
             throw new IllegalArgumentException(
                     "Water concentrations must not be negative: chlorophyll "
@@ -61,5 +93,17 @@ public record WaterBody(float chlorophyll, float cdom, float sediment) {
                 WaterMath.phytoplanktonAbsorption(
                         Math.max(0, chlorophyll), WaterMath.SPECIFIC_AT_440);
         return new WaterBody(chlorophyll, (float) (WaterMath.CDOM_SHARE * phytoplankton), 0);
+    }
+
+    /**
+     * The same water in another wind.
+     *
+     * @param speed The wind's speed 10 m up, in meters a second.
+     * @param direction The way it blows, in radians from +x toward +z.
+     * @param over How far it has blown over the water, in meters, or infinite for the open sea.
+     * @return A changed copy.
+     */
+    public WaterBody withWind(float speed, float direction, float over) {
+        return new WaterBody(chlorophyll, cdom, sediment, speed, direction, over);
     }
 }

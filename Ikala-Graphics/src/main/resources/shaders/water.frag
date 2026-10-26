@@ -19,18 +19,24 @@
 
 layout(push_constant) uniform Constants {
     WaterTileList tileList;
+    WaveClimateList climateList;
+    WaveProfileList profileList;
     // The drawn area, in pixels
     vec2 screenSize;
     // The scene's color and depth behind the water, bindless
     int behindColorIndex;
     int behindDepthIndex;
-    // The surface's roughness, for the sun's highlight and the sky's reflection
+    // A calm surface's roughness, for the sun's highlight and the sky's reflection
     float roughness;
+    // How wide a pixel is seen from the camera, in radians
+    float pixelAngle;
 };
 
 layout(location = 0) in vec3 outRenderPosition;
 layout(location = 1) in vec4 outViewPosition;
 layout(location = 2) flat in uint outTile;
+// How much of the waves the depth allows here
+layout(location = 3) in float outCalm;
 
 layout(location = 0) out vec4 outColor;
 
@@ -40,6 +46,12 @@ const float DEEP = 1000.0;
 const float SKY_REFLECTANCE = 0.066;
 // The least cosine to the normal anything gets in a GGX term, so grazing light doesn't blow up
 const float MIN_COSINE = 1e-3;
+// The least cosine a pixel's footprint is stretched by, seen at a grazing angle
+const float MIN_FOOTPRINT_COSINE = 0.2;
+// How far the bottom shifts across the screen per unit of the surface's tilt, as a share of the
+// screen's height, per meter of water down to 2 m, over the distance
+const float REFRACTION_SHIFT = 0.25;
+const float REFRACTION_MAX_DEPTH = 2.0;
 
 void main() {
     WaterTileData tile = tileList.waterTiles[outTile];
@@ -49,8 +61,31 @@ void main() {
     vec3 backscattering = tile.backscattering.rgb;
 
     // Render space: world axes, the camera at the origin
-    vec3 normal = vec3(0.0, 1.0, 0.0);
+    const vec3 up = vec3(0.0, 1.0, 0.0);
+    vec3 normal = up;
     vec3 toEye = normalize(-outRenderPosition);
+    float alpha = max(roughness * roughness, 1e-4);
+
+    // The waves: their slope from the layer whose shortest waves this pixel can still show, and
+    // the slopes of those it can't as roughness
+    int climate = int(tile.offset.w);
+    if (climate >= 0 && outCalm > 0.0) {
+        float footprint = length(outRenderPosition) * pixelAngle
+            / max(dot(up, toEye), MIN_FOOTPRINT_COSINE);
+        float layer = waveLayer(footprint);
+        int lower = int(floor(layer));
+        int upper = min(lower + 1, WAVE_LAYERS - 1);
+        float blend = layer - float(lower);
+        vec2 slope = mix(
+            waveSlope(climateList, profileList, climate, lower, outRenderPosition.xz),
+            waveSlope(climateList, profileList, climate, upper, outRenderPosition.xz), blend)
+            * outCalm;
+        vec4 missing = climateList.climates[climate].missingVariance;
+        float variance = mix(missing[lower], missing[upper], blend) * outCalm * outCalm;
+        normal = normalize(vec3(-slope.x, 1.0, -slope.y));
+        alpha = sqrt(alpha * alpha + variance);
+    }
+    float surfaceRoughness = sqrt(alpha);
     float cosView = max(dot(normal, toEye), MIN_COSINE);
     float reflected = waterFresnel(cosView);
 
@@ -60,11 +95,11 @@ void main() {
     vec3 sun = vec3(0.0);
     if (cosSun > 0.0) {
         sun = directionalLight.color * directionalLight.intensity
-            * sunVisibility(outViewPosition.xyz, outRenderPosition, normal);
+            * sunVisibility(outViewPosition.xyz, outRenderPosition, up);
     }
 
     // The sky: reflected along the mirror direction, and its average lighting the water from above
-    float sky = mix(skyLightFloor, 1.0, skyVisibility(outRenderPosition, normal));
+    float sky = mix(skyLightFloor, 1.0, skyVisibility(outRenderPosition, up));
     vec3 ambientColor = ambientLight.intensity * ambientLight.color;
     vec3 skyReflected = ambientColor;
     vec3 skyAverage = ambientColor;
@@ -72,7 +107,10 @@ void main() {
         vec3 scale = environmentScale.w > 0.5
             ? environmentScale.rgb
             : ambientColor / max(dot(environmentAverage(), ENVIRONMENT_LUMINANCE), 1e-4);
-        skyReflected = environmentSpecular(reflect(-toEye, normal), roughness) * scale;
+        vec3 mirrored = reflect(-toEye, normal);
+        // Waves tilted far enough mirror the water, not the sky: keep to the sky
+        mirrored.y = max(mirrored.y, 0.0);
+        skyReflected = environmentSpecular(normalize(mirrored), surfaceRoughness) * scale;
         skyAverage = environmentAverage() * scale;
     }
     skyReflected *= sky;
@@ -82,7 +120,6 @@ void main() {
     vec3 highlight = vec3(0.0);
     if (cosSun > 0.0) {
         vec3 halfway = normalize(toSun + toEye);
-        float alpha = max(roughness * roughness, 1e-4);
         float cosHalf = max(dot(normal, halfway), 0.0);
         float d = alpha * alpha / (3.14159265 * sqr(cosHalf * cosHalf * (alpha * alpha - 1.0) + 1.0));
         // Smith's separable masking and shadowing, with the 4 n.l n.v already divided out, as
@@ -95,13 +132,27 @@ void main() {
     float muView = waterRefractedCosine(cosView);
     float muSun = waterRefractedCosine(max(cosSun, 0.0));
 
-    // The bottom: what lies behind the water at this pixel, and how far below the surface
+    // The bottom: what lies behind the water, shifted as the tilted surface bends the view, unless
+    // that would show something in front of the water
+    float depth = -outViewPosition.z;
     ivec2 pixel = ivec2(gl_FragCoord.xy);
+    vec2 tilt = (transpose(mat3(invViewMatrix)) * vec3(normal.x, 0.0, normal.z)).xy;
+    float straightBehind =
+        texelFetch(bindlessTextures[nonuniformEXT(behindDepthIndex)], pixel, 0).x;
+    float shiftDepth = straightBehind < 1.0 ? REFRACTION_MAX_DEPTH : 0.0;
+    vec2 shift = vec2(tilt.x, -tilt.y) * screenSize.y * REFRACTION_SHIFT * shiftDepth
+        / max(depth, 1.0);
+    ivec2 shifted = clamp(ivec2(gl_FragCoord.xy + shift), ivec2(0), ivec2(screenSize) - 1);
+    float shiftedBehind =
+        texelFetch(bindlessTextures[nonuniformEXT(behindDepthIndex)], shifted, 0).x;
+    if (shiftedBehind >= gl_FragCoord.z) {
+        pixel = shifted;
+    }
     float behindDepth = texelFetch(bindlessTextures[nonuniformEXT(behindDepthIndex)], pixel, 0).x;
     vec3 bottom = vec3(0.0);
     float depthBelow = DEEP;
     if (behindDepth < 1.0) {
-        vec2 uv = gl_FragCoord.xy / screenSize;
+        vec2 uv = (vec2(pixel) + 0.5) / screenSize;
         vec4 view = invProjectionMatrix * vec4(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, behindDepth, 1.0);
         view /= view.w;
         vec3 render = mat3(invViewMatrix) * view.xyz;
@@ -127,7 +178,6 @@ void main() {
     vec3 below = (bottom + column) / (WATER_INDEX * WATER_INDEX);
     vec3 color = reflected * skyReflected + highlight + (1.0 - reflected) * below;
 
-    float depth = -outViewPosition.z;
     if ((fog.enabled & FOG_ENABLED) != 0) {
         color = fogApply(color, gl_FragCoord.xy, depth, fog.logScale);
     }

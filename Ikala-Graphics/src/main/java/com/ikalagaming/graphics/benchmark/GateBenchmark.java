@@ -1399,7 +1399,9 @@ public final class GateBenchmark {
     /**
      * In the island recipe, fill the sea with water tiles out to the view distance: every cell
      * whose ground is under {@link SyntheticTerrain#SEA_LEVEL}, the bottom at the ground's top. The
-     * {@code .waterBody} property picks what it holds: ocean (the default), green or muddy.
+     * {@code .waterBody} property picks what it holds: ocean (the default), green or muddy; {@code
+     * .wind=speed[,degrees[,fetch]]} sets its wind, blowing that many degrees from +x toward +z
+     * over a fetch in meters, the open sea if none.
      */
     private void placeOcean() {
         final SyntheticTerrain world = terrain;
@@ -1414,6 +1416,18 @@ public final class GateBenchmark {
                     WATER_BODY_NAMES.keySet(),
                     name);
             body = WaterBody.OCEAN;
+        }
+        final String wind = System.getProperty(PROPERTY + ".wind");
+        if (wind != null) {
+            final String[] parts = wind.split(",");
+            final float speed = Float.parseFloat(parts[0].trim());
+            final float direction =
+                    parts.length > 1
+                            ? (float) Math.toRadians(Double.parseDouble(parts[1].trim()))
+                            : 0;
+            final float fetch =
+                    parts.length > 2 ? Float.parseFloat(parts[2].trim()) : Float.POSITIVE_INFINITY;
+            body = body.withWind(speed, direction, fetch);
         }
         final int reach = radius * SyntheticTerrain.SECTION;
         final int tiles = (2 * reach + OCEAN_CELLS - 1) / OCEAN_CELLS;

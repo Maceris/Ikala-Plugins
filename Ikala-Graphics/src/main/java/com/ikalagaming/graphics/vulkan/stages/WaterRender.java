@@ -17,6 +17,7 @@ import com.ikalagaming.graphics.vulkan.SharedBuffer;
 import com.ikalagaming.graphics.vulkan.TextureInfoVulkan;
 import com.ikalagaming.graphics.vulkan.VulkanState;
 import com.ikalagaming.graphics.vulkan.WaterMath;
+import com.ikalagaming.graphics.vulkan.WaveMath;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +39,10 @@ import java.util.List;
  * writes its own depth, so what is under it stays under it. The surfaces are built on the CPU from
  * the tiles whenever they change, for each frame in flight; each frame the tiles' places relative
  * to the camera and their optics are written to a small list. See {@code water.frag}.
+ *
+ * <p>Water in wind has waves, see {@link WaveMath}: tiles whose bodies share a wind share a wave
+ * climate, up to {@link #MAX_CLIMATES}. Each frame a compute pass fills each climate's profiles
+ * from its waves' phases at this time, which the surface then sums over directions.
  */
 @Slf4j
 public class WaterRender implements RenderStage {
@@ -48,8 +53,96 @@ public class WaterRender implements RenderStage {
     /** Vertices a water cell is drawn with: two triangles. */
     private static final int CELL_VERTICES = 6;
 
+    /** The most wave climates drawn at once; tiles in further winds are drawn still. */
+    public static final int MAX_CLIMATES = 4;
+
+    /** How deep water is taken to be where the tile doesn't say, in meters: deep enough. */
+    private static final float UNKNOWN_DEPTH = 1000;
+
+    /** Nanoseconds in a second. */
+    private static final double NANOS_PER_SECOND = 1e9;
+
+    /** What the climates' waves' phases and directions' offsets are picked from. */
+    private static final long WAVE_SEED = 0x5EA5_1DE5L;
+
+    /**
+     * A wind the tiles' waves come from.
+     *
+     * @param speed Its speed, in meters a second.
+     * @param direction The way it blows, in radians.
+     * @param fetch How far it has blown over the water, in meters.
+     */
+    private record Wind(float speed, float direction, float fetch) {}
+
+    /**
+     * A wave climate: a wind's waves, its directions' amplitudes and random offsets along their
+     * profiles, so the directions don't line up, and the slope variance each layer leaves out.
+     *
+     * @param waves The waves each profile sums.
+     * @param amplitudes Each direction's amplitude.
+     * @param offsets Each direction's random offset, in meters.
+     * @param missingVariance Each layer's left out slope variance.
+     */
+    private record Climate(
+            WaveMath.Waves waves, double[] amplitudes, double[] offsets, double[] missingVariance) {
+
+        /**
+         * Work a wind's climate out.
+         *
+         * @param wind The wind.
+         * @param seed What picks its phases and offsets.
+         * @return The climate.
+         */
+        static Climate of(@NonNull Wind wind, long seed) {
+            final WaveMath.Waves waves = WaveMath.sample(wind.speed(), wind.fetch(), seed);
+            final double[] offsets = new double[WaveMath.DIRECTIONS];
+            for (int b = 0; b < offsets.length; ++b) {
+                offsets[b] = WaveMath.PROFILE_LENGTH * WaveMath.unitHash(seed + WaveMath.WAVES, b);
+            }
+            final double[] missing = new double[WaveMath.LAYERS];
+            for (int layer = 0; layer < missing.length; ++layer) {
+                missing[layer] = WaveMath.missingSlopeVariance(waves, layer);
+            }
+            return new Climate(
+                    waves, WaveMath.directionAmplitudes(wind.direction()), offsets, missing);
+        }
+    }
+
     /** The shader. */
     @NonNull private final ShaderVulkan shader;
+
+    /** The shader that fills the wave profiles. */
+    @NonNull private final ShaderVulkan wavesShader;
+
+    /** The waves pass's pipeline layout and pipeline, VK_NULL_HANDLE until set up. */
+    private long wavesLayout = VK_NULL_HANDLE;
+
+    private long wavesPipeline = VK_NULL_HANDLE;
+
+    /** Each frame in flight's climates, waves and profiles, or null before its first waves. */
+    private final SharedBuffer[] climateBuffers =
+            new SharedBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
+    private final SharedBuffer[] sampleBuffers =
+            new SharedBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
+    private final SharedBuffer[] profileBuffers =
+            new SharedBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
+    /** The winds the tiles' climates come from, by climate. */
+    private final List<Wind> winds = new ArrayList<>();
+
+    /** The climates, in step with {@link #winds}. */
+    private final List<Climate> climates = new ArrayList<>();
+
+    /** Each tile's climate, in step with {@link #tiles}, -1 for still water. */
+    private final List<Integer> tileClimates = new ArrayList<>();
+
+    /** When the stage first drew water, for the waves' time, or 0 before. */
+    private long startNanos;
+
+    /** Whether running out of climates was logged, so it is logged once. */
+    private boolean climatesFullLogged;
 
     /** The scene stage, for its matrices' set. */
     @NonNull private final SceneRender sceneRender;
@@ -90,14 +183,17 @@ public class WaterRender implements RenderStage {
      * Set up the stage.
      *
      * @param shader The water shader.
+     * @param wavesShader The compute shader that fills the wave profiles.
      * @param sceneRender The scene stage, whose matrices' set the shader reads.
      * @param lightRender The light stage, whose inputs' set the shader reads.
      */
     public WaterRender(
             @NonNull ShaderVulkan shader,
+            @NonNull ShaderVulkan wavesShader,
             @NonNull SceneRender sceneRender,
             @NonNull LightRender lightRender) {
         this.shader = shader;
+        this.wavesShader = wavesShader;
         this.sceneRender = sceneRender;
         this.lightRender = lightRender;
         Arrays.fill(vertexVersions, -1);
@@ -131,12 +227,37 @@ public class WaterRender implements RenderStage {
                             longOutput));
             pipelineLayout = longOutput.get(0);
             pipeline = createPipeline(state, stack);
+
+            VkPushConstantRange.Buffer wavesRanges = VkPushConstantRange.calloc(1, stack);
+            wavesRanges
+                    .get(0)
+                    .stageFlags(VK_SHADER_STAGE_COMPUTE_BIT)
+                    .offset(0)
+                    .size(ShaderBindings.Water.WAVES_CONSTANTS_SIZE);
+            checkError(
+                    vkCreatePipelineLayout(
+                            state.device.logical,
+                            VkPipelineLayoutCreateInfo.calloc(stack)
+                                    .sType$Default()
+                                    .pPushConstantRanges(wavesRanges),
+                            null,
+                            longOutput));
+            wavesLayout = longOutput.get(0);
+            VkComputePipelineCreateInfo.Buffer infos = VkComputePipelineCreateInfo.calloc(1, stack);
+            infos.get(0).sType$Default().stage(wavesShader.shaderStages.get(0)).layout(wavesLayout);
+            checkError(
+                    vkCreateComputePipelines(
+                            state.device.logical, VK_NULL_HANDLE, infos, null, longOutput));
+            wavesPipeline = longOutput.get(0);
         }
     }
 
     @Override
     public void cleanup(@NonNull VulkanState state) {
-        for (SharedBuffer[] buffers : new SharedBuffer[][] {vertexBuffers, tileBuffers}) {
+        for (SharedBuffer[] buffers :
+                new SharedBuffer[][] {
+                    vertexBuffers, tileBuffers, climateBuffers, sampleBuffers, profileBuffers
+                }) {
             for (int i = 0; i < buffers.length; ++i) {
                 if (buffers[i] != null) {
                     SharedBuffer.free(buffers[i], state);
@@ -149,6 +270,10 @@ public class WaterRender implements RenderStage {
         pipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(state.device.logical, pipelineLayout, null);
         pipelineLayout = VK_NULL_HANDLE;
+        vkDestroyPipeline(state.device.logical, wavesPipeline, null);
+        wavesPipeline = VK_NULL_HANDLE;
+        vkDestroyPipelineLayout(state.device.logical, wavesLayout, null);
+        wavesLayout = VK_NULL_HANDLE;
     }
 
     @Override
@@ -167,6 +292,7 @@ public class WaterRender implements RenderStage {
             for (WaterTile tile : tiles) {
                 optics.add(WaterMath.optics(tile.body()));
             }
+            findClimates();
         }
         if (tiles.isEmpty()) {
             return;
@@ -181,13 +307,22 @@ public class WaterRender implements RenderStage {
         if (vertexCounts[frame] == 0 || width <= 0 || height <= 0) {
             return;
         }
+        final long nanos = System.nanoTime();
+        if (startNanos == 0) {
+            startNanos = nanos;
+        }
+        final double seconds = (nanos - startNanos) / NANOS_PER_SECOND;
         writeTiles(state, frame, scene.getCamera().getPosition());
+        writeClimates(state, frame, scene.getCamera().getPosition(), seconds);
+        final float pixelAngle =
+                2 / (Math.abs(scene.getProjection().getProjectionMatrix().m11()) * height);
 
         final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[frame];
         final PerFrameData frameData = state.perFrameData[frame];
         final TextureInfoVulkan color = frameData.sceneColor;
         final TextureInfoVulkan depth = frameData.gBuffer.depth();
         try (MemoryStack stack = MemoryStack.stackPush()) {
+            fillProfiles(commandBuffer, frame, stack);
             copyBehind(commandBuffer, frameData, width, height, stack);
 
             VkRenderingAttachmentInfo.Buffer colorAttachments =
@@ -232,6 +367,13 @@ public class WaterRender implements RenderStage {
             constants.putLong(
                     ShaderBindings.Water.PUSH_CONSTANT_TILES_OFFSET,
                     tileBuffers[frame].deviceAddress);
+            constants.putLong(
+                    ShaderBindings.Water.PUSH_CONSTANT_CLIMATES_OFFSET,
+                    climateBuffers[frame].deviceAddress);
+            constants.putLong(
+                    ShaderBindings.Water.PUSH_CONSTANT_PROFILES_OFFSET,
+                    profileBuffers[frame].deviceAddress);
+            constants.putFloat(ShaderBindings.Water.PUSH_CONSTANT_PIXEL_ANGLE_OFFSET, pixelAngle);
             constants.putFloat(ShaderBindings.Water.PUSH_CONSTANT_SCREEN_SIZE_OFFSET, width);
             constants.putFloat(
                     ShaderBindings.Water.PUSH_CONSTANT_SCREEN_SIZE_OFFSET + Float.BYTES, height);
@@ -274,6 +416,185 @@ public class WaterRender implements RenderStage {
                     commandBuffer,
                     VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barriers));
         }
+    }
+
+    /**
+     * Find the winds the tiles' waves come from, one climate each, and which each tile has. Still
+     * water has none, and past {@link #MAX_CLIMATES} winds tiles are drawn still.
+     */
+    private void findClimates() {
+        final List<Wind> found = new ArrayList<>();
+        tileClimates.clear();
+        for (WaterTile tile : tiles) {
+            if (tile.body().windSpeed() <= 0) {
+                tileClimates.add(-1);
+                continue;
+            }
+            final Wind wind =
+                    new Wind(
+                            tile.body().windSpeed(),
+                            tile.body().windDirection(),
+                            tile.body().fetch());
+            int index = found.indexOf(wind);
+            if (index < 0 && found.size() < MAX_CLIMATES) {
+                found.add(wind);
+                index = found.size() - 1;
+            } else if (index < 0 && !climatesFullLogged) {
+                climatesFullLogged = true;
+                log.warn("More than {} winds over water; the rest is drawn still", MAX_CLIMATES);
+            }
+            tileClimates.add(index);
+        }
+        if (!found.equals(winds)) {
+            winds.clear();
+            winds.addAll(found);
+            climates.clear();
+            for (int i = 0; i < winds.size(); ++i) {
+                climates.add(Climate.of(winds.get(i), WAVE_SEED + i * (long) WaveMath.WAVES));
+            }
+        }
+    }
+
+    /**
+     * Write this frame's climates and their waves' phases now: each direction's amplitude and where
+     * the camera stands along its profile, worked out in doubles so it stays precise far out.
+     *
+     * @param state The Vulkan state.
+     * @param frame The frame in flight.
+     * @param camera The camera's position.
+     * @param seconds The waves' time.
+     */
+    private void writeClimates(
+            @NonNull VulkanState state, int frame, @NonNull Vector3dc camera, double seconds) {
+        final int count = Math.max(1, climates.size());
+        climateBuffers[frame] =
+                ensure(
+                        state,
+                        climateBuffers[frame],
+                        (long) count * ShaderBindings.Water.CLIMATE_SIZE,
+                        false);
+        sampleBuffers[frame] =
+                ensure(
+                        state,
+                        sampleBuffers[frame],
+                        (long) count * WaveMath.WAVES * ShaderBindings.Water.WAVE_SAMPLE_SIZE,
+                        false);
+        profileBuffers[frame] =
+                ensure(
+                        state,
+                        profileBuffers[frame],
+                        (long) count
+                                * WaveMath.LAYERS
+                                * WaveMath.PROFILE_SAMPLES
+                                * ShaderBindings.Water.PROFILE_SAMPLE_SIZE,
+                        true);
+        final long climateAddress = climateBuffers[frame].allocationInfo.pMappedData();
+        final long sampleAddress = sampleBuffers[frame].allocationInfo.pMappedData();
+        MemoryUtil.memSet(
+                sampleAddress,
+                0,
+                (long) count * WaveMath.WAVES * ShaderBindings.Water.WAVE_SAMPLE_SIZE);
+        for (int c = 0; c < climates.size(); ++c) {
+            final Climate climate = climates.get(c);
+            final long at = climateAddress + (long) c * ShaderBindings.Water.CLIMATE_SIZE;
+            for (int b = 0; b < WaveMath.DIRECTIONS; ++b) {
+                final double angle = 2 * Math.PI * b / WaveMath.DIRECTIONS;
+                final double along =
+                        camera.x() * Math.cos(angle)
+                                + camera.z() * Math.sin(angle)
+                                + climate.offsets()[b];
+                final double wrapped =
+                        along
+                                - WaveMath.PROFILE_LENGTH
+                                        * Math.floor(along / WaveMath.PROFILE_LENGTH);
+                MemoryUtil.memPutFloat(
+                        at + ShaderBindings.Water.CLIMATE_AMPLITUDES + (long) b * Float.BYTES,
+                        (float) climate.amplitudes()[b]);
+                MemoryUtil.memPutFloat(
+                        at + ShaderBindings.Water.CLIMATE_OFFSETS + (long) b * Float.BYTES,
+                        (float) wrapped);
+            }
+            for (int layer = 0; layer < WaveMath.LAYERS; ++layer) {
+                MemoryUtil.memPutFloat(
+                        at
+                                + ShaderBindings.Water.CLIMATE_MISSING_VARIANCE
+                                + (long) layer * Float.BYTES,
+                        (float) climate.missingVariance()[layer]);
+            }
+            final WaveMath.Waves waves = climate.waves();
+            for (int i = 0; i < waves.wavenumbers().length; ++i) {
+                final long sample =
+                        sampleAddress
+                                + ((long) c * WaveMath.WAVES + i)
+                                        * ShaderBindings.Water.WAVE_SAMPLE_SIZE;
+                final double k = waves.wavenumbers()[i];
+                MemoryUtil.memPutFloat(sample, (float) k);
+                MemoryUtil.memPutFloat(sample + Float.BYTES, (float) waves.amplitudes()[i]);
+                MemoryUtil.memPutFloat(
+                        sample + 2 * Float.BYTES, (float) WaveMath.phaseAt(waves, i, seconds));
+                MemoryUtil.memPutFloat(sample + 3 * Float.BYTES, (float) (2 * Math.PI / k));
+            }
+        }
+    }
+
+    /**
+     * Fill this frame's climates' profiles, for the surface to read.
+     *
+     * @param commandBuffer The command buffer.
+     * @param frame The frame in flight.
+     * @param stack The stack to allocate on.
+     */
+    private void fillProfiles(
+            @NonNull VkCommandBuffer commandBuffer, int frame, @NonNull MemoryStack stack) {
+        if (climates.isEmpty()) {
+            return;
+        }
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, wavesPipeline);
+        ByteBuffer constants = stack.calloc(ShaderBindings.Water.WAVES_CONSTANTS_SIZE);
+        constants.putLong(
+                ShaderBindings.Water.WAVES_SAMPLES_OFFSET, sampleBuffers[frame].deviceAddress);
+        constants.putLong(
+                ShaderBindings.Water.WAVES_PROFILES_OFFSET, profileBuffers[frame].deviceAddress);
+        constants.putInt(ShaderBindings.Water.WAVES_COUNT_OFFSET, WaveMath.WAVES);
+        vkCmdPushConstants(commandBuffer, wavesLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
+        vkCmdDispatch(
+                commandBuffer,
+                WaveMath.PROFILE_SAMPLES / WaveMath.WORKGROUP_SIZE,
+                climates.size(),
+                1);
+        VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
+        barrier.get(0)
+                .sType$Default()
+                .srcStageMask(VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+                .srcAccessMask(VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT)
+                .dstStageMask(
+                        VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
+                                | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT)
+                .dstAccessMask(VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
+        vkCmdPipelineBarrier2(
+                commandBuffer,
+                VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));
+    }
+
+    /**
+     * A buffer of at least a size, made or grown as needed.
+     *
+     * @param state The Vulkan state.
+     * @param buffer The buffer so far, or null.
+     * @param bytes The size needed.
+     * @param deviceLocal Whether only the GPU uses it.
+     * @return The buffer.
+     */
+    private static SharedBuffer ensure(
+            @NonNull VulkanState state, SharedBuffer buffer, long bytes, boolean deviceLocal) {
+        if (buffer == null) {
+            return deviceLocal
+                    ? SharedBuffer.allocateDeviceLocal(
+                            bytes, state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)
+                    : SharedBuffer.allocate(bytes, state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+        }
+        buffer.ensureCapacity(bytes, state);
+        return buffer;
     }
 
     /**
@@ -417,8 +738,10 @@ public class WaterRender implements RenderStage {
         buffer.ensureCapacity(bytes, state);
         long at = buffer.allocationInfo.pMappedData();
         final int[][] corners = {{0, 0}, {1, 0}, {1, 1}, {0, 0}, {1, 1}, {0, 1}};
+        final int depthOffset = 3 * Float.BYTES + Integer.BYTES;
         for (int index = 0; index < tiles.size(); ++index) {
             final WaterTile tile = tiles.get(index);
+            final float[] bottoms = tile.bottoms();
             for (int z = 0; z < tile.cellsZ(); ++z) {
                 for (int x = 0; x < tile.cellsX(); ++x) {
                     if (!tile.isWater(x, z)) {
@@ -431,6 +754,12 @@ public class WaterRender implements RenderStage {
                         MemoryUtil.memPutFloat(at + Float.BYTES, tile.heightAt(cx, cz));
                         MemoryUtil.memPutFloat(at + 2 * Float.BYTES, cz * tile.cellSize());
                         MemoryUtil.memPutInt(at + 3 * Float.BYTES, index);
+                        MemoryUtil.memPutFloat(
+                                at + depthOffset,
+                                bottoms == null
+                                        ? UNKNOWN_DEPTH
+                                        : tile.heightAt(cx, cz)
+                                                - bottoms[cz * (tile.cellsX() + 1) + cx]);
                         at += ShaderBindings.Water.VERTEX_SIZE;
                     }
                 }
@@ -460,6 +789,7 @@ public class WaterRender implements RenderStage {
             MemoryUtil.memPutFloat(at, (float) (origin.x() - camera.x()));
             MemoryUtil.memPutFloat(at + Float.BYTES, (float) (origin.y() - camera.y()));
             MemoryUtil.memPutFloat(at + 2 * Float.BYTES, (float) (origin.z() - camera.z()));
+            MemoryUtil.memPutFloat(at + 3 * Float.BYTES, tileClimates.get(index));
             final WaterMath.Optics tileOptics = optics.get(index);
             for (int channel = 0; channel < WaterMath.CHANNELS; ++channel) {
                 final long offset = (long) channel * Float.BYTES;
@@ -498,7 +828,13 @@ public class WaterRender implements RenderStage {
                 .stride(ShaderBindings.Water.VERTEX_SIZE)
                 .inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
         VkVertexInputAttributeDescription.Buffer attributes =
-                VkVertexInputAttributeDescription.calloc(2, stack);
+                VkVertexInputAttributeDescription.calloc(3, stack);
+        attributes
+                .get(2)
+                .binding(0)
+                .location(2)
+                .format(VK_FORMAT_R32_SFLOAT)
+                .offset(3 * Float.BYTES + Integer.BYTES);
         attributes.get(0).binding(0).location(0).format(VK_FORMAT_R32G32B32_SFLOAT).offset(0);
         attributes.get(1).binding(0).location(1).format(VK_FORMAT_R32_UINT).offset(3 * Float.BYTES);
         VkPipelineColorBlendAttachmentState.Buffer blend =

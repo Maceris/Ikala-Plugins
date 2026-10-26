@@ -1,0 +1,59 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_buffer_reference : require
+
+// Fills each wave climate's profiles for this frame, see WaterRender and WaveMath.profile: one
+// thread per sample of a profile, x along it and y the climate, summing the climate's waves, each
+// layer leaving out the waves shorter than its cutoff. Height is a cos (k p + phase) summed; the
+// slope along the profile its derivative, -a k sin (k p + phase). The phases come wrapped to a turn
+// from the CPU, so they stay precise.
+
+#include "water.glsl"
+
+layout(local_size_x = 64) in;
+
+// One wave of a climate: its wavenumber, amplitude, phase now and wavelength
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer WaveSampleList {
+    vec4 waves[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 8) writeonly buffer WaveProfileOut {
+    vec2 values[];
+};
+
+layout(push_constant) uniform Constants {
+    WaveSampleList samples;
+    WaveProfileOut profiles;
+    // How many waves each climate has, padded with zeros
+    uint waveCount;
+};
+
+void main() {
+    uint sampleIndex = gl_GlobalInvocationID.x;
+    uint climate = gl_GlobalInvocationID.y;
+    if (sampleIndex >= uint(WAVE_PROFILE_SAMPLES)) {
+        return;
+    }
+    float distance = float(sampleIndex) / float(WAVE_PROFILE_SAMPLES) * WAVE_PROFILE_LENGTH;
+    vec2 sums[WAVE_LAYERS];
+    for (int layer = 0; layer < WAVE_LAYERS; ++layer) {
+        sums[layer] = vec2(0.0);
+    }
+    for (uint i = 0; i < waveCount; ++i) {
+        vec4 wave = samples.waves[climate * waveCount + i];
+        if (wave.y <= 0.0) {
+            continue;
+        }
+        float angle = wave.x * distance + wave.z;
+        vec2 value = vec2(wave.y * cos(angle), -wave.y * wave.x * sin(angle));
+        for (int layer = 0; layer < WAVE_LAYERS; ++layer) {
+            if (wave.w >= WAVE_LAYER_CUTOFFS[layer]) {
+                sums[layer] += value;
+            }
+        }
+    }
+    for (int layer = 0; layer < WAVE_LAYERS; ++layer) {
+        profiles.values[(climate * uint(WAVE_LAYERS) + uint(layer)) * uint(WAVE_PROFILE_SAMPLES)
+            + sampleIndex] = sums[layer];
+    }
+}

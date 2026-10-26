@@ -295,6 +295,7 @@ public class PipelineManagerVulkan {
         stageWaterRender =
                 new WaterRender(
                         shaders.getShader(RenderStage.Type.WATER),
+                        shaders.getShader(RenderStage.Type.WATER_WAVES),
                         stageSceneRender,
                         stageLightRender);
         stageWaterRender.initialize(state);

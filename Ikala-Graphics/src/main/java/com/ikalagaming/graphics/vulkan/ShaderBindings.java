@@ -458,9 +458,20 @@ public class ShaderBindings {
         /** The tile list's address, see {@link #TILE_SIZE}. */
         public static final int PUSH_CONSTANT_TILES_OFFSET = 0;
 
-        /** The size of the area drawn, in pixels, two floats. */
-        public static final int PUSH_CONSTANT_SCREEN_SIZE_OFFSET =
+        /** The wave climates' address, see {@link #CLIMATE_SIZE}. */
+        public static final int PUSH_CONSTANT_CLIMATES_OFFSET =
                 PUSH_CONSTANT_TILES_OFFSET + Long.BYTES;
+
+        /** The wave profiles' address. */
+        public static final int PUSH_CONSTANT_PROFILES_OFFSET =
+                PUSH_CONSTANT_CLIMATES_OFFSET + Long.BYTES;
+
+        /** The size of the vertex shader's push constants: the three addresses. */
+        public static final int PUSH_CONSTANTS_VERTEX_SIZE =
+                PUSH_CONSTANT_PROFILES_OFFSET + Long.BYTES;
+
+        /** The size of the area drawn, in pixels, two floats. */
+        public static final int PUSH_CONSTANT_SCREEN_SIZE_OFFSET = PUSH_CONSTANTS_VERTEX_SIZE;
 
         /** The bindless index of the scene's color behind the water. */
         public static final int PUSH_CONSTANT_BEHIND_COLOR_OFFSET =
@@ -474,8 +485,45 @@ public class ShaderBindings {
         public static final int PUSH_CONSTANT_ROUGHNESS_OFFSET =
                 PUSH_CONSTANT_BEHIND_DEPTH_OFFSET + Integer.BYTES;
 
+        /** How wide a pixel is seen from the camera, in radians. */
+        public static final int PUSH_CONSTANT_PIXEL_ANGLE_OFFSET =
+                PUSH_CONSTANT_ROUGHNESS_OFFSET + Float.BYTES;
+
         /** The size of the push constants. */
-        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_ROUGHNESS_OFFSET + Float.BYTES;
+        public static final int PUSH_CONSTANTS_SIZE =
+                PUSH_CONSTANT_PIXEL_ANGLE_OFFSET + Float.BYTES;
+
+        /** Where in a wave climate each direction's amplitude is, 16 floats. */
+        public static final int CLIMATE_AMPLITUDES = 0;
+
+        /** Where in it how far along each direction's profile the camera stands is, 16 floats. */
+        public static final int CLIMATE_OFFSETS = WaveMath.DIRECTIONS * Float.BYTES;
+
+        /** Where in it the slope variance each layer leaves out is, a vec4. */
+        public static final int CLIMATE_MISSING_VARIANCE = 2 * WaveMath.DIRECTIONS * Float.BYTES;
+
+        /** The size of one wave climate. */
+        public static final int CLIMATE_SIZE = CLIMATE_MISSING_VARIANCE + 4 * Float.BYTES;
+
+        /**
+         * The waves pass: the samples' address, the profiles', and how many waves a climate has.
+         */
+        public static final int WAVES_SAMPLES_OFFSET = 0;
+
+        /** The profiles' address. */
+        public static final int WAVES_PROFILES_OFFSET = Long.BYTES;
+
+        /** How many waves each climate has. */
+        public static final int WAVES_COUNT_OFFSET = 2 * Long.BYTES;
+
+        /** The size of the waves pass's push constants. */
+        public static final int WAVES_CONSTANTS_SIZE = WAVES_COUNT_OFFSET + Integer.BYTES;
+
+        /** The size of one wave sample: its wavenumber, amplitude, phase and wavelength. */
+        public static final int WAVE_SAMPLE_SIZE = 4 * Float.BYTES;
+
+        /** The size of one profile sample: its height and slope. */
+        public static final int PROFILE_SAMPLE_SIZE = 2 * Float.BYTES;
 
         /** Where in a tile's entry its corner relative to the camera is, a vec4. */
         public static final int TILE_OFFSET = 0;
@@ -492,8 +540,11 @@ public class ShaderBindings {
         /** The size of one tile's entry. */
         public static final int TILE_SIZE = 64;
 
-        /** The size of a vertex: its place relative to its tile's corner, and its tile. */
-        public static final int VERTEX_SIZE = 3 * Float.BYTES + Integer.BYTES;
+        /**
+         * The size of a vertex: its place relative to its tile's corner, its tile, and how deep the
+         * water is there.
+         */
+        public static final int VERTEX_SIZE = 3 * Float.BYTES + Integer.BYTES + Float.BYTES;
 
         /** Private constructor so this class is not instantiated. */
         private Water() {

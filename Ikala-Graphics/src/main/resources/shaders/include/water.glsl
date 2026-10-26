@@ -8,8 +8,8 @@
 const float WATER_INDEX = 1.333;
 const float WATER_NORMAL_REFLECTANCE = 0.0203;
 
-// One tile's place and optics, WaterRender: its corner relative to the camera; its absorption,
-// scattering and backscattering at red, green and blue
+// One tile's place and optics, WaterRender: its corner relative to the camera and its wave climate,
+// -1 for still water; its absorption, scattering and backscattering at red, green and blue
 struct WaterTileData {
     vec4 offset;
     vec4 absorption;
@@ -20,6 +20,95 @@ struct WaterTileData {
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer WaterTileList {
     WaterTileData waterTiles[];
 };
+
+// Wind waves, see WaveMath: the directions the surface sums, the samples and length of each
+// profile, its layers, and the shortest wave each layer holds, in meters
+const int WAVE_DIRECTIONS = 16;
+const int WAVE_PROFILE_SAMPLES = 8192;
+const float WAVE_PROFILE_LENGTH = 160.0;
+const int WAVE_LAYERS = 4;
+const float WAVE_LAYER_CUTOFFS[WAVE_LAYERS] = float[](0.0, 0.25, 1.0, 4.0);
+// The layer vertices are displaced by, whose waves a grid of a meter samples well enough
+const int WAVE_VERTEX_LAYER = 3;
+// How much each layer's cutoff grows over the one before
+const float WAVE_LAYER_RATIO = 4.0;
+// How shallow water starts to calm its waves, in meters, until depth-dependent waves come
+const float WAVE_CALM_DEPTH = 2.0;
+
+// One wave climate, WaterRender: each direction's amplitude and where the camera stands along it in
+// its profile, in meters; the slope variance each layer leaves out
+struct WaveClimate {
+    float amplitudes[WAVE_DIRECTIONS];
+    float offsets[WAVE_DIRECTIONS];
+    vec4 missingVariance;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer WaveClimateList {
+    WaveClimate climates[];
+};
+
+// Each climate's profiles, layer after layer, each WAVE_PROFILE_SAMPLES of height and slope
+layout(buffer_reference, std430, buffer_reference_align = 8) readonly buffer WaveProfileList {
+    vec2 profiles[];
+};
+
+// A profile's height and slope at a distance along it, between its two nearest samples, wrapping
+vec2 waveProfile(WaveProfileList list, int climate, int layer, float distance) {
+    float at = distance / WAVE_PROFILE_LENGTH * float(WAVE_PROFILE_SAMPLES);
+    float lower = floor(at);
+    int i0 = int(lower) & (WAVE_PROFILE_SAMPLES - 1);
+    int i1 = (i0 + 1) & (WAVE_PROFILE_SAMPLES - 1);
+    int base = (climate * WAVE_LAYERS + layer) * WAVE_PROFILE_SAMPLES;
+    return mix(list.profiles[base + i0], list.profiles[base + i1], at - lower);
+}
+
+// A direction's unit vector along the water, x and z
+vec2 waveDirection(int b) {
+    float angle = 6.28318530718 * float(b) / float(WAVE_DIRECTIONS);
+    return vec2(cos(angle), sin(angle));
+}
+
+// The surface's height above its rest at a point relative to the camera, from one layer
+float waveHeight(WaveClimateList climates, WaveProfileList profiles, int climate, int layer,
+        vec2 renderXZ) {
+    WaveClimate c = climates.climates[climate];
+    float height = 0.0;
+    for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
+        if (c.amplitudes[b] <= 0.0) {
+            continue;
+        }
+        float distance = dot(renderXZ, waveDirection(b)) + c.offsets[b];
+        height += c.amplitudes[b] * waveProfile(profiles, climate, layer, distance).x;
+    }
+    return height;
+}
+
+// The surface's slope at a point, x and z, from one layer
+vec2 waveSlope(WaveClimateList climates, WaveProfileList profiles, int climate, int layer,
+        vec2 renderXZ) {
+    WaveClimate c = climates.climates[climate];
+    vec2 slope = vec2(0.0);
+    for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
+        if (c.amplitudes[b] <= 0.0) {
+            continue;
+        }
+        vec2 direction = waveDirection(b);
+        float distance = dot(renderXZ, direction) + c.offsets[b];
+        slope += c.amplitudes[b] * waveProfile(profiles, climate, layer, distance).y * direction;
+    }
+    return slope;
+}
+
+// Which layer suits waves seen at a footprint, as a fraction between two layers: the shortest
+// waves kept are four footprints long, so each gets two pixels a half wave
+float waveLayer(float footprint) {
+    float needed = 4.0 * footprint;
+    if (needed <= WAVE_LAYER_CUTOFFS[1]) {
+        return needed / WAVE_LAYER_CUTOFFS[1];
+    }
+    return min(1.0 + log(needed / WAVE_LAYER_CUTOFFS[1]) / log(WAVE_LAYER_RATIO),
+        float(WAVE_LAYERS - 1));
+}
 
 // The light a surface reflects at an angle, Schlick's approximation, see WaterMath.fresnel
 float waterFresnel(float cosine) {
