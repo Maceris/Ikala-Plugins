@@ -24,6 +24,9 @@ layout(location = 3) out vec2 outTextCoord;
 layout(location = 4) out vec4 outViewPosition;
 layout(location = 5) out vec4 outWorldPosition;
 layout(location = 6) flat out uint outMaterialIdx;
+// Only scene.frag reads these; the transparent stage's fragment shaders don't, so its vertex
+// shaders define SCENE_TRANSPARENT and leave them out rather than write what nothing reads
+#ifndef SCENE_TRANSPARENT
 // A model instance's material remaps, see scene_lod.vert; none here
 layout(location = 7) flat out uvec4 outRemaps;
 // A seed per triangle for a shell's threshold, see scene_lod.vert; no shells here
@@ -32,6 +35,7 @@ layout(location = 8) flat out uint outShellSeed;
 // wants every input it declares written
 layout(location = 9) flat out uvec4 outTint;
 layout(location = 10) flat out uint outTintMask;
+#endif
 
 layout(set = SCENE_SET, binding = 0) uniform Uniforms {
     mat4 projectionMatrix;
@@ -63,10 +67,12 @@ void main()
     // gl_InstanceIndex already includes the base instance, unlike gl_InstanceID in OpenGL
     uvec2 instance = visible[gl_InstanceIndex];
     outMaterialIdx = instance.y;
+#ifndef SCENE_TRANSPARENT
     outRemaps = uvec4(0xFFFFFFFFu);
     outShellSeed = 0u;
     outTint = uvec4(0xFFFFFFFFu);
     outTintMask = 0u;
+#endif
 
     mat4 modelMatrix = modelMatrices[instance.x];
     mat4 modelViewMatrix = viewMatrix * modelMatrix;
