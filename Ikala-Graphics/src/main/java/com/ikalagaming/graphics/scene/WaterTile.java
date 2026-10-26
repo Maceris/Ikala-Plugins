@@ -137,6 +137,26 @@ public record WaterTile(
     }
 
     /**
+     * Whether the tile gives the bottom's heights.
+     *
+     * @return Whether it does.
+     */
+    public boolean hasBottoms() {
+        return bottoms != null;
+    }
+
+    /**
+     * The bottom's height above the origin at a corner, without copying the array out.
+     *
+     * @param x The corner along x, 0 to cellsX.
+     * @param z The corner along z, 0 to cellsZ.
+     * @return The height, in meters, or NaN if the tile doesn't give the bottom.
+     */
+    public float bottomAt(int x, int z) {
+        return bottoms == null ? Float.NaN : bottoms[z * (cellsX + 1) + x];
+    }
+
+    /**
      * How many cells hold water.
      *
      * @return The count.

@@ -17,6 +17,7 @@ import com.ikalagaming.graphics.vulkan.SharedBuffer;
 import com.ikalagaming.graphics.vulkan.TextureInfoVulkan;
 import com.ikalagaming.graphics.vulkan.VulkanState;
 import com.ikalagaming.graphics.vulkan.WaterMath;
+import com.ikalagaming.graphics.vulkan.WaterMesh;
 import com.ikalagaming.graphics.vulkan.WaveMath;
 
 import lombok.NonNull;
@@ -50,14 +51,8 @@ public class WaterRender implements RenderStage {
     /** A calm surface's roughness, until waves set it. */
     private static final float CALM_ROUGHNESS = 0.02f;
 
-    /** Vertices a water cell is drawn with: two triangles. */
-    private static final int CELL_VERTICES = 6;
-
     /** The most wave climates drawn at once; tiles in further winds are drawn still. */
     public static final int MAX_CLIMATES = 4;
-
-    /** How deep water is taken to be where the tile doesn't say, in meters: deep enough. */
-    private static final float UNKNOWN_DEPTH = 1000;
 
     /** Nanoseconds in a second. */
     private static final double NANOS_PER_SECOND = 1e9;
@@ -721,51 +716,21 @@ public class WaterRender implements RenderStage {
      * @param frame The frame in flight.
      */
     private void writeVertices(@NonNull VulkanState state, int frame) {
-        int cells = 0;
-        for (WaterTile tile : tiles) {
-            cells += tile.waterCells();
-        }
-        final int count = cells * CELL_VERTICES;
-        vertexCounts[frame] = count;
-        if (count == 0) {
+        final WaterMesh.Mesh mesh = WaterMesh.build(tiles);
+        vertexCounts[frame] = mesh.count();
+        if (mesh.count() == 0) {
             return;
         }
-        final long bytes = (long) count * ShaderBindings.Water.VERTEX_SIZE;
+        final long bytes = (long) mesh.count() * ShaderBindings.Water.VERTEX_SIZE;
         SharedBuffer buffer = vertexBuffers[frame];
         if (buffer == null) {
             buffer = SharedBuffer.allocate(bytes, state, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
             vertexBuffers[frame] = buffer;
         }
         buffer.ensureCapacity(bytes, state);
-        long at = buffer.allocationInfo.pMappedData();
-        final int[][] corners = {{0, 0}, {1, 0}, {1, 1}, {0, 0}, {1, 1}, {0, 1}};
-        final int depthOffset = 3 * Float.BYTES + Integer.BYTES;
-        for (int index = 0; index < tiles.size(); ++index) {
-            final WaterTile tile = tiles.get(index);
-            final float[] bottoms = tile.bottoms();
-            for (int z = 0; z < tile.cellsZ(); ++z) {
-                for (int x = 0; x < tile.cellsX(); ++x) {
-                    if (!tile.isWater(x, z)) {
-                        continue;
-                    }
-                    for (int[] corner : corners) {
-                        final int cx = x + corner[0];
-                        final int cz = z + corner[1];
-                        MemoryUtil.memPutFloat(at, cx * tile.cellSize());
-                        MemoryUtil.memPutFloat(at + Float.BYTES, tile.heightAt(cx, cz));
-                        MemoryUtil.memPutFloat(at + 2 * Float.BYTES, cz * tile.cellSize());
-                        MemoryUtil.memPutInt(at + 3 * Float.BYTES, index);
-                        MemoryUtil.memPutFloat(
-                                at + depthOffset,
-                                bottoms == null
-                                        ? UNKNOWN_DEPTH
-                                        : tile.heightAt(cx, cz)
-                                                - bottoms[cz * (tile.cellsX() + 1) + cx]);
-                        at += ShaderBindings.Water.VERTEX_SIZE;
-                    }
-                }
-            }
-        }
+        MemoryUtil.memFloatBuffer(
+                        buffer.allocationInfo.pMappedData(), mesh.count() * WaterMesh.VERTEX_FLOATS)
+                .put(mesh.vertices(), 0, mesh.count() * WaterMesh.VERTEX_FLOATS);
     }
 
     /**
@@ -829,13 +794,19 @@ public class WaterRender implements RenderStage {
                 .stride(ShaderBindings.Water.VERTEX_SIZE)
                 .inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
         VkVertexInputAttributeDescription.Buffer attributes =
-                VkVertexInputAttributeDescription.calloc(3, stack);
+                VkVertexInputAttributeDescription.calloc(4, stack);
         attributes
                 .get(2)
                 .binding(0)
                 .location(2)
                 .format(VK_FORMAT_R32_SFLOAT)
-                .offset(3 * Float.BYTES + Integer.BYTES);
+                .offset(WaterMesh.CALM_FLOAT * Float.BYTES);
+        attributes
+                .get(3)
+                .binding(0)
+                .location(3)
+                .format(VK_FORMAT_R32G32_SFLOAT)
+                .offset(WaterMesh.NORMAL_FLOAT * Float.BYTES);
         attributes.get(0).binding(0).location(0).format(VK_FORMAT_R32G32B32_SFLOAT).offset(0);
         attributes.get(1).binding(0).location(1).format(VK_FORMAT_R32_UINT).offset(3 * Float.BYTES);
         VkPipelineColorBlendAttachmentState.Buffer blend =

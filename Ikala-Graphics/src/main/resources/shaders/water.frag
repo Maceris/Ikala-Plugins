@@ -35,8 +35,10 @@ layout(push_constant) uniform Constants {
 layout(location = 0) in vec3 outRenderPosition;
 layout(location = 1) in vec4 outViewPosition;
 layout(location = 2) flat in uint outTile;
-// How much of the waves the depth allows here
+// How much of the waves the depth and the edges allow here
 layout(location = 3) in float outCalm;
+// A side's outward normal along x and z, zero on the surface
+layout(location = 4) in vec2 outSideNormal;
 
 layout(location = 0) out vec4 outColor;
 
@@ -65,11 +67,19 @@ void main() {
     vec3 normal = up;
     vec3 toEye = normalize(-outRenderPosition);
     float alpha = max(roughness * roughness, 1e-4);
+    // A side, where the water ends: seen through its face, the way it faces the eye
+    bool side = dot(outSideNormal, outSideNormal) > 0.0;
+    if (side) {
+        normal = vec3(outSideNormal.x, 0.0, outSideNormal.y);
+        if (dot(normal, toEye) < 0.0) {
+            normal = -normal;
+        }
+    }
 
     // The waves: their slope from the layer whose shortest waves this pixel can still show, and
     // the slopes of those it can't as roughness
     int climate = int(tile.offset.w);
-    if (climate >= 0 && outCalm > 0.0) {
+    if (climate >= 0 && outCalm > 0.0 && !side) {
         float footprint = length(outRenderPosition) * pixelAngle
             / max(dot(up, toEye), MIN_FOOTPRINT_COSINE);
         float layer = waveLayer(footprint);
@@ -92,8 +102,10 @@ void main() {
     // The sun
     vec3 toSun = normalize(mat3(invViewMatrix) * -directionalLight.direction);
     float cosSun = dot(normal, toSun);
+    // The sun on the level water above, which lights what is under it
+    float cosSunDown = dot(up, toSun);
     vec3 sun = vec3(0.0);
-    if (cosSun > 0.0) {
+    if (max(cosSun, cosSunDown) > 0.0) {
         sun = directionalLight.color * directionalLight.intensity
             * sunVisibility(outViewPosition.xyz, outRenderPosition, up);
     }
@@ -130,7 +142,7 @@ void main() {
 
     // Under the surface: the view's and the sun's rays bent into the water
     float muView = waterRefractedCosine(cosView);
-    float muSun = waterRefractedCosine(max(cosSun, 0.0));
+    float muSun = waterRefractedCosine(max(cosSunDown, 0.0));
 
     // The bottom: what lies behind the water, shifted as the tilted surface bends the view, unless
     // that would show something in front of the water
@@ -151,12 +163,15 @@ void main() {
     float behindDepth = texelFetch(bindlessTextures[nonuniformEXT(behindDepthIndex)], pixel, 0).x;
     vec3 bottom = vec3(0.0);
     float depthBelow = DEEP;
+    // Through a side, how far the view goes in the water
+    float across = DEEP;
     if (behindDepth < 1.0) {
         vec2 uv = (vec2(pixel) + 0.5) / screenSize;
         vec4 view = invProjectionMatrix * vec4(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, behindDepth, 1.0);
         view /= view.w;
         vec3 render = mat3(invViewMatrix) * view.xyz;
         depthBelow = max(outRenderPosition.y - render.y, 0.0);
+        across = length(render - outRenderPosition);
         bottom = texelFetch(bindlessTextures[nonuniformEXT(behindColorIndex)], pixel, 0).rgb;
         // The light stage fogged it as if the air reached all the way: take that fog back off
         if ((fog.enabled & FOG_ENABLED) != 0) {
@@ -165,15 +180,22 @@ void main() {
         }
     }
     float distance = depthBelow / muView;
+    // The light's way down to what is seen: through a side, what is behind is about as deep as
+    // the side's point, lit from the surface just above
+    float down = depthBelow / muSun;
+    if (side) {
+        distance = across;
+        down = 0.0;
+    }
     // Lit through the water above it, and seen through the water in front of it
-    bottom *= exp(-extinction * (depthBelow / muSun + distance));
+    bottom *= exp(-extinction * (down + distance));
 
     // The light coming down into the water, from the sun and the sky, on a level surface
-    vec3 downwelling = sun * (1.0 - waterFresnel(cosSun)) * max(cosSun, 0.0)
+    vec3 downwelling = sun * (1.0 - waterFresnel(cosSunDown)) * max(cosSunDown, 0.0)
         + 3.14159265 * skyAverage * (1.0 - SKY_REFLECTANCE);
-    // What the column sends back up, evenly over the upward directions
+    // What the column sends back, evenly over the directions it leaves in
     vec3 column = downwelling / 3.14159265
-        * waterColumnReflectance(absorption, backscattering, depthBelow / muSun, distance);
+        * waterColumnReflectance(absorption, backscattering, down, distance);
 
     vec3 below = (bottom + column) / (WATER_INDEX * WATER_INDEX);
     vec3 color = reflected * skyReflected + highlight + (1.0 - reflected) * below;

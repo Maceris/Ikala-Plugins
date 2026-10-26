@@ -541,10 +541,10 @@ public class ShaderBindings {
         public static final int TILE_SIZE = 64;
 
         /**
-         * The size of a vertex: its place relative to its tile's corner, its tile, and how deep the
-         * water is there.
+         * The size of a vertex: its place relative to its tile's corner, its tile, its calm factor
+         * and its side's normal, see {@link WaterMesh}.
          */
-        public static final int VERTEX_SIZE = 3 * Float.BYTES + Integer.BYTES + Float.BYTES;
+        public static final int VERTEX_SIZE = WaterMesh.VERTEX_FLOATS * Float.BYTES;
 
         /** Private constructor so this class is not instantiated. */
         private Water() {

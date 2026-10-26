@@ -32,8 +32,6 @@ const float WAVE_LAYER_CUTOFFS[WAVE_LAYERS] = float[](0.0, 0.25, 1.0, 4.0);
 const int WAVE_VERTEX_LAYER = 3;
 // How much each layer's cutoff grows over the one before
 const float WAVE_LAYER_RATIO = 4.0;
-// How shallow water starts to calm its waves, in meters, until depth-dependent waves come
-const float WAVE_CALM_DEPTH = 2.0;
 
 // One wave climate, WaterRender: each direction's amplitude and where the camera stands along it in
 // its profile, in meters; the slope variance each layer leaves out
