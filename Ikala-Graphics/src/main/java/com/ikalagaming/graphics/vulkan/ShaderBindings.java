@@ -1548,8 +1548,19 @@ public class ShaderBindings {
         /** Which alive list it reads. */
         public static final int SIMULATE_CURRENT_OFFSET = SIMULATE_SECONDS_OFFSET + Float.BYTES;
 
+        /**
+         * The occupancy volume's finest level's corner relative to the anchor and its voxel size, a
+         * vec4 on 16 bytes.
+         */
+        public static final int SIMULATE_OCCUPANCY_ORIGIN_OFFSET = 80;
+
+        /** Its corner's texel and whether it can be read, an ivec4. */
+        public static final int SIMULATE_OCCUPANCY_TEXEL_OFFSET =
+                SIMULATE_OCCUPANCY_ORIGIN_OFFSET + 4 * Float.BYTES;
+
         /** The size of the simulation's push constants. */
-        public static final int SIMULATE_CONSTANTS_SIZE = SIMULATE_CURRENT_OFFSET + Integer.BYTES;
+        public static final int SIMULATE_CONSTANTS_SIZE =
+                SIMULATE_OCCUPANCY_TEXEL_OFFSET + 4 * Integer.BYTES;
 
         /**
          * The emission: the pool's address, then the alive list written, the free list, the control

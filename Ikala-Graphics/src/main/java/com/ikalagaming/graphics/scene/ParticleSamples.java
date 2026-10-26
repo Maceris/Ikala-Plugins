@@ -34,6 +34,9 @@ public final class ParticleSamples {
                     .drag(0.3f)
                     .size(0.12f, 0.06f)
                     .colors(new Vector4f(0.6f, 0.75f, 1, 0.9f), new Vector4f(0.6f, 0.75f, 1, 0.3f))
+                    .collision(ParticleEffect.Collision.BOUNCE)
+                    .bounce(0.2f)
+                    .friction(0.5f)
                     .build();
 
     /** Short-lived glowing orange sparks, flung every way and falling. */
@@ -48,6 +51,9 @@ public final class ParticleSamples {
                     .colors(new Vector4f(1, 0.6f, 0.2f, 1), new Vector4f(1, 0.2f, 0.05f, 0.6f))
                     .emissive(6)
                     .lit(false)
+                    .collision(ParticleEffect.Collision.BOUNCE)
+                    .bounce(0.4f)
+                    .friction(0.3f)
                     .build();
 
     /** Big gray puffs rising slowly, growing and fading. */

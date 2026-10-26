@@ -103,6 +103,78 @@ class ParticleMathTest {
         assertEquals(-1, direction.y, 1e-5);
     }
 
+    /** A particle falling onto a floor bounces up, slowed along it, and goes back where it was. */
+    @Test
+    void testCollideWithAFloor() {
+        final Vector3f previous = new Vector3f(2.5f, 1.1f, 0.5f);
+        final Vector3f next = new Vector3f(2.7f, 0.9f, 0.5f);
+        final Vector3f velocity = new Vector3f(1, -5, 0);
+        final Vector3f normal = new Vector3f();
+        final Vector3f at = ParticleMath.collide(previous, next, velocity, 1, 0.5f, 0.2f, normal);
+        assertEquals(previous, at);
+        assertEquals(new Vector3f(0, 1, 0), normal);
+        assertEquals(0.8f, velocity.x, 1e-6);
+        assertEquals(2.5f, velocity.y, 1e-6);
+        assertEquals(0, velocity.z, 1e-6);
+    }
+
+    /**
+     * Crossing two boundaries in a step, the face is the one crossed last, into the solid voxel.
+     */
+    @Test
+    void testCollideWithTheLastFaceCrossed() {
+        final Vector3f normal = new Vector3f();
+        // Crosses x = 3 a fifth of the way, then y = 1 four fifths of the way: the floor
+        final Vector3f velocity = new Vector3f(5, -5, 0);
+        ParticleMath.collide(
+                new Vector3f(2.9f, 1.4f, 0.5f),
+                new Vector3f(3.4f, 0.9f, 0.5f),
+                velocity,
+                1,
+                0,
+                0,
+                normal);
+        assertEquals(new Vector3f(0, 1, 0), normal);
+        assertEquals(5, velocity.x, 1e-6);
+        assertEquals(0, velocity.y, 1e-6);
+        // Crosses y = 1 a fifth of the way, then x = 3 four fifths of the way: a wall
+        velocity.set(5, -5, 0);
+        ParticleMath.collide(
+                new Vector3f(2.6f, 1.1f, 0.5f),
+                new Vector3f(3.1f, 0.6f, 0.5f),
+                velocity,
+                1,
+                1,
+                0,
+                normal);
+        assertEquals(new Vector3f(-1, 0, 0), normal);
+        assertEquals(-5, velocity.x, 1e-6);
+        assertEquals(-5, velocity.y, 1e-6);
+        // Already inside, with nothing crossed: stopped
+        velocity.set(1, 1, 1);
+        ParticleMath.collide(new Vector3f(0.5f), new Vector3f(0.6f), velocity, 1, 1, 0, normal);
+        assertEquals(new Vector3f(), velocity);
+    }
+
+    /** The behavior word keeps each part apart, to within a byte. */
+    @Test
+    void testBehaviorWord() {
+        final int word = ParticleMath.packBehavior(-0.4f, true, 2, 0.3f, 0.75f);
+        assertEquals(-0.4f, ParticleMath.anisotropyOf(word), 1f / ParticleMath.SIGNED_BYTE_MAX);
+        assertEquals(1, word >> ParticleMath.BEHAVIOR_LIT_SHIFT & 1);
+        assertEquals(
+                2,
+                word >> ParticleMath.BEHAVIOR_COLLISION_SHIFT
+                        & ParticleMath.BEHAVIOR_COLLISION_MASK);
+        assertEquals(
+                Math.round(0.3f * 255),
+                word >> ParticleMath.BEHAVIOR_BOUNCE_SHIFT & ParticleMath.UNSIGNED_BYTE_MAX);
+        assertEquals(Math.round(0.75f * 255), word >>> ParticleMath.BEHAVIOR_FRICTION_SHIFT);
+        final int unlit = ParticleMath.packBehavior(0.9f, false, 0, 0, 0);
+        assertEquals(0, unlit >> ParticleMath.BEHAVIOR_LIT_SHIFT & 1);
+        assertEquals(0.9f, ParticleMath.anisotropyOf(unlit), 1f / ParticleMath.SIGNED_BYTE_MAX);
+    }
+
     /** Life runs from 0 to 1, and the round shape and soft fade stay in range. */
     @Test
     void testShapeAndFades() {

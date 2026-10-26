@@ -18,8 +18,10 @@ struct Particle {
     float sizeStart;
     float sizeEnd;
     float emissive;
-    // Half floats: its anisotropy, and 1 if lights light it or 0 if it shows its color as is
-    uint lighting;
+    // How it behaves, see ParticleMath.packBehavior: its anisotropy, a signed byte in bits 0 to 7;
+    // whether lights light it, bit 8; what it does when it hits the world, bits 9 and 10; and the
+    // bounce and friction, unsigned bytes in bits 16 to 23 and 24 to 31
+    uint behavior;
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 16) buffer ParticleBuffer {
@@ -54,6 +56,63 @@ const uint BILLBOARD_VERTICES = 6;
 
 // ParticleMath.NO_DRAG
 const float NO_DRAG = 1e-6;
+
+// What a particle does when it hits the world, ParticleEffect.Collision's ordinals
+const uint COLLISION_NONE = 0;
+const uint COLLISION_BOUNCE = 1;
+const uint COLLISION_STICK = 2;
+const uint COLLISION_DIE = 3;
+
+float behaviorAnisotropy(uint behavior) {
+    return float(int(behavior << 24) >> 24) / 127.0;
+}
+
+bool behaviorLit(uint behavior) {
+    return (behavior & (1u << 8)) != 0u;
+}
+
+uint behaviorCollision(uint behavior) {
+    return (behavior >> 9) & 3u;
+}
+
+float behaviorBounce(uint behavior) {
+    return float((behavior >> 16) & 255u) / 255.0;
+}
+
+float behaviorFriction(uint behavior) {
+    return float(behavior >> 24) / 255.0;
+}
+
+// Turn a particle back from a solid voxel it stepped into, see ParticleMath.collide: back where it
+// was, its speed into the last face it crossed reversed and scaled by the bounce, its speed along
+// the face scaled down by the friction. Positions are relative to the voxel grid's corner.
+void collideParticle(vec3 previous, vec3 next, inout vec3 velocity, float voxel, float bounce,
+        float friction) {
+    int axis = -1;
+    float latest = -1.0;
+    for (int i = 0; i < 3; ++i) {
+        float fromCell = floor(previous[i] / voxel);
+        float toCell = floor(next[i] / voxel);
+        if (fromCell == toCell) {
+            continue;
+        }
+        float boundary = (next[i] > previous[i] ? toCell : toCell + 1.0) * voxel;
+        float crossing = (boundary - previous[i]) / (next[i] - previous[i]);
+        if (crossing > latest) {
+            latest = crossing;
+            axis = i;
+        }
+    }
+    if (axis < 0) {
+        velocity = vec3(0.0);
+        return;
+    }
+    vec3 normal = vec3(0.0);
+    normal[axis] = next[axis] > previous[axis] ? -1.0 : 1.0;
+    float into = dot(velocity, normal);
+    vec3 along = (velocity - into * normal) * (1.0 - friction);
+    velocity = along + normal * (into < 0.0 ? -bounce * into : into);
+}
 
 vec4 unpackParticleColor(uvec2 packed) {
     return vec4(unpackHalf2x16(packed.x), unpackHalf2x16(packed.y));

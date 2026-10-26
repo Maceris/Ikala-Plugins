@@ -219,7 +219,10 @@ class ShaderBindingsTest {
         assertEquals(48, ShaderBindings.Particles.SIMULATE_SHIFT_OFFSET);
         assertEquals(60, ShaderBindings.Particles.SIMULATE_SECONDS_OFFSET);
         assertEquals(64, ShaderBindings.Particles.SIMULATE_CURRENT_OFFSET);
-        assertEquals(68, ShaderBindings.Particles.SIMULATE_CONSTANTS_SIZE);
+        // vec4 occupancyOrigin on 16 bytes; ivec4 occupancyTexel;
+        assertEquals(80, ShaderBindings.Particles.SIMULATE_OCCUPANCY_ORIGIN_OFFSET);
+        assertEquals(96, ShaderBindings.Particles.SIMULATE_OCCUPANCY_TEXEL_OFFSET);
+        assertEquals(112, ShaderBindings.Particles.SIMULATE_CONSTANTS_SIZE);
         // 5 addresses; uint emitterCount; uint total; uint next;
         assertEquals(40, ShaderBindings.Particles.EMIT_EMITTER_COUNT_OFFSET);
         assertEquals(48, ShaderBindings.Particles.EMIT_NEXT_OFFSET);

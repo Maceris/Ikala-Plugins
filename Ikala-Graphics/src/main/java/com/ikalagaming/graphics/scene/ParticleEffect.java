@@ -32,6 +32,21 @@ import org.joml.Vector4fc;
 @Builder(toBuilder = true)
 public class ParticleEffect {
 
+    /**
+     * What a particle does when it hits the world: the static world near the camera, its occupancy
+     * volume's finest voxels, see {@link com.ikalagaming.graphics.vulkan.ParticleMath#collide}.
+     */
+    public enum Collision {
+        /** Passes through. */
+        NONE,
+        /** Bounces off, keeping {@link #bounce} of its speed into the surface. */
+        BOUNCE,
+        /** Stops where it hits and stays. */
+        STICK,
+        /** Dies at once. */
+        DIE
+    }
+
     /** How many particles a second an emitter spawns. */
     @Builder.Default float rate = 20;
 
@@ -94,6 +109,15 @@ public class ParticleEffect {
      * toward 1 mostly onward, so it glows with the sun behind it, toward -1 mostly back.
      */
     @Builder.Default float anisotropy = 0.2f;
+
+    /** What a particle does when it hits the world. */
+    @Builder.Default @NonNull Collision collision = Collision.NONE;
+
+    /** How much of its speed into a surface a bouncing particle keeps, 0 to 1. */
+    @Builder.Default float bounce = 0.3f;
+
+    /** How much of its speed along a surface a bouncing particle loses when it hits, 0 to 1. */
+    @Builder.Default float friction = 0.2f;
 
     /** Builder methods for ranges and pairs, on top of the generated ones, filled in by Lombok. */
     public static class ParticleEffectBuilder {

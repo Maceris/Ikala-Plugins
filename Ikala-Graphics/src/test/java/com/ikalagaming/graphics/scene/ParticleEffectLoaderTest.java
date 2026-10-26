@@ -65,6 +65,9 @@ class ParticleEffectLoaderTest {
                         emissive: 6
                         lit: false
                         anisotropy: -0.3
+                        collision: Bounce
+                        bounce: 0.5
+                        friction: 0.1
                         """);
         assertEquals(300, effect.getRate());
         assertEquals(20, effect.getBurst());
@@ -84,6 +87,9 @@ class ParticleEffectLoaderTest {
         assertEquals(6, effect.getEmissive());
         assertFalse(effect.isLit());
         assertEquals(-0.3f, effect.getAnisotropy());
+        assertEquals(ParticleEffect.Collision.BOUNCE, effect.getCollision());
+        assertEquals(0.5f, effect.getBounce());
+        assertEquals(0.1f, effect.getFriction());
     }
 
     /** Missing keys default, one number stands for both ends, and one color for both. */
@@ -123,6 +129,10 @@ class ParticleEffectLoaderTest {
         assertTrue(failure("rate: [").contains("not valid YAML"));
         assertTrue(failure("lit: yes please").contains("lit: expected true or false"));
         assertTrue(failure("anisotropy: 1").contains("anisotropy: must be from"));
+        assertTrue(
+                failure("collision: splat")
+                        .contains("collision: expected one of none, bounce, stick, die"));
+        assertTrue(failure("bounce: 2").contains("bounce: must be from"));
     }
 
     /** Every sample writes out and reads back the same. */
@@ -150,6 +160,9 @@ class ParticleEffectLoaderTest {
             assertEquals(original.getEmissive(), copy.getEmissive(), name);
             assertEquals(original.isLit(), copy.isLit(), name);
             assertEquals(original.getAnisotropy(), copy.getAnisotropy(), name);
+            assertEquals(original.getCollision(), copy.getCollision(), name);
+            assertEquals(original.getBounce(), copy.getBounce(), name);
+            assertEquals(original.getFriction(), copy.getFriction(), name);
         }
     }
 

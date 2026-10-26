@@ -43,12 +43,11 @@ void main() {
     }
     uint slot = drawn.indices[index];
     Particle particle = pool.particles[slot];
-    vec2 lighting = unpackHalf2x16(particle.lighting);
-    if (lighting.y < 0.5) {
+    if (!behaviorLit(particle.behavior)) {
         radianceList.radiance[slot] = packParticleColor(vec4(1.0));
         return;
     }
-    float anisotropy = lighting.x;
+    float anisotropy = behaviorAnisotropy(particle.behavior);
     vec3 renderPosition = particle.position + anchor;
     // In render space the view only turns, so its inverse is its transpose
     vec3 viewPosition = transpose(mat3(invViewMatrix)) * renderPosition;

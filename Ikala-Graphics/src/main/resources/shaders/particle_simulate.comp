@@ -4,11 +4,20 @@
 
 // Moves each alive particle through the frame, see ParticleUpdate: one thread per particle in the
 // current alive list, dispatched by the count it holds. Particles past their lifetime go back on
-// the free list; the rest go on the other alive list, which the billboards draw.
+// the free list; the rest go on the other alive list, which the billboards draw. Particles that
+// collide step into an opaque voxel of the occupancy volume's finest level, which holds the static
+// world near the camera, and bounce, stick or die there.
 
 #include "particles.glsl"
 
 layout(local_size_x = 64) in;
+
+// The occupancy volume, see OccupancyVolume: three levels of voxel bits stacked along z
+layout(set = 0, binding = 0, r32ui) uniform restrict readonly uimage3D occupancyVolume;
+
+// Matches OccupancyVolume and occupancy.glsl
+const int OCCUPANCY_SIZE = 128;
+const uint OCCUPANCY_OPAQUE = 1u;
 
 layout(push_constant) uniform Constants {
     ParticleBuffer pool;
@@ -22,7 +31,25 @@ layout(push_constant) uniform Constants {
     float seconds;
     // Which alive list this reads
     uint current;
+    // The occupancy volume's finest level: its corner relative to the anchor, and its voxels' size
+    vec4 occupancyOrigin;
+    // Its corner's texel in the toroidal image, and nonzero if it can be read
+    ivec4 occupancyTexel;
 };
+
+// Whether a point relative to the anchor is in an opaque voxel of the finest level; false outside
+// it, or while it can't be read
+bool solidAt(vec3 position) {
+    if (occupancyTexel.w == 0) {
+        return false;
+    }
+    ivec3 voxel = ivec3(floor((position - occupancyOrigin.xyz) / occupancyOrigin.w));
+    if (any(lessThan(voxel, ivec3(0))) || any(greaterThanEqual(voxel, ivec3(OCCUPANCY_SIZE)))) {
+        return false;
+    }
+    ivec3 texel = (occupancyTexel.xyz + voxel) & (OCCUPANCY_SIZE - 1);
+    return (imageLoad(occupancyVolume, texel).x & OCCUPANCY_OPAQUE) != 0u;
+}
 
 void main() {
     uint index = gl_GlobalInvocationID.x;
@@ -39,7 +66,24 @@ void main() {
     }
     vec3 position = particle.position + shift;
     vec3 velocity = particle.velocity;
+    vec3 previous = position;
     advanceParticle(position, velocity, particle.acceleration, particle.drag, seconds);
+    uint collision = behaviorCollision(particle.behavior);
+    if (collision != COLLISION_NONE && solidAt(position) && !solidAt(previous)) {
+        if (collision == COLLISION_DIE) {
+            int free = atomicAdd(control.dead, 1);
+            dead.indices[free] = slot;
+            return;
+        }
+        if (collision == COLLISION_STICK) {
+            velocity = vec3(0.0);
+        } else {
+            collideParticle(previous - occupancyOrigin.xyz, position - occupancyOrigin.xyz,
+                velocity, occupancyOrigin.w, behaviorBounce(particle.behavior),
+                behaviorFriction(particle.behavior));
+        }
+        position = previous;
+    }
     pool.particles[slot].position = position;
     pool.particles[slot].velocity = velocity;
     pool.particles[slot].age = particle.age;

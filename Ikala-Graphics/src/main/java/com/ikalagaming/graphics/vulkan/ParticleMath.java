@@ -53,8 +53,8 @@ public final class ParticleMath {
     /** Where its spawn count and random seed are. */
     public static final int EMITTER_COUNT = 112;
 
-    /** Where its anisotropy, a float, and whether lights light it, an int, are. */
-    public static final int EMITTER_LIGHTING = EMITTER_COUNT + 2 * Integer.BYTES;
+    /** Where its particles' behavior word is, see {@link #packBehavior}. */
+    public static final int EMITTER_BEHAVIOR = EMITTER_COUNT + 2 * Integer.BYTES;
 
     /** The size of a particle's light, four half floats, see {@code particle_light.comp}. */
     public static final int RADIANCE_SIZE = 4 * Short.BYTES;
@@ -85,6 +85,30 @@ public final class ParticleMath {
 
     /** Below this drag, per second, motion is integrated as if there were none. */
     public static final double NO_DRAG = 1e-6;
+
+    /** A particle's behavior word: its anisotropy, as a signed byte in the low 8 bits. */
+    public static final int BEHAVIOR_ANISOTROPY_MASK = 0xFF;
+
+    /** Where in it whether lights light the particle is, one bit. */
+    public static final int BEHAVIOR_LIT_SHIFT = 8;
+
+    /** Where in it what the particle does when it hits something is, two bits. */
+    public static final int BEHAVIOR_COLLISION_SHIFT = 9;
+
+    /** The collision bits' mask, once shifted down. */
+    public static final int BEHAVIOR_COLLISION_MASK = 3;
+
+    /** Where in it how much of its speed into a surface it keeps is, an unsigned byte. */
+    public static final int BEHAVIOR_BOUNCE_SHIFT = 16;
+
+    /** Where in it how much of its speed along a surface it loses is, an unsigned byte. */
+    public static final int BEHAVIOR_FRICTION_SHIFT = 24;
+
+    /** The largest value a signed byte holds, for the anisotropy. */
+    public static final int SIGNED_BYTE_MAX = 127;
+
+    /** The largest value an unsigned byte holds, for the bounce and friction. */
+    public static final int UNSIGNED_BYTE_MAX = 255;
 
     /** Static helpers only. */
     private ParticleMath() {}
@@ -178,6 +202,93 @@ public final class ParticleMath {
                 .mul(cosTheta)
                 .fma(sinTheta * (float) Math.cos(phi), tangent)
                 .fma(sinTheta * (float) Math.sin(phi), bitangent);
+    }
+
+    /**
+     * Pack how a particle behaves into its behavior word: which way it scatters light, whether
+     * lights light it, and what it does when it hits something, see {@code particles.glsl}.
+     *
+     * @param anisotropy Its Henyey-Greenstein g, -1 to 1.
+     * @param lit Whether lights light it.
+     * @param collision What it does when it hits something, an ordinal of {@code
+     *     ParticleEffect.Collision}.
+     * @param bounce How much of its speed into a surface it keeps, 0 to 1.
+     * @param friction How much of its speed along a surface it loses, 0 to 1.
+     * @return The word.
+     */
+    public static int packBehavior(
+            float anisotropy, boolean lit, int collision, float bounce, float friction) {
+        final int g = Math.round(Math.clamp(anisotropy, -1, 1) * SIGNED_BYTE_MAX);
+        return (g & BEHAVIOR_ANISOTROPY_MASK)
+                | (lit ? 1 << BEHAVIOR_LIT_SHIFT : 0)
+                | (collision & BEHAVIOR_COLLISION_MASK) << BEHAVIOR_COLLISION_SHIFT
+                | Math.round(Math.clamp(bounce, 0, 1) * UNSIGNED_BYTE_MAX) << BEHAVIOR_BOUNCE_SHIFT
+                | Math.round(Math.clamp(friction, 0, 1) * UNSIGNED_BYTE_MAX)
+                        << BEHAVIOR_FRICTION_SHIFT;
+    }
+
+    /**
+     * The anisotropy in a behavior word.
+     *
+     * @param behavior The word.
+     * @return The Henyey-Greenstein g, to within a byte's step.
+     */
+    public static float anisotropyOf(int behavior) {
+        return (byte) (behavior & BEHAVIOR_ANISOTROPY_MASK) / (float) SIGNED_BYTE_MAX;
+    }
+
+    /**
+     * Turn a particle back from a solid voxel it stepped into: back to where it was, its speed into
+     * the face it crossed reversed and scaled by the bounce, and its speed along the face scaled
+     * down by the friction. The face is the last voxel boundary the step crossed, the one into the
+     * solid voxel.
+     *
+     * @param previous Where it was, relative to the voxel grid's corner.
+     * @param next Where it stepped to, in a solid voxel, relative to the same corner.
+     * @param velocity Its velocity, updated in place.
+     * @param voxel The voxels' size, in meters.
+     * @param bounce How much of its speed into the face it keeps, 0 to 1.
+     * @param friction How much of its speed along the face it loses, 0 to 1.
+     * @param normal Receives the face's normal, pointing back out toward where it was.
+     * @return Where it is now: where it was.
+     */
+    public static Vector3f collide(
+            @NonNull Vector3fc previous,
+            @NonNull Vector3fc next,
+            @NonNull Vector3f velocity,
+            float voxel,
+            float bounce,
+            float friction,
+            @NonNull Vector3f normal) {
+        int axis = -1;
+        float latest = -1;
+        for (int i = 0; i < 3; ++i) {
+            final float from = previous.get(i);
+            final float to = next.get(i);
+            final float fromCell = (float) Math.floor(from / voxel);
+            final float toCell = (float) Math.floor(to / voxel);
+            if (fromCell == toCell) {
+                continue;
+            }
+            // The boundary of the solid voxel facing where it came from
+            final float boundary = (to > from ? toCell : toCell + 1) * voxel;
+            final float crossing = (boundary - from) / (to - from);
+            if (crossing > latest) {
+                latest = crossing;
+                axis = i;
+            }
+        }
+        normal.zero();
+        if (axis < 0) {
+            // Stepped nowhere new, so already inside: stop it
+            velocity.zero();
+            return new Vector3f(previous);
+        }
+        normal.setComponent(axis, next.get(axis) > previous.get(axis) ? -1 : 1);
+        final float into = velocity.dot(normal);
+        final Vector3f along = new Vector3f(velocity).fma(-into, normal).mul(1 - friction);
+        velocity.set(along).fma(into < 0 ? -bounce * into : into, normal);
+        return new Vector3f(previous);
     }
 
     /**

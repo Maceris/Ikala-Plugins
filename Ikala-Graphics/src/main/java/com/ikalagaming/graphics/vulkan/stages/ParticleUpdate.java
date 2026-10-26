@@ -5,6 +5,7 @@ import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
+import com.ikalagaming.graphics.graph.OccupancyClipmap;
 import com.ikalagaming.graphics.scene.EmitterRegistry;
 import com.ikalagaming.graphics.scene.ParticleClock;
 import com.ikalagaming.graphics.scene.ParticleEffect;
@@ -102,12 +103,18 @@ public class ParticleUpdate implements RenderStage {
         log.debug("Initializing particles");
         try (MemoryStack stack = MemoryStack.stackPush()) {
             controlLayout =
-                    createLayout(state, ShaderBindings.Particles.CONTROL_CONSTANTS_SIZE, stack);
+                    createLayout(
+                            state, ShaderBindings.Particles.CONTROL_CONSTANTS_SIZE, null, stack);
             controlPipeline = createPipeline(state, controlShader, controlLayout, stack);
             simulateLayout =
-                    createLayout(state, ShaderBindings.Particles.SIMULATE_CONSTANTS_SIZE, stack);
+                    createLayout(
+                            state,
+                            ShaderBindings.Particles.SIMULATE_CONSTANTS_SIZE,
+                            stack.longs(state.occupancy.getSetLayout()),
+                            stack);
             simulatePipeline = createPipeline(state, simulateShader, simulateLayout, stack);
-            emitLayout = createLayout(state, ShaderBindings.Particles.EMIT_CONSTANTS_SIZE, stack);
+            emitLayout =
+                    createLayout(state, ShaderBindings.Particles.EMIT_CONSTANTS_SIZE, null, stack);
             emitPipeline = createPipeline(state, emitShader, emitLayout, stack);
         }
     }
@@ -195,7 +202,7 @@ public class ParticleUpdate implements RenderStage {
                             | VK_ACCESS_2_SHADER_STORAGE_READ_BIT
                             | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                     stack);
-            simulate(commandBuffer, pool, shift, seconds, stack);
+            simulate(commandBuffer, state, pool, shift, seconds, stack);
             computeBarrier(commandBuffer, stack);
             final int emitters = writeEmitters(state, pool);
             if (emitters > 0) {
@@ -252,6 +259,7 @@ public class ParticleUpdate implements RenderStage {
      * Record the simulation, dispatched by the alive count the control pass turned into groups.
      *
      * @param commandBuffer The command buffer.
+     * @param state The Vulkan state, for the occupancy volume particles collide with.
      * @param pool The pool.
      * @param shift How far every particle moves for the anchor's step.
      * @param seconds How long the frame was, in particle time.
@@ -259,11 +267,19 @@ public class ParticleUpdate implements RenderStage {
      */
     private void simulate(
             @NonNull VkCommandBuffer commandBuffer,
+            @NonNull VulkanState state,
             @NonNull ParticlePool pool,
             @NonNull Vector3d shift,
             double seconds,
             @NonNull MemoryStack stack) {
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, simulatePipeline);
+        vkCmdBindDescriptorSets(
+                commandBuffer,
+                VK_PIPELINE_BIND_POINT_COMPUTE,
+                simulateLayout,
+                0,
+                stack.longs(state.occupancy.getSet()),
+                null);
         ByteBuffer constants = stack.calloc(ShaderBindings.Particles.SIMULATE_CONSTANTS_SIZE);
         final int current = pool.getCurrent();
         final long[] addresses = {
@@ -284,6 +300,24 @@ public class ParticleUpdate implements RenderStage {
                 ShaderBindings.Particles.SIMULATE_SHIFT_OFFSET + 2 * Float.BYTES, (float) shift.z);
         constants.putFloat(ShaderBindings.Particles.SIMULATE_SECONDS_OFFSET, (float) seconds);
         constants.putInt(ShaderBindings.Particles.SIMULATE_CURRENT_OFFSET, current);
+        // The finest level as the image holds it: the voxelizer moves the level later in the
+        // frame, after the particles move
+        final OccupancyClipmap clipmap = state.occupancy.getClipmap();
+        final long[] origin = clipmap.origin(0);
+        final int voxel = OccupancyClipmap.VOXEL_SIZES[0];
+        for (int axis = 0; axis < 3; ++axis) {
+            constants.putFloat(
+                    ShaderBindings.Particles.SIMULATE_OCCUPANCY_ORIGIN_OFFSET + axis * Float.BYTES,
+                    (float) ((double) origin[axis] * voxel - pool.getAnchor().get(axis)));
+            constants.putInt(
+                    ShaderBindings.Particles.SIMULATE_OCCUPANCY_TEXEL_OFFSET + axis * Integer.BYTES,
+                    OccupancyClipmap.texel(origin[axis]));
+        }
+        constants.putFloat(
+                ShaderBindings.Particles.SIMULATE_OCCUPANCY_ORIGIN_OFFSET + 3 * Float.BYTES, voxel);
+        constants.putInt(
+                ShaderBindings.Particles.SIMULATE_OCCUPANCY_TEXEL_OFFSET + 3 * Integer.BYTES,
+                GraphicsManager.getSettings().occupancy && clipmap.isValid(0) ? 1 : 0);
         vkCmdPushConstants(
                 commandBuffer, simulateLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
         vkCmdDispatchIndirect(
@@ -409,15 +443,18 @@ public class ParticleUpdate implements RenderStage {
             MemoryUtil.memPutInt(at + ParticleMath.EMITTER_COUNT, count);
             MemoryUtil.memPutInt(
                     at + ParticleMath.EMITTER_COUNT + Integer.BYTES, frames * 0x9E3779B9 + written);
-            MemoryUtil.memPutFloat(
-                    at + ParticleMath.EMITTER_LIGHTING,
-                    (float)
-                            Math.clamp(
-                                    effect.getAnisotropy(),
-                                    -ParticleEffectLoader.MAX_ANISOTROPY,
-                                    ParticleEffectLoader.MAX_ANISOTROPY));
             MemoryUtil.memPutInt(
-                    at + ParticleMath.EMITTER_LIGHTING + Float.BYTES, effect.isLit() ? 1 : 0);
+                    at + ParticleMath.EMITTER_BEHAVIOR,
+                    ParticleMath.packBehavior(
+                            (float)
+                                    Math.clamp(
+                                            effect.getAnisotropy(),
+                                            -ParticleEffectLoader.MAX_ANISOTROPY,
+                                            ParticleEffectLoader.MAX_ANISOTROPY),
+                            effect.isLit(),
+                            effect.getCollision().ordinal(),
+                            effect.getBounce(),
+                            effect.getFriction()));
             first += count;
             ++written;
         }
@@ -511,15 +548,19 @@ public class ParticleUpdate implements RenderStage {
     }
 
     /**
-     * Create a compute pipeline layout with only push constants.
+     * Create a compute pipeline layout.
      *
      * @param state The Vulkan state.
      * @param constantsSize The size of its push constants.
+     * @param setLayouts Its descriptor sets' layouts, or null for none.
      * @param stack The stack to allocate on.
      * @return The VkPipelineLayout.
      */
     private static long createLayout(
-            @NonNull VulkanState state, int constantsSize, @NonNull MemoryStack stack) {
+            @NonNull VulkanState state,
+            int constantsSize,
+            LongBuffer setLayouts,
+            @NonNull MemoryStack stack) {
         LongBuffer longOutput = stack.callocLong(1);
         VkPushConstantRange.Buffer ranges = VkPushConstantRange.calloc(1, stack);
         ranges.get(0).stageFlags(VK_SHADER_STAGE_COMPUTE_BIT).offset(0).size(constantsSize);
@@ -528,6 +569,7 @@ public class ParticleUpdate implements RenderStage {
                         state.device.logical,
                         VkPipelineLayoutCreateInfo.calloc(stack)
                                 .sType$Default()
+                                .pSetLayouts(setLayouts)
                                 .pPushConstantRanges(ranges),
                         null,
                         longOutput));

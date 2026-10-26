@@ -27,9 +27,9 @@ struct Emitter {
     vec4 sizes;
     uint spawnCount;
     uint seed;
-    // Which way its particles scatter light, and nonzero if lights light them
-    float anisotropy;
-    uint lit;
+    // How its particles behave, see Particle.behavior
+    uint behavior;
+    uint padding;
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer EmitterList {
@@ -98,7 +98,7 @@ void main() {
     particle.sizeStart = emitter.sizes.x;
     particle.sizeEnd = emitter.sizes.y;
     particle.emissive = emitter.sizes.z;
-    particle.lighting = packHalf2x16(vec2(emitter.anisotropy, emitter.lit != 0 ? 1.0 : 0.0));
+    particle.behavior = emitter.behavior;
     pool.particles[slot] = particle;
     to.indices[atomicAdd(control.alive[next], 1)] = slot;
 }

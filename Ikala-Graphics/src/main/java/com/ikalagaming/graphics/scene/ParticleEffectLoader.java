@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -44,6 +45,9 @@ import java.util.Set;
  * emissive: 6                # light given off, times the color
  * lit: false                 # true for lit by the sun, sky and lights, the color their albedo
  * anisotropy: 0.2            # which way lit ones scatter, -1 back to 1 onward
+ * collision: bounce          # none, bounce, stick or die, on hitting the world near the camera
+ * bounce: 0.3                # speed into a surface kept when bouncing, 0 to 1
+ * friction: 0.2              # speed along a surface lost when bouncing, 0 to 1
  * </pre>
  */
 public final class ParticleEffectLoader {
@@ -96,6 +100,15 @@ public final class ParticleEffectLoader {
     /** Which way lit ones scatter. */
     public static final String ANISOTROPY = "anisotropy";
 
+    /** What they do when they hit the world. */
+    public static final String COLLISION = "collision";
+
+    /** How much speed into a surface they keep. */
+    public static final String BOUNCE = "bounce";
+
+    /** How much speed along a surface they lose. */
+    public static final String FRICTION = "friction";
+
     /** The most anisotropy can be either way, short of all one way. */
     public static final double MAX_ANISOTROPY = 0.95;
 
@@ -115,7 +128,10 @@ public final class ParticleEffectLoader {
                     COLOR,
                     EMISSIVE,
                     LIT,
-                    ANISOTROPY);
+                    ANISOTROPY,
+                    COLLISION,
+                    BOUNCE,
+                    FRICTION);
 
     /** The widest spread there is, in degrees: every way. */
     public static final double MAX_SPREAD_DEGREES = 180;
@@ -185,6 +201,9 @@ public final class ParticleEffectLoader {
         reader.number(EMISSIVE, 0, Float.MAX_VALUE).ifPresent(builder::emissive);
         reader.bool(LIT).ifPresent(builder::lit);
         reader.number(ANISOTROPY, -MAX_ANISOTROPY, MAX_ANISOTROPY).ifPresent(builder::anisotropy);
+        reader.choice(COLLISION, ParticleEffect.Collision.class).ifPresent(builder::collision);
+        reader.number(BOUNCE, 0, 1).ifPresent(builder::bounce);
+        reader.number(FRICTION, 0, 1).ifPresent(builder::friction);
         return builder.build();
     }
 
@@ -213,6 +232,9 @@ public final class ParticleEffectLoader {
         root.put(EMISSIVE, effect.getEmissive());
         root.put(LIT, effect.isLit());
         root.put(ANISOTROPY, effect.getAnisotropy());
+        root.put(COLLISION, effect.getCollision().name().toLowerCase(Locale.ROOT));
+        root.put(BOUNCE, effect.getBounce());
+        root.put(FRICTION, effect.getFriction());
         // Lists of numbers stay on one line, as people write them
         final DumperOptions flow = new DumperOptions();
         flow.setDefaultFlowStyle(DumperOptions.FlowStyle.FLOW);
@@ -283,6 +305,34 @@ public final class ParticleEffectLoader {
                 return Optional.empty();
             }
             return Optional.of(checked(key, root.get(key), min, max));
+        }
+
+        /**
+         * One of an enum's values, by its name in any case.
+         *
+         * @param key Its key.
+         * @param type The enum.
+         * @param <E> The enum's type.
+         * @return The value, or empty if the key is missing.
+         */
+        <E extends Enum<E>> Optional<E> choice(String key, Class<E> type) {
+            if (!root.containsKey(key)) {
+                return Optional.empty();
+            }
+            final String name = String.valueOf(root.get(key)).toUpperCase(Locale.ROOT);
+            for (E value : type.getEnumConstants()) {
+                if (value.name().equals(name)) {
+                    return Optional.of(value);
+                }
+            }
+            final StringBuilder names = new StringBuilder();
+            for (E value : type.getEnumConstants()) {
+                if (!names.isEmpty()) {
+                    names.append(", ");
+                }
+                names.append(value.name().toLowerCase(Locale.ROOT));
+            }
+            throw error(key, "expected one of " + names);
         }
 
         /**
