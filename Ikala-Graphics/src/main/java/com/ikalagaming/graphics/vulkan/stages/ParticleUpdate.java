@@ -146,6 +146,8 @@ public class ParticleUpdate implements RenderStage {
         final long now = System.nanoTime();
         final double realSeconds = lastNanos == 0 ? 0 : (now - lastNanos) / NANOS_PER_SECOND;
         lastNanos = now;
+        // Edited effect files reach their emitters before this frame's spawns
+        scene.getEffectLibrary().checkIfDue(now);
         final ParticleClock clock = scene.getParticleClock();
         // What the GPU reported a frame or two ago, read from the mapped counts
         clock.report(pool.readLiveCount(), pool.readDropped());

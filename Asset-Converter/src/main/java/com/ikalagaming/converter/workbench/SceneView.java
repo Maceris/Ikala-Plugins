@@ -96,7 +96,7 @@ public class SceneView {
     private final LodSection lod;
 
     /** Watches particles on the particle stage. */
-    private final ParticleViewer particles;
+    @Getter private final ParticleViewer particles;
 
     /** The selected mesh of the selected node, a scene mesh index, or -1. */
     private int selectedMesh = -1;

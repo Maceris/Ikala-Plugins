@@ -341,6 +341,7 @@ public class GraphicsManager {
             if (media > 0) {
                 log.debug("Removed {} medium volumes owned by {}", media, context.getOwnerKey());
             }
+            scene.getEffectLibrary().removeAllOwnedBy(context.getOwnerKey());
             int emitters = scene.getEmitterRegistry().removeAllOwnedBy(context.getOwnerKey());
             if (emitters > 0) {
                 log.debug(

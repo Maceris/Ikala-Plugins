@@ -18,8 +18,13 @@ public enum AssetKind {
             Set.of(
                     "fbx", "obj", "gltf", "glb", "dae", "3ds", "blend", "ply", "stl", "x", "lwo",
                     "ms3d")),
+    /** A particle effect, a YAML file named *.effect.yml, shown on the particle stage. */
+    PARTICLE_EFFECT(Set.of()),
     /** Anything else. */
     UNKNOWN(Set.of());
+
+    /** What a particle effect's file name ends with. */
+    public static final String PARTICLE_EFFECT_SUFFIX = ".effect.yml";
 
     /** The extensions of this kind, lower case and without the dot. */
     private final Set<String> extensions;
@@ -40,6 +45,9 @@ public enum AssetKind {
             return UNKNOWN;
         }
         final String text = name.toString();
+        if (text.toLowerCase(Locale.ROOT).endsWith(PARTICLE_EFFECT_SUFFIX)) {
+            return PARTICLE_EFFECT;
+        }
         final int dot = text.lastIndexOf('.');
         if (dot < 0) {
             return UNKNOWN;

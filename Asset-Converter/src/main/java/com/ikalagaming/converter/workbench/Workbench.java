@@ -175,6 +175,8 @@ public class Workbench {
                                 this::loadTexture,
                                 () -> viewer.getImage() == null ? null : viewer.getImage().path()));
         browser = new FileBrowser(Path.of(""));
+        sceneView.getParticles().setFolder(browser::getDirectory);
+        sceneView.getParticles().setSaved(saved -> refresh());
         path = new TextInput("path", "").onSubmit(this::openPath).width(Sizing.grow());
         files = new Column("files").align(Align.STRETCH);
         filter = new Button("filter", "").onClick(this::toggleFilter);
@@ -244,7 +246,7 @@ public class Workbench {
                                                 new Button("shader-ball", "Shader ball")
                                                         .onClick(this::openShaderBall),
                                                 new Button("particle-stage", "Particles")
-                                                        .onClick(this::openParticleStage)));
+                                                        .onClick(() -> openParticleStage(null))));
         ui.show(
                 ui.surface(SURFACE_ID)
                         .anchors(edges(0, 0, 1, 0, 0, 0, 0, 0))
@@ -422,7 +424,24 @@ public class Workbench {
         final Path absolute = file.toAbsolutePath().normalize();
         final AssetKind kind = AssetKind.of(absolute);
         if (kind == AssetKind.UNKNOWN) {
-            status.text("Can't open " + absolute.getFileName() + ", it isn't an image or model");
+            status.text(
+                    "Can't open "
+                            + absolute.getFileName()
+                            + ", it isn't an image, model or particle effect");
+            return;
+        }
+        if (kind == AssetKind.PARTICLE_EFFECT) {
+            openFile = absolute;
+            final Path folder = absolute.getParent();
+            if (folder != null && !folder.equals(browser.getDirectory())) {
+                browser.navigate(folder);
+            }
+            refresh();
+            if (sceneView.getParticles().isActive()) {
+                sceneView.getParticles().openFile(absolute);
+            } else {
+                openParticleStage(absolute);
+            }
             return;
         }
         final int request = requests.incrementAndGet();
@@ -481,7 +500,7 @@ public class Workbench {
      */
     public void openNamed(@NonNull String what) {
         if (what.equals(PREVIEW_PREFIX + PARTICLE_PREVIEW)) {
-            openParticleStage();
+            openParticleStage(null);
             return;
         }
         if (what.startsWith(PREVIEW_PREFIX)) {
@@ -512,15 +531,25 @@ public class Workbench {
                 });
     }
 
-    /** Show the stage particles are watched on, with the particle viewer. */
-    private void openParticleStage() {
+    /**
+     * Show the stage particles are watched on, with the particle viewer.
+     *
+     * @param effectFile An effect file to show on it, or null for the first sample.
+     */
+    private void openParticleStage(@Nullable Path effectFile) {
         final int request = requests.incrementAndGet();
         status.text("Making the particle stage...");
         loader.execute(
                 () -> {
                     final ScenePlacement placement =
                             ScenePlacement.prepare(graphics, PreviewShapes.particleStage());
-                    post(() -> sceneLoaded(request, placement));
+                    post(
+                            () -> {
+                                sceneLoaded(request, placement);
+                                if (effectFile != null && sceneView.getParticles().isActive()) {
+                                    sceneView.getParticles().openFile(effectFile);
+                                }
+                            });
                 });
     }
 

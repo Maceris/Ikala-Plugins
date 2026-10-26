@@ -100,6 +100,13 @@ public class Scene {
     private final ParticleClock particleClock;
 
     /**
+     * The particle effects plugins loaded from files.
+     *
+     * @return The effect library.
+     */
+    private final EffectLibrary effectLibrary;
+
+    /**
      * The texture of the skybox, which may be null if we want the sky to be just a single diffuse
      * color.
      */
@@ -186,6 +193,7 @@ public class Scene {
         mediumRegistry = new MediumRegistry();
         emitterRegistry = new EmitterRegistry();
         particleClock = new ParticleClock();
+        effectLibrary = new EffectLibrary();
         viewDistance = DEFAULT_VIEW_DISTANCE;
         exposure = 1;
         camera = new Camera();

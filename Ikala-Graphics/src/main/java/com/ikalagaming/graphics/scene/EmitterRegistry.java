@@ -33,8 +33,8 @@ public class EmitterRegistry {
 
     /** An emitter in a slot. */
     private static final class Emitter {
-        /** What it spawns. */
-        ParticleEffect effect;
+        /** Where its effect comes from: a fixed one, or a loaded file's. */
+        EffectSource source;
 
         /** Where it is, in the world. */
         final Vector3d position = new Vector3d();
@@ -74,15 +74,29 @@ public class EmitterRegistry {
      */
     public @Nullable EmitterHandle add(
             @NonNull String owner, @NonNull ParticleEffect effect, @NonNull Vector3dc position) {
+        return add(owner, new EffectSource(effect), position);
+    }
+
+    /**
+     * Add an emitter whose effect comes from a source, such as a loaded file's, which it follows
+     * when the file is reloaded.
+     *
+     * @param owner The owning context's key.
+     * @param source Where its effect comes from.
+     * @param position Where it is, in the world.
+     * @return Its handle, or null if the scene holds {@link #MAX_EMITTERS} already.
+     */
+    public @Nullable EmitterHandle add(
+            @NonNull String owner, @NonNull EffectSource source, @NonNull Vector3dc position) {
         lock.lock();
         try {
             if (count >= MAX_EMITTERS) {
                 return null;
             }
             final Emitter emitter = new Emitter();
-            emitter.effect = effect;
+            emitter.source = source;
             emitter.position.set(position);
-            emitter.pendingBurst = Math.max(0, effect.getBurst());
+            emitter.pendingBurst = Math.max(0, source.get().getBurst());
             emitter.owner = owner;
             final int slot;
             if (freeSlots.isEmpty()) {
@@ -137,7 +151,7 @@ public class EmitterRegistry {
             if (!owns(owner, handle)) {
                 return false;
             }
-            emitters.get(handle.slot()).effect = effect;
+            emitters.get(handle.slot()).source = new EffectSource(effect);
             return true;
         } finally {
             lock.unlock();
@@ -255,14 +269,15 @@ public class EmitterRegistry {
                 if (emitter == null) {
                     continue;
                 }
+                final ParticleEffect effect = emitter.source.get();
                 final long spawns =
-                        (long) ParticleMath.spawns(emitter.effect.getRate(), seconds, emitter.carry)
+                        (long) ParticleMath.spawns(effect.getRate(), seconds, emitter.carry)
                                 + emitter.pendingBurst;
                 emitter.pendingBurst = 0;
                 if (spawns > 0) {
                     into.add(
                             new Spawn(
-                                    emitter.effect,
+                                    effect,
                                     new Vector3d(emitter.position),
                                     (int) Math.min(Integer.MAX_VALUE, spawns)));
                 }
