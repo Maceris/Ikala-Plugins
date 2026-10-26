@@ -140,6 +140,14 @@ What the renderer does and the work it builds on.
   *Nanite: A Deep Dive*, SIGGRAPH 2021) and batched multiresolution meshes (Ponchio, dissertation,
   2008). Clusters are grouped by a METIS-style graph partition (Karypis and Kumar 1998), and group
   borders are locked so levels never crack.
+- A group's error is the two-sided distance between its output
+  and its children, plus the children's largest, and spheres grow to hold the children's
+  (Ponchio's saturation), so each cluster can decide on its own whether it is in the cut.
+- Live worlds keep the DAG as an octree of region cells: a 64 m cell builds its own DAG with its
+  boundary planes locked, a parent carries on from its children's top clusters, and a change
+  rebuilds only its cell and those above it. Cell grids are offset differently at each level, so
+  every area ends up under one root. Near the camera, a section whose newest bake the LOD doesn't
+  show yet draws its own blocks until the rebuilt cells land.
 - Simplification after Liu, Zhang and Yuksel, *Simplifying Textured Triangle Meshes in the Wild*
   (ACM TOG 44(6), 2025): edge collapses with quadric error (Garland and Heckbert 1997), virtual
   edges joining nearby parts, and correspondence to carry materials and attributes up the levels.
@@ -162,6 +170,10 @@ What the renderer does and the work it builds on.
 - Hashed alpha testing past the first mips, so distant leaves keep their coverage (Wyman and McGuire,
   *Hashed Alpha Testing*, I3D 2017).
 - Ideas for the brick format and volumetric shadows from Smolder (Mueller, SIGGRAPH 2026).
+- Coverage volumes: parts finer than a group's resolution (far foliage, thin rods, scattered blocks)
+  leave its triangles for a voxel volume of SGGX microflakes (Heitz et al. 2015), after Loubet and
+  Neyret's hybrid mesh-volume LoDs (Eurographics 2017) and their isotropic self-shadowing (2018).
+  Volumes small on screen draw as convex-hull shells whose coverage follows the view angle.
 - Coarse bricks for far sections, downsampled from theirs: a coarse voxel is solid when at least half
   its voxels are, and otherwise holds their average extinction, which keeps the light a ray loses
   crossing it. Each level starts where its voxels project under the LOD's pixel threshold, with a
