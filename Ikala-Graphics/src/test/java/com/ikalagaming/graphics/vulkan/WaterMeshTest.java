@@ -15,8 +15,11 @@ import java.util.List;
 /** The water's surfaces, their calm near edges, and their sides. */
 class WaterMeshTest {
 
-    /** Vertices a cell's surface or one side takes. */
+    /** Indices a cell's surface or one side takes. */
     private static final int QUAD = 6;
+
+    /** Vertices one side takes. */
+    private static final int SIDE = 4;
 
     /** Still water. */
     private static final WaterBody STILL = new WaterBody(0, 0, 0);
@@ -71,9 +74,10 @@ class WaterMeshTest {
     void testLonePool() {
         final WaterTile pool = WaterTile.flat(new Vector3d(), 1, 5, 5, 0.875f, STILL);
         final WaterMesh.Mesh mesh = WaterMesh.build(List.of(pool));
-        assertEquals((25 + 4 * 5) * QUAD, mesh.count());
-        assertEquals(5 * QUAD, sides(mesh, -1, 0));
-        assertEquals(5 * QUAD, sides(mesh, 0, 1));
+        assertEquals((25 + 4 * 5) * QUAD, mesh.indexCount());
+        assertEquals(6 * 6 + 4 * 5 * SIDE, mesh.count(), "corners are shared");
+        assertEquals(5 * SIDE, sides(mesh, -1, 0));
+        assertEquals(5 * SIDE, sides(mesh, 0, 1));
         assertEquals(0, calmAt(mesh, 0, 0, 0));
         assertEquals(0.5f, calmAt(mesh, 0, 1, 1));
         assertEquals(1, calmAt(mesh, 0, 2, 2));
@@ -95,12 +99,12 @@ class WaterMeshTest {
         final WaterTile west = WaterTile.flat(new Vector3d(0, 0, 0), 1, 4, 4, 0.875f, STILL);
         final WaterTile east = WaterTile.flat(new Vector3d(4, 0, 0), 1, 4, 4, 0.875f, STILL);
         final WaterMesh.Mesh level = WaterMesh.build(List.of(west, east));
-        assertEquals(0, sides(level, 1, 0) - 4 * QUAD, "only the east tile's far edge");
+        assertEquals(0, sides(level, 1, 0) - 4 * SIDE, "only the east tile's far edge");
         assertEquals(1, calmAt(level, 0, 4, 2), "the seam is open water");
 
         final WaterTile lower = WaterTile.flat(new Vector3d(4, -1, 0), 1, 4, 4, 0.875f, STILL);
         final WaterMesh.Mesh step = WaterMesh.build(List.of(west, lower));
-        assertEquals(8 * QUAD, sides(step, 1, 0), "the step, and the far edge");
+        assertEquals(8 * SIDE, sides(step, 1, 0), "the step, and the far edge");
         assertEquals(0, calmAt(step, 0, 4, 2));
         assertEquals(0, calmAt(step, 1, 0, 2));
         // The step goes down to the lower water's surface
@@ -133,6 +137,6 @@ class WaterMeshTest {
         assertEquals(0, calmAt(mesh, 0, 1, 1), "next to the masked cell");
         assertTrue(sides(mesh, -1, 0) > 0);
         // The masked corner cell takes two outer sides and leaves two facing it
-        assertEquals((24 + 4 * 5 - 2 + 2) * QUAD, mesh.count());
+        assertEquals((24 + 4 * 5 - 2 + 2) * QUAD, mesh.indexCount());
     }
 }

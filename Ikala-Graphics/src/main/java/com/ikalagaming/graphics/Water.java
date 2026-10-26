@@ -6,6 +6,8 @@ import com.ikalagaming.graphics.scene.WaterTile;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Vector3d;
+import org.joml.Vector3dc;
 
 import javax.annotation.Nullable;
 
@@ -85,6 +87,24 @@ public final class Water {
         final WaterRegistry registry = registryOrNull();
         if (registry != null && !registry.remove(owner(), handle)) {
             ignored(registry, handle, "remove");
+        }
+    }
+
+    /**
+     * Set the water rippling, as a stone dropped in or a swimmer does: ripples leave the disturbed
+     * patch as a ring, reflect off the shores and die away. Only water near the camera ripples.
+     * Something moving through water can call this every frame along its way.
+     *
+     * @param position Where, in the world.
+     * @param radius How far around it, in meters.
+     * @param strength How high the ripples start, in meters: a few centimeters for a footstep, tens
+     *     for a boulder falling in.
+     */
+    public void disturb(@NonNull Vector3dc position, float radius, float strength) {
+        final WaterRegistry registry = registryOrNull();
+        if (registry != null && radius > 0 && strength > 0) {
+            registry.disturb(
+                    new WaterRegistry.Disturbance(new Vector3d(position), radius, strength));
         }
     }
 

@@ -297,7 +297,15 @@ What the renderer does and the work it builds on.
   Water Surface Wavelets (Jeschke et al. 2018). Vertices rise and fall with the waves of 4 m and
   longer; normals come from the profile layer whose shortest waves a pixel can still show, and the
   slopes of the waves left out become roughness (Bruneton, Neyret and Holzschuch 2010), so far water
-  doesn't shimmer. Shallow water calms them. `WaveMath` has the math in Java, with tests.
+  doesn't shimmer. `WaveMath` has the math in Java, with tests.
+- A wave amplitude grid around the camera (128 m at 1 m, 16 directions) carries how strong the
+  wind's waves are going each way, blocked and reflected by shores and built back by the wind
+  behind them, and the ripples disturbances start (`graphics.water().disturb(position, radius,
+  strength)`), which leave as rings, reflect and die away, after Water Surface Wavelets.
+  `WaveletMath` has the math in Java, with tests.
+- Waves calm in shallow water and over the last two cells before land or a step to another level,
+  and the surface has sides where the water ends: down to the bottom, or to lower water, so banks,
+  steps and the tops of waterfalls close up (`WaterMesh`, with tests).
 
 **Planned**: waves that travel, reflect and follow depth and flow, and underwater views (see the
 design doc); stochastic lightcuts for
@@ -369,6 +377,7 @@ These are Java system properties, given before `-jar`:
 | `-Dikala.benchmark.weather=<rain or snow>` | not set | Makes it rain or snow around the camera, stopped by roofs and the ground. |
 | `-Dikala.benchmark.waterBody=<ocean, green or muddy>` | `ocean` | What the `ISLAND` recipe's sea holds: clear ocean, a green lake's phytoplankton, or a muddy river's sediment, each with its own wind. |
 | `-Dikala.benchmark.wind=<m/s>[,<degrees>[,<fetch>]]` | the body's | The `ISLAND` recipe's sea's wind: its speed 10 m up, the way it blows in degrees from +x toward +z, and how far it has blown over the water in meters (the open sea if not given). 0 for still water. |
+| `-Dikala.benchmark.ripples=<x>,<z>,<radius>,<strength>,<seconds>` | not set | Disturbs the water at x, z every so many seconds, its ripples starting that high in meters over that radius, to watch them spread and reflect off shores. |
 | `-Dikala.benchmark.water=<x>,<y>,<z>` | not set | Places test water tiles with a corner there, on the ground at y: a 3 by 3 grid of 6 m tiles 12 m apart (between the `HUTS` recipe's huts at 9,1,9), clear ocean, green and muddy water along z, 0.5, 2 and 6 m deep along x. |
 | `-Dikala.vulkan.validation=false` | `true` | Not a benchmark option: runs without the Vulkan validation layers. Their checks can cost milliseconds of CPU a frame, so time the CPU without them, and keep them for correctness runs. |
 

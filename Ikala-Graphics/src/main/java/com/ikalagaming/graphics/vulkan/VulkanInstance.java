@@ -1346,6 +1346,15 @@ public class VulkanInstance {
                                         ShaderVulkan.Location.BUNDLED)),
                         state));
         shaderMap.addShader(
+                RenderStage.Type.WATER_WAVELETS,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/water_wavelets.comp",
+                                        ShaderVulkan.Type.COMPUTE,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
                 RenderStage.Type.WATER_WAVES,
                 new ShaderVulkan(
                         List.of(

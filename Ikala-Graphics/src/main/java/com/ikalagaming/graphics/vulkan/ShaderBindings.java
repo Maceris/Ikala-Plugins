@@ -466,12 +466,13 @@ public class ShaderBindings {
         public static final int PUSH_CONSTANT_PROFILES_OFFSET =
                 PUSH_CONSTANT_CLIMATES_OFFSET + Long.BYTES;
 
-        /** The size of the vertex shader's push constants: the three addresses. */
-        public static final int PUSH_CONSTANTS_VERTEX_SIZE =
+        /** The wave amplitude grid's address. */
+        public static final int PUSH_CONSTANT_GRID_OFFSET =
                 PUSH_CONSTANT_PROFILES_OFFSET + Long.BYTES;
 
         /** The size of the area drawn, in pixels, two floats. */
-        public static final int PUSH_CONSTANT_SCREEN_SIZE_OFFSET = PUSH_CONSTANTS_VERTEX_SIZE;
+        public static final int PUSH_CONSTANT_SCREEN_SIZE_OFFSET =
+                PUSH_CONSTANT_GRID_OFFSET + Long.BYTES;
 
         /** The bindless index of the scene's color behind the water. */
         public static final int PUSH_CONSTANT_BEHIND_COLOR_OFFSET =
@@ -489,9 +490,55 @@ public class ShaderBindings {
         public static final int PUSH_CONSTANT_PIXEL_ANGLE_OFFSET =
                 PUSH_CONSTANT_ROUGHNESS_OFFSET + Float.BYTES;
 
-        /** The size of the push constants. */
-        public static final int PUSH_CONSTANTS_SIZE =
+        /** The grid's corner relative to the camera, in meters, two floats. */
+        public static final int PUSH_CONSTANT_GRID_CORNER_OFFSET =
                 PUSH_CONSTANT_PIXEL_ANGLE_OFFSET + Float.BYTES;
+
+        /** The grid's corner in world cells, two ints. */
+        public static final int PUSH_CONSTANT_GRID_CELL_OFFSET =
+                PUSH_CONSTANT_GRID_CORNER_OFFSET + 2 * Float.BYTES;
+
+        /** The ripples' climate. */
+        public static final int PUSH_CONSTANT_RIPPLE_CLIMATE_OFFSET =
+                PUSH_CONSTANT_GRID_CELL_OFFSET + 2 * Integer.BYTES;
+
+        /** Nonzero if the grid was stepped this frame. */
+        public static final int PUSH_CONSTANT_GRID_ON_OFFSET =
+                PUSH_CONSTANT_RIPPLE_CLIMATE_OFFSET + Integer.BYTES;
+
+        /** The size of the push constants, which the vertex and fragment shaders share. */
+        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_GRID_ON_OFFSET + Integer.BYTES;
+
+        /** The grid's step: the last grid's address, then the next's, the mask's, disturbances'. */
+        public static final int WAVELETS_LAST_OFFSET = 0;
+
+        public static final int WAVELETS_NEXT_OFFSET = Long.BYTES;
+
+        public static final int WAVELETS_MASK_OFFSET = 2 * Long.BYTES;
+
+        public static final int WAVELETS_DISTURBANCES_OFFSET = 3 * Long.BYTES;
+
+        /** The grid's corner now and at the last step, in world cells, two ints each. */
+        public static final int WAVELETS_CORNER_OFFSET = 4 * Long.BYTES;
+
+        public static final int WAVELETS_LAST_CORNER_OFFSET =
+                WAVELETS_CORNER_OFFSET + 2 * Integer.BYTES;
+
+        /** How long the step is, in seconds. */
+        public static final int WAVELETS_SECONDS_OFFSET =
+                WAVELETS_LAST_CORNER_OFFSET + 2 * Integer.BYTES;
+
+        /** How many disturbances there are. */
+        public static final int WAVELETS_DISTURBANCE_COUNT_OFFSET =
+                WAVELETS_SECONDS_OFFSET + Float.BYTES;
+
+        /** Nonzero if the last grid can be stepped from. */
+        public static final int WAVELETS_LAST_VALID_OFFSET =
+                WAVELETS_DISTURBANCE_COUNT_OFFSET + Integer.BYTES;
+
+        /** The size of the step's push constants. */
+        public static final int WAVELETS_CONSTANTS_SIZE =
+                WAVELETS_LAST_VALID_OFFSET + Integer.BYTES;
 
         /** Where in a wave climate each direction's amplitude is, 16 floats. */
         public static final int CLIMATE_AMPLITUDES = 0;

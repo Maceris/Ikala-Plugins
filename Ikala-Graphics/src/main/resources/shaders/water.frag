@@ -16,21 +16,8 @@
 #define FOG_SET 4
 #include "fog.glsl"
 #include "water.glsl"
+#include "water_constants.glsl"
 
-layout(push_constant) uniform Constants {
-    WaterTileList tileList;
-    WaveClimateList climateList;
-    WaveProfileList profileList;
-    // The drawn area, in pixels
-    vec2 screenSize;
-    // The scene's color and depth behind the water, bindless
-    int behindColorIndex;
-    int behindDepthIndex;
-    // A calm surface's roughness, for the sun's highlight and the sky's reflection
-    float roughness;
-    // How wide a pixel is seen from the camera, in radians
-    float pixelAngle;
-};
 
 layout(location = 0) in vec3 outRenderPosition;
 layout(location = 1) in vec4 outViewPosition;
@@ -39,6 +26,8 @@ layout(location = 2) flat in uint outTile;
 layout(location = 3) in float outCalm;
 // A side's outward normal along x and z, zero on the surface
 layout(location = 4) in vec2 outSideNormal;
+// Each direction's amplitudes here, from the vertices
+layout(location = 5) in vec4 outAmplitudes[WAVE_AMPLITUDE_VECTORS];
 
 layout(location = 0) out vec4 outColor;
 
@@ -79,19 +68,28 @@ void main() {
     // The waves: their slope from the layer whose shortest waves this pixel can still show, and
     // the slopes of those it can't as roughness
     int climate = int(tile.offset.w);
-    if (climate >= 0 && outCalm > 0.0 && !side) {
+    if ((climate >= 0 || gridOn != 0) && outCalm > 0.0 && !side) {
+        WaveField field;
+        field.climates = climateList;
+        field.profiles = profileList;
+        field.grid = gridList;
+        field.climate = climate;
+        field.ripples = rippleClimate;
+        field.gridOn = gridOn != 0;
         float footprint = length(outRenderPosition) * pixelAngle
             / max(dot(up, toEye), MIN_FOOTPRINT_COSINE);
         float layer = waveLayer(footprint);
         int lower = int(floor(layer));
         int upper = min(lower + 1, WAVE_LAYERS - 1);
         float blend = layer - float(lower);
-        vec2 slope = mix(
-            waveSlope(climateList, profileList, climate, lower, outRenderPosition.xz),
-            waveSlope(climateList, profileList, climate, upper, outRenderPosition.xz), blend)
-            * outCalm;
-        vec4 missing = climateList.climates[climate].missingVariance;
-        float variance = mix(missing[lower], missing[upper], blend) * outCalm * outCalm;
+        vec2 amplitudes[WAVE_DIRECTIONS];
+        for (int i = 0; i < WAVE_AMPLITUDE_VECTORS; ++i) {
+            amplitudes[2 * i] = outAmplitudes[i].xy;
+            amplitudes[2 * i + 1] = outAmplitudes[i].zw;
+        }
+        vec3 slope = mix(waveSlope(field, amplitudes, lower, outRenderPosition.xz),
+            waveSlope(field, amplitudes, upper, outRenderPosition.xz), blend) * outCalm;
+        float variance = slope.z * outCalm;
         normal = normalize(vec3(-slope.x, 1.0, -slope.y));
         alpha = sqrt(alpha * alpha + variance);
     }

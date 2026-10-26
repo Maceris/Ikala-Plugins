@@ -6,8 +6,10 @@ import lombok.NonNull;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Builds the water's surfaces from its tiles, see {@code WaterRender}: two triangles for each cell
@@ -19,9 +21,10 @@ import java.util.Map;
  * surface where it stands lower, which makes banks, steps between levels and the tops of
  * waterfalls. Neighbors are found across tiles that share a cell size.
  *
- * <p>Each vertex is {@link #VERTEX_FLOATS} floats: its place relative to its tile's corner, its
- * tile's index as an int's bits, its calm factor, and for sides the face's outward normal along x
- * and z, zero on the surface.
+ * <p>Surface corners are shared by the cells around them, and drawn through indices, so the waves
+ * are worked out once a corner. Each vertex is {@link #VERTEX_FLOATS} floats: its place relative to
+ * its tile's corner, its tile's index as an int's bits, its calm factor, and for sides the face's
+ * outward normal along x and z, zero on the surface.
  */
 public final class WaterMesh {
 
@@ -52,6 +55,9 @@ public final class WaterMesh {
     /** Vertices a quad is drawn with: two triangles. */
     private static final int QUAD_VERTICES = 6;
 
+    /** A side's four corners in its two triangles. */
+    private static final int[] SIDE_TRIANGLES = {0, 1, 2, 0, 2, 3};
+
     /** A cell's corners in a quad's two triangles, along x and z. */
     private static final int[][] QUAD = {{0, 0}, {1, 0}, {1, 1}, {0, 0}, {1, 1}, {0, 1}};
 
@@ -71,8 +77,10 @@ public final class WaterMesh {
      *
      * @param vertices The vertices, {@link #VERTEX_FLOATS} floats each.
      * @param count How many vertices.
+     * @param indices The triangles' corners, three a triangle, indices into the vertices.
+     * @param indexCount How many indices.
      */
-    public record Mesh(float[] vertices, int count) {}
+    public record Mesh(float[] vertices, int count, int[] indices, int indexCount) {}
 
     /**
      * A cell of a tile, found by its place in the world.
@@ -95,6 +103,15 @@ public final class WaterMesh {
     /** How many vertices so far. */
     private int count;
 
+    /** The indices so far. */
+    private int[] indices = new int[QUAD_VERTICES];
+
+    /** How many indices so far. */
+    private int indexCount;
+
+    /** Each surface corner's vertex in the tile being added, -1 before it is made. */
+    private int[] cornerVertices = new int[0];
+
     /**
      * Start building.
      *
@@ -116,7 +133,7 @@ public final class WaterMesh {
         for (int index = 0; index < tiles.size(); ++index) {
             mesh.addTile(index);
         }
-        return new Mesh(mesh.vertices, mesh.count);
+        return new Mesh(mesh.vertices, mesh.count, mesh.indices, mesh.indexCount);
     }
 
     /** Index every water cell by its place in the world. */
@@ -144,6 +161,9 @@ public final class WaterMesh {
      */
     private void addTile(int index) {
         final WaterTile tile = tiles.get(index);
+        final int stride = tile.cellsX() + 1;
+        cornerVertices = new int[stride * (tile.cellsZ() + 1)];
+        Arrays.fill(cornerVertices, -1);
         for (int z = 0; z < tile.cellsZ(); ++z) {
             for (int x = 0; x < tile.cellsX(); ++x) {
                 if (!tile.isWater(x, z)) {
@@ -152,15 +172,20 @@ public final class WaterMesh {
                 for (int[] corner : QUAD) {
                     final int cx = x + corner[0];
                     final int cz = z + corner[1];
-                    add(
-                            index,
-                            tile,
-                            cx * tile.cellSize(),
-                            tile.heightAt(cx, cz),
-                            cz * tile.cellSize(),
-                            calm(tile, cx, cz),
-                            0,
-                            0);
+                    int vertex = cornerVertices[cz * stride + cx];
+                    if (vertex < 0) {
+                        vertex =
+                                add(
+                                        index,
+                                        cx * tile.cellSize(),
+                                        tile.heightAt(cx, cz),
+                                        cz * tile.cellSize(),
+                                        calm(tile, cx, cz),
+                                        0,
+                                        0);
+                        cornerVertices[cz * stride + cx] = vertex;
+                    }
+                    addIndex(vertex);
                 }
                 for (int[] edge : EDGES) {
                     addSide(index, tile, x, z, edge);
@@ -207,12 +232,13 @@ public final class WaterMesh {
             return;
         }
         final float size = tile.cellSize();
-        final float[][] quad = {
-            {ax, topA, az}, {bx, topB, bz}, {bx, lowB, bz},
-            {ax, topA, az}, {bx, lowB, bz}, {ax, lowA, az}
-        };
-        for (float[] corner : quad) {
-            add(index, tile, corner[0] * size, corner[1], corner[2] * size, 0, edge[0], edge[1]);
+        final float[][] corners = {{ax, topA, az}, {bx, topB, bz}, {bx, lowB, bz}, {ax, lowA, az}};
+        final int first = count;
+        for (float[] corner : corners) {
+            add(index, corner[0] * size, corner[1], corner[2] * size, 0, edge[0], edge[1]);
+        }
+        for (int corner : SIDE_TRIANGLES) {
+            addIndex(first + corner);
         }
     }
 
@@ -309,6 +335,46 @@ public final class WaterMesh {
     }
 
     /**
+     * The world's one meter cells that water covers, as {@link #worldKey} has them, for the wave
+     * grid's mask.
+     *
+     * @param tiles The tiles.
+     * @return The cells' keys.
+     */
+    public static Set<Long> waterCells(@NonNull List<WaterTile> tiles) {
+        final Set<Long> covered = new HashSet<>();
+        for (WaterTile tile : tiles) {
+            final double size = tile.cellSize();
+            for (int z = 0; z < tile.cellsZ(); ++z) {
+                for (int x = 0; x < tile.cellsX(); ++x) {
+                    if (!tile.isWater(x, z)) {
+                        continue;
+                    }
+                    final double minX = tile.origin().x() + x * size;
+                    final double minZ = tile.origin().z() + z * size;
+                    for (long cz = (long) Math.floor(minZ); cz < Math.ceil(minZ + size); ++cz) {
+                        for (long cx = (long) Math.floor(minX); cx < Math.ceil(minX + size); ++cx) {
+                            covered.add(worldKey(cx, cz));
+                        }
+                    }
+                }
+            }
+        }
+        return covered;
+    }
+
+    /**
+     * The key of a world cell.
+     *
+     * @param x The cell along x.
+     * @param z Along z.
+     * @return Its key.
+     */
+    public static long worldKey(long x, long z) {
+        return key(x, z);
+    }
+
+    /**
      * Pack two world cell indices into a key.
      *
      * @param x The index along x.
@@ -323,23 +389,16 @@ public final class WaterMesh {
      * Add a vertex.
      *
      * @param index Its tile's index.
-     * @param tile Its tile.
      * @param x Its x relative to the tile's corner.
      * @param y Its height above the tile's corner.
      * @param z Its z.
      * @param calm Its calm factor.
      * @param normalX Its side's outward normal along x.
      * @param normalZ Along z.
+     * @return Its index.
      */
-    private void add(
-            int index,
-            WaterTile tile,
-            float x,
-            float y,
-            float z,
-            float calm,
-            float normalX,
-            float normalZ) {
+    private int add(
+            int index, float x, float y, float z, float calm, float normalX, float normalZ) {
         if ((count + 1) * VERTEX_FLOATS > vertices.length) {
             vertices = Arrays.copyOf(vertices, vertices.length * 2);
         }
@@ -351,6 +410,18 @@ public final class WaterMesh {
         vertices[at + CALM_FLOAT] = calm;
         vertices[at + NORMAL_FLOAT] = normalX;
         vertices[at + NORMAL_FLOAT + 1] = normalZ;
-        ++count;
+        return count++;
+    }
+
+    /**
+     * Add an index.
+     *
+     * @param vertex The vertex it points to.
+     */
+    private void addIndex(int vertex) {
+        if (indexCount == indices.length) {
+            indices = Arrays.copyOf(indices, indices.length * 2);
+        }
+        indices[indexCount++] = vertex;
     }
 }

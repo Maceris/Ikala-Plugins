@@ -661,6 +661,18 @@ public final class GateBenchmark {
     /** Where the test weather's box is centered, from the camera, in meters: a little above it. */
     private static final Vector3d WEATHER_OFFSET = new Vector3d(0, 2, 0);
 
+    /**
+     * The test ripples from the {@code .ripples} option: x, z, radius, strength and how many
+     * seconds apart; null until read, empty for none.
+     */
+    private double[] testRipples;
+
+    /** When the test water was last disturbed, from {@link System#nanoTime()}. */
+    private long lastRippleNanos;
+
+    /** Values in the {@code .ripples} option. */
+    private static final int RIPPLE_VALUES = 5;
+
     /** The scene options a preset set, which come before the startup properties. */
     private final Map<String, String> options = new HashMap<>();
 
@@ -1412,6 +1424,7 @@ public final class GateBenchmark {
      * @param scene The scene.
      */
     private void step(@NonNull Scene scene) {
+        rippleTestWater();
         switch (phase) {
             case BAKING -> {
                 if (composedAt == 0) {
@@ -1643,6 +1656,43 @@ public final class GateBenchmark {
                 }
             }
         }
+    }
+
+    /**
+     * Disturb the water every so often at one place, from the {@code .ripples=x,z,radius,strength,
+     * seconds} option, to watch ripples spread and reflect, while the world is up.
+     */
+    private void rippleTestWater() {
+        if (testRipples == null) {
+            final String value = option("ripples");
+            testRipples = new double[0];
+            if (value != null) {
+                final String[] parts = value.split(",");
+                if (parts.length != RIPPLE_VALUES) {
+                    log.warn(
+                            "The benchmark's ripples must be x,z,radius,strength,seconds, not {}",
+                            value);
+                } else {
+                    testRipples =
+                            Arrays.stream(parts)
+                                    .mapToDouble(p -> Double.parseDouble(p.trim()))
+                                    .toArray();
+                }
+            }
+        }
+        if (testRipples.length == 0 || released || graphics.isClosed()) {
+            return;
+        }
+        final long now = System.nanoTime();
+        if ((now - lastRippleNanos) / NANOS_PER_SECOND < testRipples[RIPPLE_VALUES - 1]) {
+            return;
+        }
+        lastRippleNanos = now;
+        graphics.water()
+                .disturb(
+                        new Vector3d(testRipples[0], SyntheticTerrain.SEA_LEVEL, testRipples[1]),
+                        (float) testRipples[2],
+                        (float) testRipples[3]);
     }
 
     /**

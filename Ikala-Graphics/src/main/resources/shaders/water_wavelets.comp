@@ -1,0 +1,142 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_buffer_reference : require
+
+// Steps the wave amplitude grid around the camera, see WaveletMath and WaterRender: one thread per
+// cell, for each band and direction: the amplitude upstream along the direction, at the band's
+// speed, read from the last step's grid (past it, open water: a wind factor of 1 and no ripples);
+// where the way upstream reaches land, the amplitude of the direction the shore reflects into this
+// one, here; then a little spread into the neighboring directions; the wind building its waves back
+// toward 1 and ripples dying away; and the disturbances' ripples, leaving each as a ring. Land
+// holds no waves. Cells are kept by world cell, wrapping around the grid, so the grid scrolls with
+// the camera without moving anything.
+
+#include "water.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+// Whether each cell holds water, 1 or 0, by world cell wrapping around the grid
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer WaveMaskList {
+    float water[];
+};
+
+// This frame's disturbances: x and z relative to the grid's corner in cells, radius in cells, and
+// strength, the ripples' height in meters
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer WaveDisturbanceList {
+    vec4 disturbances[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 4) writeonly buffer WaveGridOut {
+    float values[];
+};
+
+layout(push_constant) uniform Constants {
+    WaveGridList last;
+    WaveGridOut next;
+    WaveMaskList mask;
+    WaveDisturbanceList disturbanceList;
+    // The grid's corner now and at the last step, in world cells
+    ivec2 corner;
+    ivec2 lastCorner;
+    // How long the step is, in seconds
+    float seconds;
+    // How many disturbances there are, and nonzero if the last step's grid can be read
+    int disturbanceCount;
+    int lastValid;
+};
+
+// The wind band's amplitude past the grid or before it was stepped, and the ripples'
+const float OPEN_WIND = 1.0;
+
+// Whether a world cell holds water, as far as the grid knows; land past it
+float waterAt(ivec2 cell) {
+    ivec2 local = cell - corner;
+    if (any(lessThan(local, ivec2(0))) || any(greaterThanEqual(local, ivec2(WAVE_GRID_SIZE)))) {
+        return 1.0;
+    }
+    return mask.water[waveGridSlot(cell)];
+}
+
+// The last step's amplitude at a point in world cells, between the four nearest cells' middles;
+// open water's past the last grid
+float lastAt(vec2 point, int band, int direction) {
+    vec2 local = point - vec2(lastCorner) - 0.5;
+    if (lastValid == 0 || any(lessThan(local, vec2(0.0)))
+            || any(greaterThan(local, vec2(float(WAVE_GRID_SIZE - 1))))) {
+        return band == WAVE_WIND_BAND ? OPEN_WIND : 0.0;
+    }
+    ivec2 base = ivec2(floor(local)) + lastCorner;
+    vec2 f = fract(local);
+    int channel = band * WAVE_DIRECTIONS + direction;
+    float v00 = last.values[waveGridSlot(base) * WAVE_CELL_VALUES + channel];
+    float v10 = last.values[waveGridSlot(base + ivec2(1, 0)) * WAVE_CELL_VALUES + channel];
+    float v01 = last.values[waveGridSlot(base + ivec2(0, 1)) * WAVE_CELL_VALUES + channel];
+    float v11 = last.values[waveGridSlot(base + ivec2(1, 1)) * WAVE_CELL_VALUES + channel];
+    return mix(mix(v00, v10, f.x), mix(v01, v11, f.x), f.y);
+}
+
+// The direction a shore of some outward normal reflects into a direction, see
+// WaveletMath.reflectedFrom
+int reflectedFrom(int direction, vec2 normal) {
+    vec2 d = waveDirection(direction);
+    vec2 mirrored = d - 2.0 * dot(d, normal) * normal;
+    int nearest = int(round(atan(mirrored.y, mirrored.x) / 6.28318530718 * float(WAVE_DIRECTIONS)));
+    return ((nearest % WAVE_DIRECTIONS) + WAVE_DIRECTIONS) % WAVE_DIRECTIONS;
+}
+
+void main() {
+    ivec2 local = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(local, ivec2(WAVE_GRID_SIZE)))) {
+        return;
+    }
+    ivec2 cell = corner + local;
+    int slot = waveGridSlot(cell);
+    if (waterAt(cell) <= 0.0) {
+        for (int i = 0; i < WAVE_CELL_VALUES; ++i) {
+            next.values[slot * WAVE_CELL_VALUES + i] = 0.0;
+        }
+        return;
+    }
+    vec2 middle = vec2(cell) + 0.5;
+    // The way out of the land nearby, toward the water
+    vec2 shore = vec2(waterAt(cell + ivec2(1, 0)) - waterAt(cell - ivec2(1, 0)),
+        waterAt(cell + ivec2(0, 1)) - waterAt(cell - ivec2(0, 1)));
+    float diffusion = WAVE_ANGULAR_DIFFUSION * seconds;
+    for (int band = 0; band < WAVE_BANDS; ++band) {
+        float speed = (band == WAVE_WIND_BAND ? WAVE_WIND_SPEED : WAVE_RIPPLE_SPEED)
+            / WAVE_CELL_SIZE * seconds;
+        float moved[WAVE_DIRECTIONS];
+        for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
+            vec2 upstream = middle - speed * waveDirection(b);
+            if (waterAt(ivec2(floor(upstream))) <= 0.0) {
+                vec2 normal = dot(shore, shore) > 0.0 ? normalize(shore) : -waveDirection(b);
+                moved[b] = WAVE_REFLECTION * lastAt(middle, band, reflectedFrom(b, normal));
+            } else {
+                moved[b] = lastAt(upstream, band, b);
+            }
+        }
+        for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
+            float before = moved[(b + WAVE_DIRECTIONS - 1) % WAVE_DIRECTIONS];
+            float after = moved[(b + 1) % WAVE_DIRECTIONS];
+            float value = (1.0 - 2.0 * diffusion) * moved[b] + diffusion * (before + after);
+            if (band == WAVE_WIND_BAND) {
+                value += (OPEN_WIND - value) * (1.0 - exp(-seconds / WAVE_WIND_RECOVERY));
+            } else {
+                value *= exp(-seconds / WAVE_RIPPLE_LIFETIME);
+                for (int d = 0; d < disturbanceCount; ++d) {
+                    vec4 disturbance = disturbanceList.disturbances[d];
+                    vec2 offset = vec2(local) + 0.5 - disturbance.xy;
+                    float distance = length(offset);
+                    if (distance >= disturbance.z) {
+                        continue;
+                    }
+                    float fade = 1.0 - distance / disturbance.z;
+                    float outward = distance > 0.0
+                        ? max(0.0, dot(waveDirection(b), offset / distance)) : 1.0;
+                    value += disturbance.w * fade * outward;
+                }
+            }
+            next.values[slot * WAVE_CELL_VALUES + band * WAVE_DIRECTIONS + b] = value;
+        }
+    }
+}

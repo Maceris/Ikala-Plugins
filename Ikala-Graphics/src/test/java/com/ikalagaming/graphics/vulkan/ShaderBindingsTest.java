@@ -234,17 +234,30 @@ class ShaderBindingsTest {
         // 6 addresses; uint next;
         assertEquals(48, ShaderBindings.Particles.SPLASH_NEXT_OFFSET);
         assertEquals(52, ShaderBindings.Particles.SPLASH_CONSTANTS_SIZE);
-        // Water: addresses tileList, climateList, profileList; vec2 screenSize; int
-        // behindColorIndex; int behindDepthIndex; float roughness; float pixelAngle;
+        // Water, water_constants.glsl: addresses tileList, climateList, profileList, gridList;
+        // vec2 screenSize; int behindColorIndex; int behindDepthIndex; float roughness; float
+        // pixelAngle; vec2 gridCorner; ivec2 gridCornerCell; int rippleClimate; int gridOn;
         assertEquals(8, ShaderBindings.Water.PUSH_CONSTANT_CLIMATES_OFFSET);
         assertEquals(16, ShaderBindings.Water.PUSH_CONSTANT_PROFILES_OFFSET);
-        assertEquals(24, ShaderBindings.Water.PUSH_CONSTANTS_VERTEX_SIZE);
-        assertEquals(24, ShaderBindings.Water.PUSH_CONSTANT_SCREEN_SIZE_OFFSET);
-        assertEquals(32, ShaderBindings.Water.PUSH_CONSTANT_BEHIND_COLOR_OFFSET);
-        assertEquals(36, ShaderBindings.Water.PUSH_CONSTANT_BEHIND_DEPTH_OFFSET);
-        assertEquals(40, ShaderBindings.Water.PUSH_CONSTANT_ROUGHNESS_OFFSET);
-        assertEquals(44, ShaderBindings.Water.PUSH_CONSTANT_PIXEL_ANGLE_OFFSET);
-        assertEquals(48, ShaderBindings.Water.PUSH_CONSTANTS_SIZE);
+        assertEquals(24, ShaderBindings.Water.PUSH_CONSTANT_GRID_OFFSET);
+        assertEquals(32, ShaderBindings.Water.PUSH_CONSTANT_SCREEN_SIZE_OFFSET);
+        assertEquals(40, ShaderBindings.Water.PUSH_CONSTANT_BEHIND_COLOR_OFFSET);
+        assertEquals(44, ShaderBindings.Water.PUSH_CONSTANT_BEHIND_DEPTH_OFFSET);
+        assertEquals(48, ShaderBindings.Water.PUSH_CONSTANT_ROUGHNESS_OFFSET);
+        assertEquals(52, ShaderBindings.Water.PUSH_CONSTANT_PIXEL_ANGLE_OFFSET);
+        assertEquals(56, ShaderBindings.Water.PUSH_CONSTANT_GRID_CORNER_OFFSET);
+        assertEquals(64, ShaderBindings.Water.PUSH_CONSTANT_GRID_CELL_OFFSET);
+        assertEquals(72, ShaderBindings.Water.PUSH_CONSTANT_RIPPLE_CLIMATE_OFFSET);
+        assertEquals(76, ShaderBindings.Water.PUSH_CONSTANT_GRID_ON_OFFSET);
+        assertEquals(80, ShaderBindings.Water.PUSH_CONSTANTS_SIZE);
+        // water_wavelets.comp: four addresses; ivec2 corner, lastCorner; float seconds; int
+        // disturbanceCount; int lastValid;
+        assertEquals(32, ShaderBindings.Water.WAVELETS_CORNER_OFFSET);
+        assertEquals(40, ShaderBindings.Water.WAVELETS_LAST_CORNER_OFFSET);
+        assertEquals(48, ShaderBindings.Water.WAVELETS_SECONDS_OFFSET);
+        assertEquals(52, ShaderBindings.Water.WAVELETS_DISTURBANCE_COUNT_OFFSET);
+        assertEquals(56, ShaderBindings.Water.WAVELETS_LAST_VALID_OFFSET);
+        assertEquals(60, ShaderBindings.Water.WAVELETS_CONSTANTS_SIZE);
         // WaveClimate: float amplitudes[16]; float offsets[16]; vec4 missingVariance;
         assertEquals(64, ShaderBindings.Water.CLIMATE_OFFSETS);
         assertEquals(128, ShaderBindings.Water.CLIMATE_MISSING_VARIANCE);

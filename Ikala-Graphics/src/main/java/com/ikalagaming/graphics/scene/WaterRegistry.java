@@ -3,8 +3,11 @@ package com.ikalagaming.graphics.scene;
 import com.ikalagaming.graphics.WaterHandle;
 
 import lombok.NonNull;
+import org.joml.Vector3dc;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.Nullable;
@@ -18,6 +21,21 @@ public class WaterRegistry {
 
     /** The most tiles the scene holds. */
     public static final int MAX_TILES = 4096;
+
+    /** The most disturbances waiting at once; past it the oldest are dropped. */
+    public static final int MAX_WAITING_DISTURBANCES = 1024;
+
+    /**
+     * Something that set water rippling, waiting for the wave grid to take it in.
+     *
+     * @param position Where, in the world.
+     * @param radius How far around it, in meters.
+     * @param strength How high its ripples start, in meters.
+     */
+    public record Disturbance(@NonNull Vector3dc position, float radius, float strength) {}
+
+    /** The disturbances waiting, oldest first. */
+    private final Deque<Disturbance> disturbances = new ArrayDeque<>();
 
     /** Guards everything below. */
     private final ReentrantLock lock = new ReentrantLock();
@@ -187,6 +205,41 @@ public class WaterRegistry {
                 }
             }
             return version;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Set the water rippling somewhere; it shows from the next frame, on water near the camera.
+     *
+     * @param disturbance What disturbed it.
+     */
+    public void disturb(@NonNull Disturbance disturbance) {
+        lock.lock();
+        try {
+            if (disturbances.size() >= MAX_WAITING_DISTURBANCES) {
+                disturbances.removeFirst();
+            }
+            disturbances.addLast(disturbance);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Take the waiting disturbances, up to a count, oldest first.
+     *
+     * @param most The most to take.
+     * @param into Filled with them.
+     */
+    public void takeDisturbances(int most, @NonNull List<Disturbance> into) {
+        into.clear();
+        lock.lock();
+        try {
+            while (into.size() < most && !disturbances.isEmpty()) {
+                into.add(disturbances.removeFirst());
+            }
         } finally {
             lock.unlock();
         }

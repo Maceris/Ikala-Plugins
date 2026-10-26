@@ -6,6 +6,7 @@ import static org.lwjgl.vulkan.VK13.*;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.scene.WaterRegistry;
 import com.ikalagaming.graphics.scene.WaterTile;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.PipelineManagerVulkan;
@@ -18,7 +19,9 @@ import com.ikalagaming.graphics.vulkan.TextureInfoVulkan;
 import com.ikalagaming.graphics.vulkan.VulkanState;
 import com.ikalagaming.graphics.vulkan.WaterMath;
 import com.ikalagaming.graphics.vulkan.WaterMesh;
+import com.ikalagaming.graphics.vulkan.WaveGrid;
 import com.ikalagaming.graphics.vulkan.WaveMath;
+import com.ikalagaming.graphics.vulkan.WaveletMath;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -57,6 +60,9 @@ public class WaterRender implements RenderStage {
     /** Nanoseconds in a second. */
     private static final double NANOS_PER_SECOND = 1e9;
 
+    /** What the ripples' phases and directions' offsets are picked from. */
+    private static final long RIPPLE_SEED = 0x9195_1E5L;
+
     /** What the climates' waves' phases and directions' offsets are picked from. */
     private static final long WAVE_SEED = 0x5EA5_1DE5L;
 
@@ -89,7 +95,21 @@ public class WaterRender implements RenderStage {
          * @return The climate.
          */
         static Climate of(@NonNull Wind wind, long seed) {
-            final WaveMath.Waves waves = WaveMath.sample(wind.speed(), wind.fetch(), seed);
+            return of(
+                    WaveMath.sample(wind.speed(), wind.fetch(), seed),
+                    WaveMath.directionAmplitudes(wind.direction()),
+                    seed);
+        }
+
+        /**
+         * Work a climate out from its waves.
+         *
+         * @param waves The waves.
+         * @param amplitudes Each direction's amplitude.
+         * @param seed What picks its directions' offsets.
+         * @return The climate.
+         */
+        static Climate of(@NonNull WaveMath.Waves waves, double[] amplitudes, long seed) {
             final double[] offsets = new double[WaveMath.DIRECTIONS];
             for (int b = 0; b < offsets.length; ++b) {
                 offsets[b] = WaveMath.PROFILE_LENGTH * WaveMath.unitHash(seed + WaveMath.WAVES, b);
@@ -98,8 +118,7 @@ public class WaterRender implements RenderStage {
             for (int layer = 0; layer < missing.length; ++layer) {
                 missing[layer] = WaveMath.missingSlopeVariance(waves, layer);
             }
-            return new Climate(
-                    waves, WaveMath.directionAmplitudes(wind.direction()), offsets, missing);
+            return new Climate(waves, amplitudes, offsets, missing);
         }
     }
 
@@ -127,8 +146,20 @@ public class WaterRender implements RenderStage {
     /** The winds the tiles' climates come from, by climate. */
     private final List<Wind> winds = new ArrayList<>();
 
-    /** The climates, in step with {@link #winds}. */
+    /**
+     * The climates, in step with {@link #winds}, then the ripples' last, whose amplitudes come from
+     * the wave grid.
+     */
     private final List<Climate> climates = new ArrayList<>();
+
+    /** The ripples disturbances start, as a climate. */
+    private final Climate ripples;
+
+    /** The wave amplitude grid around the camera. */
+    @NonNull private final WaveGrid grid;
+
+    /** This frame's disturbances, a scratch list. */
+    private final List<WaterRegistry.Disturbance> disturbances = new ArrayList<>();
 
     /** Each tile's climate, in step with {@link #tiles}, -1 for still water. */
     private final List<Integer> tileClimates = new ArrayList<>();
@@ -158,8 +189,12 @@ public class WaterRender implements RenderStage {
     /** Which version of the tiles each frame's vertices hold, -1 for none. */
     private final long[] vertexVersions = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
 
-    /** How many vertices each frame's buffer holds. */
-    private final int[] vertexCounts = new int[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+    /** Each frame in flight's surface indices, or null before its first water. */
+    private final SharedBuffer[] indexBuffers =
+            new SharedBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
+    /** How many indices each frame's buffer holds. */
+    private final int[] indexCounts = new int[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
 
     /** Each frame in flight's tile list, or null before its first water. */
     private final SharedBuffer[] tileBuffers =
@@ -179,16 +214,23 @@ public class WaterRender implements RenderStage {
      *
      * @param shader The water shader.
      * @param wavesShader The compute shader that fills the wave profiles.
+     * @param waveletsShader The compute shader that steps the wave amplitude grid.
      * @param sceneRender The scene stage, whose matrices' set the shader reads.
      * @param lightRender The light stage, whose inputs' set the shader reads.
      */
     public WaterRender(
             @NonNull ShaderVulkan shader,
             @NonNull ShaderVulkan wavesShader,
+            @NonNull ShaderVulkan waveletsShader,
             @NonNull SceneRender sceneRender,
             @NonNull LightRender lightRender) {
         this.shader = shader;
         this.wavesShader = wavesShader;
+        grid = new WaveGrid(waveletsShader);
+        final double[] everyWay = new double[WaveMath.DIRECTIONS];
+        Arrays.fill(everyWay, 1);
+        ripples = Climate.of(WaveletMath.ripples(RIPPLE_SEED), everyWay, RIPPLE_SEED);
+        climates.add(ripples);
         this.sceneRender = sceneRender;
         this.lightRender = lightRender;
         Arrays.fill(vertexVersions, -1);
@@ -245,13 +287,19 @@ public class WaterRender implements RenderStage {
                             state.device.logical, VK_NULL_HANDLE, infos, null, longOutput));
             wavesPipeline = longOutput.get(0);
         }
+        grid.initialize(state);
     }
 
     @Override
     public void cleanup(@NonNull VulkanState state) {
         for (SharedBuffer[] buffers :
                 new SharedBuffer[][] {
-                    vertexBuffers, tileBuffers, climateBuffers, sampleBuffers, profileBuffers
+                    vertexBuffers,
+                    indexBuffers,
+                    tileBuffers,
+                    climateBuffers,
+                    sampleBuffers,
+                    profileBuffers
                 }) {
             for (int i = 0; i < buffers.length; ++i) {
                 if (buffers[i] != null) {
@@ -265,6 +313,7 @@ public class WaterRender implements RenderStage {
         pipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(state.device.logical, pipelineLayout, null);
         pipelineLayout = VK_NULL_HANDLE;
+        grid.cleanup(state);
         vkDestroyPipeline(state.device.logical, wavesPipeline, null);
         wavesPipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(state.device.logical, wavesLayout, null);
@@ -299,7 +348,7 @@ public class WaterRender implements RenderStage {
         }
         final int width = Math.min(sceneTarget.width(), state.realSize.width());
         final int height = Math.min(sceneTarget.height(), state.realSize.height());
-        if (vertexCounts[frame] == 0 || width <= 0 || height <= 0) {
+        if (indexCounts[frame] == 0 || width <= 0 || height <= 0) {
             return;
         }
         final long nanos = System.nanoTime();
@@ -316,7 +365,18 @@ public class WaterRender implements RenderStage {
         final PerFrameData frameData = state.perFrameData[frame];
         final TextureInfoVulkan color = frameData.sceneColor;
         final TextureInfoVulkan depth = frameData.gBuffer.depth();
+        scene.getWaterRegistry().takeDisturbances(WaveletMath.MAX_DISTURBANCES, disturbances);
+        final Vector3dc camera = scene.getCamera().getPosition();
         try (MemoryStack stack = MemoryStack.stackPush()) {
+            grid.step(
+                    commandBuffer,
+                    state,
+                    frame,
+                    camera,
+                    version,
+                    () -> WaterMesh.waterCells(tiles),
+                    disturbances,
+                    stack);
             fillProfiles(commandBuffer, frame, stack);
             copyBehind(commandBuffer, frameData, width, height, stack);
 
@@ -369,6 +429,22 @@ public class WaterRender implements RenderStage {
                     ShaderBindings.Water.PUSH_CONSTANT_PROFILES_OFFSET,
                     profileBuffers[frame].deviceAddress);
             constants.putFloat(ShaderBindings.Water.PUSH_CONSTANT_PIXEL_ANGLE_OFFSET, pixelAngle);
+            constants.putLong(
+                    ShaderBindings.Water.PUSH_CONSTANT_GRID_OFFSET, grid.currentAddress());
+            constants.putFloat(
+                    ShaderBindings.Water.PUSH_CONSTANT_GRID_CORNER_OFFSET,
+                    (float) (grid.getCornerX() * WaveletMath.CELL_SIZE - camera.x()));
+            constants.putFloat(
+                    ShaderBindings.Water.PUSH_CONSTANT_GRID_CORNER_OFFSET + Float.BYTES,
+                    (float) (grid.getCornerZ() * WaveletMath.CELL_SIZE - camera.z()));
+            constants.putInt(
+                    ShaderBindings.Water.PUSH_CONSTANT_GRID_CELL_OFFSET, grid.getCornerX());
+            constants.putInt(
+                    ShaderBindings.Water.PUSH_CONSTANT_GRID_CELL_OFFSET + Integer.BYTES,
+                    grid.getCornerZ());
+            constants.putInt(
+                    ShaderBindings.Water.PUSH_CONSTANT_RIPPLE_CLIMATE_OFFSET, climates.size() - 1);
+            constants.putInt(ShaderBindings.Water.PUSH_CONSTANT_GRID_ON_OFFSET, 1);
             constants.putFloat(ShaderBindings.Water.PUSH_CONSTANT_SCREEN_SIZE_OFFSET, width);
             constants.putFloat(
                     ShaderBindings.Water.PUSH_CONSTANT_SCREEN_SIZE_OFFSET + Float.BYTES, height);
@@ -387,7 +463,9 @@ public class WaterRender implements RenderStage {
                     constants);
             vkCmdBindVertexBuffers(
                     commandBuffer, 0, stack.longs(vertexBuffers[frame].buffer), stack.longs(0));
-            vkCmdDraw(commandBuffer, vertexCounts[frame], 1, 0, 0);
+            vkCmdBindIndexBuffer(
+                    commandBuffer, indexBuffers[frame].buffer, 0, VK_INDEX_TYPE_UINT32);
+            vkCmdDrawIndexed(commandBuffer, indexCounts[frame], 1, 0, 0, 0);
             vkCmdEndRendering(commandBuffer);
 
             // Read only again, as the transparency passes and filters expect it
@@ -447,6 +525,7 @@ public class WaterRender implements RenderStage {
             for (int i = 0; i < winds.size(); ++i) {
                 climates.add(Climate.of(winds.get(i), WAVE_SEED + i * (long) WaveMath.WAVES));
             }
+            climates.add(ripples);
         }
     }
 
@@ -717,8 +796,8 @@ public class WaterRender implements RenderStage {
      */
     private void writeVertices(@NonNull VulkanState state, int frame) {
         final WaterMesh.Mesh mesh = WaterMesh.build(tiles);
-        vertexCounts[frame] = mesh.count();
-        if (mesh.count() == 0) {
+        indexCounts[frame] = mesh.indexCount();
+        if (mesh.indexCount() == 0) {
             return;
         }
         final long bytes = (long) mesh.count() * ShaderBindings.Water.VERTEX_SIZE;
@@ -731,6 +810,15 @@ public class WaterRender implements RenderStage {
         MemoryUtil.memFloatBuffer(
                         buffer.allocationInfo.pMappedData(), mesh.count() * WaterMesh.VERTEX_FLOATS)
                 .put(mesh.vertices(), 0, mesh.count() * WaterMesh.VERTEX_FLOATS);
+        final long indexBytes = (long) mesh.indexCount() * Integer.BYTES;
+        SharedBuffer indices = indexBuffers[frame];
+        if (indices == null) {
+            indices = SharedBuffer.allocate(indexBytes, state, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+            indexBuffers[frame] = indices;
+        }
+        indices.ensureCapacity(indexBytes, state);
+        MemoryUtil.memIntBuffer(indices.allocationInfo.pMappedData(), mesh.indexCount())
+                .put(mesh.indices(), 0, mesh.indexCount());
     }
 
     /**
