@@ -1,0 +1,139 @@
+#version 460
+#extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_buffer_reference : require
+
+// Splats volumetric particles into the fog volume's froxels, see FogRender: one workgroup per
+// particle in the drawn list, its threads striding over the froxels its ball reaches. A particle
+// is a soft ball whose density falls off as (1 - (d / r)^2)^2, scaled so that a line through its
+// middle loses as much light as its opacity says (ParticleMath.sphereDensity). Each froxel gathers,
+// in fixed point, the density, scattering by color, the optical depth out to the ball's edge (its
+// shade from the sky), scattering times anisotropy, the optical depth through the ball toward the
+// sun, and its optical depth across through its middle, which fog_inject.comp adds to the fog.
+
+#include "light_inputs.glsl"
+#include "fog.glsl"
+#include "particles.glsl"
+
+layout(local_size_x = 64) in;
+
+// Each froxel's values, PARTICLE_FROXEL_CHANNELS per froxel, x fastest, then y, then slice
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer FroxelValues {
+    uint froxelValues[];
+};
+
+layout(push_constant) uniform Constants {
+    ParticleBuffer pool;
+    // The alive list the billboards draw; volumetric ones are splatted here instead
+    IndexList drawn;
+    Control control;
+    FroxelValues froxels;
+    // The pool's anchor in render space: the anchor minus the camera
+    vec3 anchor;
+    // The slices' log scale
+    float logScale;
+    // How many tiles across and down the fog volume holds
+    uvec2 tiles;
+    // The drawn area, in pixels
+    vec2 screenSize;
+};
+
+// The most froxels across, down and deep one particle reaches, so one up against the camera can't
+// take the frame
+const int MAX_TILES = 64;
+const int MAX_SLICES = 32;
+
+shared int firstTile[2];
+shared int tileCount[2];
+shared int firstSlice;
+shared int sliceCount;
+shared float middleDensity;
+shared float radius;
+shared vec3 middle;
+shared vec3 albedo;
+shared float anisotropyShare;
+shared vec3 toSun;
+
+void main() {
+    uint particleIndex = gl_WorkGroupID.x;
+    if (gl_LocalInvocationIndex == 0) {
+        sliceCount = 0;
+        Particle particle = pool.particles[drawn.indices[particleIndex]];
+        float life = lifeFraction(particle.age, particle.lifetime);
+        vec4 color = mix(unpackParticleColor(particle.colorStart),
+            unpackParticleColor(particle.colorEnd), life);
+        radius = 0.5 * mix(particle.sizeStart, particle.sizeEnd, life);
+        middleDensity = sphereDensity(color.a, radius);
+        // In render space the view only turns, so its inverse is its transpose
+        middle = transpose(mat3(invViewMatrix)) * (particle.position + anchor);
+        float depth = -middle.z;
+        if (behaviorVolumetric(particle.behavior) && middleDensity > 0.0
+                && depth + radius > FIRST_DEPTH) {
+            albedo = clamp(color.rgb, 0.0, 1.0);
+            anisotropyShare = 0.5 * (behaviorAnisotropy(particle.behavior) + 1.0);
+            toSun = normalize(-directionalLight.direction);
+            int slice0 = int(floor(sliceCoordinate(max(depth - radius, FIRST_DEPTH), logScale)));
+            int slice1 = int(floor(sliceCoordinate(depth + radius, logScale)));
+            slice0 = clamp(slice0, 0, int(SLICES) - 1);
+            slice1 = clamp(slice1, 0, int(SLICES) - 1);
+            // Its footprint on the screen, from its middle's place and its radius at its nearest
+            mat4 projection = inverse(invProjectionMatrix);
+            ivec2 tile0 = ivec2(0);
+            ivec2 tile1 = ivec2(tiles) - 1;
+            if (depth - radius > FIRST_DEPTH) {
+                vec4 clip = projection * vec4(middle, 1.0);
+                vec2 ndc = clip.xy / clip.w;
+                vec2 pixel = vec2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5) * screenSize;
+                vec2 reach = radius / (depth - radius)
+                    * vec2(abs(projection[0][0]), abs(projection[1][1])) * 0.5 * screenSize;
+                tile0 = max(ivec2(floor((pixel - reach) / float(FOG_TILE))), ivec2(0));
+                tile1 = min(ivec2(floor((pixel + reach) / float(FOG_TILE))), ivec2(tiles) - 1);
+            }
+            // Kept to the most around its middle's place
+            ivec2 counts = min(tile1 - tile0 + 1, ivec2(MAX_TILES));
+            firstTile[0] = tile0.x;
+            firstTile[1] = tile0.y;
+            tileCount[0] = max(counts.x, 0);
+            tileCount[1] = max(counts.y, 0);
+            firstSlice = slice0;
+            sliceCount = min(slice1 - slice0 + 1, MAX_SLICES);
+        }
+    }
+    barrier();
+    int total = tileCount[0] * tileCount[1] * sliceCount;
+    if (sliceCount <= 0 || total <= 0) {
+        return;
+    }
+    for (int i = int(gl_LocalInvocationIndex); i < total; i += int(gl_WorkGroupSize.x)) {
+        int x = i % tileCount[0];
+        int y = (i / tileCount[0]) % tileCount[1];
+        int s = i / (tileCount[0] * tileCount[1]);
+        uvec3 froxel = uvec3(firstTile[0] + x, firstTile[1] + y, firstSlice + s);
+        // The froxel's middle in view space, as fog_inject.comp places it
+        vec2 screen = min((vec2(froxel.xy) + 0.5) * float(FOG_TILE), screenSize) / screenSize;
+        vec4 far = invProjectionMatrix * vec4(screen.x * 2.0 - 1.0, 1.0 - screen.y * 2.0, 1.0, 1.0);
+        vec3 ray = far.xyz / far.w;
+        vec3 point = ray * (sliceDepth(float(froxel.z) + 0.5, logScale) / -ray.z);
+        float distance = length(point - middle);
+        float weight = sphereProfile(distance, radius);
+        if (weight <= 0.0) {
+            continue;
+        }
+        float density = middleDensity * weight;
+        vec3 scattering = albedo * density;
+        uint base = ((froxel.z * tiles.y + froxel.y) * tiles.x + froxel.x)
+            * PARTICLE_FROXEL_CHANNELS;
+        atomicAdd(froxels.froxelValues[base], uint(density * PARTICLE_FROXEL_SCALE + 0.5));
+        atomicAdd(froxels.froxelValues[base + 1], uint(scattering.r * PARTICLE_FROXEL_SCALE + 0.5));
+        atomicAdd(froxels.froxelValues[base + 2], uint(scattering.g * PARTICLE_FROXEL_SCALE + 0.5));
+        atomicAdd(froxels.froxelValues[base + 3], uint(scattering.b * PARTICLE_FROXEL_SCALE + 0.5));
+        atomicAdd(froxels.froxelValues[base + 4],
+            uint(sphereDepthToEdge(middleDensity, distance, radius) * PARTICLE_FROXEL_SCALE + 0.5));
+        atomicAdd(froxels.froxelValues[base + 5],
+            uint(dot(scattering, vec3(1.0 / 3.0)) * anisotropyShare * PARTICLE_FROXEL_SCALE + 0.5));
+        atomicAdd(froxels.froxelValues[base + 6], uint(sphereDepthAlong(middleDensity,
+            point - middle, toSun, radius) * PARTICLE_FROXEL_SCALE + 0.5));
+        atomicAdd(froxels.froxelValues[base + 7],
+            uint(middleDensity * SPHERE_PROFILE_LENGTH * radius * PARTICLE_FROXEL_SCALE + 0.5));
+    }
+}

@@ -2,6 +2,7 @@
 #extension GL_EXT_nonuniform_qualifier : enable
 #extension GL_GOOGLE_include_directive : require
 #extension GL_EXT_buffer_reference : require
+#extension GL_EXT_buffer_reference_uvec2 : require
 
 // Fills the fog volume's froxels, one thread each: the media at the froxel's middle, its extinction
 // per meter, and the light they scatter toward the camera per meter, from the sun through its
@@ -42,11 +43,23 @@ struct MediumVolume {
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer MediaList {
     uint mediumCount;
-    uint mediumPadding0;
-    uint mediumPadding1;
-    uint mediumPadding2;
+    // Nonzero if volumetric particles were splatted into the froxels this frame, see
+    // particle_froxel.comp, and where their values are
+    uint particleFroxels;
+    uvec2 particleFroxelAddress;
     MediumVolume media[];
 };
+
+// What volumetric particles left in each froxel: density, scattering by color, the optical depth
+// out to their edge, scattering times anisotropy, the optical depth through them toward the sun,
+// and their optical depth across through their middles, in fixed point
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer ParticleFroxels {
+    uint particleValues[];
+};
+
+// Values per froxel and their fixed point scale, ParticleMath.FROXEL_CHANNELS and FROXEL_SCALE
+const uint PARTICLE_CHANNELS = 8;
+const float PARTICLE_SCALE = 65536.0;
 
 // This frame's media and their light, per froxel, blended with the frames before's, see FogVolume
 layout(set = 4, binding = 0, rgba16f) uniform restrict writeonly image3D media;
@@ -181,6 +194,9 @@ void main() {
     // volumes, which stands in for the sky's light from all around
     float towardSun = 0.0;
     float sheltered = 0.0;
+    // How much deeper the way back through the volumes is than the nearest way out: the sky's light
+    // comes from all around, about half of it the near way and half the far
+    float behind = 0.0;
     // The optical thickness of the media around here, across each, for multiple scattering
     float thickness = 0.0;
     // The anisotropies of what scatters here, weighted by how much each scatters
@@ -248,11 +264,37 @@ void main() {
         float across = shape == SHAPE_BOX ? min(size.x, min(size.y, size.z)) : size.x;
         thickness += inside * average * across;
     }
+    // Volumetric particles' smoke, shaded by how deep in their balls this is
+    if (mediaList.particleFroxels != 0u) {
+        ParticleFroxels particles = ParticleFroxels(mediaList.particleFroxelAddress);
+        uint base = ((froxel.z * tiles.y + froxel.y) * tiles.x + froxel.x) * PARTICLE_CHANNELS;
+        float density = float(particles.particleValues[base]) / PARTICLE_SCALE;
+        if (density > 0.0) {
+            vec3 particleScattering = vec3(particles.particleValues[base + 1],
+                particles.particleValues[base + 2], particles.particleValues[base + 3])
+                / PARTICLE_SCALE;
+            float shade = float(particles.particleValues[base + 4]) / PARTICLE_SCALE;
+            float share = float(particles.particleValues[base + 5]) / PARTICLE_SCALE;
+            float sunward = float(particles.particleValues[base + 6]) / PARTICLE_SCALE;
+            float across = float(particles.particleValues[base + 7]) / PARTICLE_SCALE;
+            extinction += density;
+            scattering += particleScattering;
+            // The sky's light comes in from the nearest edge of the balls and from the far side
+            // through their middles, the sun's through them toward it
+            towardSun += sunward;
+            sheltered += shade;
+            behind += max(0.0, across - 2.0 * shade);
+            thickness += across;
+            weightedAnisotropy += 2.0 * share - dot(particleScattering, vec3(1.0 / 3.0));
+        }
+    }
     float scatteringAverage = dot(scattering, vec3(1.0 / 3.0));
     float albedo = extinction > 0.0 ? scatteringAverage / extinction : 0.0;
     float anisotropy = scatteringAverage > 0.0 ? weightedAnisotropy / scatteringAverage : 0.0;
     float fromSun = multipleScattering(towardSun, thickness, cosTheta, anisotropy, albedo);
-    scattered += scattering * (sun * fromSun + ambient * exp(-sheltered)) + emitted;
+    scattered += scattering
+        * (sun * fromSun + ambient * 0.5 * (ambientScattering(sheltered, thickness, albedo)
+            + ambientScattering(sheltered + behind, thickness, albedo))) + emitted;
     if ((fog.enabled & FOG_HAZE) != 0) {
         vec3 rayleigh = RAYLEIGH_SCATTERING * PER_KILOMETER;
         float mie = MIE_SCATTERING * PER_KILOMETER;

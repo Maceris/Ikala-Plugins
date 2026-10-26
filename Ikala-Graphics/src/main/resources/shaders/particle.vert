@@ -25,6 +25,15 @@ const vec2 CORNERS[6] = vec2[](vec2(-1.0, -1.0), vec2(1.0, -1.0), vec2(1.0, 1.0)
 void main() {
     uint slot = drawn.indices[gl_InstanceIndex];
     Particle particle = pool.particles[slot];
+    if (behaviorVolumetric(particle.behavior)) {
+        // Drawn in the fog volume instead: past the far plane, so nothing is drawn
+        outCorner = vec2(0.0);
+        outColor = vec4(0.0);
+        outViewPosition = vec4(0.0);
+        outSizeEmissive = vec2(0.0);
+        gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+        return;
+    }
     float life = lifeFraction(particle.age, particle.lifetime);
     float size = mix(particle.sizeStart, particle.sizeEnd, life);
     vec2 corner = CORNERS[gl_VertexIndex % BILLBOARD_VERTICES];

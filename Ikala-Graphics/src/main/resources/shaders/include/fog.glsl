@@ -60,6 +60,23 @@ float multipleScattering(float opticalDepth, float thickness, float cosTheta, fl
     return total;
 }
 
+// How much of the sky's light reaches a point under an optical depth of shelter, counting light
+// scattered more than once, see FogMath.ambientScattering
+float ambientScattering(float opticalDepth, float thickness, float albedo) {
+    float scattered = albedo * (1.0 - exp(-thickness));
+    float attenuation = 1.0;
+    float contribution = 1.0;
+    float weights = 0.0;
+    float total = 0.0;
+    for (int octave = 0; octave < SCATTER_OCTAVES; ++octave) {
+        total += contribution * exp(-attenuation * opticalDepth);
+        weights += contribution;
+        attenuation *= SCATTER_ATTENUATION;
+        contribution *= SCATTER_CONTRIBUTION * scattered;
+    }
+    return total / weights;
+}
+
 #ifdef FOG_SET
 // Each froxel's light scattered toward the camera in front of its far end (rgb) and how much light
 // gets through to it (a)

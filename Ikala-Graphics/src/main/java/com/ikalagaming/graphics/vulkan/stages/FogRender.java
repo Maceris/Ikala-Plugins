@@ -9,6 +9,8 @@ import com.ikalagaming.graphics.scene.MediumRegistry;
 import com.ikalagaming.graphics.scene.MediumVolume;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.FogVolume;
+import com.ikalagaming.graphics.vulkan.ParticleMath;
+import com.ikalagaming.graphics.vulkan.ParticlePool;
 import com.ikalagaming.graphics.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.vulkan.SharedBuffer;
 import com.ikalagaming.graphics.vulkan.VoxelOitMath;
@@ -81,6 +83,39 @@ public class FogRender {
      */
     private static final int MEDIA_HEADER_SIZE = 4 * Integer.BYTES;
 
+    /** Where the media buffer's header says whether particles were splatted, an int. */
+    private static final int MEDIA_PARTICLES_OFFSET = Integer.BYTES;
+
+    /** Where it holds the particles' froxel values' address. */
+    private static final int MEDIA_PARTICLE_ADDRESS_OFFSET = 2 * Integer.BYTES;
+
+    /** Where the froxel splat's push constants keep the drawn list, after the pool. */
+    private static final int FROXEL_DRAWN_OFFSET = Long.BYTES;
+
+    /** Where they keep the control buffer. */
+    private static final int FROXEL_CONTROL_OFFSET = 2 * Long.BYTES;
+
+    /** Where they keep the froxel values. */
+    private static final int FROXEL_VALUES_OFFSET = 3 * Long.BYTES;
+
+    /** Where they keep the anchor in render space, a vec3 on 16 bytes. */
+    private static final int FROXEL_ANCHOR_OFFSET = 4 * Long.BYTES;
+
+    /** Where they keep the slices' log scale. */
+    private static final int FROXEL_LOG_SCALE_OFFSET = FROXEL_ANCHOR_OFFSET + 3 * Float.BYTES;
+
+    /** Where they keep the tiles. */
+    private static final int FROXEL_TILES_OFFSET = FROXEL_LOG_SCALE_OFFSET + Float.BYTES;
+
+    /** Where they keep the drawn area. */
+    private static final int FROXEL_SCREEN_OFFSET = FROXEL_TILES_OFFSET + 2 * Integer.BYTES;
+
+    /** The froxel splat's push constants. */
+    private static final int FROXEL_CONSTANTS_SIZE = FROXEL_SCREEN_OFFSET + 2 * Float.BYTES;
+
+    /** Where the particle control buffer keeps the froxel splat's dispatch. */
+    private static final int FROXEL_DISPATCH_OFFSET = ParticleMath.CONTROL_COUNTS + Integer.BYTES;
+
     /** The size of one medium volume in the buffer: seven vec4s. */
     private static final int MEDIUM_SIZE = 7 * 4 * Float.BYTES;
 
@@ -128,6 +163,14 @@ public class FogRender {
     /** The integration's shader. */
     @NonNull private final ShaderVulkan integrateShader;
 
+    /** The volumetric particles' splat's shader. */
+    @NonNull private final ShaderVulkan froxelShader;
+
+    /** The splat's pipeline and layout, VK_NULL_HANDLE until set up. */
+    private long froxelLayout;
+
+    private long froxelPipeline;
+
     /** The pipelines and their layouts, VK_NULL_HANDLE until set up. */
     private long injectLayout;
 
@@ -162,10 +205,15 @@ public class FogRender {
      *
      * @param injectShader The injection's compute shader.
      * @param integrateShader The integration's compute shader.
+     * @param froxelShader The volumetric particles' splat's compute shader.
      */
-    public FogRender(@NonNull ShaderVulkan injectShader, @NonNull ShaderVulkan integrateShader) {
+    public FogRender(
+            @NonNull ShaderVulkan injectShader,
+            @NonNull ShaderVulkan integrateShader,
+            @NonNull ShaderVulkan froxelShader) {
         this.injectShader = injectShader;
         this.integrateShader = integrateShader;
+        this.froxelShader = froxelShader;
     }
 
     /**
@@ -197,6 +245,15 @@ public class FogRender {
                             INTEGRATE_CONSTANTS_SIZE,
                             stack);
             integratePipeline = createPipeline(state, integrateShader, integrateLayout, stack);
+            froxelLayout =
+                    createLayout(
+                            state,
+                            stack.longs(
+                                    lightSetLayout,
+                                    state.bindlessTextures.getDescriptorSetLayout()),
+                            FROXEL_CONSTANTS_SIZE,
+                            stack);
+            froxelPipeline = createPipeline(state, froxelShader, froxelLayout, stack);
         }
     }
 
@@ -266,6 +323,10 @@ public class FogRender {
         }
         vkDestroyPipeline(state.device.logical, injectPipeline, null);
         vkDestroyPipeline(state.device.logical, integratePipeline, null);
+        vkDestroyPipeline(state.device.logical, froxelPipeline, null);
+        vkDestroyPipelineLayout(state.device.logical, froxelLayout, null);
+        froxelPipeline = VK_NULL_HANDLE;
+        froxelLayout = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(state.device.logical, injectLayout, null);
         vkDestroyPipelineLayout(state.device.logical, integrateLayout, null);
         injectPipeline = VK_NULL_HANDLE;
@@ -308,7 +369,24 @@ public class FogRender {
         final int tilesY = Math.min(FogVolume.tiles(height), volume.getTilesY());
         final int groupsX = (tilesX + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
         final int groupsY = (tilesY + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
+        // Volumetric particles, splatted into the froxels for the injection to add
+        final ParticlePool pool = state.particlePool;
+        final boolean particles = pool != null && pool.readVolumetricCount() > 0;
         try (MemoryStack stack = MemoryStack.stackPush()) {
+            if (particles) {
+                splatParticles(
+                        commandBuffer,
+                        state,
+                        pool,
+                        lightSets,
+                        tilesX,
+                        tilesY,
+                        width,
+                        height,
+                        viewDistance,
+                        scene,
+                        stack);
+            }
             // After an earlier frame's integration read the media and its surfaces read the fog
             barrier(
                     commandBuffer,
@@ -352,7 +430,7 @@ public class FogRender {
                     VoxelOitMath.logScale(history ? previousViewDistance : viewDistance));
             inject.putLong(
                     INJECT_MEDIA_OFFSET,
-                    writeMedia(state, scene.getMediumRegistry(), camera, viewDistance));
+                    writeMedia(state, scene.getMediumRegistry(), camera, viewDistance, particles));
             vkCmdPushConstants(commandBuffer, injectLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, inject);
             vkCmdDispatch(commandBuffer, groupsX, groupsY, VoxelOitMath.SLICES);
 
@@ -412,13 +490,15 @@ public class FogRender {
      * @param registry The scene's medium volumes.
      * @param camera The camera's position, in the world.
      * @param viewDistance The view distance.
+     * @param particles Whether volumetric particles were splatted into the froxels.
      * @return The buffer's device address.
      */
     private long writeMedia(
             @NonNull VulkanState state,
             @NonNull MediumRegistry registry,
             @NonNull Vector3d camera,
-            double viewDistance) {
+            double viewDistance,
+            boolean particles) {
         registry.snapshot(media);
         SharedBuffer buffer = mediaBuffers[state.frameIndex];
         final long bytes = MEDIA_HEADER_SIZE + (long) media.size() * MEDIUM_SIZE;
@@ -482,7 +562,90 @@ public class FogRender {
             ++count;
         }
         MemoryUtil.memPutInt(address, count);
+        MemoryUtil.memPutInt(address + MEDIA_PARTICLES_OFFSET, particles ? 1 : 0);
+        MemoryUtil.memPutLong(
+                address + MEDIA_PARTICLE_ADDRESS_OFFSET,
+                particles ? state.fogVolume.getParticleFroxels().deviceAddress : 0);
         return buffer.deviceAddress;
+    }
+
+    /**
+     * Splat the volumetric particles into the froxels, see {@code particle_froxel.comp}: the values
+     * cleared, then a workgroup per drawn particle, as the particle control buffer counts them.
+     *
+     * @param commandBuffer The command buffer.
+     * @param state The Vulkan state.
+     * @param pool The particles.
+     * @param lightSets The light stage's sets, whose first two the splat reads.
+     * @param tilesX The fog volume's tiles across.
+     * @param tilesY Its tiles down.
+     * @param width The drawn area's width, in pixels.
+     * @param height Its height.
+     * @param viewDistance The view distance.
+     * @param scene The scene, for the camera.
+     * @param stack The stack to allocate on.
+     */
+    private void splatParticles(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull VulkanState state,
+            @NonNull ParticlePool pool,
+            long @NonNull [] lightSets,
+            int tilesX,
+            int tilesY,
+            int width,
+            int height,
+            double viewDistance,
+            @NonNull Scene scene,
+            @NonNull MemoryStack stack) {
+        final SharedBuffer froxels = state.fogVolume.getParticleFroxels();
+        // After last frame's injection read the values
+        barrier(
+                commandBuffer,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+                VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
+                VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                stack);
+        vkCmdFillBuffer(commandBuffer, froxels.buffer, 0, VK_WHOLE_SIZE, 0);
+        barrier(
+                commandBuffer,
+                VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
+                VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                stack);
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, froxelPipeline);
+        vkCmdBindDescriptorSets(
+                commandBuffer,
+                VK_PIPELINE_BIND_POINT_COMPUTE,
+                froxelLayout,
+                0,
+                stack.longs(lightSets[0], lightSets[1]),
+                null);
+        final Vector3d anchor = new Vector3d(pool.getAnchor()).sub(scene.getCamera().getPosition());
+        ByteBuffer constants = stack.calloc(FROXEL_CONSTANTS_SIZE);
+        constants.putLong(0, pool.getParticles().deviceAddress);
+        constants.putLong(FROXEL_DRAWN_OFFSET, pool.aliveListAddress(pool.getCurrent()));
+        constants.putLong(FROXEL_CONTROL_OFFSET, pool.getControl().deviceAddress);
+        constants.putLong(FROXEL_VALUES_OFFSET, froxels.deviceAddress);
+        constants.putFloat(FROXEL_ANCHOR_OFFSET, (float) anchor.x);
+        constants.putFloat(FROXEL_ANCHOR_OFFSET + Float.BYTES, (float) anchor.y);
+        constants.putFloat(FROXEL_ANCHOR_OFFSET + 2 * Float.BYTES, (float) anchor.z);
+        constants.putFloat(FROXEL_LOG_SCALE_OFFSET, VoxelOitMath.logScale(viewDistance));
+        constants.putInt(FROXEL_TILES_OFFSET, tilesX);
+        constants.putInt(FROXEL_TILES_OFFSET + Integer.BYTES, tilesY);
+        constants.putFloat(FROXEL_SCREEN_OFFSET, width);
+        constants.putFloat(FROXEL_SCREEN_OFFSET + Float.BYTES, height);
+        vkCmdPushConstants(commandBuffer, froxelLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
+        vkCmdDispatchIndirect(commandBuffer, pool.getControl().buffer, FROXEL_DISPATCH_OFFSET);
+        // The injection reads the values
+        barrier(
+                commandBuffer,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+                stack);
     }
 
     /**

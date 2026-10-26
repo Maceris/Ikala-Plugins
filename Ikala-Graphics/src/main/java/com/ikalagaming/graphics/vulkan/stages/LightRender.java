@@ -159,7 +159,11 @@ public class LightRender implements RenderStage {
         final TextureInfoVulkan target = frameData.sceneColor;
 
         // The fog volume is filled for the scene's fog or any medium volumes
-        frameData.fogFilled = scene.getFog().isActive() || scene.getMediumRegistry().getCount() > 0;
+        frameData.fogFilled =
+                scene.getFog().isActive()
+                        || scene.getMediumRegistry().getCount() > 0
+                        || vulkanState.particlePool != null
+                                && vulkanState.particlePool.readVolumetricCount() > 0;
         // The light cull stage wrote the lights and sorted them into clusters
         updateUniforms(scene, vulkanState, frameData, frameData.lightCount);
         SceneRender.writeStorageBindings(

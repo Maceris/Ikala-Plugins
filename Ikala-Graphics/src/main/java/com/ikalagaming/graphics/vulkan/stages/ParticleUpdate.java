@@ -454,7 +454,8 @@ public class ParticleUpdate implements RenderStage {
                             effect.isLit(),
                             effect.getCollision().ordinal(),
                             effect.getBounce(),
-                            effect.getFriction()));
+                            effect.getFriction(),
+                            effect.isVolumetric()));
             first += count;
             ++written;
         }

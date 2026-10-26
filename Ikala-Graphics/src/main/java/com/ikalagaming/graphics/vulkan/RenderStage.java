@@ -23,6 +23,7 @@ public interface RenderStage {
         PARTICLE,
         PARTICLE_CONTROL,
         PARTICLE_EMIT,
+        PARTICLE_FROXEL,
         PARTICLE_LIGHT,
         PARTICLE_SIMULATE,
         PARTICLE_SPLAT,

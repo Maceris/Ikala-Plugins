@@ -69,6 +69,23 @@ public final class ParticleSamples {
                     .colors(new Vector4f(0.5f, 0.5f, 0.5f, 0.6f), new Vector4f(0.6f, 0.6f, 0.6f, 0))
                     .build();
 
+    /** Thick smoke drawn in the fog volume: big soft balls, lit and shaded like the fog. */
+    public static final ParticleEffect THICK_SMOKE =
+            ParticleEffect.builder()
+                    .rate(12)
+                    .lifetime(5, 7)
+                    .speed(0.6f, 1)
+                    .spread(0.25f)
+                    .spawnRadius(0.5f)
+                    .drag(0.3f)
+                    .size(1.5f, 4)
+                    .colors(
+                            new Vector4f(0.7f, 0.7f, 0.7f, 0.9f),
+                            new Vector4f(0.75f, 0.75f, 0.75f, 0))
+                    .anisotropy(0.3f)
+                    .volumetric(true)
+                    .build();
+
     /** Flames: glowing orange puffs rising fast and shrinking, going dark red as they fade. */
     public static final ParticleEffect FIRE =
             ParticleEffect.builder()
@@ -91,6 +108,7 @@ public final class ParticleSamples {
                     new Sample("Fountain", FOUNTAIN),
                     new Sample("Sparks", SPARKS),
                     new Sample("Smoke", SMOKE),
+                    new Sample("Thick smoke", THICK_SMOKE),
                     new Sample("Fire", FIRE));
 
     /** Static samples only. */

@@ -68,6 +68,7 @@ class ParticleEffectLoaderTest {
                         collision: Bounce
                         bounce: 0.5
                         friction: 0.1
+                        volumetric: true
                         """);
         assertEquals(300, effect.getRate());
         assertEquals(20, effect.getBurst());
@@ -90,6 +91,7 @@ class ParticleEffectLoaderTest {
         assertEquals(ParticleEffect.Collision.BOUNCE, effect.getCollision());
         assertEquals(0.5f, effect.getBounce());
         assertEquals(0.1f, effect.getFriction());
+        assertTrue(effect.isVolumetric());
     }
 
     /** Missing keys default, one number stands for both ends, and one color for both. */
@@ -163,6 +165,7 @@ class ParticleEffectLoaderTest {
             assertEquals(original.getCollision(), copy.getCollision(), name);
             assertEquals(original.getBounce(), copy.getBounce(), name);
             assertEquals(original.getFriction(), copy.getFriction(), name);
+            assertEquals(original.isVolumetric(), copy.isVolumetric(), name);
         }
     }
 

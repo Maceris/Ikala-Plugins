@@ -209,6 +209,25 @@ class FogMathTest {
                 "whiter smoke is brighter inside");
     }
 
+    /**
+     * The sky's light is whole outside a medium, e^-depth in thin or dark media, and reaches
+     * further into thick white smoke.
+     */
+    @Test
+    void testAmbientScattering() {
+        final double thick = 4;
+        final double depth = 3;
+        for (double albedo : new double[] {0, 0.5, 1}) {
+            assertEquals(1, FogMath.ambientScattering(0, thick, albedo), 1e-12);
+            assertEquals(Math.exp(-depth), FogMath.ambientScattering(depth, 0, albedo), 1e-12);
+        }
+        assertEquals(Math.exp(-depth), FogMath.ambientScattering(depth, thick, 0), 1e-12);
+        final double white = FogMath.ambientScattering(depth, thick, 0.9);
+        assertTrue(white > 3 * Math.exp(-depth), "light reaches into white smoke: " + white);
+        assertTrue(white < 1);
+        assertTrue(white > FogMath.ambientScattering(2 * depth, thick, 0.9));
+    }
+
     /** Height fog is its density at and below the base, and falls off by e every 1 / falloff. */
     @Test
     void testHeightFog() {

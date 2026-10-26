@@ -40,6 +40,7 @@ void main() {
             control.dropped = 0;
             control.dispatchArgs = uvec4(0, 1, 1, 0);
             control.drawArgs = uvec4(BILLBOARD_VERTICES, 0, 0, 0);
+            control.counts = uvec4(0, 0, 1, 1);
         }
         return;
     }
@@ -51,10 +52,13 @@ void main() {
         control.dispatchArgs = uvec4((alive + PARTICLE_WORKGROUP - 1) / PARTICLE_WORKGROUP, 1, 1, 0);
         control.alive[1 - current] = 0;
         control.dropped = 0;
+        control.counts.x = 0;
     } else {
         uint drawn = control.alive[1 - current];
         control.drawArgs = uvec4(BILLBOARD_VERTICES, drawn, 0, 0);
         // The simulation is done with its dispatch, so the lighting takes the slot
         control.dispatchArgs = uvec4((drawn + PARTICLE_WORKGROUP - 1) / PARTICLE_WORKGROUP, 1, 1, 0);
+        // The froxel splat takes a workgroup per particle
+        control.counts.yzw = uvec3(drawn, 1, 1);
     }
 }

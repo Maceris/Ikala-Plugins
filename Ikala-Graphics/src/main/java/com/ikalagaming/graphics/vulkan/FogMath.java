@@ -112,6 +112,32 @@ public final class FogMath {
     }
 
     /**
+     * How much of the sky's light reaches a point under an optical depth of shelter, counting light
+     * scattered more than once: the octaves of {@link #multipleScattering} without the phase, as
+     * their weighted average, so that unsheltered points get the sky's light once and no more. In
+     * thin or dark media it is e^-depth; in thick white smoke the deeper octaves carry light in.
+     *
+     * @param opticalDepth The medium's optical depth from the point to the nearest way out.
+     * @param thickness The optical thickness of the medium around the point.
+     * @param albedo The medium's albedo.
+     * @return The share of the sky's light, 0 to 1.
+     */
+    public static double ambientScattering(double opticalDepth, double thickness, double albedo) {
+        final double scattered = albedo * (1 - Math.exp(-thickness));
+        double attenuation = 1;
+        double contribution = 1;
+        double weights = 0;
+        double total = 0;
+        for (int octave = 0; octave < SCATTER_OCTAVES; ++octave) {
+            total += contribution * Math.exp(-attenuation * opticalDepth);
+            weights += contribution;
+            attenuation *= SCATTER_ATTENUATION;
+            contribution *= SCATTER_CONTRIBUTION * scattered;
+        }
+        return total / weights;
+    }
+
+    /**
      * Exponential height fog's extinction at a height: its density at and below a base height,
      * falling off by e every 1 / falloff meters above it.
      *

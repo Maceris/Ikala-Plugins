@@ -48,6 +48,7 @@ import java.util.Set;
  * collision: bounce          # none, bounce, stick or die, on hitting the world near the camera
  * bounce: 0.3                # speed into a surface kept when bouncing, 0 to 1
  * friction: 0.2              # speed along a surface lost when bouncing, 0 to 1
+ * volumetric: false          # true to draw them as smoke in the fog volume, not billboards
  * </pre>
  */
 public final class ParticleEffectLoader {
@@ -109,6 +110,9 @@ public final class ParticleEffectLoader {
     /** How much speed along a surface they lose. */
     public static final String FRICTION = "friction";
 
+    /** Whether they are smoke in the fog volume. */
+    public static final String VOLUMETRIC = "volumetric";
+
     /** The most anisotropy can be either way, short of all one way. */
     public static final double MAX_ANISOTROPY = 0.95;
 
@@ -131,7 +135,8 @@ public final class ParticleEffectLoader {
                     ANISOTROPY,
                     COLLISION,
                     BOUNCE,
-                    FRICTION);
+                    FRICTION,
+                    VOLUMETRIC);
 
     /** The widest spread there is, in degrees: every way. */
     public static final double MAX_SPREAD_DEGREES = 180;
@@ -204,6 +209,7 @@ public final class ParticleEffectLoader {
         reader.choice(COLLISION, ParticleEffect.Collision.class).ifPresent(builder::collision);
         reader.number(BOUNCE, 0, 1).ifPresent(builder::bounce);
         reader.number(FRICTION, 0, 1).ifPresent(builder::friction);
+        reader.bool(VOLUMETRIC).ifPresent(builder::volumetric);
         return builder.build();
     }
 
@@ -235,6 +241,7 @@ public final class ParticleEffectLoader {
         root.put(COLLISION, effect.getCollision().name().toLowerCase(Locale.ROOT));
         root.put(BOUNCE, effect.getBounce());
         root.put(FRICTION, effect.getFriction());
+        root.put(VOLUMETRIC, effect.isVolumetric());
         // Lists of numbers stay on one line, as people write them
         final DumperOptions flow = new DumperOptions();
         flow.setDefaultFlowStyle(DumperOptions.FlowStyle.FLOW);

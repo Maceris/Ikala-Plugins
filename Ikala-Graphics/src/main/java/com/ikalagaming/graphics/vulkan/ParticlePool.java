@@ -149,6 +149,17 @@ public class ParticlePool {
     }
 
     /**
+     * How many volumetric particles were alive in the last finished frame, which the fog volume
+     * draws.
+     *
+     * @return The count.
+     */
+    public int readVolumetricCount() {
+        final long address = control.allocationInfo.pMappedData();
+        return MemoryUtil.memGetInt(address + ParticleMath.CONTROL_COUNTS);
+    }
+
+    /**
      * How many spawns found the pool full in the last finished frame.
      *
      * @return The count.

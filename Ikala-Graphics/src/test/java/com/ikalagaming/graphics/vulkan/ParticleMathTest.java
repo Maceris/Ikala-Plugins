@@ -159,7 +159,8 @@ class ParticleMathTest {
     /** The behavior word keeps each part apart, to within a byte. */
     @Test
     void testBehaviorWord() {
-        final int word = ParticleMath.packBehavior(-0.4f, true, 2, 0.3f, 0.75f);
+        final int word = ParticleMath.packBehavior(-0.4f, true, 2, 0.3f, 0.75f, true);
+        assertEquals(1, word >> ParticleMath.BEHAVIOR_VOLUMETRIC_SHIFT & 1);
         assertEquals(-0.4f, ParticleMath.anisotropyOf(word), 1f / ParticleMath.SIGNED_BYTE_MAX);
         assertEquals(1, word >> ParticleMath.BEHAVIOR_LIT_SHIFT & 1);
         assertEquals(
@@ -170,9 +171,78 @@ class ParticleMathTest {
                 Math.round(0.3f * 255),
                 word >> ParticleMath.BEHAVIOR_BOUNCE_SHIFT & ParticleMath.UNSIGNED_BYTE_MAX);
         assertEquals(Math.round(0.75f * 255), word >>> ParticleMath.BEHAVIOR_FRICTION_SHIFT);
-        final int unlit = ParticleMath.packBehavior(0.9f, false, 0, 0, 0);
+        final int unlit = ParticleMath.packBehavior(0.9f, false, 0, 0, 0, false);
+        assertEquals(0, unlit >> ParticleMath.BEHAVIOR_VOLUMETRIC_SHIFT & 1);
         assertEquals(0, unlit >> ParticleMath.BEHAVIOR_LIT_SHIFT & 1);
         assertEquals(0.9f, ParticleMath.anisotropyOf(unlit), 1f / ParticleMath.SIGNED_BYTE_MAX);
+    }
+
+    /**
+     * A volumetric particle's density falls off smoothly to its edge, and a line through its middle
+     * loses as much light as its opacity says.
+     */
+    @Test
+    void testSphereDensity() {
+        final double opacity = 0.8;
+        final double radius = 1.7;
+        final double middle = ParticleMath.sphereDensity(opacity, radius);
+        final int steps = 100_000;
+        double depth = 0;
+        for (int i = 0; i < steps; ++i) {
+            final double s = -radius + (i + 0.5) * 2 * radius / steps;
+            depth += middle * ParticleMath.sphereProfile(Math.abs(s), radius) * 2 * radius / steps;
+        }
+        assertEquals(opacity, 1 - Math.exp(-depth), 1e-6);
+        assertEquals(1, ParticleMath.sphereProfile(0, radius), 1e-12);
+        assertEquals(0, ParticleMath.sphereProfile(radius, radius), 1e-12);
+        assertTrue(
+                ParticleMath.sphereProfile(0.3, radius) > ParticleMath.sphereProfile(0.9, radius));
+        assertEquals(0, ParticleMath.sphereDensity(opacity, 0));
+
+        // The depth to the edge is the density integrated out along the radius
+        final double from = 0.4;
+        double outward = 0;
+        for (int i = 0; i < steps; ++i) {
+            final double s = from + (i + 0.5) * (radius - from) / steps;
+            outward += middle * ParticleMath.sphereProfile(s, radius) * (radius - from) / steps;
+        }
+        assertEquals(outward, ParticleMath.sphereDepthToEdge(middle, from, radius), 1e-9);
+        // From the middle, half of the depth along a whole line through it
+        assertEquals(
+                -Math.log(1 - opacity) / 2,
+                ParticleMath.sphereDepthToEdge(middle, 0, radius),
+                1e-9);
+        assertEquals(0, ParticleMath.sphereDepthToEdge(middle, radius, radius));
+
+        // Along any direction, the density integrated out to the edge
+        final Vector3d offset = new Vector3d(0.3, -0.5, 0.2);
+        final Vector3d direction = new Vector3d(0.4, 0.8, -0.3).normalize();
+        double along = 0;
+        final double step = 1e-5;
+        final Vector3d point = new Vector3d();
+        for (double t = step / 2; ; t += step) {
+            offset.fma(t, direction, point);
+            final double distance = point.length();
+            if (distance >= radius) {
+                break;
+            }
+            along += middle * ParticleMath.sphereProfile(distance, radius) * step;
+        }
+        assertEquals(along, ParticleMath.sphereDepthAlong(middle, offset, direction, radius), 1e-6);
+        // Straight out it is the depth to the edge
+        final Vector3d radial = new Vector3d(offset).normalize();
+        assertEquals(
+                ParticleMath.sphereDepthToEdge(middle, offset.length(), radius),
+                ParticleMath.sphereDepthAlong(middle, offset, radial, radius),
+                1e-9);
+        // Toward the middle it is deeper than straight out
+        assertTrue(
+                ParticleMath.sphereDepthAlong(middle, offset, radial.negate(), radius)
+                        > ParticleMath.sphereDepthToEdge(middle, offset.length(), radius));
+        assertEquals(
+                0,
+                ParticleMath.sphereDepthAlong(
+                        middle, new Vector3d(radius, 0, 0), direction, radius));
     }
 
     /** Life runs from 0 to 1, and the round shape and soft fade stay in range. */

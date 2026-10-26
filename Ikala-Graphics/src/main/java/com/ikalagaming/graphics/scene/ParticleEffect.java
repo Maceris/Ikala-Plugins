@@ -119,6 +119,13 @@ public class ParticleEffect {
     /** How much of its speed along a surface a bouncing particle loses when it hits, 0 to 1. */
     @Builder.Default float friction = 0.2f;
 
+    /**
+     * Whether particles are drawn as soft balls of smoke in the fog volume rather than billboards:
+     * lit and shaded like the fog, at the fog's coarse resolution, for broad thick smoke. Their
+     * opacity is how much light a line through a particle's middle loses.
+     */
+    @Builder.Default boolean volumetric = false;
+
     /** Builder methods for ranges and pairs, on top of the generated ones, filled in by Lombok. */
     public static class ParticleEffectBuilder {
 

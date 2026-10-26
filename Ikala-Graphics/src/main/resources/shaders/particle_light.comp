@@ -43,6 +43,10 @@ void main() {
     }
     uint slot = drawn.indices[index];
     Particle particle = pool.particles[slot];
+    if (behaviorVolumetric(particle.behavior)) {
+        // The fog lights it
+        return;
+    }
     if (!behaviorLit(particle.behavior)) {
         radianceList.radiance[slot] = packParticleColor(vec4(1.0));
         return;

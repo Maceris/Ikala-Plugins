@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.vulkan;
 
 import lombok.NonNull;
 import org.joml.Vector3d;
+import org.joml.Vector3dc;
 import org.joml.Vector3f;
 import org.joml.Vector3fc;
 
@@ -53,6 +54,26 @@ public final class ParticleMath {
     /** Where its spawn count and random seed are. */
     public static final int EMITTER_COUNT = 112;
 
+    /** Where the control buffer keeps counts the CPU reads back: alive volumetric particles. */
+    public static final int CONTROL_COUNTS = 48;
+
+    /**
+     * The values each froxel of the fog volume gathers from volumetric particles: density,
+     * scattering's red, green and blue, the optical depth out to the particles' edges, scattering
+     * times anisotropy, the optical depth through them toward the sun, and the optical depth across
+     * them through their middles, see {@code particle_froxel.comp}.
+     */
+    public static final int FROXEL_CHANNELS = 8;
+
+    /** The fixed point scale froxels gather particles' values in: 1 is this many steps. */
+    public static final double FROXEL_SCALE = 65_536;
+
+    /**
+     * How far a volumetric particle's density profile reaches along a line through its middle, per
+     * meter of radius: the integral of (1 - (s / r)^2)^2 from -r to r over r.
+     */
+    public static final double SPHERE_PROFILE_LENGTH = 16.0 / 15;
+
     /** Where its particles' behavior word is, see {@link #packBehavior}. */
     public static final int EMITTER_BEHAVIOR = EMITTER_COUNT + 2 * Integer.BYTES;
 
@@ -78,7 +99,10 @@ public final class ParticleMath {
     public static final int CONTROL_DRAW_STRIDE = 4 * Integer.BYTES;
 
     /** The size of the control buffer. */
-    public static final int CONTROL_SIZE = 48;
+    public static final int CONTROL_SIZE = 64;
+
+    /** Opacity is kept below this, so its optical depth stays finite; matches OitMath. */
+    public static final double MAX_OPACITY = 0.999;
 
     /** Vertices in a particle's billboard, two triangles. */
     public static final int BILLBOARD_VERTICES = 6;
@@ -97,6 +121,9 @@ public final class ParticleMath {
 
     /** The collision bits' mask, once shifted down. */
     public static final int BEHAVIOR_COLLISION_MASK = 3;
+
+    /** Where in it whether the particle is drawn as smoke in the fog volume, one bit. */
+    public static final int BEHAVIOR_VOLUMETRIC_SHIFT = 11;
 
     /** Where in it how much of its speed into a surface it keeps is, an unsigned byte. */
     public static final int BEHAVIOR_BOUNCE_SHIFT = 16;
@@ -214,13 +241,20 @@ public final class ParticleMath {
      *     ParticleEffect.Collision}.
      * @param bounce How much of its speed into a surface it keeps, 0 to 1.
      * @param friction How much of its speed along a surface it loses, 0 to 1.
+     * @param volumetric Whether it is drawn as smoke in the fog volume rather than a billboard.
      * @return The word.
      */
     public static int packBehavior(
-            float anisotropy, boolean lit, int collision, float bounce, float friction) {
+            float anisotropy,
+            boolean lit,
+            int collision,
+            float bounce,
+            float friction,
+            boolean volumetric) {
         final int g = Math.round(Math.clamp(anisotropy, -1, 1) * SIGNED_BYTE_MAX);
         return (g & BEHAVIOR_ANISOTROPY_MASK)
                 | (lit ? 1 << BEHAVIOR_LIT_SHIFT : 0)
+                | (volumetric ? 1 << BEHAVIOR_VOLUMETRIC_SHIFT : 0)
                 | (collision & BEHAVIOR_COLLISION_MASK) << BEHAVIOR_COLLISION_SHIFT
                 | Math.round(Math.clamp(bounce, 0, 1) * UNSIGNED_BYTE_MAX) << BEHAVIOR_BOUNCE_SHIFT
                 | Math.round(Math.clamp(friction, 0, 1) * UNSIGNED_BYTE_MAX)
@@ -289,6 +323,109 @@ public final class ParticleMath {
         final Vector3f along = new Vector3f(velocity).fma(-into, normal).mul(1 - friction);
         velocity.set(along).fma(into < 0 ? -bounce * into : into, normal);
         return new Vector3f(previous);
+    }
+
+    /**
+     * The density in the middle of a volumetric particle, a soft ball whose density falls off as (1
+     * - (d / r)^2)^2, so that the optical depth along a line through its middle matches the
+     * particle's opacity, as its billboard has it.
+     *
+     * @param opacity The particle's opacity, 0 to 1.
+     * @param radius Its radius, in meters.
+     * @return Its extinction in the middle, per meter.
+     */
+    public static double sphereDensity(double opacity, double radius) {
+        if (radius <= 0) {
+            return 0;
+        }
+        final double depth = -Math.log(1 - Math.min(opacity, MAX_OPACITY));
+        return depth / (SPHERE_PROFILE_LENGTH * radius);
+    }
+
+    /**
+     * How much of a volumetric particle's middle density is at a distance from its middle.
+     *
+     * @param distance The distance, in meters.
+     * @param radius Its radius.
+     * @return (1 - (d / r)^2)^2 inside it, 0 outside.
+     */
+    public static double sphereProfile(double distance, double radius) {
+        if (radius <= 0 || distance >= radius) {
+            return 0;
+        }
+        final double fraction = distance / radius;
+        final double falloff = 1 - fraction * fraction;
+        return falloff * falloff;
+    }
+
+    /**
+     * The optical depth from a point in a volumetric particle straight out to its edge, along its
+     * radius: the integral of its density from the point's distance to the radius, in closed form,
+     * rho * [s - 2 s^3 / (3 r^2) + s^5 / (5 r^4)] from d to r. What shades the point.
+     *
+     * @param middleDensity Its density in the middle, per meter.
+     * @param distance The point's distance from its middle, in meters.
+     * @param radius Its radius.
+     * @return The optical depth, 0 at and past the edge.
+     */
+    public static double sphereDepthToEdge(double middleDensity, double distance, double radius) {
+        if (radius <= 0 || distance >= radius) {
+            return 0;
+        }
+        return middleDensity
+                * (sphereProfileIntegral(radius, radius)
+                        - sphereProfileIntegral(Math.max(0, distance), radius));
+    }
+
+    /**
+     * The optical depth from a point in a volumetric particle out to its edge along a direction,
+     * such as toward the sun, in closed form. Along the ray, (r^2 - d^2) is h^2 - x^2, with x the
+     * distance from the ray's point nearest the middle and h half the chord through it, so the
+     * profile integrates to [h^4 x - 2 h^2 x^3 / 3 + x^5 / 5] / r^4 between the point and the edge.
+     *
+     * @param middleDensity Its density in the middle, per meter.
+     * @param offset The point less the particle's middle, in meters.
+     * @param direction The way out, of unit length.
+     * @param radius Its radius.
+     * @return The optical depth, 0 at and past the edge.
+     */
+    public static double sphereDepthAlong(
+            double middleDensity, Vector3dc offset, Vector3dc direction, double radius) {
+        final double distanceSquared = offset.lengthSquared();
+        if (radius <= 0 || distanceSquared >= radius * radius) {
+            return 0;
+        }
+        // Along the ray x is m at the point and 0 nearest the middle
+        final double m = offset.dot(direction);
+        final double h = Math.sqrt(Math.max(0, m * m - distanceSquared + radius * radius));
+        final double r2 = radius * radius;
+        return middleDensity * (chordIntegral(h, h) - chordIntegral(m, h)) / (r2 * r2);
+    }
+
+    /**
+     * The integral of (h^2 - x^2)^2 from 0 to x.
+     *
+     * @param x How far along.
+     * @param h Half the chord.
+     * @return h^4 x - 2 h^2 x^3 / 3 + x^5 / 5.
+     */
+    private static double chordIntegral(double x, double h) {
+        final double h2 = h * h;
+        final double x2 = x * x;
+        return x * (h2 * h2 - 2 * h2 * x2 / 3 + x2 * x2 / 5);
+    }
+
+    /**
+     * The integral of the density profile from the middle out to a distance.
+     *
+     * @param distance The distance.
+     * @param radius The radius.
+     * @return s - 2 s^3 / (3 r^2) + s^5 / (5 r^4).
+     */
+    private static double sphereProfileIntegral(double distance, double radius) {
+        final double s = distance / radius;
+        final double s2 = s * s;
+        return radius * s * (1 - 2 * s2 / 3 + s2 * s2 / 5);
     }
 
     /**

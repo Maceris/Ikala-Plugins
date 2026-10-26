@@ -88,4 +88,7 @@ void main() {
     pool.particles[slot].velocity = velocity;
     pool.particles[slot].age = particle.age;
     to.indices[atomicAdd(control.alive[1 - current], 1)] = slot;
+    if (behaviorVolumetric(particle.behavior)) {
+        atomicAdd(control.counts.x, 1);
+    }
 }

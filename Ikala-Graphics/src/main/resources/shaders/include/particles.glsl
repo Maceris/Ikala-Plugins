@@ -46,6 +46,9 @@ layout(buffer_reference, std430, buffer_reference_align = 16) buffer Control {
     uint dropped;
     uvec4 dispatchArgs;
     uvec4 drawArgs;
+    // Alive volumetric particles, which the CPU reads back; then the froxel splat's dispatch, a
+    // workgroup per drawn particle
+    uvec4 counts;
 };
 
 // Threads in a workgroup, ParticleMath.WORKGROUP_SIZE
@@ -56,6 +59,61 @@ const uint BILLBOARD_VERTICES = 6;
 
 // ParticleMath.NO_DRAG
 const float NO_DRAG = 1e-6;
+
+// Values each fog froxel gathers from volumetric particles, and their fixed point scale, see
+// ParticleMath.FROXEL_CHANNELS and FROXEL_SCALE
+const uint PARTICLE_FROXEL_CHANNELS = 8;
+const float PARTICLE_FROXEL_SCALE = 65536.0;
+
+// How far a volumetric particle's profile reaches through its middle per meter of radius,
+// ParticleMath.SPHERE_PROFILE_LENGTH
+const float SPHERE_PROFILE_LENGTH = 16.0 / 15.0;
+
+// A volumetric particle's density in its middle, see ParticleMath.sphereDensity
+float sphereDensity(float opacity, float radius) {
+    if (radius <= 0.0) {
+        return 0.0;
+    }
+    return -log(1.0 - min(opacity, 0.999)) / (SPHERE_PROFILE_LENGTH * radius);
+}
+
+// How much of its middle density is at a distance, see ParticleMath.sphereProfile
+float sphereProfile(float distance, float radius) {
+    if (radius <= 0.0 || distance >= radius) {
+        return 0.0;
+    }
+    float fraction = distance / radius;
+    float falloff = 1.0 - fraction * fraction;
+    return falloff * falloff;
+}
+
+// The optical depth from a point in a volumetric particle out to its edge, see
+// ParticleMath.sphereDepthToEdge
+float sphereDepthToEdge(float middleDensity, float distance, float radius) {
+    if (radius <= 0.0 || distance >= radius) {
+        return 0.0;
+    }
+    float s = max(distance, 0.0) / radius;
+    float s2 = s * s;
+    return middleDensity * radius * (8.0 / 15.0 - s * (1.0 - 2.0 * s2 / 3.0 + s2 * s2 / 5.0));
+}
+
+// The optical depth from a point in a volumetric particle out to its edge along a direction of unit
+// length, see ParticleMath.sphereDepthAlong
+float sphereDepthAlong(float middleDensity, vec3 offset, vec3 direction, float radius) {
+    float distanceSquared = dot(offset, offset);
+    float r2 = radius * radius;
+    if (radius <= 0.0 || distanceSquared >= r2) {
+        return 0.0;
+    }
+    float m = dot(offset, direction);
+    float h = sqrt(max(0.0, m * m - distanceSquared + r2));
+    float h2 = h * h;
+    float m2 = m * m;
+    float toEdge = h * h2 * h2 * (8.0 / 15.0);
+    float toPoint = m * (h2 * h2 - 2.0 * h2 * m2 / 3.0 + m2 * m2 / 5.0);
+    return middleDensity * (toEdge - toPoint) / (r2 * r2);
+}
 
 // What a particle does when it hits the world, ParticleEffect.Collision's ordinals
 const uint COLLISION_NONE = 0;
@@ -69,6 +127,10 @@ float behaviorAnisotropy(uint behavior) {
 
 bool behaviorLit(uint behavior) {
     return (behavior & (1u << 8)) != 0u;
+}
+
+bool behaviorVolumetric(uint behavior) {
+    return (behavior & (1u << 11)) != 0u;
 }
 
 uint behaviorCollision(uint behavior) {

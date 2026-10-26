@@ -101,4 +101,7 @@ void main() {
     particle.behavior = emitter.behavior;
     pool.particles[slot] = particle;
     to.indices[atomicAdd(control.alive[next], 1)] = slot;
+    if (behaviorVolumetric(particle.behavior)) {
+        atomicAdd(control.counts.x, 1);
+    }
 }

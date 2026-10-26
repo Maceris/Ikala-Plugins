@@ -120,6 +120,12 @@ public class FogVolume {
      */
     @Getter private int tilesY;
 
+    /**
+     * What volumetric particles leave in each froxel, {@link ParticleMath#FROXEL_CHANNELS} values
+     * per froxel, see {@code particle_froxel.comp}; cleared before each frame's splat.
+     */
+    @Getter private SharedBuffer particleFroxels;
+
     /** Which media image this frame writes. */
     private int current;
 
@@ -246,6 +252,15 @@ public class FogVolume {
             integratedView = made[2];
             createDescriptorSets(state, stack);
         }
+        particleFroxels =
+                SharedBuffer.allocateDeviceLocal(
+                        (long) tilesX
+                                * tilesY
+                                * VoxelOitMath.SLICES
+                                * ParticleMath.FROXEL_CHANNELS
+                                * Integer.BYTES,
+                        state,
+                        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
         // The images move to the general layout once, where they stay
         state.immediateCommands.submit(
                 state,
@@ -500,6 +515,10 @@ public class FogVolume {
         vkDestroyImageView(state.device.logical, integratedView, null);
         vmaDestroyImage(state.vmaAllocator, integrated, integratedAllocation);
         integrated = VK_NULL_HANDLE;
+        if (particleFroxels != null) {
+            SharedBuffer.free(particleFroxels, state);
+            particleFroxels = null;
+        }
     }
 
     /**
