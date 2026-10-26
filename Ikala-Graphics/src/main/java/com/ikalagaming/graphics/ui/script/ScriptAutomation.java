@@ -24,10 +24,10 @@ import java.util.function.Supplier;
  * why and stops the script, like a failed assertion.
  *
  * <pre>
- * await(ui.test().click("main-menu//about"));
- * await(ui.test().waitForVisible("about"));
- * await(ui.test().assertText("about//title", "About"));
- * boolean open = await(ui.test().exists("about"));
+ * await(ui.test().click("main-menu//benchmarks"));
+ * await(ui.test().waitForVisible("benchmarks"));
+ * await(ui.test().assertText("benchmarks//title", "Benchmarks"));
+ * boolean open = await(ui.test().exists("benchmarks"));
  * await(ui.test().mouseDrag(640, 360, 700, 360));
  * await(ui.test().clickItem("tools//lod", "Show cells"));
  * await(ui.test().typeItem("tools//materials", "Roughness", "0.5", true));

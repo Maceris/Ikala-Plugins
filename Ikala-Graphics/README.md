@@ -341,6 +341,10 @@ level of detail cache.
 
 It can be run from the Benchmark section of the Graphics Debug window, or from the command line.
 
+Ready-made runs, `GateBenchmark.PRESETS`, pair a world with its scene options (the islands' water,
+rain and snow, particles, fog) and keep the world to look around in once measured; the asset
+editor's main menu lists them under Benchmarks, and `GateBenchmark.start(preset)` opens one.
+
 **Command line options**
 
 These are Java system properties, given before `-jar`:

@@ -56,6 +56,9 @@ public class MainMenu {
     /** How many sample containers have been written, shown under the buttons. */
     private final Observable<Integer> sampleCount;
 
+    /** The benchmark screen, which comes back to this menu. */
+    private final BenchmarkMenu benchmarks;
+
     /**
      * Create the main menu.
      *
@@ -73,6 +76,7 @@ public class MainMenu {
         this.openInspector = openInspector;
         this.openWorkbench = openWorkbench;
         this.sampleCount = sampleCount;
+        benchmarks = new BenchmarkMenu(ui, () -> ui.setVisible(SURFACE_ID, true));
     }
 
     /** Where the rows added behind the demo's first row start, along z. */
@@ -103,6 +107,7 @@ public class MainMenu {
                                 .handler("start-sphere-demo", this::startSphereDemo)
                                 .handler("open-workbench", this::startWorkbench)
                                 .handler("open-inspector", this::startInspector)
+                                .handler("open-benchmarks", this::openBenchmarks)
                                 .handler("open-tool", event -> openTool((Tool) event.item()))
                                 .list("tools", ui.tools())
                                 .value("samples.count", sampleCount));
@@ -122,6 +127,12 @@ public class MainMenu {
     private void openTool(Tool tool) {
         ui.setVisible(SURFACE_ID, false);
         tool.open().accept(() -> ui.setVisible(SURFACE_ID, true));
+    }
+
+    /** Hide the menu and show the benchmarks to pick from. */
+    private void openBenchmarks() {
+        ui.setVisible(SURFACE_ID, false);
+        benchmarks.open();
     }
 
     /** Hide the menu and show the asset inspector. */

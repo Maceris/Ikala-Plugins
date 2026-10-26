@@ -270,9 +270,9 @@ public final class UI {
      * cancelled when it unloads. Don't wait for the result on the render thread, which runs it.
      *
      * <pre>
-     * ui.automate(steps -&gt; steps.click("main-menu//about")
-     *         .waitForVisible("about")
-     *         .assertText("about//title", "About"));
+     * ui.automate(steps -&gt; steps.click("main-menu//benchmarks")
+     *         .waitForVisible("benchmarks")
+     *         .assertText("benchmarks//title", "Benchmarks"));
      * </pre>
      *
      * @param build Adds the steps.

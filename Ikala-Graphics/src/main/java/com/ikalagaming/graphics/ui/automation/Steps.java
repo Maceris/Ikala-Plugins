@@ -22,7 +22,8 @@ import java.util.function.Function;
 
 /**
  * The steps of an automation run, built in order: {@code
- * steps.click("main-menu//about").waitForVisible("about").assertText("about//title", "About")}.
+ * steps.click("main-menu//benchmarks").waitForVisible("benchmarks").assertText("benchmarks//title",
+ * "Benchmarks")}.
  *
  * <p>Steps find nodes by {@link Selector} and drive them with real IkGui input aimed at their
  * rectangles, so they test what a player would do: whether the node is on screen, whether something

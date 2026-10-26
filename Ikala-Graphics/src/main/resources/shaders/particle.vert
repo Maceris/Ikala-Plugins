@@ -17,8 +17,7 @@ layout(set = 2, binding = 0) uniform Uniforms {
 layout(location = PARTICLE_VARYING_CORNER) out vec2 outCorner;
 layout(location = PARTICLE_VARYING_COLOR) out vec4 outColor;
 layout(location = PARTICLE_VARYING_VIEW) out vec4 outViewPosition;
-layout(location = PARTICLE_VARYING_SIZE) out vec2 outSizeEmissive;
-layout(location = PARTICLE_VARYING_REACTIVE) out float outReactive;
+layout(location = PARTICLE_VARYING_SIZE) out vec2 outSizeReactive;
 
 const vec2 CORNERS[6] = vec2[](vec2(-1.0, -1.0), vec2(1.0, -1.0), vec2(1.0, 1.0),
     vec2(-1.0, -1.0), vec2(1.0, 1.0), vec2(-1.0, 1.0));
@@ -31,8 +30,7 @@ void main() {
         outCorner = vec2(0.0);
         outColor = vec4(0.0);
         outViewPosition = vec4(0.0);
-        outSizeEmissive = vec2(0.0);
-        outReactive = 0.0;
+        outSizeReactive = vec2(0.0);
         gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
         return;
     }
@@ -48,9 +46,9 @@ void main() {
     vec2 across = (mat3(viewMatrix) * particle.velocity).xy;
     float speed = length(across);
     float streak = streakLength(size, speed, particleStretch(particle));
-    outReactive = 0.0;
+    float reactive = 0.0;
     if (streak > size && speed > 0.0) {
-        outReactive = 1.0 - size / streak;
+        reactive = 1.0 - size / streak;
         vec2 along = across / speed;
         vec2 side = vec2(-along.y, along.x);
         view.xy += along * (corner.x * 0.5 * streak - 0.5 * (streak - size))
@@ -63,6 +61,6 @@ void main() {
     vec3 light = unpackParticleColor(radianceList.radiance[slot]).rgb;
     outColor = vec4(color.rgb * (light + emissive), color.a);
     outViewPosition = view;
-    outSizeEmissive = vec2(size, emissive);
+    outSizeReactive = vec2(size, reactive);
     gl_Position = projectionMatrix * view;
 }

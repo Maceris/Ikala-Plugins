@@ -661,6 +661,9 @@ public final class GateBenchmark {
     /** Where the test weather's box is centered, from the camera, in meters: a little above it. */
     private static final Vector3d WEATHER_OFFSET = new Vector3d(0, 2, 0);
 
+    /** The scene options a preset set, which come before the startup properties. */
+    private final Map<String, String> options = new HashMap<>();
+
     /** The test water tiles the run placed, removed when it ends. */
     private final List<WaterHandle> testWater = new ArrayList<>();
 
@@ -690,6 +693,133 @@ public final class GateBenchmark {
 
     /** The {@code .weather} property's value for snow. */
     public static final String WEATHER_SNOW = "snow";
+
+    /**
+     * A ready-made run to pick from a menu: a world, its view distance, and the options its scene
+     * takes, as the startup properties name them without the {@code ikala.benchmark.} prefix.
+     *
+     * @param id What it is called in code and scripts.
+     * @param name What menus show for it.
+     * @param description What it shows, a line for menus.
+     * @param recipe The world.
+     * @param radius The view distance, in sections.
+     * @param lod Whether to draw with level of detail.
+     * @param options The scene's options, like {@code weather} or {@code view}.
+     */
+    public record Preset(
+            @NonNull String id,
+            @NonNull String name,
+            @NonNull String description,
+            SyntheticTerrain.@NonNull Recipe recipe,
+            int radius,
+            boolean lod,
+            @NonNull Map<String, String> options) {}
+
+    /** The ready-made runs, in the order menus show them. */
+    public static final List<Preset> PRESETS =
+            List.of(
+                    new Preset(
+                            "hills",
+                            "Hills",
+                            "Rolling hills with trees, huts, lakes and caves",
+                            SyntheticTerrain.Recipe.TERRAIN,
+                            12,
+                            false,
+                            Map.of()),
+                    new Preset(
+                            "hills-far",
+                            "Hills, far",
+                            "The hills out to 512 m with level of detail",
+                            SyntheticTerrain.Recipe.TERRAIN,
+                            32,
+                            true,
+                            Map.of()),
+                    new Preset(
+                            "hazy-hills",
+                            "Hazy hills",
+                            "The hills under the physical sky, with height fog and haze",
+                            SyntheticTerrain.Recipe.TERRAIN,
+                            12,
+                            false,
+                            Map.of("physicalSky", "true", "fog", "0.01,0.05,20", "haze", "true")),
+                    new Preset(
+                            "island",
+                            "Island",
+                            "A hilly island in clear ocean, with wind waves",
+                            SyntheticTerrain.Recipe.ISLAND,
+                            8,
+                            false,
+                            Map.of("view", "0,6,70,0.15,0")),
+                    new Preset(
+                            "green-lake",
+                            "Green lake",
+                            "The island in green lake water, rich in phytoplankton",
+                            SyntheticTerrain.Recipe.ISLAND,
+                            8,
+                            false,
+                            Map.of("waterBody", "green", "view", "0,6,70,0.15,0")),
+                    new Preset(
+                            "muddy-water",
+                            "Muddy water",
+                            "The island in a muddy river's water",
+                            SyntheticTerrain.Recipe.ISLAND,
+                            8,
+                            false,
+                            Map.of("waterBody", "muddy", "view", "0,6,70,0.15,0")),
+                    new Preset(
+                            "rain",
+                            "Rain",
+                            "Rain falling between huts, splashing on the ground",
+                            SyntheticTerrain.Recipe.HUTS,
+                            4,
+                            false,
+                            Map.of("weather", WEATHER_RAIN, "view", "6.5,6,14,0.3,0")),
+                    new Preset(
+                            "snow",
+                            "Snow",
+                            "Snow settling between huts",
+                            SyntheticTerrain.Recipe.HUTS,
+                            4,
+                            false,
+                            Map.of("weather", WEATHER_SNOW, "view", "6.5,6,14,0.3,0")),
+                    new Preset(
+                            "effects",
+                            "Particles and smoke",
+                            "A fountain, sparks, smoke, thick smoke and fire among huts, with fog",
+                            SyntheticTerrain.Recipe.HUTS,
+                            4,
+                            false,
+                            Map.of(
+                                    "particles",
+                                    "6.5,1,4",
+                                    "fog",
+                                    "0.02",
+                                    "view",
+                                    "6.5,6,14,0.3,0")),
+                    new Preset(
+                            "glass",
+                            "Glass",
+                            "Walls of clear and tinted glass, many layers deep",
+                            SyntheticTerrain.Recipe.GLASS,
+                            8,
+                            false,
+                            Map.of()),
+                    new Preset(
+                            "caves",
+                            "Caves",
+                            "Rock full of caves under a solid roof",
+                            SyntheticTerrain.Recipe.CAVES,
+                            8,
+                            false,
+                            Map.of()),
+                    new Preset(
+                            "jumble",
+                            "Jumble",
+                            "Hills of mixed block shapes, drawn with level of detail",
+                            SyntheticTerrain.Recipe.JUMBLE,
+                            16,
+                            true,
+                            Map.of()));
 
     /** How tall the test smoke column is, half of it, in meters. */
     private static final float SMOKE_HALF_HEIGHT = 20;
@@ -810,6 +940,43 @@ public final class GateBenchmark {
         removeWorld();
         current = new GateBenchmark(recipe, radius, Math.max(0, lights), keepWorld, lod, gate);
         current.begin();
+    }
+
+    /**
+     * Start a ready-made run, keeping its world to look around in, stopping any in progress and
+     * removing a kept world. Render thread only.
+     *
+     * @param preset The run.
+     */
+    public static void start(@NonNull Preset preset) {
+        stop();
+        removeWorld();
+        current = new GateBenchmark(preset.recipe(), preset.radius(), 0, true, preset.lod(), false);
+        current.options.putAll(preset.options());
+        current.begin();
+    }
+
+    /**
+     * One of the run's options: what its preset set, else the startup property of that name.
+     *
+     * @param key The option, the property's name after {@code ikala.benchmark.}.
+     * @return Its value, or null if neither sets it.
+     */
+    private String option(@NonNull String key) {
+        final String value = options.get(key);
+        return value != null ? value : System.getProperty(PROPERTY + "." + key);
+    }
+
+    /**
+     * One of the run's options, or a default.
+     *
+     * @param key The option.
+     * @param fallback What it is if nothing sets it.
+     * @return Its value.
+     */
+    private String option(@NonNull String key, @NonNull String fallback) {
+        final String value = option(key);
+        return value != null ? value : fallback;
     }
 
     /** Remove the world a finished run kept. Render thread only. */
@@ -1095,7 +1262,7 @@ public final class GateBenchmark {
         scene.getMaterialCache().setDirty(true);
         if (lod) {
             lodWorld = graphics.lods().fromSections();
-            final String pixels = System.getProperty(PROPERTY + ".lodPx");
+            final String pixels = option("lodPx");
             if (pixels != null) {
                 graphics.lods().setThreshold(lodWorld, Double.parseDouble(pixels));
             }
@@ -1198,7 +1365,7 @@ public final class GateBenchmark {
      * @param terrain The world.
      */
     private void placeLights(@NonNull SyntheticTerrain terrain) {
-        final String hutTorch = System.getProperty(PROPERTY + ".hutTorch");
+        final String hutTorch = option("hutTorch");
         if (hutTorch != null && !"false".equalsIgnoreCase(hutTorch)) {
             placeHutTorch(terrain, hutTorch);
         }
@@ -1366,14 +1533,14 @@ public final class GateBenchmark {
      * @param scene The scene.
      */
     private void showWorld(@NonNull Scene scene) {
-        scene.getDebugVisualizers().setWireframe(Boolean.getBoolean(PROPERTY + ".wireframe"));
+        scene.getDebugVisualizers().setWireframe(Boolean.parseBoolean(option("wireframe")));
         GraphicsManager.swapPipeline(RenderConfig.WORLD);
         previousSun = scene.getSceneLights().getDirLight();
         previousAmbient = scene.getSceneLights().getAmbientLight();
         previousViewDistance = scene.getViewDistance();
         scene.setViewDistance((double) radius * SyntheticTerrain.SECTION);
         // At night only the torches light the world, to look at their shadows
-        final boolean night = Boolean.getBoolean(PROPERTY + ".night");
+        final boolean night = Boolean.parseBoolean(option("night"));
         scene.getSceneLights()
                 .setDirLight(
                         new DirectionalLight(SUN_COLOR, sunDirection(), night ? 0 : SUN_INTENSITY));
@@ -1384,11 +1551,11 @@ public final class GateBenchmark {
                                 night ? NIGHT_AMBIENT_INTENSITY : AMBIENT_INTENSITY));
         // The physical sky in place of the gray skybox, from the startup property
         previousPhysicalSky = scene.getPhysicalSky();
-        if (Boolean.getBoolean(PROPERTY + ".physicalSky")) {
+        if (Boolean.parseBoolean(option("physicalSky"))) {
             scene.setPhysicalSky(new PhysicalSky());
         }
         previousAutoExposure = scene.isAutoExposure();
-        scene.setAutoExposure(Boolean.getBoolean(PROPERTY + ".autoExposure"));
+        scene.setAutoExposure(Boolean.parseBoolean(option("autoExposure")));
         previousFog = scene.getFog().isActive();
         placeFog(scene.getFog());
         placeTestMedia();
@@ -1408,7 +1575,7 @@ public final class GateBenchmark {
         if (world == null || world.getRecipe() != SyntheticTerrain.Recipe.ISLAND) {
             return;
         }
-        final String name = System.getProperty(PROPERTY + ".waterBody", "ocean");
+        final String name = option("waterBody", "ocean");
         WaterBody body = WATER_BODY_NAMES.get(name.trim().toLowerCase(Locale.ROOT));
         if (body == null) {
             log.warn(
@@ -1417,7 +1584,7 @@ public final class GateBenchmark {
                     name);
             body = WaterBody.OCEAN;
         }
-        final String wind = System.getProperty(PROPERTY + ".wind");
+        final String wind = option("wind");
         if (wind != null) {
             final String[] parts = wind.split(",");
             final float speed = Float.parseFloat(parts[0].trim());
@@ -1485,7 +1652,7 @@ public final class GateBenchmark {
      */
     private void placeTestWater() {
         placeOcean();
-        final String value = System.getProperty(PROPERTY + ".water");
+        final String value = option("water");
         if (value == null) {
             return;
         }
@@ -1530,7 +1697,7 @@ public final class GateBenchmark {
      * around the camera.
      */
     private void placeTestParticles() {
-        final String weather = System.getProperty(PROPERTY + ".weather");
+        final String weather = option("weather");
         if (weather != null) {
             final ParticleEffect effect =
                     switch (weather.trim().toLowerCase(Locale.ROOT)) {
@@ -1551,7 +1718,7 @@ public final class GateBenchmark {
                 }
             }
         }
-        final String value = System.getProperty(PROPERTY + ".particles");
+        final String value = option("particles");
         if (value == null) {
             return;
         }
@@ -1586,7 +1753,7 @@ public final class GateBenchmark {
      * for looking at smoke with the fog, the lights and transparency.
      */
     private void placeTestMedia() {
-        final String value = System.getProperty(PROPERTY + ".smoke");
+        final String value = option("smoke");
         if (value == null) {
             return;
         }
@@ -1648,8 +1815,8 @@ public final class GateBenchmark {
      *
      * @param fog The scene's fog.
      */
-    private static void placeFog(@NonNull Fog fog) {
-        final String value = System.getProperty(PROPERTY + ".fog");
+    private void placeFog(@NonNull Fog fog) {
+        final String value = option("fog");
         if (value == null) {
             return;
         }
@@ -1665,7 +1832,7 @@ public final class GateBenchmark {
         if (parts.length > FOG_ANISOTROPY_PART) {
             fog.setAnisotropy(Float.parseFloat(parts[FOG_ANISOTROPY_PART].trim()));
         }
-        fog.setHaze(Boolean.getBoolean(PROPERTY + ".haze"));
+        fog.setHaze(Boolean.parseBoolean(option("haze")));
     }
 
     /**
@@ -1674,8 +1841,8 @@ public final class GateBenchmark {
      *
      * @return The direction.
      */
-    private static Vector3f sunDirection() {
-        final String up = System.getProperty(PROPERTY + ".sunUp");
+    private Vector3f sunDirection() {
+        final String up = option("sunUp");
         if (up == null) {
             return new Vector3f(SUN_DIRECTION);
         }
@@ -1783,7 +1950,7 @@ public final class GateBenchmark {
      * @param scene The scene.
      */
     private void placeView(@NonNull Scene scene) {
-        final String view = System.getProperty(PROPERTY + ".view");
+        final String view = option("view");
         if (viewPlaced || view == null) {
             return;
         }

@@ -9,8 +9,7 @@
 layout(location = PARTICLE_VARYING_CORNER) in vec2 outCorner;
 layout(location = PARTICLE_VARYING_COLOR) in vec4 outColor;
 layout(location = PARTICLE_VARYING_VIEW) in vec4 outViewPosition;
-layout(location = PARTICLE_VARYING_SIZE) in vec2 outSizeEmissive;
-layout(location = PARTICLE_VARYING_REACTIVE) in float outReactive;
+layout(location = PARTICLE_VARYING_SIZE) in vec2 outSizeReactive;
 
 // Opacity is kept below 1, so the extinction stays finite. Matches OitMath.MAX_OPACITY.
 const float PARTICLE_MAX_OPACITY = 0.999;
@@ -40,12 +39,12 @@ float particleShapeAlpha() {
 // streak moves too far each frame for history to follow it, so where its shape is, it counts as
 // fully reactive, however faint it was smeared; other billboards count by their opacity
 float particleReactive(float alpha) {
-    return min(max(alpha, outReactive * roundShape(outCorner)), PARTICLE_MAX_OPACITY);
+    return min(max(alpha, outSizeReactive.y * roundShape(outCorner)), PARTICLE_MAX_OPACITY);
 }
 
 // The billboard's opacity at this fragment, from its shape's, faded near the opaque scene
 float particleAlpha(float shapeAlpha) {
-    float fade = softFade(-outViewPosition.z, sceneDepthHere(), outSizeEmissive.x * softScale);
+    float fade = softFade(-outViewPosition.z, sceneDepthHere(), outSizeReactive.x * softScale);
     return min(shapeAlpha * fade, PARTICLE_MAX_OPACITY);
 }
 
