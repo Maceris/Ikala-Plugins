@@ -91,6 +91,79 @@ class FogMathTest {
         assertEquals(0.2, out[2], 1e-12);
     }
 
+    /**
+     * Fogging each translucent layer at its own depth, then blending the layers over one another,
+     * gives what fogging the whole ray once does: the fog in front of a pane counts once, and the
+     * fog between it and what is behind shows through it as much as the pane lets through. This is
+     * why translucent surfaces and volume bricks look up the fog at each sample's depth rather than
+     * having it added after blending.
+     */
+    @Test
+    void testFoggedLayersBlendLikeTheWholeRay() {
+        final double[] lengths = sliceLengths(500);
+        final int n = lengths.length;
+        final double[] extinction = new double[n];
+        final double[] scattered = new double[n * FogMath.CHANNELS];
+        for (int slice = 0; slice < n; ++slice) {
+            // Thin fog with a dense, colored bank in the middle slices
+            final boolean bank = slice > n / 3 && slice < n / 2;
+            extinction[slice] = bank ? 0.05 : 0.004;
+            for (int c = 0; c < FogMath.CHANNELS; ++c) {
+                scattered[slice * FogMath.CHANNELS + c] = extinction[slice] * (0.5 + 0.2 * c);
+            }
+        }
+        final double[] gathered = new double[n * FogMath.CHANNELS];
+        final double[] through = new double[n];
+        FogMath.integrate(scattered, extinction, lengths, gathered, through);
+
+        final int near = n / 4;
+        final int middle = (n * 3) / 5;
+        final int far = n - 2;
+        final double[] nearPane = {0.9, 0.2, 0.1};
+        final double nearAlpha = 0.4;
+        final double[] farPane = {0.1, 0.6, 0.9};
+        final double farAlpha = 0.7;
+        final double[] wall = {0.3, 0.3, 0.3};
+
+        final double[] fogNear = fogged(nearPane, gathered, through, near);
+        final double[] fogMiddle = fogged(farPane, gathered, through, middle);
+        final double[] fogWall = fogged(wall, gathered, through, far);
+        for (int c = 0; c < FogMath.CHANNELS; ++c) {
+            // Blended back to front, each layer fogged at its own depth
+            final double behind = farAlpha * fogMiddle[c] + (1 - farAlpha) * fogWall[c];
+            final double blended = nearAlpha * fogNear[c] + (1 - nearAlpha) * behind;
+
+            // The ray walked front to back: fog to the near pane, the pane, fog between the panes
+            // seen through it, and so on
+            final double toNear = gathered[near * FogMath.CHANNELS + c];
+            final double toMiddle = gathered[middle * FogMath.CHANNELS + c];
+            final double toFar = gathered[far * FogMath.CHANNELS + c];
+            final double nearToMiddle = (toMiddle - toNear) / through[near];
+            final double middleToFar = (toFar - toMiddle) / through[middle];
+            final double betweenThrough = through[middle] / through[near];
+            final double lastThrough = through[far] / through[middle];
+            final double fromMiddle =
+                    farAlpha * farPane[c] + (1 - farAlpha) * (middleToFar + lastThrough * wall[c]);
+            final double fromNear =
+                    nearAlpha * nearPane[c]
+                            + (1 - nearAlpha) * (nearToMiddle + betweenThrough * fromMiddle);
+            final double walked = toNear + through[near] * fromNear;
+            assertEquals(walked, blended, 1e-12, "channel " + c);
+        }
+    }
+
+    /** A surface's color fogged at the far end of a slice. */
+    private static double[] fogged(double[] color, double[] gathered, double[] through, int slice) {
+        final double[] out = new double[FogMath.CHANNELS];
+        FogMath.apply(
+                color,
+                java.util.Arrays.copyOfRange(
+                        gathered, slice * FogMath.CHANNELS, (slice + 1) * FogMath.CHANNELS),
+                through[slice],
+                out);
+        return out;
+    }
+
     /** The phase function integrates to 1 over the sphere, and is even when g is 0. */
     @Test
     void testPhaseIntegratesToOne() {

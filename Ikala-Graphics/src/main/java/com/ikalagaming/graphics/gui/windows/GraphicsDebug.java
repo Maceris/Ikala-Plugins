@@ -27,6 +27,7 @@ import com.ikalagaming.graphics.gui.enums.Condition;
 import com.ikalagaming.graphics.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.gui.util.Alignment;
 import com.ikalagaming.graphics.lod.LodPanel;
+import com.ikalagaming.graphics.scene.MediumRegistry;
 import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
@@ -464,6 +465,14 @@ public class GraphicsDebug extends GuiWindow {
                 fogBase.draw(width, height);
                 fogAnisotropy.draw(width, height);
                 fogHaze.draw(width, height);
+                final Scene fogScene = GraphicsManager.getScene();
+                if (fogScene != null) {
+                    IkGui.text(
+                            String.format(
+                                    "Medium volumes: %d of %d",
+                                    fogScene.getMediumRegistry().getCount(),
+                                    MediumRegistry.MAX_VOLUMES));
+                }
                 exposure.draw(width, height);
                 wireframeEnabled.draw(width, height);
                 directionalLightX.draw(width, height);

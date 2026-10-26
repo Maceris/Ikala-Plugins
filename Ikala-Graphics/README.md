@@ -94,6 +94,18 @@ already run this way.
   horizon at large view distances (`GraphicsSettings.coarseBricks`, on by default).
 - **Lighting:** physically based, with a sun, sky light, point and spot lights, shadows,
   transparency and anti-aliasing (see below). `GraphicsSettings` holds the switches and budgets.
+- **Fog and smoke:** the scene's `Fog` is height fog of a density, color (albedo), falloff, base
+  height and anisotropy, optionally with the physical sky's haze so far land fades into the sky.
+  Plugins place local media, like smoke, fog banks or steam, through `graphics.media()`: a
+  `MediumVolume` is a box, sphere or cylinder with a soft edge, a density, albedo, emission,
+  anisotropy, and noise drifting with the wind. `add()` returns a `MediumHandle` to `update()` or
+  `remove()` it; a plugin's volumes are removed when it unloads, and a scene holds up to 256.
+
+  ```java
+  MediumHandle smoke = graphics.media().add(
+          MediumVolume.of(MediumVolume.Shape.CYLINDER, chimneyTop, new Vector3f(1.5f, 6, 0))
+                  .withNoise(2, 4, 0.7f, new Vector3f(0, 2, 0)));
+  ```
 - **Debug views:** the Graphics Debug window shows frame timings, lights, LOD colorings, volume
   sources, G-buffer views and benchmark controls.
 
@@ -180,8 +192,22 @@ What the renderer does and the work it builds on.
   and Salvi, *A Survey of Temporal Antialiasing Techniques*, 2020). Depth rejection of history taps
   is from VRRT (Olejnik, SIGGRAPH 2026). Glass and water make history more reactive.
 
-**Planned**: volumetric fog and smoke lit by the sun, sky and lights, composited with the
-transparency passes; a particle system; stochastic lightcuts for light visibility (Yuksel 2019).
+**Volumetric fog**
+
+- Froxels of 16 px tiles by 128 log slices (Wronski, *Volumetric Fog*, SIGGRAPH 2014), lit by the
+  sun through its cascades, the sky, and the clustered point and spot lights with their shadows,
+  with a Henyey-Greenstein phase; jittered and blended with the last frame's volume.
+- Energy-conserving front-to-back integration (Hillaire, *Physically Based and Unified Volumetric
+  Rendering in Frostbite*, SIGGRAPH 2015). Opaque surfaces, the sky, translucent surfaces and volume
+  bricks are each fogged at their own depth, so blending translucent layers over one another stays
+  right.
+- Media shade themselves analytically, without marching: sunlight is dimmed by each shape's chord
+  toward the sun and the height fog's closed form, and sky light by how deep inside a volume a
+  point is. Light scattered more than once follows Wrenninge's octaves (*Oz: The Great and
+  Volumetric*, SIGGRAPH 2013), weighted by albedo and the volume's thickness. `FogMath` has the
+  math in Java, with tests.
+
+**Planned**: a particle system; stochastic lightcuts for light visibility (Yuksel 2019).
 
 ## Graphics Manager
 
@@ -238,6 +264,9 @@ These are Java system properties, given before `-jar`:
 | `-Dikala.benchmark.cracks=<views>` | `4` | With the gate, checks only the first this many views for cracks, 0 to skip them; each takes minutes at a large radius. |
 | `-Dikala.benchmark.editCracks=false` | `true` | With the gate, skips the crack check over the edits; the edits are still made and timed. A run that checks nothing reports "Cracks: not checked". |
 | `-Dikala.benchmark.coarseBricks=false` | `true` | Turns coarse volume bricks off, for comparing. |
+| `-Dikala.benchmark.fog=<density>[,<falloff>,<base>,<anisotropy>]` | not set | Turns the scene's fog on with this density (per meter) and, optionally, height falloff (per meter), base height and anisotropy. |
+| `-Dikala.benchmark.haze=true` | `false` | Adds the physical sky's haze to the fog; it only shows with a physical sky (`-Dikala.benchmark.physicalSky=true`). |
+| `-Dikala.benchmark.smoke=<x>,<y>,<z>` | not set | Places test media there: a column of white smoke drifting up, a glowing orange sphere 25 m along -x and a fog bank in front. |
 | `-Dikala.vulkan.validation=false` | `true` | Not a benchmark option: runs without the Vulkan validation layers. Their checks can cost milliseconds of CPU a frame, so time the CPU without them, and keep them for correctness runs. |
 
 For example, from the asset editor's folder:
