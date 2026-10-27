@@ -51,8 +51,8 @@ const int LAYOUT_EQUIRECTANGULAR = 1;
 void finish(vec3 color)
 {
     if (fogEnabled != 0) {
-        vec4 seen = fogBeyond(gl_FragCoord.xy);
-        color = color * seen.a + seen.rgb;
+        FogSeen seen = fogBeyond(gl_FragCoord.xy);
+        color = color * seen.through + seen.light;
     }
     fragColor = vec4(color, 1.0);
 }

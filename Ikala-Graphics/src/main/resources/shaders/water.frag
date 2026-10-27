@@ -403,8 +403,8 @@ void main() {
         bottom = texelFetch(bindlessTextures[nonuniformEXT(behindColorIndex)], pixel, 0).rgb;
         // The light stage fogged it as if the air reached all the way: take that fog back off
         if ((fog.enabled & FOG_ENABLED) != 0) {
-            vec4 fogged = fogInFront(gl_FragCoord.xy, -view.z, fog.logScale);
-            bottom = max(bottom - fogged.rgb, vec3(0.0)) / max(fogged.a, 1e-3);
+            FogSeen fogged = fogInFront(gl_FragCoord.xy, -view.z, fog.logScale);
+            bottom = max(bottom - fogged.light, vec3(0.0)) / max(fogged.through, vec3(1e-3));
         }
     } else if (side) {
         // Through a side with only the sky behind, the sky, past the air beyond the water

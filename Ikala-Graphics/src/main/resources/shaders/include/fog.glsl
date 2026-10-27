@@ -78,32 +78,50 @@ float ambientScattering(float opticalDepth, float thickness, float albedo) {
 }
 
 #ifdef FOG_SET
-// Each froxel's light scattered toward the camera in front of its far end (rgb) and how much light
-// gets through to it (a)
+// Each froxel's light scattered toward the camera in front of its far end, and how much of each
+// color gets through to it
 layout(set = FOG_SET, binding = 0) uniform sampler3D fogVolume;
+layout(set = FOG_SET, binding = 1) uniform sampler3D fogTransmittance;
 
-// The fog in front of a point at a pixel, depth meters in front of the camera: the light it
-// scatters toward the camera (rgb) and how much of the point's own light gets through (a). Blended
-// between froxels, and from nothing in the way at the camera to the first slice's far end.
-vec4 fogInFront(vec2 fragCoord, float depth, float logScale) {
+// What the fog in front of a point does: the light it scatters toward the camera, and how much of
+// each color of the point's own light gets through
+struct FogSeen {
+    vec3 light;
+    vec3 through;
+};
+
+// The fog in front of a point at a pixel, depth meters in front of the camera. Blended between
+// froxels, and from nothing in the way at the camera to the first slice's far end.
+FogSeen fogInFront(vec2 fragCoord, float depth, float logScale) {
     vec3 size = vec3(textureSize(fogVolume, 0));
     vec2 tile = fragCoord / float(FOG_TILE);
     float slice = sliceCoordinate(depth, logScale);
     // Each texel holds the fog up to its slice's far end, its center half a slice before it
-    vec4 seen = texture(fogVolume, vec3(tile / size.xy, (max(slice, 1.0) - 0.5) / size.z));
-    return slice < 1.0 ? mix(vec4(0.0, 0.0, 0.0, 1.0), seen, slice) : seen;
+    vec3 at = vec3(tile / size.xy, (max(slice, 1.0) - 0.5) / size.z);
+    FogSeen seen;
+    seen.light = texture(fogVolume, at).rgb;
+    seen.through = texture(fogTransmittance, at).rgb;
+    if (slice < 1.0) {
+        seen.light *= slice;
+        seen.through = mix(vec3(1.0), seen.through, slice);
+    }
+    return seen;
 }
 
 // All the fog in the volume at a pixel, out to the view distance, which the sky is seen through
-vec4 fogBeyond(vec2 fragCoord) {
+FogSeen fogBeyond(vec2 fragCoord) {
     vec3 size = vec3(textureSize(fogVolume, 0));
-    return texture(fogVolume, vec3(fragCoord / float(FOG_TILE) / size.xy, 1.0 - 0.5 / size.z));
+    vec3 at = vec3(fragCoord / float(FOG_TILE) / size.xy, 1.0 - 0.5 / size.z);
+    FogSeen seen;
+    seen.light = texture(fogVolume, at).rgb;
+    seen.through = texture(fogTransmittance, at).rgb;
+    return seen;
 }
 
 // A point's light seen through the fog in front of it
 vec3 fogApply(vec3 color, vec2 fragCoord, float depth, float logScale) {
-    vec4 seen = fogInFront(fragCoord, depth, logScale);
-    return color * seen.a + seen.rgb;
+    FogSeen seen = fogInFront(fragCoord, depth, logScale);
+    return color * seen.through + seen.light;
 }
 #endif
 

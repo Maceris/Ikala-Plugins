@@ -32,7 +32,10 @@ public class FogVolume {
     /** Pixels along each side of a froxel's tile. */
     public static final int TILE_SIZE = 16;
 
-    /** The images' format: light in rgb and extinction or transmittance in alpha, half floats. */
+    /**
+     * The images' format, half floats: light in rgb, or extinction or transmittance by color in
+     * rgb; alpha unused.
+     */
     public static final int FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
 
     /** The binding the injection writes this frame's media through. */
@@ -49,6 +52,21 @@ public class FogVolume {
 
     /** The binding surfaces read the integrated fog through. */
     public static final int READ_BINDING = 0;
+
+    /** The binding the injection writes this frame's extinction by color through. */
+    public static final int INJECT_EXTINCTION_BINDING = 2;
+
+    /** The binding the injection reads the frames before's extinction through. */
+    public static final int HISTORY_EXTINCTION_BINDING = 3;
+
+    /** The binding the integration reads the extinction through. */
+    public static final int MEDIA_EXTINCTION_BINDING = 2;
+
+    /** The binding the integration writes the transmittance by color through. */
+    public static final int TRANSMITTANCE_BINDING = 3;
+
+    /** The binding surfaces read the transmittance through. */
+    public static final int READ_TRANSMITTANCE_BINDING = 1;
 
     /** How many media images take turns. */
     private static final int MEDIA_IMAGES = 2;
@@ -84,11 +102,23 @@ public class FogVolume {
     private final long[] mediaAllocations = new long[MEDIA_IMAGES];
     private final long[] mediaViews = new long[MEDIA_IMAGES];
 
+    /** The media's extinction by color, alongside each media image, and allocations and views. */
+    private final long[] extinction = new long[MEDIA_IMAGES];
+
+    private final long[] extinctionAllocations = new long[MEDIA_IMAGES];
+    private final long[] extinctionViews = new long[MEDIA_IMAGES];
+
     /** The fog integrated front to back, per froxel, and its allocation and view. */
     private long integrated;
 
     private long integratedAllocation;
     private long integratedView;
+
+    /** How much of each color gets through, front to back, per froxel, and allocation and view. */
+    private long transmittance;
+
+    private long transmittanceAllocation;
+    private long transmittanceView;
 
     /** The pool the sets come from. */
     private long descriptorPool;
@@ -147,8 +177,15 @@ public class FogVolume {
             injectSetLayout =
                     createSetLayout(
                             state,
-                            new int[] {INJECT_BINDING, HISTORY_BINDING},
                             new int[] {
+                                INJECT_BINDING,
+                                HISTORY_BINDING,
+                                INJECT_EXTINCTION_BINDING,
+                                HISTORY_EXTINCTION_BINDING
+                            },
+                            new int[] {
+                                VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                                VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                                 VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
                                 VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
                             },
@@ -157,8 +194,15 @@ public class FogVolume {
             integrateSetLayout =
                     createSetLayout(
                             state,
-                            new int[] {MEDIA_BINDING, INTEGRATED_BINDING},
                             new int[] {
+                                MEDIA_BINDING,
+                                INTEGRATED_BINDING,
+                                MEDIA_EXTINCTION_BINDING,
+                                TRANSMITTANCE_BINDING
+                            },
+                            new int[] {
+                                VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
                                 VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                                 VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
                             },
@@ -167,8 +211,11 @@ public class FogVolume {
             readSetLayout =
                     createSetLayout(
                             state,
-                            new int[] {READ_BINDING},
-                            new int[] {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER},
+                            new int[] {READ_BINDING, READ_TRANSMITTANCE_BINDING},
+                            new int[] {
+                                VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
+                            },
                             VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT,
                             stack);
             LongBuffer longOutput = stack.callocLong(1);
@@ -245,11 +292,19 @@ public class FogVolume {
                 media[i] = made[0];
                 mediaAllocations[i] = made[1];
                 mediaViews[i] = made[2];
+                final long[] extinctionMade = createImage(state, stack);
+                extinction[i] = extinctionMade[0];
+                extinctionAllocations[i] = extinctionMade[1];
+                extinctionViews[i] = extinctionMade[2];
             }
             final long[] made = createImage(state, stack);
             integrated = made[0];
             integratedAllocation = made[1];
             integratedView = made[2];
+            final long[] transmittanceMade = createImage(state, stack);
+            transmittance = transmittanceMade[0];
+            transmittanceAllocation = transmittanceMade[1];
+            transmittanceView = transmittanceMade[2];
             createDescriptorSets(state, stack);
         }
         particleFroxels =
@@ -266,7 +321,14 @@ public class FogVolume {
                 state,
                 commandBuffer -> {
                     try (MemoryStack stack = MemoryStack.stackPush()) {
-                        final long[] images = {media[0], media[1], integrated};
+                        final long[] images = {
+                            media[0],
+                            media[1],
+                            extinction[0],
+                            extinction[1],
+                            integrated,
+                            transmittance
+                        };
                         VkImageMemoryBarrier2.Buffer layouts =
                                 VkImageMemoryBarrier2.calloc(images.length, stack);
                         for (int i = 0; i < images.length; ++i) {
@@ -400,11 +462,15 @@ public class FogVolume {
         LongBuffer longOutput = stack.callocLong(1);
         final int sets = 2 * MEDIA_IMAGES + 1;
         VkDescriptorPoolSize.Buffer poolSizes = VkDescriptorPoolSize.calloc(2, stack);
-        poolSizes.get(0).type(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE).descriptorCount(2 * MEDIA_IMAGES);
+        // Each set reads or writes the light and the extinction alike: twice as many images
+        poolSizes
+                .get(0)
+                .type(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+                .descriptorCount(2 * 2 * MEDIA_IMAGES);
         poolSizes
                 .get(1)
                 .type(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-                .descriptorCount(2 * MEDIA_IMAGES + 1);
+                .descriptorCount(2 * (2 * MEDIA_IMAGES + 1));
         checkError(
                 vkCreateDescriptorPool(
                         state.device.logical,
@@ -432,7 +498,7 @@ public class FogVolume {
                                                 readSetLayout)),
                         allocated));
         VkWriteDescriptorSet.Buffer writes =
-                VkWriteDescriptorSet.calloc(4 * MEDIA_IMAGES + 1, stack);
+                VkWriteDescriptorSet.calloc(2 * (4 * MEDIA_IMAGES + 1), stack);
         int write = 0;
         for (int i = 0; i < MEDIA_IMAGES; ++i) {
             final int other = (i + 1) % MEDIA_IMAGES;
@@ -454,9 +520,44 @@ public class FogVolume {
                     integratedView,
                     false,
                     stack);
+            image(
+                    writes.get(write++),
+                    injectSets[i],
+                    INJECT_EXTINCTION_BINDING,
+                    extinctionViews[i],
+                    false,
+                    stack);
+            image(
+                    writes.get(write++),
+                    injectSets[i],
+                    HISTORY_EXTINCTION_BINDING,
+                    extinctionViews[other],
+                    true,
+                    stack);
+            image(
+                    writes.get(write++),
+                    integrateSets[i],
+                    MEDIA_EXTINCTION_BINDING,
+                    extinctionViews[i],
+                    true,
+                    stack);
+            image(
+                    writes.get(write++),
+                    integrateSets[i],
+                    TRANSMITTANCE_BINDING,
+                    transmittanceView,
+                    false,
+                    stack);
         }
         readSet = allocated.get(2 * MEDIA_IMAGES);
-        image(writes.get(write), readSet, READ_BINDING, integratedView, true, stack);
+        image(writes.get(write++), readSet, READ_BINDING, integratedView, true, stack);
+        image(
+                writes.get(write),
+                readSet,
+                READ_TRANSMITTANCE_BINDING,
+                transmittanceView,
+                true,
+                stack);
         vkUpdateDescriptorSets(state.device.logical, writes, null);
     }
 
@@ -511,10 +612,16 @@ public class FogVolume {
             vkDestroyImageView(state.device.logical, mediaViews[i], null);
             vmaDestroyImage(state.vmaAllocator, media[i], mediaAllocations[i]);
             media[i] = VK_NULL_HANDLE;
+            vkDestroyImageView(state.device.logical, extinctionViews[i], null);
+            vmaDestroyImage(state.vmaAllocator, extinction[i], extinctionAllocations[i]);
+            extinction[i] = VK_NULL_HANDLE;
         }
         vkDestroyImageView(state.device.logical, integratedView, null);
         vmaDestroyImage(state.vmaAllocator, integrated, integratedAllocation);
         integrated = VK_NULL_HANDLE;
+        vkDestroyImageView(state.device.logical, transmittanceView, null);
+        vmaDestroyImage(state.vmaAllocator, transmittance, transmittanceAllocation);
+        transmittance = VK_NULL_HANDLE;
         if (particleFroxels != null) {
             SharedBuffer.free(particleFroxels, state);
             particleFroxels = null;

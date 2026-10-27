@@ -2,17 +2,21 @@
 #extension GL_GOOGLE_include_directive : require
 
 // Sums each tile's froxels front to back into the fog in front of each slice's far end: the light
-// scattered toward the camera and how much light gets through, energy-conserving within each slice
-// (Hillaire 2015). One thread per tile. FogMath.integrate has the same math in Java.
+// scattered toward the camera and how much light gets through, by color, energy-conserving within
+// each slice (Hillaire 2015). One thread per tile. FogMath.integrate has the same math in Java, for
+// one color.
 
 #include "fog.glsl"
 
 layout(local_size_x = 8, local_size_y = 8) in;
 
-// The media and their light, per froxel, from fog_inject.comp
+// The media's light and their extinction by color, per froxel, from fog_inject.comp
 layout(set = 0, binding = 0) uniform sampler3D media;
-// The fog in front of each froxel's far end
+layout(set = 0, binding = 2) uniform sampler3D mediaExtinction;
+// The fog in front of each froxel's far end: the light it scatters toward the camera, and how much
+// of each color gets through
 layout(set = 0, binding = 1, rgba16f) uniform restrict writeonly image3D integrated;
+layout(set = 0, binding = 3, rgba16f) uniform restrict writeonly image3D transmittance;
 
 layout(push_constant) uniform Constants {
     // To view space from clip space, for each tile's ray
@@ -40,17 +44,20 @@ void main() {
     float perDepth = length(ray) / -ray.z;
 
     vec3 gathered = vec3(0.0);
-    float through = 1.0;
+    vec3 through = vec3(1.0);
     float near = sliceDepth(0.0, logScale);
     for (uint slice = 0; slice < SLICES; ++slice) {
         float farDepth = sliceDepth(float(slice) + 1.0, logScale);
         float segment = (farDepth - near) * perDepth;
         near = farDepth;
-        vec4 froxel = texelFetch(media, ivec3(tile, slice), 0);
-        float slab = exp(-froxel.a * segment);
-        vec3 within = froxel.a < CLEAR ? froxel.rgb * segment : froxel.rgb * (1.0 - slab) / froxel.a;
+        vec3 light = texelFetch(media, ivec3(tile, slice), 0).rgb;
+        vec3 extinction = texelFetch(mediaExtinction, ivec3(tile, slice), 0).rgb;
+        vec3 slab = exp(-extinction * segment);
+        vec3 within = mix(light * (1.0 - slab) / max(extinction, vec3(CLEAR)), light * segment,
+            lessThan(extinction, vec3(CLEAR)));
         gathered += through * within;
         through *= slab;
-        imageStore(integrated, ivec3(tile, slice), vec4(gathered, through));
+        imageStore(integrated, ivec3(tile, slice), vec4(gathered, 0.0));
+        imageStore(transmittance, ivec3(tile, slice), vec4(through, 0.0));
     }
 }

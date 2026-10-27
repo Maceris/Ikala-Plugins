@@ -15,8 +15,10 @@
 // fog and the volumes shade themselves, worked out for each shape and for the fog's fall off with
 // height rather than marched: the sun's light reaching a point is dimmed by what of them lies toward
 // the sun, with the light scattered more than once on its way (see multipleScattering), and the
-// sky's, which comes from all around, by how deep inside each volume the point is. Their extinction is kept as one value, the air's averaged over its colors; the air's color
-// comes from the light it scatters, which is by color.
+// sky's, which comes from all around, by how deep inside each volume the point is. Extinction is
+// kept by color, so a medium can turn what is seen through it, as water does; the fog, the volumes
+// and the air stop every color alike, the air's averaged over its colors, its own color coming from
+// the light it scatters.
 
 // The light stage's sets, see LightRender
 #define OCCUPANCY_SET 2
@@ -61,9 +63,12 @@ layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Par
 const uint PARTICLE_CHANNELS = 8;
 const float PARTICLE_SCALE = 65536.0;
 
-// This frame's media and their light, per froxel, blended with the frames before's, see FogVolume
+// This frame's media's light, per froxel, blended with the frames before's, see FogVolume, and
+// their extinction by color, likewise
 layout(set = 4, binding = 0, rgba16f) uniform restrict writeonly image3D media;
 layout(set = 4, binding = 1) uniform sampler3D history;
+layout(set = 4, binding = 2, rgba16f) uniform restrict writeonly image3D mediaExtinction;
+layout(set = 4, binding = 3) uniform sampler3D historyExtinction;
 
 layout(push_constant) uniform Constants {
     // From this frame's render space to last frame's view space
@@ -336,7 +341,8 @@ void main() {
                 * henyeyGreenstein(cosLight, anisotropy);
         }
     }
-    vec4 sampled = vec4(scattered, extinction);
+    vec4 sampled = vec4(scattered, 0.0);
+    vec4 sampledExtinction = vec4(vec3(extinction), 0.0);
 
     // Blended with where the froxel's middle was last frame, if it was on screen
     if (historyWeight > 0.0) {
@@ -360,8 +366,11 @@ void main() {
                 vec3 at = vec3(beforeScreen * screenSize / float(FOG_TILE) / size.xy,
                     beforeSlice / size.z);
                 sampled = mix(sampled, texture(history, at), historyWeight);
+                sampledExtinction =
+                    mix(sampledExtinction, texture(historyExtinction, at), historyWeight);
             }
         }
     }
     imageStore(media, ivec3(froxel), sampled);
+    imageStore(mediaExtinction, ivec3(froxel), sampledExtinction);
 }
