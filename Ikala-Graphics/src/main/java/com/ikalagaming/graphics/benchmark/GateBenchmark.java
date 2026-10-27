@@ -822,7 +822,7 @@ public final class GateBenchmark {
                                     "loopSpeed",
                                     "0",
                                     "loopWaves",
-                                    "2",
+                                    "6",
                                     "view",
                                     "0,30,140,0.45,0")),
                     new Preset(

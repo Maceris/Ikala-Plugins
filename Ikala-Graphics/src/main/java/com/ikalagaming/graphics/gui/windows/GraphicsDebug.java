@@ -179,7 +179,7 @@ public class GraphicsDebug extends GuiWindow {
     private final float[][] waterSettings = {{0}, {0}, {0}, {0}, {0}, {0}};
 
     /** The tallest painted waves the slider reaches, as a share of the wind's. */
-    private static final float MAX_PATH_WAVES = 4;
+    private static final float MAX_PATH_WAVES = 10;
 
     /** The fastest wind the water sliders reach, in meters a second. */
     private static final float MAX_WIND = 25;

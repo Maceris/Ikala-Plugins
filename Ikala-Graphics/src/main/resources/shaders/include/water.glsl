@@ -30,6 +30,8 @@ const int WAVE_LAYERS = 4;
 const float WAVE_LAYER_CUTOFFS[WAVE_LAYERS] = float[](0.0, 0.25, 1.0, 4.0);
 // The layer vertices are displaced by, whose waves a grid of a meter samples well enough
 const int WAVE_VERTEX_LAYER = 3;
+// The layer of only the longest waves, a swell's
+const int WAVE_LAST_LAYER = WAVE_LAYERS - 1;
 // How much each layer's cutoff grows over the one before
 const float WAVE_LAYER_RATIO = 4.0;
 // The depths each climate's profiles are worked out for, see WaveMath.DEPTH_LEVELS: deep water,
@@ -255,10 +257,20 @@ vec3 waveSlope(WaveField field, vec2 all[WAVE_DIRECTIONS], int layer, vec2 rende
         vec2 direction = waveDirection(b);
         float along = dot(renderXZ - field.shift, direction);
         if (amplitudes.x > WAVE_FAINTEST) {
+            // Past the wind's own height in this direction, painted or reflected waves grow only
+            // their swell: short waves are already as steep as they get, as in a rougher sea
+            float own = field.climates.climates[field.climate].amplitudes[b];
+            float fine = min(amplitudes.x, own);
+            float swell = amplitudes.x - fine;
             float distance = along + field.climates.climates[field.climate].offsets[b];
-            slope += amplitudes.x * direction
-                * waveProfile(field.profiles, field.climate, windLevel, b, layer, distance).y;
-            windEnergy += amplitudes.x * amplitudes.x;
+            float profile = fine > WAVE_FAINTEST
+                ? waveProfile(field.profiles, field.climate, windLevel, b, layer, distance).y : 0.0;
+            float swellProfile = swell <= WAVE_FAINTEST ? 0.0
+                : layer == WAVE_LAST_LAYER ? profile
+                : waveProfile(field.profiles, field.climate, windLevel, b, WAVE_LAST_LAYER,
+                    distance).y;
+            slope += direction * (fine * profile + swell * swellProfile);
+            windEnergy += fine * fine;
         }
         if (amplitudes.y > WAVE_FAINTEST) {
             float distance = along + field.climates.climates[field.ripples].offsets[b];
