@@ -19,6 +19,7 @@ import com.ikalagaming.graphics.vulkan.TextureInfoVulkan;
 import com.ikalagaming.graphics.vulkan.VulkanState;
 import com.ikalagaming.graphics.vulkan.WaterMath;
 import com.ikalagaming.graphics.vulkan.WaterMesh;
+import com.ikalagaming.graphics.vulkan.WaterVolume;
 import com.ikalagaming.graphics.vulkan.WaveGrid;
 import com.ikalagaming.graphics.vulkan.WaveMath;
 import com.ikalagaming.graphics.vulkan.WaveletMath;
@@ -503,6 +504,9 @@ public class WaterRender implements RenderStage {
                             (camera.z()
                                     - WaveMath.PATTERN_WRAP
                                             * Math.floor(camera.z() / WaveMath.PATTERN_WRAP)));
+            constants.putInt(
+                    ShaderBindings.Water.PUSH_CONSTANT_UNDER_WATER_OFFSET,
+                    WaterVolume.isUnderWater(tiles, camera) ? 1 : 0);
             constants.putFloat(ShaderBindings.Water.PUSH_CONSTANT_SCREEN_SIZE_OFFSET, width);
             constants.putFloat(
                     ShaderBindings.Water.PUSH_CONSTANT_SCREEN_SIZE_OFFSET + Float.BYTES, height);

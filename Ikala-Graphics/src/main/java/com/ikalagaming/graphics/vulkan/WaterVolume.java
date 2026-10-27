@@ -230,6 +230,48 @@ public class WaterVolume {
     }
 
     /**
+     * Whether a point is under water: inside a water cell, between its bottom and its surface at
+     * rest.
+     *
+     * @param tiles The water's tiles.
+     * @param point The point, in the world.
+     * @return Whether it is under water.
+     */
+    public static boolean isUnderWater(@NonNull List<WaterTile> tiles, @NonNull Vector3dc point) {
+        for (WaterTile tile : tiles) {
+            final double size = tile.cellSize();
+            final int x = (int) Math.floor((point.x() - tile.origin().x()) / size);
+            final int z = (int) Math.floor((point.z() - tile.origin().z()) / size);
+            if (x < 0 || z < 0 || x >= tile.cellsX() || z >= tile.cellsZ() || !tile.isWater(x, z)) {
+                continue;
+            }
+            final double fx = (point.x() - tile.origin().x()) / size - x;
+            final double fz = (point.z() - tile.origin().z()) / size - z;
+            final double surface =
+                    tile.origin().y()
+                            + (1 - fz)
+                                    * ((1 - fx) * tile.heightAt(x, z)
+                                            + fx * tile.heightAt(x + 1, z))
+                            + fz
+                                    * ((1 - fx) * tile.heightAt(x, z + 1)
+                                            + fx * tile.heightAt(x + 1, z + 1));
+            final double bottom =
+                    tile.hasBottoms()
+                            ? tile.origin().y()
+                                    + Math.min(
+                                            Math.min(tile.bottomAt(x, z), tile.bottomAt(x + 1, z)),
+                                            Math.min(
+                                                    tile.bottomAt(x, z + 1),
+                                                    tile.bottomAt(x + 1, z + 1)))
+                            : Double.NEGATIVE_INFINITY;
+            if (point.y() < surface && point.y() > bottom) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Free the buffers.
      *
      * @param state The Vulkan state.

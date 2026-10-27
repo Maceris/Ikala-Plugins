@@ -33,6 +33,8 @@ layout(push_constant) uniform Constants {
     // and z kept to WATER_PATTERN_WRAP, which patterns fixed in the world are drawn from
     float sheetTime;
     vec2 cameraWrap;
+    // Nonzero if the camera is under water, which then sees surfaces and sides from inside
+    int underWater;
 };
 
 #endif

@@ -84,6 +84,9 @@ const float REFRACTION_SHIFT = 0.25;
 const float REFRACTION_MAX_DEPTH = 2.0;
 // How far off the sky is taken to be, seen through a side, in meters
 const float SIDE_SKY_DISTANCE = 1e4;
+// The average cosine of the light coming down through water, which sets how fast it fades with
+// depth, as the fog volume has it
+const float WATER_DOWNWELLING_COSINE = 0.8;
 
 // A number from 0 to 1, advancing a seed (Jarzynski and Olano's PCG hash)
 float waterRandom(inout uint seed) {
@@ -431,6 +434,46 @@ void main() {
 
     vec3 below = (bottom + column) / (WATER_INDEX * WATER_INDEX);
     vec3 color = reflected * skyReflected + highlight + (1.0 - reflected) * below;
+
+    // From inside the water, looking out through the surface or a side: what lies beyond, bent
+    // and gaining n^2 of its radiance as its rays crowd into the water, inside Snell's window;
+    // outside it, and as Fresnel reflects within it, the water's own glow from below
+    vec3 sideOutward = vec3(outSideNormal.x, 0.0, outSideNormal.y);
+    bool inside = underWater != 0
+        && (side ? dot(sideOutward, toEye) < 0.0 : outRenderPosition.y > 0.0);
+    if (inside) {
+        vec3 outward = side ? sideOutward : normal;
+        vec3 into = normalize(outRenderPosition);
+        // Deep water's light, scattered from the light coming down, as it fades with depth
+        vec3 fading = (absorption + backscattering) / WATER_DOWNWELLING_COSINE;
+        vec3 glow = scattering * downwelling / (4.0 * 3.14159265) / (extinction + fading);
+        vec3 exiting = refract(into, -outward, WATER_INDEX);
+        if (dot(exiting, exiting) == 0.0) {
+            // Past the critical angle the surface is a mirror
+            color = glow;
+        } else {
+            float leaving = waterFresnel(dot(exiting, outward));
+            float straight = straightBehind < 1.0
+                ? length(behindPoint(ivec2(gl_FragCoord.xy), straightBehind) - outRenderPosition)
+                : SIDE_SKY_DISTANCE;
+            vec3 seen = outRenderPosition + exiting * straight;
+            vec4 clip = inverse(invProjectionMatrix)
+                * vec4(transpose(mat3(invViewMatrix)) * seen, 1.0);
+            vec2 ndc = clip.xy / max(clip.w, 1e-6);
+            vec2 uv = vec2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+            ivec2 beyondPixel = clamp(ivec2(uv * screenSize), ivec2(0), ivec2(screenSize) - 1);
+            vec3 beyond =
+                texelFetch(bindlessTextures[nonuniformEXT(behindColorIndex)], beyondPixel, 0).rgb;
+            // It was seen through the water in front of this surface: that is put back below
+            if ((fog.enabled & FOG_ENABLED) != 0) {
+                FogSeen water = fogInFront(gl_FragCoord.xy, depth, fog.logScale);
+                beyond = max(beyond - water.light, vec3(0.0)) / max(water.through, vec3(1e-3));
+            }
+            color = (1.0 - leaving) * beyond * WATER_INDEX * WATER_INDEX + leaving * glow;
+        }
+        foam = 0.0;
+    }
+
     // Foam over it, lit by the sun on the wave and the sky above
     if (foam > 0.0) {
         vec3 irradiance = sun * max(cosSun, 0.0) + 3.14159265 * skyAverage;
