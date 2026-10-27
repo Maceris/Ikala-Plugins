@@ -31,6 +31,8 @@ layout(location = 5) in vec4 outAmplitudes[WAVE_AMPLITUDE_VECTORS];
 // How fast the water flows here, and how deep it is
 layout(location = 13) in vec2 outFlow;
 layout(location = 14) in float outDepth;
+// Where the surface is at rest, which the waves are worked out from
+layout(location = 15) in vec2 outRestXZ;
 
 layout(location = 0) out vec4 outColor;
 
@@ -42,6 +44,10 @@ const float SKY_REFLECTANCE = 0.066;
 const float MIN_COSINE = 1e-3;
 // The least cosine a pixel's footprint is stretched by, seen at a grazing angle
 const float MIN_FOOTPRINT_COSINE = 0.2;
+// How much of the light reaching it fresh, dense foam sends back, spread evenly: bright, short of
+// snow; whitecaps average about 0.22 with old, thinning foam (Koepke 1984), dense foam reaches about
+// 0.55 (Frouin et al. 2001)
+const float FOAM_ALBEDO = 0.55;
 // How far the bottom shifts across the screen per unit of the surface's tilt, as a share of the
 // screen's height, per meter of water down to 2 m, over the distance
 const float REFRACTION_SHIFT = 0.25;
@@ -65,6 +71,8 @@ void main() {
     const vec3 up = vec3(0.0, 1.0, 0.0);
     vec3 normal = up;
     vec3 toEye = normalize(-outRenderPosition);
+    // How much of the pixel foam covers
+    float foam = 0.0;
     float alpha = max(roughness * roughness, 1e-4);
     // A side, where the water ends: seen through its face, the way it faces the eye
     bool side = dot(outSideNormal, outSideNormal) > 0.0;
@@ -107,16 +115,34 @@ void main() {
             amplitudes[2 * i + 1] = outAmplitudes[i].zw;
         }
         field.shift = waveFlowShift(outFlow, waveTime, 0);
-        vec3 slope = mix(waveSlope(field, amplitudes, lower, outRenderPosition.xz),
-            waveSlope(field, amplitudes, upper, outRenderPosition.xz), blend);
+        vec3 lowerSums;
+        vec3 upperSums;
+        vec3 slope = mix(waveSlope(field, amplitudes, lower, outRestXZ, lowerSums),
+            waveSlope(field, amplitudes, upper, outRestXZ, upperSums), blend);
+        vec3 sums = mix(lowerSums, upperSums, blend);
         if (phaseBlend > 0.0) {
             field.shift = waveFlowShift(outFlow, waveTime, 1);
-            slope = mix(slope, mix(waveSlope(field, amplitudes, lower, outRenderPosition.xz),
-                waveSlope(field, amplitudes, upper, outRenderPosition.xz), blend), phaseBlend);
+            slope = mix(slope, mix(waveSlope(field, amplitudes, lower, outRestXZ, lowerSums),
+                waveSlope(field, amplitudes, upper, outRestXZ, upperSums), blend), phaseBlend);
+            sums = mix(sums, mix(lowerSums, upperSums, blend), phaseBlend);
         }
         slope *= outCalm;
         float variance = slope.z * outCalm;
-        normal = normalize(vec3(-slope.x, 1.0, -slope.y));
+        // The choppy surface's slope: the height's gradient at rest through the inverse of the
+        // map's Jacobian, which steepens the squeezed crests and flattens the stretched troughs
+        mat2 jacobian = waveJacobian(sums * outCalm);
+        float squeeze = determinant(jacobian);
+        vec2 gradient = slope.xy;
+        if (squeeze > WAVE_MIN_JACOBIAN) {
+            gradient = inverse(jacobian) * gradient;
+        } else {
+            gradient = mat2(jacobian[1][1], -jacobian[0][1], -jacobian[1][0], jacobian[0][0])
+                * gradient / WAVE_MIN_JACOBIAN;
+        }
+        if (climate >= 0) {
+            foam = waveFoam(squeeze, variance, climateList.climates[climate].peak.y);
+        }
+        normal = normalize(vec3(-gradient.x, 1.0, -gradient.y));
         alpha = sqrt(alpha * alpha + variance);
     }
     float surfaceRoughness = sqrt(alpha);
@@ -223,6 +249,11 @@ void main() {
 
     vec3 below = (bottom + column) / (WATER_INDEX * WATER_INDEX);
     vec3 color = reflected * skyReflected + highlight + (1.0 - reflected) * below;
+    // Foam over it, lit by the sun on the wave and the sky above
+    if (foam > 0.0) {
+        vec3 irradiance = sun * max(cosSun, 0.0) + 3.14159265 * skyAverage;
+        color = mix(color, FOAM_ALBEDO / 3.14159265 * irradiance, foam);
+    }
 
     if ((fog.enabled & FOG_ENABLED) != 0) {
         color = fogApply(color, gl_FragCoord.xy, depth, fog.logScale);

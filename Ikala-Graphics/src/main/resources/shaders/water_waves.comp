@@ -5,9 +5,12 @@
 // Fills each wave climate's profiles for this frame, see WaterRender and WaveMath.profile: one
 // thread per sample of a profile, x along it and y the climate's depth and direction, summing the
 // climate's waves at that depth, each turned by the direction's own phase, each layer leaving out
-// the waves shorter than its cutoff. Height is a cos (k p + phase) summed; the
-// slope along the profile its derivative, -a k sin (k p + phase). The phases come wrapped to a turn
-// from the CPU, so they stay precise.
+// the waves shorter than its cutoff. Each sample holds four sums, as half floats: the height,
+// a cos (k p + phase); the slope along the profile, its derivative, -a k sin (k p + phase); how far
+// the choppy waves move the surface along the profile, -a sin (k p + phase), as Gerstner and
+// Tessendorf's choppy waves do; and how fast that changes, which the Jacobian is made of,
+// a k cos (k p + phase), so dD/dp = -that. The phases come wrapped to a turn from the CPU, so they
+// stay precise.
 
 #include "water.glsl"
 
@@ -22,7 +25,7 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Wa
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 8) writeonly buffer WaveProfileOut {
-    vec2 values[];
+    uvec2 values[];
 };
 
 layout(push_constant) uniform Constants {
@@ -53,9 +56,9 @@ void main() {
         return;
     }
     float distance = float(sampleIndex) / float(WAVE_PROFILE_SAMPLES) * WAVE_PROFILE_LENGTH;
-    vec2 sums[WAVE_LAYERS];
+    vec4 sums[WAVE_LAYERS];
     for (int layer = 0; layer < WAVE_LAYERS; ++layer) {
-        sums[layer] = vec2(0.0);
+        sums[layer] = vec4(0.0);
     }
     for (uint i = 0; i < waveCount; ++i) {
         vec4 wave = samples.waves[depthClimate * waveCount + i];
@@ -63,7 +66,9 @@ void main() {
             continue;
         }
         float angle = wave.x * distance + wave.z + directionPhase(direction, i);
-        vec2 value = vec2(wave.y * cos(angle), -wave.y * wave.x * sin(angle));
+        float c = cos(angle);
+        float s = sin(angle);
+        vec4 value = wave.y * vec4(c, -wave.x * s, -s, wave.x * c);
         for (int layer = 0; layer < WAVE_LAYERS; ++layer) {
             if (wave.w >= WAVE_LAYER_CUTOFFS[layer]) {
                 sums[layer] += value;
@@ -73,6 +78,7 @@ void main() {
     for (int layer = 0; layer < WAVE_LAYERS; ++layer) {
         uint profile = (depthClimate * uint(WAVE_DIRECTIONS) + direction) * uint(WAVE_LAYERS)
             + uint(layer);
-        profiles.values[profile * uint(WAVE_PROFILE_SAMPLES) + sampleIndex] = sums[layer];
+        profiles.values[profile * uint(WAVE_PROFILE_SAMPLES) + sampleIndex] =
+            uvec2(packHalf2x16(sums[layer].xy), packHalf2x16(sums[layer].zw));
     }
 }

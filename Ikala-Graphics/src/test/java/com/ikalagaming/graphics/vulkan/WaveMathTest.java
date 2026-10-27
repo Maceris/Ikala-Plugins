@@ -106,6 +106,36 @@ class WaveMathTest {
         return WaveMath.levelsUsed(atDepths);
     }
 
+    /**
+     * Whitecaps cover a few percent of the sea in a strong wind and none in a calm, and the foam
+     * Jacobian puts that share of a normal Jacobian under it.
+     */
+    @Test
+    void testFoamJacobian() {
+        assertEquals(0.032, WaveMath.whitecapCoverage(14), 0.003);
+        assertEquals(0, WaveMath.whitecapCoverage(0));
+        assertTrue(WaveMath.whitecapCoverage(100) <= WaveMath.MAX_WHITECAP_COVERAGE);
+        final WaveMath.Waves waves = WaveMath.sample(14, OPEN, 3);
+        double variance = 0;
+        for (int i = 0; i < waves.wavenumbers().length; ++i) {
+            final double slope = waves.amplitudes()[i] * waves.wavenumbers()[i];
+            variance += slope * slope / 2;
+        }
+        final double threshold = WaveMath.foamJacobian(waves, 14);
+        assertTrue(threshold < 1);
+        // The logistic stand-in for the chance the Jacobian falls under it
+        final double under =
+                1
+                        / (1
+                                + Math.exp(
+                                        -WaveMath.LOGISTIC_SCALE
+                                                * (threshold - 1)
+                                                / Math.sqrt(variance)));
+        assertEquals(WaveMath.whitecapCoverage(14), under, 1e-9);
+        assertEquals(WaveMath.NO_FOAM_JACOBIAN, WaveMath.foamJacobian(waves, 0));
+        assertTrue(WaveMath.foamJacobian(waves, 20) > threshold, "more foam in more wind");
+    }
+
     /** The directions' energies sum to the whole, and none go against the wind. */
     @Test
     void testSpreading() {

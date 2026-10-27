@@ -36,10 +36,13 @@ layout(location = 4) out vec2 outSideNormal;
 layout(location = 5) out vec4 outAmplitudes[WAVE_AMPLITUDE_VECTORS];
 layout(location = 13) out vec2 outFlow;
 layout(location = 14) out float outDepth;
+// Where the surface is at rest, relative to the camera, which the waves are worked out from
+layout(location = 15) out vec2 outRestXZ;
 
 void main() {
     WaterTileData tile = tileList.waterTiles[inTile];
     vec3 render = tile.offset.xyz + inPosition;
+    vec2 rest = render.xz;
     int climate = int(tile.offset.w);
     float waves = inCalm;
     vec2 amplitudes[WAVE_DIRECTIONS];
@@ -63,7 +66,7 @@ void main() {
             int upper = min(lower + 1, WAVE_DEPTHS - 1);
             float depthBlend = level - float(lower);
             float phaseBlend = dot(inFlow, inFlow) > 0.0 ? waveFlowWeight(waveTime) : 0.0;
-            float height = 0.0;
+            vec3 moved = vec3(0.0);
             for (int phase = 0; phase < 2; ++phase) {
                 float phaseWeight = phase == 0 ? 1.0 - phaseBlend : phaseBlend;
                 if (phaseWeight <= 0.0) {
@@ -71,15 +74,15 @@ void main() {
                 }
                 field.shift = waveFlowShift(inFlow, waveTime, phase);
                 field.level = lower;
-                float atLevel = waveHeight(field, amplitudes, WAVE_VERTEX_LAYER, render.xz);
+                vec3 atLevel = waveDisplacement(field, amplitudes, WAVE_VERTEX_LAYER, rest);
                 if (depthBlend > 0.0) {
                     field.level = upper;
                     atLevel = mix(atLevel,
-                        waveHeight(field, amplitudes, WAVE_VERTEX_LAYER, render.xz), depthBlend);
+                        waveDisplacement(field, amplitudes, WAVE_VERTEX_LAYER, rest), depthBlend);
                 }
-                height += phaseWeight * atLevel;
+                moved += phaseWeight * atLevel;
             }
-            render.y += waves * height;
+            render += waves * moved;
         }
     }
     for (int i = 0; i < WAVE_AMPLITUDE_VECTORS; ++i) {
@@ -93,5 +96,6 @@ void main() {
     outSideNormal = inSideNormal;
     outFlow = inFlow;
     outDepth = inDepth;
+    outRestXZ = rest;
     gl_Position = projectionMatrix * view;
 }

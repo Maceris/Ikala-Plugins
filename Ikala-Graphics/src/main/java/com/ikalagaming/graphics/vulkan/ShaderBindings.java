@@ -579,6 +579,9 @@ public class ShaderBindings {
          */
         public static final int CLIMATE_PEAK = CLIMATE_LEVELS + 4 * Integer.BYTES;
 
+        /** Where in it the Jacobian its waves break into foam under is, after the peak. */
+        public static final int CLIMATE_FOAM_JACOBIAN = CLIMATE_PEAK + Float.BYTES;
+
         /** The size of one wave climate. */
         public static final int CLIMATE_SIZE = CLIMATE_PEAK + 4 * Float.BYTES;
 
@@ -603,7 +606,10 @@ public class ShaderBindings {
         /** The size of one wave sample: its wavenumber, amplitude, phase and wavelength. */
         public static final int WAVE_SAMPLE_SIZE = 4 * Float.BYTES;
 
-        /** The size of one profile sample: its height and slope. */
+        /**
+         * The size of one profile sample: its height, slope, along-profile displacement and
+         * Jacobian sum, as half floats.
+         */
         public static final int PROFILE_SAMPLE_SIZE = 2 * Float.BYTES;
 
         /** Where in a tile's entry its corner relative to the camera is, a vec4. */

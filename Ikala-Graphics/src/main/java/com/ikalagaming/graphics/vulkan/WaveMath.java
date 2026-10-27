@@ -74,6 +74,24 @@ public final class WaveMath {
      */
     public static final double SAME_AS_DEEP = 0.01;
 
+    /** Monahan and O'Muircheartaigh's whitecap coverage's factor, see {@link #whitecapCoverage}. */
+    public static final double WHITECAP_SCALE = 2.95e-6;
+
+    /** Its power of the wind's speed. */
+    public static final double WHITECAP_POWER = 3.52;
+
+    /** The most of the sea whitecaps cover, past the fit's measured winds. */
+    public static final double MAX_WHITECAP_COVERAGE = 0.2;
+
+    /**
+     * The logistic function's scale that makes it close to the normal distribution's cumulative
+     * one, 1 / (1 + exp(-1.702 x)), see {@code waveFoam} in {@code water.glsl}.
+     */
+    public static final double LOGISTIC_SCALE = 1.702;
+
+    /** The foam Jacobian of a climate without whitecaps, which no surface falls under. */
+    public static final double NO_FOAM_JACOBIAN = -1000;
+
     /** The most shoaling raises a wave, short of where it breaks. */
     public static final double MAX_SHOALING = 1.6;
 
@@ -483,6 +501,49 @@ public final class WaveMath {
             variance += amplitude * amplitude / 2;
         }
         return 4 * Math.sqrt(variance);
+    }
+
+    /**
+     * How much of the sea whitecaps cover in a wind, as Monahan and O'Muircheartaigh (1980) fit it:
+     * {@link #WHITECAP_SCALE} U^{@link #WHITECAP_POWER}, U the wind 10 m up in meters a second, up
+     * to {@link #MAX_WHITECAP_COVERAGE}.
+     *
+     * @param windSpeed The wind's speed, in meters a second.
+     * @return The share covered, 0 to 1.
+     */
+    public static double whitecapCoverage(double windSpeed) {
+        if (windSpeed <= 0) {
+            return 0;
+        }
+        return Math.min(
+                MAX_WHITECAP_COVERAGE, WHITECAP_SCALE * Math.pow(windSpeed, WHITECAP_POWER));
+    }
+
+    /**
+     * Where the choppy waves' Jacobian breaks into foam for a wind's waves, so that foam covers as
+     * much of the sea as whitecaps do, see {@link #whitecapCoverage}: the surface squeezes by J = 1
+     * - T, T = sum of a k cos (k p + phase) over every wave, which is about normal with the
+     * variance of the slope along one direction, sum of (a k)^2 / 2; foam is where J falls under
+     * the threshold, as often as whitecaps cover. Measured coverage, rather than a fixed threshold,
+     * keeps the foam right where a profile leaves out the longest waves. The water shader's normal
+     * distribution is the logistic one scaled by {@link #LOGISTIC_SCALE}, so its inverse is used.
+     *
+     * @param waves The wind's waves, deep water's.
+     * @param windSpeed The wind's speed, in meters a second.
+     * @return The Jacobian foam starts under, or {@link #NO_FOAM_JACOBIAN} for a calm.
+     */
+    public static double foamJacobian(Waves waves, double windSpeed) {
+        final double coverage = whitecapCoverage(windSpeed);
+        double variance = 0;
+        for (int i = 0; i < waves.wavenumbers().length; ++i) {
+            final double slope = waves.amplitudes()[i] * waves.wavenumbers()[i];
+            variance += slope * slope / 2;
+        }
+        if (coverage <= 0 || variance <= 0) {
+            return NO_FOAM_JACOBIAN;
+        }
+        final double standard = Math.log((1 - coverage) / coverage) / LOGISTIC_SCALE;
+        return 1 - Math.sqrt(variance) * standard;
     }
 
     /**

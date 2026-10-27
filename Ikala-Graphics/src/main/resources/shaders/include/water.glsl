@@ -32,6 +32,13 @@ const float WAVE_LAYER_CUTOFFS[WAVE_LAYERS] = float[](0.0, 0.25, 1.0, 4.0);
 const int WAVE_VERTEX_LAYER = 3;
 // The layer of only the longest waves, a swell's
 const int WAVE_LAST_LAYER = WAVE_LAYERS - 1;
+// How far the choppy waves move the surface sideways, Tessendorf's lambda: 1 moves each point
+// round a circle as tall as its wave, as in Gerstner's waves
+const float WAVE_CHOP = 1.0;
+// How soft the foam's edge is, as a spread of the Jacobian, for the pixels that see every wave
+const float WAVE_FOAM_EDGE = 0.08;
+// The least Jacobian the slope of the choppy surface is worked out with, short of a fold
+const float WAVE_MIN_JACOBIAN = 0.1;
 // How much each layer's cutoff grows over the one before
 const float WAVE_LAYER_RATIO = 4.0;
 // The depths each climate's profiles are worked out for, see WaveMath.DEPTH_LEVELS: deep water,
@@ -45,7 +52,8 @@ const float WAVE_FLOW_CYCLE = 4.0;
 // One wave climate, WaterRender: each direction's amplitude and where the camera stands along it in
 // its profile, in meters; the slope variance each layer leaves out; which depth's profiles each
 // depth reads, deep water's where its waves are the same, so those are never filled; and the
-// amplitude of its strongest direction, in x, which the grid's wind band keeps shares of
+// amplitude of its strongest direction, in x, which the grid's wind band keeps shares of, and the
+// Jacobian its waves break into foam under, in y, see WaveMath.foamJacobian
 struct WaveClimate {
     float amplitudes[WAVE_DIRECTIONS];
     float offsets[WAVE_DIRECTIONS];
@@ -59,13 +67,21 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Wa
 };
 
 // Each climate's profiles, depth after depth, in each direction after direction, and in each layer
-// after layer, each WAVE_PROFILE_SAMPLES of height and slope
+// after layer, each WAVE_PROFILE_SAMPLES of four half floats: height, slope, how far the choppy
+// waves move the surface along the profile, and the sum the Jacobian is made of, see
+// water_waves.comp
 layout(buffer_reference, std430, buffer_reference_align = 8) readonly buffer WaveProfileList {
-    vec2 profiles[];
+    uvec2 profiles[];
 };
 
-// A profile's height and slope at a distance along it, between its two nearest samples, wrapping
-vec2 waveProfile(WaveProfileList list, int climate, int level, int direction, int layer,
+// One profile sample's four sums
+vec4 waveProfileSample(uvec2 packed) {
+    return vec4(unpackHalf2x16(packed.x), unpackHalf2x16(packed.y));
+}
+
+// A profile's height, slope, along-profile displacement and Jacobian sum at a distance along it,
+// between its two nearest samples, wrapping
+vec4 waveProfile(WaveProfileList list, int climate, int level, int direction, int layer,
         float distance) {
     float at = distance / WAVE_PROFILE_LENGTH * float(WAVE_PROFILE_SAMPLES);
     float lower = floor(at);
@@ -73,7 +89,8 @@ vec2 waveProfile(WaveProfileList list, int climate, int level, int direction, in
     int i1 = (i0 + 1) & (WAVE_PROFILE_SAMPLES - 1);
     int base = (((climate * WAVE_DEPTHS + level) * WAVE_DIRECTIONS + direction) * WAVE_LAYERS
         + layer) * WAVE_PROFILE_SAMPLES;
-    return mix(list.profiles[base + i0], list.profiles[base + i1], at - lower);
+    return mix(waveProfileSample(list.profiles[base + i0]),
+        waveProfileSample(list.profiles[base + i1]), at - lower);
 }
 
 // Which depth's profiles suit water of a depth, as a fraction between two of them
@@ -210,27 +227,31 @@ int waveClimateLevel(WaveField field, int climate) {
     return climate >= 0 ? field.climates.climates[climate].levels[field.level] : 0;
 }
 
-// The surface's height above its rest at a point relative to the camera, from one layer and the
-// directions' amplitudes there
-float waveHeight(WaveField field, vec2 all[WAVE_DIRECTIONS], int layer, vec2 renderXZ) {
-    float height = 0.0;
+// How the waves move the surface at a point relative to the camera, from one layer and the
+// directions' amplitudes there: x and z by the choppy waves, as much as WAVE_CHOP, and y, its height
+// above its rest
+vec3 waveDisplacement(WaveField field, vec2 all[WAVE_DIRECTIONS], int layer, vec2 renderXZ) {
+    vec3 moved = vec3(0.0);
     int windLevel = waveClimateLevel(field, field.climate);
     int rippleLevel = waveClimateLevel(field, field.ripples);
     for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
         vec2 amplitudes = all[b];
-        float along = dot(renderXZ - field.shift, waveDirection(b));
+        vec2 direction = waveDirection(b);
+        float along = dot(renderXZ - field.shift, direction);
+        vec2 sums = vec2(0.0);
         if (amplitudes.x > WAVE_FAINTEST) {
             float distance = along + field.climates.climates[field.climate].offsets[b];
-            height += amplitudes.x
-                * waveProfile(field.profiles, field.climate, windLevel, b, layer, distance).x;
+            sums += amplitudes.x
+                * waveProfile(field.profiles, field.climate, windLevel, b, layer, distance).xz;
         }
         if (amplitudes.y > WAVE_FAINTEST) {
             float distance = along + field.climates.climates[field.ripples].offsets[b];
-            height += amplitudes.y
-                * waveProfile(field.profiles, field.ripples, rippleLevel, b, layer, distance).x;
+            sums += amplitudes.y
+                * waveProfile(field.profiles, field.ripples, rippleLevel, b, layer, distance).xz;
         }
+        moved += vec3(WAVE_CHOP * sums.y * direction.x, sums.x, WAVE_CHOP * sums.y * direction.y);
     }
-    return height;
+    return moved;
 }
 
 // The directions' amplitudes passed from vertex to fragment, two directions to a vec4: the grid's
@@ -245,9 +266,12 @@ void waveAmplitudesAll(WaveField field, out vec2 amplitudes[WAVE_DIRECTIONS]) {
 }
 
 // The surface's slope at a point, x and z, from one layer and the directions' amplitudes there,
-// and the slope variance the layer leaves out there
-vec3 waveSlope(WaveField field, vec2 all[WAVE_DIRECTIONS], int layer, vec2 renderXZ) {
+// and the slope variance the layer leaves out there; and the sums the choppy waves' Jacobian is
+// made of: J = I - WAVE_CHOP * [x z; z y] of them, see waveJacobian
+vec3 waveSlope(WaveField field, vec2 all[WAVE_DIRECTIONS], int layer, vec2 renderXZ,
+        out vec3 jacobian) {
     vec2 slope = vec2(0.0);
+    jacobian = vec3(0.0);
     float windEnergy = 0.0;
     float rippleEnergy = 0.0;
     int windLevel = waveClimateLevel(field, field.climate);
@@ -263,17 +287,22 @@ vec3 waveSlope(WaveField field, vec2 all[WAVE_DIRECTIONS], int layer, vec2 rende
             float fine = min(amplitudes.x, own);
             float swell = amplitudes.x - fine;
             float distance = along + field.climates.climates[field.climate].offsets[b];
-            float profile = fine > WAVE_FAINTEST
-                ? waveProfile(field.profiles, field.climate, windLevel, b, layer, distance).y : 0.0;
-            float swellProfile = swell <= WAVE_FAINTEST ? 0.0
+            vec4 profile = fine > WAVE_FAINTEST
+                ? waveProfile(field.profiles, field.climate, windLevel, b, layer, distance)
+                : vec4(0.0);
+            vec4 swellProfile = swell <= WAVE_FAINTEST ? vec4(0.0)
                 : layer == WAVE_LAST_LAYER ? profile
                 : waveProfile(field.profiles, field.climate, windLevel, b, WAVE_LAST_LAYER,
-                    distance).y;
-            slope += direction * (fine * profile + swell * swellProfile);
+                    distance);
+            vec4 sums = fine * profile + swell * swellProfile;
+            slope += direction * sums.y;
+            jacobian += sums.w * vec3(direction.x * direction.x, direction.y * direction.y,
+                direction.x * direction.y);
             windEnergy += fine * fine;
         }
         if (amplitudes.y > WAVE_FAINTEST) {
             float distance = along + field.climates.climates[field.ripples].offsets[b];
+            // Ripples tilt the surface but don't break: they stay out of the Jacobian
             slope += amplitudes.y * direction
                 * waveProfile(field.profiles, field.ripples, rippleLevel, b, layer, distance).y;
             rippleEnergy += amplitudes.y * amplitudes.y;
@@ -287,6 +316,25 @@ vec3 waveSlope(WaveField field, vec2 all[WAVE_DIRECTIONS], int layer, vec2 rende
         missing += rippleEnergy * field.climates.climates[field.ripples].missingVariance[layer];
     }
     return vec3(slope, missing);
+}
+
+// The choppy waves' map from the surface at rest to where it is, x0 to x0 + D: its Jacobian
+// matrix, from waveSlope's sums, xx, zz and xz
+mat2 waveJacobian(vec3 sums) {
+    return mat2(1.0 - WAVE_CHOP * sums.x, -WAVE_CHOP * sums.z,
+        -WAVE_CHOP * sums.z, 1.0 - WAVE_CHOP * sums.y);
+}
+
+// How much of a pixel foam covers, from the Jacobian of the waves it sees and the slope variance
+// of those it can't: where the surface squeezes under the climate's foam Jacobian it breaks, a
+// threshold set so foam covers as much as measured whitecaps do (WaveMath.foamJacobian); War
+// Thunder's ocean uses a fixed 0.3 to 0.5 (Tcheblokov 2015). The waves left out add to the
+// Jacobian about as much spread as to the slope, so a far pixel's foam is the chance its waves
+// break, as Dupuy and Bruneton filter whitecaps (2012). The normal distribution's cumulative
+// function is the logistic one's, scaled, close enough here.
+float waveFoam(float jacobian, float missingVariance, float threshold) {
+    float spread = sqrt(WAVE_CHOP * WAVE_CHOP * missingVariance + WAVE_FOAM_EDGE * WAVE_FOAM_EDGE);
+    return 1.0 / (1.0 + exp(-1.702 * (threshold - jacobian) / spread));
 }
 
 // Which layer suits waves seen at a footprint, as a fraction between two layers: the shortest

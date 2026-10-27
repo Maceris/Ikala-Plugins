@@ -85,6 +85,7 @@ public class WaterRender implements RenderStage {
      * @param missingVariance Each layer's left out slope variance.
      * @param atDepths The waves at each of {@link WaveMath#DEPTH_LEVELS}, deep water's first.
      * @param levels Which depth's profiles each depth reads, see {@link WaveMath#levelsUsed}.
+     * @param foamJacobian Where its waves break into foam, see {@link WaveMath#foamJacobian}.
      */
     private record Climate(
             WaveMath.Waves waves,
@@ -92,7 +93,8 @@ public class WaterRender implements RenderStage {
             double[] offsets,
             double[] missingVariance,
             WaveMath.Waves[] atDepths,
-            int[] levels) {
+            int[] levels,
+            double foamJacobian) {
 
         /**
          * Work a wind's climate out.
@@ -105,7 +107,8 @@ public class WaterRender implements RenderStage {
             return of(
                     WaveMath.sample(wind.speed(), wind.fetch(), seed),
                     WaveMath.directionAmplitudes(wind.direction()),
-                    seed);
+                    seed,
+                    wind.speed());
         }
 
         /**
@@ -114,9 +117,12 @@ public class WaterRender implements RenderStage {
          * @param waves The waves.
          * @param amplitudes Each direction's amplitude.
          * @param seed What picks its directions' offsets.
+         * @param windSpeed The wind that raised them, in meters a second, for their whitecaps; 0
+         *     for none.
          * @return The climate.
          */
-        static Climate of(@NonNull WaveMath.Waves waves, double[] amplitudes, long seed) {
+        static Climate of(
+                @NonNull WaveMath.Waves waves, double[] amplitudes, long seed, double windSpeed) {
             final double[] offsets = new double[WaveMath.DIRECTIONS];
             for (int b = 0; b < offsets.length; ++b) {
                 offsets[b] = WaveMath.PROFILE_LENGTH * WaveMath.unitHash(seed + WaveMath.WAVES, b);
@@ -130,7 +136,13 @@ public class WaterRender implements RenderStage {
                 atDepths[level] = WaveMath.atDepth(waves, WaveMath.DEPTH_LEVELS[level]);
             }
             return new Climate(
-                    waves, amplitudes, offsets, missing, atDepths, WaveMath.levelsUsed(atDepths));
+                    waves,
+                    amplitudes,
+                    offsets,
+                    missing,
+                    atDepths,
+                    WaveMath.levelsUsed(atDepths),
+                    WaveMath.foamJacobian(waves, windSpeed));
         }
     }
 
@@ -244,7 +256,7 @@ public class WaterRender implements RenderStage {
         grid = new WaveGrid(waveletsShader);
         final double[] everyWay = new double[WaveMath.DIRECTIONS];
         Arrays.fill(everyWay, 1);
-        ripples = Climate.of(WaveletMath.ripples(RIPPLE_SEED), everyWay, RIPPLE_SEED);
+        ripples = Climate.of(WaveletMath.ripples(RIPPLE_SEED), everyWay, RIPPLE_SEED, 0);
         climates.add(ripples);
         this.sceneRender = sceneRender;
         this.lightRender = lightRender;
@@ -628,6 +640,9 @@ public class WaterRender implements RenderStage {
                 peak = Math.max(peak, amplitude);
             }
             MemoryUtil.memPutFloat(at + ShaderBindings.Water.CLIMATE_PEAK, (float) peak);
+            MemoryUtil.memPutFloat(
+                    at + ShaderBindings.Water.CLIMATE_FOAM_JACOBIAN,
+                    (float) climate.foamJacobian());
             for (int level = 0; level < WaveMath.DEPTHS; ++level) {
                 MemoryUtil.memPutInt(
                         at + ShaderBindings.Water.CLIMATE_LEVELS + (long) level * Integer.BYTES,
