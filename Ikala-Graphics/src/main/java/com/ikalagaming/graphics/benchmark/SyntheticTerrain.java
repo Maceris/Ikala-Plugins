@@ -263,6 +263,26 @@ public final class SyntheticTerrain {
      */
     @Getter @Setter private volatile boolean fountain;
 
+    /**
+     * Whether the island has its transparency test pieces: a glass dome on the sea floor off its
+     * shore and a glass wall on its top, see {@link #glassTest}. Set before any blocks are read.
+     */
+    @Getter @Setter private volatile boolean glassTest;
+
+    /** Where the glass dome stands on the sea floor, along z from the island's middle. */
+    public static final int DOME_Z = 60;
+
+    /** The glass dome's outer radius, in blocks. */
+    public static final int DOME_RADIUS = 5;
+
+    /** Where the glass wall stands along z, in front of the fountain, and its half width. */
+    public static final int WALL_Z = 9;
+
+    public static final int WALL_HALF_WIDTH = 2;
+
+    /** How many blocks tall the glass wall stands over the ground. */
+    public static final int WALL_HEIGHT = 30;
+
     /** The fountain's tiers, blocks across each from the outermost in, centered on the origin. */
     public static final int[] FOUNTAIN_SIZES = {12, 8, 4};
 
@@ -328,7 +348,7 @@ public final class SyntheticTerrain {
             case CAVES -> 34;
             case GLASS -> GLASS_WALL_HEIGHT;
             case HUTS -> HUT_HEIGHT;
-            case ISLAND -> ISLAND_TOP;
+            case ISLAND -> glassTest ? ISLAND_TOP + WALL_HEIGHT : ISLAND_TOP;
         };
     }
 
@@ -854,6 +874,29 @@ public final class SyntheticTerrain {
     }
 
     /**
+     * The transparency test pieces at a block, if any: a shell of glass a block thick, a half
+     * sphere on the sea floor, and a wall of glass blocks on the island.
+     *
+     * @param x The block's x.
+     * @param y The block's y.
+     * @param z The block's z.
+     * @param top The ground's top block in the column.
+     * @return GLASS, or AIR for none.
+     */
+    private byte glassTest(int x, int y, int z, int top) {
+        final int floor = (int) Math.floor(naturalIslandHeight(0, DOME_Z));
+        final double distance =
+                Math.sqrt(x * x + (y - floor) * (y - floor) + (z - DOME_Z) * (z - DOME_Z));
+        if (y > floor && distance < DOME_RADIUS && distance >= DOME_RADIUS - 1) {
+            return GLASS;
+        }
+        if (z == WALL_Z && Math.abs(x) <= WALL_HALF_WIDTH && y > top && y <= top + WALL_HEIGHT) {
+            return GLASS;
+        }
+        return AIR;
+    }
+
+    /**
      * Which of the fountain's tiers a column is under, the highest whose square covers it.
      *
      * @param x The column's x.
@@ -909,6 +952,12 @@ public final class SyntheticTerrain {
      */
     private byte island(int x, int y, int z) {
         final int top = (int) Math.floor(islandHeight(x, z));
+        if (glassTest && recipe == Recipe.ISLAND) {
+            final byte piece = glassTest(x, y, z, top);
+            if (piece != AIR) {
+                return piece;
+            }
+        }
         if (fountainTier(x, z) >= 0) {
             return y > top ? AIR : STONE;
         }

@@ -220,7 +220,8 @@ void main() {
                 * gradient / WAVE_MIN_JACOBIAN;
         }
         if (climate >= 0) {
-            foam = waveFoam(squeeze, variance, climateList.climates[climate].peak.y);
+            foam = waveFoam(squeeze, variance, climateList.climates[climate].peak.y,
+                climateList.climates[climate].peak.z);
         }
         float left = foamPatches(outRestXZ - field.shift, outFoam, squeeze, footprint);
         foam = 1.0 - (1.0 - foam) * (1.0 - left);

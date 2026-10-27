@@ -35,8 +35,9 @@ const int WAVE_LAST_LAYER = WAVE_LAYERS - 1;
 // How far the choppy waves move the surface sideways, Tessendorf's lambda: 1 moves each point
 // round a circle as tall as its wave, as in Gerstner's waves
 const float WAVE_CHOP = 1.0;
-// How soft the foam's edge is, as a spread of the Jacobian, for the pixels that see every wave
-const float WAVE_FOAM_EDGE = 0.08;
+// How soft the foam's edge is, for the pixels that see every wave, as a share of the spread of the
+// climate's Jacobian: a fixed width swamps a light breeze's, whose threshold sits close to 1
+const float WAVE_FOAM_EDGE = 0.25;
 // The least Jacobian the slope of the choppy surface is worked out with, short of a fold
 const float WAVE_MIN_JACOBIAN = 0.1;
 // How much each layer's cutoff grows over the one before
@@ -376,8 +377,12 @@ mat2 waveJacobian(vec3 sums) {
 // Thunder's ocean uses a fixed 0.3 to 0.5 (Tcheblokov 2015). The waves left out add to the
 // Jacobian about as much spread as to the slope, so a far pixel's foam is the chance its waves
 // break, as Dupuy and Bruneton filter whitecaps (2012).
-float waveFoam(float jacobian, float missingVariance, float threshold) {
-    float spread = sqrt(WAVE_CHOP * WAVE_CHOP * missingVariance + WAVE_FOAM_EDGE * WAVE_FOAM_EDGE);
+float waveFoam(float jacobian, float missingVariance, float threshold, float climateVariance) {
+    float edge = WAVE_FOAM_EDGE * WAVE_CHOP * sqrt(climateVariance);
+    float spread = sqrt(WAVE_CHOP * WAVE_CHOP * missingVariance + edge * edge);
+    if (spread <= 0.0) {
+        return jacobian < threshold ? 1.0 : 0.0;
+    }
     return waveNormalCdf((threshold - jacobian) / spread);
 }
 

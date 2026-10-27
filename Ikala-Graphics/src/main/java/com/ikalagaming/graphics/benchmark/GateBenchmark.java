@@ -849,6 +849,30 @@ public final class GateBenchmark {
                             false,
                             Map.of("fountain", "true", "wind", "3,30", "view", "0,16,16,0.45,0")),
                     new Preset(
+                            "glass-water",
+                            "Glass and water",
+                            "The fountain behind a glass wall, with smoke behind it",
+                            SyntheticTerrain.Recipe.ISLAND,
+                            8,
+                            false,
+                            Map.of(
+                                    "fountain",
+                                    "true",
+                                    "glassTest",
+                                    "true",
+                                    "wind",
+                                    "3,30",
+                                    "view",
+                                    "0,15,20,0.3,0")),
+                    new Preset(
+                            "under-sea",
+                            "Under the sea",
+                            "Under the island's sea, by a glass dome on the sea floor",
+                            SyntheticTerrain.Recipe.ISLAND,
+                            8,
+                            false,
+                            Map.of("glassTest", "true", "wind", "3,30", "view", "0,-4,72,-0.1,0")),
+                    new Preset(
                             "green-lake",
                             "Green lake",
                             "The island in green lake water, rich in phytoplankton",
@@ -933,6 +957,9 @@ public final class GateBenchmark {
 
     /** The test smoke's drift, up and along x, in meters a second. */
     private static final Vector3fc SMOKE_WIND = new Vector3f(1, 3, 0);
+
+    /** Where the glass test's smoke stands along z: behind the fountain. */
+    private static final double GLASS_TEST_SMOKE_Z = -10;
 
     /** Where the glowing sphere is from the smoke, and its radius, in meters. */
     private static final Vector3d GLOW_OFFSET = new Vector3d(-25, 5, 0);
@@ -1428,6 +1455,7 @@ public final class GateBenchmark {
             final long start = System.nanoTime();
             final SyntheticTerrain terrain = new SyntheticTerrain(recipe, SEED, sources);
             terrain.setFountain(option("fountain") != null);
+            terrain.setGlassTest(option("glassTest") != null);
             this.terrain = terrain;
             final GateScene.Layout layout = GateScene.build(terrain, radius);
             if (testMesh != null) {
@@ -2100,6 +2128,7 @@ public final class GateBenchmark {
     private void placeTestWater() {
         placeOcean();
         placeFountain();
+        placeGlassTestSmoke();
         final String value = option("water");
         if (value == null) {
             return;
@@ -2192,6 +2221,37 @@ public final class GateBenchmark {
             if (handle != null) {
                 testEmitters.add(handle);
             }
+        }
+    }
+
+    /**
+     * With the {@code .glassTest} option, a column of gray smoke behind the fountain, to see
+     * through its water.
+     */
+    private void placeGlassTestSmoke() {
+        final SyntheticTerrain world = terrain;
+        if (world == null
+                || !world.isGlassTest()
+                || world.getRecipe() != SyntheticTerrain.Recipe.ISLAND) {
+            return;
+        }
+        final MediumVolume smoke =
+                MediumVolume.of(
+                                MediumVolume.Shape.CYLINDER,
+                                new Vector3d(
+                                        0,
+                                        world.fountainBase() + SMOKE_HALF_HEIGHT,
+                                        GLASS_TEST_SMOKE_Z),
+                                new Vector3f(SMOKE_RADIUS / 2, SMOKE_HALF_HEIGHT, 0))
+                        .withMedium(SMOKE_DENSITY, SMOKE_ALBEDO, new Vector3f())
+                        .withNoise(
+                                MediumVolume.DEFAULT_EDGE,
+                                MediumVolume.DEFAULT_NOISE_SCALE,
+                                0.7f,
+                                SMOKE_WIND);
+        final MediumHandle handle = graphics.media().add(smoke);
+        if (handle != null) {
+            testMedia.add(handle);
         }
     }
 

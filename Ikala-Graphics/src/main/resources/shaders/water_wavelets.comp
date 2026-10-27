@@ -274,7 +274,8 @@ void main() {
     // trails behind them, settling over the wind's own waves at the rest of the whitecaps' measured
     // coverage, see WaveMath.ACTIVE_WHITECAP_SHARE
     float foam = lastAt(middle - carried, WAVE_FOAM_BAND, 0) * exp(-seconds / WAVE_FOAM_LIFETIME);
-    if (climate >= 0) {
+    // Without long waves, a light breeze's or a small pool's, nothing breaks
+    if (climate >= 0 && climates.climates[climate].peak.w > 0.0) {
         vec4 extra = climates.climates[climate].peak;
         vec2 render = cornerRender + (vec2(local) + 0.5) * WAVE_CELL_SIZE;
         int depthLevel = min(int(floor(waveDepthLevel(max(here.w, 0.0)) + 0.5)), WAVE_DEPTHS - 1);
@@ -295,7 +296,7 @@ void main() {
         float threshold = 1.0 - sqrt(extra.w / max(extra.z, 1e-12)) * (1.0 - extra.y);
         // As sharp as the long waves' own spread allows, so breaking keeps to the crests
         float edge = WAVE_FOAM_CREST_EDGE * WAVE_CHOP * sqrt(extra.w);
-        float breaking = waveNormalCdf((threshold - squeeze) / max(edge, 1e-6));
+        float breaking = waveNormalCdf((threshold - squeeze) / edge);
         foam += breaking * (1.0 - WAVE_ACTIVE_WHITECAP_SHARE) / WAVE_ACTIVE_WHITECAP_SHARE
             * seconds / WAVE_FOAM_LIFETIME;
     }
