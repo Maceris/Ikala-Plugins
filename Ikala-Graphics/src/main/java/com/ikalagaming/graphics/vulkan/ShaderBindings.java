@@ -639,6 +639,12 @@ public class ShaderBindings {
         /** Where its backscattering is, a vec4. */
         public static final int TILE_BACKSCATTERING = 48;
 
+        /** Where its width along x is, in meters, the absorption's fourth float. */
+        public static final int TILE_WIDTH_X = TILE_ABSORPTION + 3 * Float.BYTES;
+
+        /** Where its width along z is, in meters, the scattering's fourth float. */
+        public static final int TILE_WIDTH_Z = TILE_SCATTERING + 3 * Float.BYTES;
+
         /** The size of one tile's entry. */
         public static final int TILE_SIZE = 64;
 

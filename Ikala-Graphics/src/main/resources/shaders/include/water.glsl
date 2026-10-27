@@ -10,6 +10,8 @@ const float WATER_NORMAL_REFLECTANCE = 0.0203;
 
 // One tile's place and optics, WaterRender: its corner relative to the camera and its wave climate,
 // -1 for still water; its absorption, scattering and backscattering at red, green and blue
+// A water tile: its corner relative to the camera and its wind climate; its absorption, and its
+// width along x in w; its scattering, and its width along z in w; its backscattering
 struct WaterTileData {
     vec4 offset;
     vec4 absorption;

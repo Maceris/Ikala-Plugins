@@ -267,13 +267,24 @@ void main() {
             vec4 fogged = fogInFront(gl_FragCoord.xy, -view.z, fog.logScale);
             bottom = max(bottom - fogged.rgb, vec3(0.0)) / max(fogged.a, 1e-3);
         }
+    } else if (side) {
+        // Through a side with only the sky behind, the sky, past the air beyond the water
+        bottom = texelFetch(bindlessTextures[nonuniformEXT(behindColorIndex)], pixel, 0).rgb;
     }
     float distance = depthBelow / muView;
     // The light's way down to what is seen: through a side, what is behind is about as deep as
     // the side's point, lit from the surface just above
     float down = depthBelow / muSun;
     if (side) {
-        distance = across;
+        // The view leaves the water by the far side of the tile at the latest: what lies behind
+        // a narrow column, a fall or a pool's wall, is past the air beyond it
+        vec2 way = normalize(outRenderPosition).xz;
+        vec2 low = tile.offset.xz;
+        vec2 high = low + vec2(tile.absorption.w, tile.scattering.w);
+        vec2 exits = mix((low - outRenderPosition.xz) / min(way, vec2(-1e-6)),
+            (high - outRenderPosition.xz) / max(way, vec2(1e-6)), greaterThan(way, vec2(0.0)));
+        float leave = min(exits.x, exits.y);
+        distance = min(across, max(leave, 0.0));
         down = 0.0;
     }
     // Lit through the water above it, and seen through the water in front of it

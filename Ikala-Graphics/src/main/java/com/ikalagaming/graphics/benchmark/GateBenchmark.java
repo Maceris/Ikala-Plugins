@@ -716,6 +716,15 @@ public final class GateBenchmark {
     /** How fast the loop's channel flows unless {@code .loopSpeed} says, in meters a second. */
     public static final float DEFAULT_LOOP_SPEED = 1;
 
+    /** The fountain's pools, cells across each from the outermost in. */
+    private static final int[] FOUNTAIN_SIZES = {12, 8, 4};
+
+    /** How much higher each of the fountain's pools stands than the one around it, in meters. */
+    private static final double FOUNTAIN_STEP = 1.5;
+
+    /** How fast the fountain's water drifts outward, in meters a second. */
+    private static final double FOUNTAIN_FLOW = 0.4;
+
     /** The test splash's radius, in meters, and its ripples' height, in meters. */
     private static final float SPLASH_RADIUS = 1;
 
@@ -825,6 +834,14 @@ public final class GateBenchmark {
                                     "6",
                                     "view",
                                     "0,30,140,0.45,0")),
+                    new Preset(
+                            "fountain",
+                            "Fountain",
+                            "Stepped pools on the island's top, water falling off every side",
+                            SyntheticTerrain.Recipe.ISLAND,
+                            8,
+                            false,
+                            Map.of("fountain", "true", "wind", "3,30", "view", "0,16,16,0.45,0")),
                     new Preset(
                             "green-lake",
                             "Green lake",
@@ -1781,6 +1798,67 @@ public final class GateBenchmark {
     }
 
     /**
+     * In the island recipe, with the {@code .fountain} option, stack square pools on the island's
+     * top, each smaller one {@link #FOUNTAIN_STEP} m above the one around it and drifting outward,
+     * so water falls off every side of each onto the one below and the outermost onto the ground:
+     * the water's sides seen from all around.
+     */
+    private void placeFountain() {
+        final SyntheticTerrain world = terrain;
+        if (world == null
+                || world.getRecipe() != SyntheticTerrain.Recipe.ISLAND
+                || option("fountain") == null
+                || waterBody == null) {
+            return;
+        }
+        final double ground = Math.floor(world.islandHeight(0, 0)) + 1;
+        for (int tier = 0; tier < FOUNTAIN_SIZES.length; ++tier) {
+            final int size = FOUNTAIN_SIZES[tier];
+            final int inner = tier + 1 < FOUNTAIN_SIZES.length ? FOUNTAIN_SIZES[tier + 1] : 0;
+            final int start = -size / 2;
+            final int corners = size + 1;
+            final float[] heights = new float[corners * corners];
+            final float[] bottoms = new float[corners * corners];
+            final float[] flows = new float[2 * corners * corners];
+            final boolean[] mask = new boolean[size * size];
+            Arrays.fill(heights, (float) (ground + FOUNTAIN_STEP * (tier + 1)));
+            for (int z = 0; z < corners; ++z) {
+                for (int x = 0; x < corners; ++x) {
+                    final int at = z * corners + x;
+                    bottoms[at] = (float) Math.floor(world.islandHeight(start + x, start + z)) + 1;
+                    final double length = Math.hypot(start + x, start + z);
+                    if (length > 0) {
+                        flows[2 * at] = (float) (FOUNTAIN_FLOW * (start + x) / length);
+                        flows[2 * at + 1] = (float) (FOUNTAIN_FLOW * (start + z) / length);
+                    }
+                }
+            }
+            for (int z = 0; z < size; ++z) {
+                for (int x = 0; x < size; ++x) {
+                    final int wx = start + x;
+                    final int wz = start + z;
+                    // Leave out where the next pool up stands
+                    mask[z * size + x] =
+                            inner == 0
+                                    || Math.max(Math.abs(wx + 0.5), Math.abs(wz + 0.5))
+                                            > inner / 2.0;
+                }
+            }
+            placeWater(
+                    new WaterTile(
+                                    new Vector3d(start, 0, start),
+                                    1,
+                                    size,
+                                    size,
+                                    heights,
+                                    bottoms,
+                                    mask,
+                                    waterBody)
+                            .withFlows(flows));
+        }
+    }
+
+    /**
      * Place a test water tile with the run's wind and flow, remembering it so they can change.
      *
      * @param still The tile, without flow.
@@ -1802,6 +1880,10 @@ public final class GateBenchmark {
      */
     private WaterTile withWaterSettings(@NonNull PlacedWater placed) {
         final WaterTile still = placed.still();
+        if (still.flows() != null) {
+            // Water with its own flow, like the fountain's, keeps it
+            return still.withBody(waterBody);
+        }
         final int cornersX = still.cellsX() + 1;
         final int corners = cornersX * (still.cellsZ() + 1);
         final WaterLoop path = waterLoop;
@@ -1978,6 +2060,7 @@ public final class GateBenchmark {
      */
     private void placeTestWater() {
         placeOcean();
+        placeFountain();
         final String value = option("water");
         if (value == null) {
             return;

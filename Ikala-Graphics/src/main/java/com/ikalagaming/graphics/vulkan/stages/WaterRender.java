@@ -912,6 +912,13 @@ public class WaterRender implements RenderStage {
             MemoryUtil.memPutFloat(at + Float.BYTES, (float) (origin.y() - camera.y()));
             MemoryUtil.memPutFloat(at + 2 * Float.BYTES, (float) (origin.z() - camera.z()));
             MemoryUtil.memPutFloat(at + 3 * Float.BYTES, tileClimates.get(index));
+            final WaterTile tile = tiles.get(index);
+            MemoryUtil.memPutFloat(
+                    at + ShaderBindings.Water.TILE_WIDTH_X,
+                    (float) (tile.cellsX() * tile.cellSize()));
+            MemoryUtil.memPutFloat(
+                    at + ShaderBindings.Water.TILE_WIDTH_Z,
+                    (float) (tile.cellsZ() * tile.cellSize()));
             final WaterMath.Optics tileOptics = optics.get(index);
             for (int channel = 0; channel < WaterMath.CHANNELS; ++channel) {
                 final long offset = (long) channel * Float.BYTES;
