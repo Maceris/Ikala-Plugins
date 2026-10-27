@@ -78,6 +78,8 @@ const float SHEET_STRAND_DEPTH = 0.55;
 // flows, and the share of the sheet that is air where it is white through
 const float SHEET_BUBBLE_RADIUS = 1e-3;
 const float SHEET_MAX_AIR = 0.3;
+// How much of a broken-up sheet is gaps between its strands, where it is broken up through
+const float SHEET_MAX_GAP = 0.5;
 // How far the bottom shifts across the screen per unit of the surface's tilt, as a share of the
 // screen's height, per meter of water down to 2 m, over the distance
 const float REFRACTION_SHIFT = 0.25;
@@ -139,8 +141,9 @@ void main() {
     const vec3 up = vec3(0.0, 1.0, 0.0);
     vec3 normal = up;
     vec3 toEye = normalize(-outRenderPosition);
-    // How much of the pixel foam covers
+    // How much of the pixel foam covers, and how much of it a falling sheet's water does
     float foam = 0.0;
+    float sheetPresence = 1.0;
     float alpha = max(roughness * roughness, 1e-4);
     // A side, where the water ends: seen through its face, the way it faces the eye
     bool side = dot(outSideNormal, outSideNormal) > 0.0;
@@ -276,6 +279,10 @@ void main() {
         float depth = 1.5 * SHEET_MAX_AIR * bubbly * thickness / SHEET_BUBBLE_RADIUS;
         float cosFace = max(abs(dot(face, toEye)), MIN_COSINE);
         foam = 1.0 - exp(-depth / cosFace);
+        // Past where it breaks up, the sheet is strands and drops with air between them, up to
+        // SHEET_MAX_GAP of it: what is behind shows straight through the gaps
+        sheetPresence = 1.0 - aerated * (1.0 - smoothstep(SHEET_MAX_GAP - FOAM_PATCH_EDGE,
+            SHEET_MAX_GAP + FOAM_PATCH_EDGE, strands));
     }
     float surfaceRoughness = sqrt(alpha);
     float cosView = max(dot(normal, toEye), MIN_COSINE);
@@ -400,6 +407,11 @@ void main() {
 
     if ((fog.enabled & FOG_ENABLED) != 0) {
         color = fogApply(color, gl_FragCoord.xy, depth, fog.logScale);
+    }
+    if (sheetPresence < 1.0) {
+        vec3 through = texelFetch(bindlessTextures[nonuniformEXT(behindColorIndex)],
+            ivec2(gl_FragCoord.xy), 0).rgb;
+        color = mix(through, color, sheetPresence);
     }
     outColor = vec4(color, 1.0);
 }

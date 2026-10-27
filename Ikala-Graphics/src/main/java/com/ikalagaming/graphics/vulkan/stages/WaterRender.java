@@ -209,6 +209,12 @@ public class WaterRender implements RenderStage {
     /** The pipeline, VK_NULL_HANDLE until set up. */
     private long pipeline = VK_NULL_HANDLE;
 
+    /**
+     * How many of each frame in flight's indices are the surfaces', drawn first; the sides' come
+     * after, drawn over a copy of the scene with the surfaces, so water shows through them.
+     */
+    private final int[] surfaceIndexCounts = new int[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
     /** Each frame in flight's surface vertices, or null before its first water. */
     private final SharedBuffer[] vertexBuffers =
             new SharedBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
@@ -410,7 +416,7 @@ public class WaterRender implements RenderStage {
                     paints,
                     profileBuffers[frame].deviceAddress,
                     stack);
-            copyBehind(commandBuffer, frameData, width, height, stack);
+            copyBehind(commandBuffer, frameData, width, height, false, stack);
 
             VkRenderingAttachmentInfo.Buffer colorAttachments =
                     VkRenderingAttachmentInfo.calloc(1, stack);
@@ -517,8 +523,49 @@ public class WaterRender implements RenderStage {
                     commandBuffer, 0, stack.longs(vertexBuffers[frame].buffer), stack.longs(0));
             vkCmdBindIndexBuffer(
                     commandBuffer, indexBuffers[frame].buffer, 0, VK_INDEX_TYPE_UINT32);
-            vkCmdDrawIndexed(commandBuffer, indexCounts[frame], 1, 0, 0, 0);
+            // The surfaces: from above, water only ever has its own water under it
+            vkCmdDrawIndexed(commandBuffer, surfaceIndexCounts[frame], 1, 0, 0, 0);
             vkCmdEndRendering(commandBuffer);
+            final int sides = indexCounts[frame] - surfaceIndexCounts[frame];
+            if (sides > 0) {
+                // The sides: over a copy of the scene with the surfaces drawn, so a side shows the
+                // water behind it, the sea, a pool below, as well as the ground and the sky
+                copyBehind(commandBuffer, frameData, width, height, true, stack);
+                vkCmdBeginRendering(
+                        commandBuffer,
+                        VkRenderingInfo.calloc(stack)
+                                .sType$Default()
+                                .renderArea(area -> area.extent().set(width, height))
+                                .layerCount(1)
+                                .pColorAttachments(colorAttachments)
+                                .pDepthAttachment(depthAttachment));
+                TranslucentRender.setViewport(commandBuffer, width, height, stack);
+                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+                vkCmdBindDescriptorSets(
+                        commandBuffer,
+                        VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        pipelineLayout,
+                        0,
+                        stack.longs(
+                                lightRender.getDescriptorSet(frame),
+                                state.bindlessTextures.getDescriptorSet(),
+                                sceneRender.getDescriptorSet(frame),
+                                state.environment.getSet(),
+                                state.fogVolume.getReadSet()),
+                        null);
+                vkCmdPushConstants(
+                        commandBuffer,
+                        pipelineLayout,
+                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                        0,
+                        constants);
+                vkCmdBindVertexBuffers(
+                        commandBuffer, 0, stack.longs(vertexBuffers[frame].buffer), stack.longs(0));
+                vkCmdBindIndexBuffer(
+                        commandBuffer, indexBuffers[frame].buffer, 0, VK_INDEX_TYPE_UINT32);
+                vkCmdDrawIndexed(commandBuffer, sides, 1, surfaceIndexCounts[frame], 0, 0);
+                vkCmdEndRendering(commandBuffer);
+            }
 
             // Read only again, as the transparency passes and filters expect it
             VkImageMemoryBarrier2.Buffer barriers = VkImageMemoryBarrier2.calloc(1, stack);
@@ -763,6 +810,8 @@ public class WaterRender implements RenderStage {
      * @param frameData This frame's data.
      * @param width The width drawn, in pixels.
      * @param height The height drawn, in pixels.
+     * @param depthWritten Whether the water has just written the depth, as an attachment, rather
+     *     than it being read only.
      * @param stack The stack to allocate on.
      */
     private static void copyBehind(
@@ -770,6 +819,7 @@ public class WaterRender implements RenderStage {
             @NonNull PerFrameData frameData,
             int width,
             int height,
+            boolean depthWritten,
             @NonNull MemoryStack stack) {
         final TextureInfoVulkan color = frameData.sceneColor;
         final TextureInfoVulkan depth = frameData.gBuffer.depth();
@@ -794,10 +844,12 @@ public class WaterRender implements RenderStage {
                         | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT
                         | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
                         | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_NONE,
+                depthWritten ? VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT : VK_ACCESS_2_NONE,
                 VK_PIPELINE_STAGE_2_COPY_BIT,
                 VK_ACCESS_2_TRANSFER_READ_BIT,
-                VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
+                depthWritten
+                        ? VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL
+                        : VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
         for (int i = 0; i < 2; ++i) {
             SceneRender.imageBarrier(
@@ -880,6 +932,7 @@ public class WaterRender implements RenderStage {
     private void writeVertices(@NonNull VulkanState state, int frame) {
         final WaterMesh.Mesh mesh = WaterMesh.build(tiles);
         indexCounts[frame] = mesh.indexCount();
+        surfaceIndexCounts[frame] = mesh.surfaceIndexCount();
         if (mesh.indexCount() == 0) {
             return;
         }

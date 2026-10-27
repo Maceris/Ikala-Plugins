@@ -113,9 +113,8 @@ void main() {
     outFoam = foam * waves;
     outFall = side ? inCalm : 0.0;
     if (side) {
-        // The sheet leaves its lip outward and keeps going as it falls
-        float lip = max(dot(inFlow, inSideNormal), SHEET_MIN_SPEED);
-        render.xz += inSideNormal * sheetOut(lip, inCalm);
+        // Just off what the sheet falls past, so the two never fight over depth
+        render.xz += inSideNormal * SHEET_GAP;
         view = viewMatrix * vec4(render, 1.0);
         outRenderPosition = render;
         outViewPosition = view;

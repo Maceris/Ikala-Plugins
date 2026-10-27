@@ -106,10 +106,13 @@ public final class WaterMesh {
      *
      * @param vertices The vertices, {@link #VERTEX_FLOATS} floats each.
      * @param count How many vertices.
-     * @param indices The triangles' corners, three a triangle, indices into the vertices.
+     * @param indices The triangles' corners, three a triangle, indices into the vertices: the
+     *     surfaces' first, then the sides'.
      * @param indexCount How many indices.
+     * @param surfaceIndexCount How many of them are the surfaces', the rest the sides'.
      */
-    public record Mesh(float[] vertices, int count, int[] indices, int indexCount) {}
+    public record Mesh(
+            float[] vertices, int count, int[] indices, int indexCount, int surfaceIndexCount) {}
 
     /**
      * A cell of a tile, found by its place in the world.
@@ -138,6 +141,12 @@ public final class WaterMesh {
     /** How many indices so far. */
     private int indexCount;
 
+    /** The sides' indices so far, which go after the surfaces'. */
+    private int[] sideIndices = new int[QUAD_VERTICES];
+
+    /** How many side indices so far. */
+    private int sideIndexCount;
+
     /** Each surface corner's vertex in the tile being added, -1 before it is made. */
     private int[] cornerVertices = new int[0];
 
@@ -162,7 +171,11 @@ public final class WaterMesh {
         for (int index = 0; index < tiles.size(); ++index) {
             mesh.addTile(index);
         }
-        return new Mesh(mesh.vertices, mesh.count, mesh.indices, mesh.indexCount);
+        final int surfaces = mesh.indexCount;
+        for (int i = 0; i < mesh.sideIndexCount; ++i) {
+            mesh.addIndex(mesh.sideIndices[i]);
+        }
+        return new Mesh(mesh.vertices, mesh.count, mesh.indices, mesh.indexCount, surfaces);
     }
 
     /** Index every water cell by its place in the world. */
@@ -280,7 +293,7 @@ public final class WaterMesh {
             flowAndDepth(vertex, tile, (int) corner[0], (int) corner[2]);
         }
         for (int corner : SIDE_TRIANGLES) {
-            addIndex(first + corner);
+            addSideIndex(first + corner);
         }
     }
 
@@ -580,5 +593,17 @@ public final class WaterMesh {
             indices = Arrays.copyOf(indices, indices.length * 2);
         }
         indices[indexCount++] = vertex;
+    }
+
+    /**
+     * Add a side's index, drawn after every surface.
+     *
+     * @param vertex The vertex it points to.
+     */
+    private void addSideIndex(int vertex) {
+        if (sideIndexCount == sideIndices.length) {
+            sideIndices = Arrays.copyOf(sideIndices, sideIndices.length * 2);
+        }
+        sideIndices[sideIndexCount++] = vertex;
     }
 }
