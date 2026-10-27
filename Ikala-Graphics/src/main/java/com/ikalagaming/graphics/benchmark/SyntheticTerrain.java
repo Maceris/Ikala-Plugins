@@ -275,13 +275,18 @@ public final class SyntheticTerrain {
     /** The glass dome's outer radius, in blocks. */
     public static final int DOME_RADIUS = 5;
 
-    /** Where the glass wall stands along z, in front of the fountain, and its half width. */
+    /**
+     * Where the glass wall stands along z, in front of the fountain, along x, off to one side so it
+     * covers about half of the fountain and the smoke, and its half width.
+     */
     public static final int WALL_Z = 9;
+
+    public static final int WALL_X = 3;
 
     public static final int WALL_HALF_WIDTH = 2;
 
     /** How many blocks tall the glass wall stands over the ground. */
-    public static final int WALL_HEIGHT = 30;
+    public static final int WALL_HEIGHT = 10;
 
     /** The fountain's tiers, blocks across each from the outermost in, centered on the origin. */
     public static final int[] FOUNTAIN_SIZES = {12, 8, 4};
@@ -890,7 +895,10 @@ public final class SyntheticTerrain {
         if (y > floor && distance < DOME_RADIUS && distance >= DOME_RADIUS - 1) {
             return GLASS;
         }
-        if (z == WALL_Z && Math.abs(x) <= WALL_HALF_WIDTH && y > top && y <= top + WALL_HEIGHT) {
+        if (z == WALL_Z
+                && Math.abs(x - WALL_X) <= WALL_HALF_WIDTH
+                && y > top
+                && y <= top + WALL_HEIGHT) {
             return GLASS;
         }
         return AIR;
