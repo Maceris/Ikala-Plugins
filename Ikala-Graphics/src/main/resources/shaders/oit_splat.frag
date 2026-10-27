@@ -41,6 +41,9 @@ layout(push_constant) uniform Constants {
 const float MAX_OPACITY = 0.999;
 
 void main() {
+    if (inFrontOfWaterGate(gl_FragCoord)) {
+        discard;
+    }
     Material material = materials[outMaterialIdx];
     float alpha = material.baseColor.a;
     if (material.textureIndex > 0) {

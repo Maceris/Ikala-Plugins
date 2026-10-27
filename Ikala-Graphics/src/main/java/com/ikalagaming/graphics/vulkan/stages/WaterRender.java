@@ -26,6 +26,7 @@ import com.ikalagaming.graphics.vulkan.WaveletMath;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
@@ -210,6 +211,18 @@ public class WaterRender implements RenderStage {
     /** The pipeline, VK_NULL_HANDLE until set up. */
     private long pipeline = VK_NULL_HANDLE;
 
+    /** The gate's pipeline: the surface's depth alone, VK_NULL_HANDLE until set up. */
+    private long gatePipeline = VK_NULL_HANDLE;
+
+    /** The frame number {@link #prepare} last got ready, and what it worked out for it. */
+    private long preparedFrame = -1;
+
+    private int preparedWidth;
+    private int preparedHeight;
+    private double preparedSeconds;
+    private float preparedPixelAngle;
+    private final Vector3d preparedCamera = new Vector3d();
+
     /**
      * How many of each frame in flight's indices are the surfaces', drawn first; the sides' come
      * after, drawn over a copy of the scene with the surfaces, so water shows through them.
@@ -297,7 +310,8 @@ public class WaterRender implements RenderStage {
                             null,
                             longOutput));
             pipelineLayout = longOutput.get(0);
-            pipeline = createPipeline(state, stack);
+            pipeline = createPipeline(state, stack, false);
+            gatePipeline = createPipeline(state, stack, true);
 
             VkPushConstantRange.Buffer wavesRanges = VkPushConstantRange.calloc(1, stack);
             wavesRanges
@@ -345,6 +359,8 @@ public class WaterRender implements RenderStage {
         Arrays.fill(vertexVersions, -1);
         vkDestroyPipeline(state.device.logical, pipeline, null);
         pipeline = VK_NULL_HANDLE;
+        vkDestroyPipeline(state.device.logical, gatePipeline, null);
+        gatePipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(state.device.logical, pipelineLayout, null);
         pipelineLayout = VK_NULL_HANDLE;
         grid.cleanup(state);
@@ -360,63 +376,19 @@ public class WaterRender implements RenderStage {
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState state,
             RenderConfig renderConfig) {
-        if (scene == null || renderConfig == null || !renderConfig.world()) {
-            return;
-        }
-        final long now = scene.getWaterRegistry().snapshotIfChanged(version, tiles);
-        if (now != version) {
-            version = now;
-            optics.clear();
-            for (WaterTile tile : tiles) {
-                optics.add(WaterMath.optics(tile.body()));
-            }
-            findClimates();
-        }
-        if (tiles.isEmpty()) {
-            return;
-        }
         final int frame = state.frameIndex;
-        if (vertexVersions[frame] != version) {
-            writeVertices(state, frame);
-            vertexVersions[frame] = version;
-        }
-        final int width = Math.min(sceneTarget.width(), state.realSize.width());
-        final int height = Math.min(sceneTarget.height(), state.realSize.height());
-        if (indexCounts[frame] == 0 || width <= 0 || height <= 0) {
+        final PerFrameData frameData = state.perFrameData[frame];
+        if (preparedFrame != state.frameNumber) {
             return;
         }
-        final long nanos = System.nanoTime();
-        if (startNanos == 0) {
-            startNanos = nanos;
-        }
-        final double seconds = (nanos - startNanos) / NANOS_PER_SECOND;
-        writeTiles(state, frame, scene.getCamera().getPosition());
-        writeClimates(state, frame, scene.getCamera().getPosition(), seconds);
-        final float pixelAngle =
-                2 / (Math.abs(scene.getProjection().getProjectionMatrix().m11()) * height);
-
+        final int width = preparedWidth;
+        final int height = preparedHeight;
         final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[frame];
-        final PerFrameData frameData = state.perFrameData[frame];
         final TextureInfoVulkan color = frameData.sceneColor;
         final TextureInfoVulkan depth = frameData.gBuffer.depth();
-        scene.getWaterRegistry().takeDisturbances(WaveletMath.MAX_DISTURBANCES, disturbances);
-        scene.getWaterRegistry().takePaints(WaveletMath.MAX_PAINTS, paints);
-        final Vector3dc camera = scene.getCamera().getPosition();
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            // The profiles first: the grid's step reads them for where crests break
-            fillProfiles(commandBuffer, frame, stack);
-            grid.step(
-                    commandBuffer,
-                    state,
-                    frame,
-                    camera,
-                    version,
-                    () -> WaterMesh.waterCellData(tiles, tileClimates),
-                    disturbances,
-                    climateBuffers[frame].deviceAddress,
-                    paints,
-                    profileBuffers[frame].deviceAddress,
-                    stack);
+            // What lies behind the water is drawn: the gate opens for what is in front of it
+            clearGate(commandBuffer, frameData, width, height, stack);
             copyBehind(commandBuffer, frameData, width, height, false, stack);
 
             VkRenderingAttachmentInfo.Buffer colorAttachments =
@@ -444,89 +416,7 @@ public class WaterRender implements RenderStage {
                             .pColorAttachments(colorAttachments)
                             .pDepthAttachment(depthAttachment));
             TranslucentRender.setViewport(commandBuffer, width, height, stack);
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-            vkCmdBindDescriptorSets(
-                    commandBuffer,
-                    VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    pipelineLayout,
-                    0,
-                    stack.longs(
-                            lightRender.getDescriptorSet(frame),
-                            state.bindlessTextures.getDescriptorSet(),
-                            sceneRender.getDescriptorSet(frame),
-                            state.environment.getSet(),
-                            state.fogVolume.getReadSet()),
-                    null);
-            ByteBuffer constants = stack.calloc(ShaderBindings.Water.PUSH_CONSTANTS_SIZE);
-            constants.putLong(
-                    ShaderBindings.Water.PUSH_CONSTANT_TILES_OFFSET,
-                    tileBuffers[frame].deviceAddress);
-            constants.putLong(
-                    ShaderBindings.Water.PUSH_CONSTANT_CLIMATES_OFFSET,
-                    climateBuffers[frame].deviceAddress);
-            constants.putLong(
-                    ShaderBindings.Water.PUSH_CONSTANT_PROFILES_OFFSET,
-                    profileBuffers[frame].deviceAddress);
-            constants.putFloat(ShaderBindings.Water.PUSH_CONSTANT_PIXEL_ANGLE_OFFSET, pixelAngle);
-            constants.putLong(
-                    ShaderBindings.Water.PUSH_CONSTANT_GRID_OFFSET, grid.currentAddress());
-            constants.putFloat(
-                    ShaderBindings.Water.PUSH_CONSTANT_GRID_CORNER_OFFSET,
-                    (float) (grid.getCornerX() * WaveletMath.CELL_SIZE - camera.x()));
-            constants.putFloat(
-                    ShaderBindings.Water.PUSH_CONSTANT_GRID_CORNER_OFFSET + Float.BYTES,
-                    (float) (grid.getCornerZ() * WaveletMath.CELL_SIZE - camera.z()));
-            constants.putInt(
-                    ShaderBindings.Water.PUSH_CONSTANT_GRID_CELL_OFFSET, grid.getCornerX());
-            constants.putInt(
-                    ShaderBindings.Water.PUSH_CONSTANT_GRID_CELL_OFFSET + Integer.BYTES,
-                    grid.getCornerZ());
-            constants.putInt(
-                    ShaderBindings.Water.PUSH_CONSTANT_RIPPLE_CLIMATE_OFFSET, climates.size() - 1);
-            constants.putInt(ShaderBindings.Water.PUSH_CONSTANT_GRID_ON_OFFSET, 1);
-            constants.putFloat(
-                    ShaderBindings.Water.PUSH_CONSTANT_WAVE_TIME_OFFSET,
-                    (float) (seconds % WaveMath.FLOW_CYCLE));
-            constants.putInt(
-                    ShaderBindings.Water.PUSH_CONSTANT_FRAME_OFFSET, (int) state.frameNumber);
-            constants.putFloat(
-                    ShaderBindings.Water.PUSH_CONSTANT_SHEET_TIME_OFFSET,
-                    (float) (seconds % WaveMath.SHEET_TIME_PERIOD));
-            constants.putFloat(
-                    ShaderBindings.Water.PUSH_CONSTANT_CAMERA_WRAP_OFFSET,
-                    (float)
-                            (camera.x()
-                                    - WaveMath.PATTERN_WRAP
-                                            * Math.floor(camera.x() / WaveMath.PATTERN_WRAP)));
-            constants.putFloat(
-                    ShaderBindings.Water.PUSH_CONSTANT_CAMERA_WRAP_OFFSET + Float.BYTES,
-                    (float)
-                            (camera.z()
-                                    - WaveMath.PATTERN_WRAP
-                                            * Math.floor(camera.z() / WaveMath.PATTERN_WRAP)));
-            constants.putInt(
-                    ShaderBindings.Water.PUSH_CONSTANT_UNDER_WATER_OFFSET,
-                    WaterVolume.isUnderWater(tiles, camera) ? 1 : 0);
-            constants.putFloat(ShaderBindings.Water.PUSH_CONSTANT_SCREEN_SIZE_OFFSET, width);
-            constants.putFloat(
-                    ShaderBindings.Water.PUSH_CONSTANT_SCREEN_SIZE_OFFSET + Float.BYTES, height);
-            constants.putInt(
-                    ShaderBindings.Water.PUSH_CONSTANT_BEHIND_COLOR_OFFSET,
-                    frameData.waterBehindColor.bindlessIndex);
-            constants.putInt(
-                    ShaderBindings.Water.PUSH_CONSTANT_BEHIND_DEPTH_OFFSET,
-                    frameData.waterBehindDepth.bindlessIndex);
-            constants.putFloat(ShaderBindings.Water.PUSH_CONSTANT_ROUGHNESS_OFFSET, CALM_ROUGHNESS);
-            vkCmdPushConstants(
-                    commandBuffer,
-                    pipelineLayout,
-                    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                    0,
-                    constants);
-            vkCmdBindVertexBuffers(
-                    commandBuffer, 0, stack.longs(vertexBuffers[frame].buffer), stack.longs(0));
-            vkCmdBindIndexBuffer(
-                    commandBuffer, indexBuffers[frame].buffer, 0, VK_INDEX_TYPE_UINT32);
+            bindSurface(commandBuffer, state, frameData, pipeline, stack);
             // The surfaces: from above, water only ever has its own water under it
             vkCmdDrawIndexed(commandBuffer, surfaceIndexCounts[frame], 1, 0, 0, 0);
             vkCmdEndRendering(commandBuffer);
@@ -544,29 +434,7 @@ public class WaterRender implements RenderStage {
                                 .pColorAttachments(colorAttachments)
                                 .pDepthAttachment(depthAttachment));
                 TranslucentRender.setViewport(commandBuffer, width, height, stack);
-                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-                vkCmdBindDescriptorSets(
-                        commandBuffer,
-                        VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        pipelineLayout,
-                        0,
-                        stack.longs(
-                                lightRender.getDescriptorSet(frame),
-                                state.bindlessTextures.getDescriptorSet(),
-                                sceneRender.getDescriptorSet(frame),
-                                state.environment.getSet(),
-                                state.fogVolume.getReadSet()),
-                        null);
-                vkCmdPushConstants(
-                        commandBuffer,
-                        pipelineLayout,
-                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                        0,
-                        constants);
-                vkCmdBindVertexBuffers(
-                        commandBuffer, 0, stack.longs(vertexBuffers[frame].buffer), stack.longs(0));
-                vkCmdBindIndexBuffer(
-                        commandBuffer, indexBuffers[frame].buffer, 0, VK_INDEX_TYPE_UINT32);
+                bindSurface(commandBuffer, state, frameData, pipeline, stack);
                 vkCmdDrawIndexed(commandBuffer, sides, 1, surfaceIndexCounts[frame], 0, 0);
                 vkCmdEndRendering(commandBuffer);
             }
@@ -593,6 +461,364 @@ public class WaterRender implements RenderStage {
                     VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barriers));
         }
     }
+
+    /**
+     * Get the frame ready to draw the water: its tiles, vertices, climates and waves, and the wave
+     * grid's step. Records the profiles' fill and the step.
+     *
+     * @param scene The scene.
+     * @param sceneTarget What the scene is drawn into.
+     * @param state The Vulkan state.
+     * @param renderConfig What is drawn.
+     * @return Whether there is water to draw.
+     */
+    private boolean prepare(
+            Scene scene,
+            @NonNull SceneTarget sceneTarget,
+            @NonNull VulkanState state,
+            RenderConfig renderConfig) {
+        if (scene == null || renderConfig == null || !renderConfig.world()) {
+            return false;
+        }
+        final long now = scene.getWaterRegistry().snapshotIfChanged(version, tiles);
+        if (now != version) {
+            version = now;
+            optics.clear();
+            for (WaterTile tile : tiles) {
+                optics.add(WaterMath.optics(tile.body()));
+            }
+            findClimates();
+        }
+        if (tiles.isEmpty()) {
+            return false;
+        }
+        final int frame = state.frameIndex;
+        if (vertexVersions[frame] != version) {
+            writeVertices(state, frame);
+            vertexVersions[frame] = version;
+        }
+        final int width = Math.min(sceneTarget.width(), state.realSize.width());
+        final int height = Math.min(sceneTarget.height(), state.realSize.height());
+        if (indexCounts[frame] == 0 || width <= 0 || height <= 0) {
+            return false;
+        }
+        final long nanos = System.nanoTime();
+        if (startNanos == 0) {
+            startNanos = nanos;
+        }
+        final double seconds = (nanos - startNanos) / NANOS_PER_SECOND;
+        writeTiles(state, frame, scene.getCamera().getPosition());
+        writeClimates(state, frame, scene.getCamera().getPosition(), seconds);
+        final float pixelAngle =
+                2 / (Math.abs(scene.getProjection().getProjectionMatrix().m11()) * height);
+
+        final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[frame];
+        scene.getWaterRegistry().takeDisturbances(WaveletMath.MAX_DISTURBANCES, disturbances);
+        scene.getWaterRegistry().takePaints(WaveletMath.MAX_PAINTS, paints);
+        final Vector3dc camera = scene.getCamera().getPosition();
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            // The profiles first: the grid's step reads them for where crests break
+            fillProfiles(commandBuffer, frame, stack);
+            grid.step(
+                    commandBuffer,
+                    state,
+                    frame,
+                    camera,
+                    version,
+                    () -> WaterMesh.waterCellData(tiles, tileClimates),
+                    disturbances,
+                    climateBuffers[frame].deviceAddress,
+                    paints,
+                    profileBuffers[frame].deviceAddress,
+                    stack);
+        }
+        preparedFrame = state.frameNumber;
+        preparedWidth = width;
+        preparedHeight = height;
+        preparedSeconds = seconds;
+        preparedPixelAngle = pixelAngle;
+        preparedCamera.set(camera);
+        return true;
+    }
+
+    /**
+     * The push constants the surface's shaders share, for this frame.
+     *
+     * @param state The Vulkan state.
+     * @param frameData The frame's images.
+     * @param stack The stack to allocate on.
+     * @return The constants.
+     */
+    private ByteBuffer constants(
+            @NonNull VulkanState state,
+            @NonNull PerFrameData frameData,
+            @NonNull MemoryStack stack) {
+        final int frame = state.frameIndex;
+        ByteBuffer constants = stack.calloc(ShaderBindings.Water.PUSH_CONSTANTS_SIZE);
+        constants.putLong(
+                ShaderBindings.Water.PUSH_CONSTANT_TILES_OFFSET, tileBuffers[frame].deviceAddress);
+        constants.putLong(
+                ShaderBindings.Water.PUSH_CONSTANT_CLIMATES_OFFSET,
+                climateBuffers[frame].deviceAddress);
+        constants.putLong(
+                ShaderBindings.Water.PUSH_CONSTANT_PROFILES_OFFSET,
+                profileBuffers[frame].deviceAddress);
+        constants.putFloat(
+                ShaderBindings.Water.PUSH_CONSTANT_PIXEL_ANGLE_OFFSET, preparedPixelAngle);
+        constants.putLong(ShaderBindings.Water.PUSH_CONSTANT_GRID_OFFSET, grid.currentAddress());
+        constants.putFloat(
+                ShaderBindings.Water.PUSH_CONSTANT_GRID_CORNER_OFFSET,
+                (float) (grid.getCornerX() * WaveletMath.CELL_SIZE - preparedCamera.x()));
+        constants.putFloat(
+                ShaderBindings.Water.PUSH_CONSTANT_GRID_CORNER_OFFSET + Float.BYTES,
+                (float) (grid.getCornerZ() * WaveletMath.CELL_SIZE - preparedCamera.z()));
+        constants.putInt(ShaderBindings.Water.PUSH_CONSTANT_GRID_CELL_OFFSET, grid.getCornerX());
+        constants.putInt(
+                ShaderBindings.Water.PUSH_CONSTANT_GRID_CELL_OFFSET + Integer.BYTES,
+                grid.getCornerZ());
+        constants.putInt(
+                ShaderBindings.Water.PUSH_CONSTANT_RIPPLE_CLIMATE_OFFSET, climates.size() - 1);
+        constants.putInt(ShaderBindings.Water.PUSH_CONSTANT_GRID_ON_OFFSET, 1);
+        constants.putFloat(
+                ShaderBindings.Water.PUSH_CONSTANT_WAVE_TIME_OFFSET,
+                (float) (preparedSeconds % WaveMath.FLOW_CYCLE));
+        constants.putInt(ShaderBindings.Water.PUSH_CONSTANT_FRAME_OFFSET, (int) state.frameNumber);
+        constants.putFloat(
+                ShaderBindings.Water.PUSH_CONSTANT_SHEET_TIME_OFFSET,
+                (float) (preparedSeconds % WaveMath.SHEET_TIME_PERIOD));
+        constants.putFloat(
+                ShaderBindings.Water.PUSH_CONSTANT_CAMERA_WRAP_OFFSET,
+                (float)
+                        (preparedCamera.x()
+                                - WaveMath.PATTERN_WRAP
+                                        * Math.floor(preparedCamera.x() / WaveMath.PATTERN_WRAP)));
+        constants.putFloat(
+                ShaderBindings.Water.PUSH_CONSTANT_CAMERA_WRAP_OFFSET + Float.BYTES,
+                (float)
+                        (preparedCamera.z()
+                                - WaveMath.PATTERN_WRAP
+                                        * Math.floor(preparedCamera.z() / WaveMath.PATTERN_WRAP)));
+        constants.putInt(
+                ShaderBindings.Water.PUSH_CONSTANT_UNDER_WATER_OFFSET,
+                WaterVolume.isUnderWater(tiles, preparedCamera) ? 1 : 0);
+        constants.putFloat(ShaderBindings.Water.PUSH_CONSTANT_SCREEN_SIZE_OFFSET, preparedWidth);
+        constants.putFloat(
+                ShaderBindings.Water.PUSH_CONSTANT_SCREEN_SIZE_OFFSET + Float.BYTES,
+                preparedHeight);
+        constants.putInt(
+                ShaderBindings.Water.PUSH_CONSTANT_BEHIND_COLOR_OFFSET,
+                frameData.waterBehindColor.bindlessIndex);
+        constants.putInt(
+                ShaderBindings.Water.PUSH_CONSTANT_BEHIND_DEPTH_OFFSET,
+                frameData.waterBehindDepth.bindlessIndex);
+        constants.putFloat(ShaderBindings.Water.PUSH_CONSTANT_ROUGHNESS_OFFSET, CALM_ROUGHNESS);
+        return constants;
+    }
+
+    /**
+     * Bind what the surface's pipelines read: their sets and constants, vertices and indices.
+     *
+     * @param commandBuffer The command buffer.
+     * @param state The Vulkan state.
+     * @param frameData The frame's images.
+     * @param layerPipeline The pipeline.
+     * @param stack The stack to allocate on.
+     */
+    private void bindSurface(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull VulkanState state,
+            @NonNull PerFrameData frameData,
+            long layerPipeline,
+            @NonNull MemoryStack stack) {
+        final int frame = state.frameIndex;
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, layerPipeline);
+        vkCmdBindDescriptorSets(
+                commandBuffer,
+                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                pipelineLayout,
+                0,
+                stack.longs(
+                        lightRender.getDescriptorSet(frame),
+                        state.bindlessTextures.getDescriptorSet(),
+                        sceneRender.getDescriptorSet(frame),
+                        state.environment.getSet(),
+                        state.fogVolume.getReadSet()),
+                null);
+        vkCmdPushConstants(
+                commandBuffer,
+                pipelineLayout,
+                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                0,
+                constants(state, frameData, stack));
+        vkCmdBindVertexBuffers(
+                commandBuffer, 0, stack.longs(vertexBuffers[frame].buffer), stack.longs(0));
+        vkCmdBindIndexBuffer(commandBuffer, indexBuffers[frame].buffer, 0, VK_INDEX_TYPE_UINT32);
+    }
+
+    /**
+     * Draw the gate, see {@link PerFrameData#waterGate}: the water's depth when there is water,
+     * else 0, then read only for the transparent stages.
+     *
+     * @param scene The scene.
+     * @param sceneTarget What the scene is drawn into.
+     * @param state The Vulkan state.
+     * @param renderConfig What is drawn.
+     */
+    private void drawGate(
+            Scene scene,
+            @NonNull SceneTarget sceneTarget,
+            @NonNull VulkanState state,
+            RenderConfig renderConfig) {
+        final PerFrameData frameData = state.perFrameData[state.frameIndex];
+        final boolean water = prepare(scene, sceneTarget, state, renderConfig);
+        frameData.waterGated = water;
+        final int width =
+                water ? preparedWidth : Math.min(sceneTarget.width(), state.realSize.width());
+        final int height =
+                water ? preparedHeight : Math.min(sceneTarget.height(), state.realSize.height());
+        final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            gateBarrier(commandBuffer, frameData, true, stack);
+            VkRenderingAttachmentInfo depthAttachment =
+                    VkRenderingAttachmentInfo.calloc(stack)
+                            .sType$Default()
+                            .imageView(frameData.waterGate.view)
+                            .imageLayout(VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL)
+                            .loadOp(VK_ATTACHMENT_LOAD_OP_CLEAR)
+                            .storeOp(VK_ATTACHMENT_STORE_OP_STORE);
+            depthAttachment.clearValue().depthStencil().depth(water ? 1 : 0);
+            vkCmdBeginRendering(
+                    commandBuffer,
+                    VkRenderingInfo.calloc(stack)
+                            .sType$Default()
+                            .renderArea(
+                                    area ->
+                                            area.extent()
+                                                    .set(Math.max(width, 1), Math.max(height, 1)))
+                            .layerCount(1)
+                            .pDepthAttachment(depthAttachment));
+            if (water) {
+                TranslucentRender.setViewport(commandBuffer, width, height, stack);
+                bindSurface(commandBuffer, state, frameData, gatePipeline, stack);
+                vkCmdDrawIndexed(commandBuffer, indexCounts[state.frameIndex], 1, 0, 0, 0);
+            }
+            vkCmdEndRendering(commandBuffer);
+            gateBarrier(commandBuffer, frameData, false, stack);
+        }
+    }
+
+    /**
+     * Clear the gate to 0, so the transparent stages draw everything in front of the water.
+     *
+     * @param commandBuffer The command buffer.
+     * @param frameData The frame's images.
+     * @param width The drawn width, in pixels.
+     * @param height The drawn height.
+     * @param stack The stack to allocate on.
+     */
+    private static void clearGate(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull PerFrameData frameData,
+            int width,
+            int height,
+            @NonNull MemoryStack stack) {
+        gateBarrier(commandBuffer, frameData, true, stack);
+        VkRenderingAttachmentInfo depthAttachment =
+                VkRenderingAttachmentInfo.calloc(stack)
+                        .sType$Default()
+                        .imageView(frameData.waterGate.view)
+                        .imageLayout(VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL)
+                        .loadOp(VK_ATTACHMENT_LOAD_OP_CLEAR)
+                        .storeOp(VK_ATTACHMENT_STORE_OP_STORE);
+        depthAttachment.clearValue().depthStencil().depth(0);
+        vkCmdBeginRendering(
+                commandBuffer,
+                VkRenderingInfo.calloc(stack)
+                        .sType$Default()
+                        .renderArea(area -> area.extent().set(width, height))
+                        .layerCount(1)
+                        .pDepthAttachment(depthAttachment));
+        vkCmdEndRendering(commandBuffer);
+        gateBarrier(commandBuffer, frameData, false, stack);
+    }
+
+    /**
+     * Move the gate between being drawn and being read by the transparent stages.
+     *
+     * @param commandBuffer The command buffer.
+     * @param frameData The frame's images.
+     * @param toDraw Whether it is about to be drawn, rather than read.
+     * @param stack The stack to allocate on.
+     */
+    private static void gateBarrier(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull PerFrameData frameData,
+            boolean toDraw,
+            @NonNull MemoryStack stack) {
+        final long tests =
+                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
+                        | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+        final long attachment =
+                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT
+                        | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        VkImageMemoryBarrier2.Buffer barrier = VkImageMemoryBarrier2.calloc(1, stack);
+        if (toDraw) {
+            // Whatever it held before: last frame's, or what the transparent stages read
+            SceneRender.imageBarrier(
+                    barrier.get(0),
+                    frameData.waterGate.texture,
+                    VK_IMAGE_ASPECT_DEPTH_BIT,
+                    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                    VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                    tests,
+                    attachment,
+                    VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+        } else {
+            SceneRender.imageBarrier(
+                    barrier.get(0),
+                    frameData.waterGate.texture,
+                    VK_IMAGE_ASPECT_DEPTH_BIT,
+                    tests,
+                    VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                    VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                    VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                    VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+        }
+        vkCmdPipelineBarrier2(
+                commandBuffer,
+                VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barrier));
+    }
+
+    /**
+     * The stage that draws the water's depth into the gate, see {@link PerFrameData#waterGate},
+     * before the transparent stages draw what lies behind the water: it gets the frame ready for
+     * the water stage too.
+     *
+     * @return The stage.
+     */
+    public RenderStage getGate() {
+        return gate;
+    }
+
+    /** See {@link #getGate}. */
+    private final RenderStage gate =
+            new RenderStage() {
+                @Override
+                public void render(
+                        Scene scene,
+                        @NonNull SceneTarget sceneTarget,
+                        @NonNull VulkanState state,
+                        RenderConfig renderConfig) {
+                    drawGate(scene, sceneTarget, state, renderConfig);
+                }
+
+                @Override
+                public String name() {
+                    return "WaterGate";
+                }
+            };
 
     /**
      * Find the winds the tiles' waves come from, one climate each, and which each tile has. Still
@@ -1013,14 +1239,24 @@ public class WaterRender implements RenderStage {
      *
      * @param state The Vulkan state.
      * @param stack The stack to allocate on.
+     * @param depthOnly Whether for the gate: the vertex shader alone, writing only depth.
      * @return The VkPipeline.
      */
-    private long createPipeline(@NonNull VulkanState state, @NonNull MemoryStack stack) {
-        final int count = shader.shaderModules.length;
+    private long createPipeline(
+            @NonNull VulkanState state, @NonNull MemoryStack stack, boolean depthOnly) {
+        int count = 0;
+        for (int i = 0; i < shader.shaderModules.length; ++i) {
+            if (!depthOnly || shader.shaderStages.get(i).stage() == VK_SHADER_STAGE_VERTEX_BIT) {
+                ++count;
+            }
+        }
         VkPipelineShaderStageCreateInfo.Buffer stages =
                 VkPipelineShaderStageCreateInfo.calloc(count, stack);
-        for (int i = 0; i < count; ++i) {
-            stages.get(i).set(shader.shaderStages.get(i));
+        int added = 0;
+        for (int i = 0; i < shader.shaderModules.length; ++i) {
+            if (!depthOnly || shader.shaderStages.get(i).stage() == VK_SHADER_STAGE_VERTEX_BIT) {
+                stages.get(added++).set(shader.shaderStages.get(i));
+            }
         }
         VkVertexInputBindingDescription.Buffer bindings =
                 VkVertexInputBindingDescription.calloc(1, stack);
@@ -1072,7 +1308,10 @@ public class WaterRender implements RenderStage {
                         VkPipelineRenderingCreateInfo.calloc(stack)
                                 .sType$Default()
                                 .pColorAttachmentFormats(
-                                        stack.ints(PipelineManagerVulkan.SCENE_COLOR_FORMAT))
+                                        depthOnly
+                                                ? null
+                                                : stack.ints(
+                                                        PipelineManagerVulkan.SCENE_COLOR_FORMAT))
                                 .depthAttachmentFormat(PipelineManagerVulkan.DEPTH_FORMAT))
                 .stageCount(count)
                 .pStages(stages)
@@ -1110,7 +1349,7 @@ public class WaterRender implements RenderStage {
                 .pColorBlendState(
                         VkPipelineColorBlendStateCreateInfo.calloc(stack)
                                 .sType$Default()
-                                .pAttachments(blend))
+                                .pAttachments(depthOnly ? null : blend))
                 .pDynamicState(
                         VkPipelineDynamicStateCreateInfo.calloc(stack)
                                 .sType$Default()

@@ -116,6 +116,9 @@ vec2 visibility(uint slot, vec3 renderPoint, vec3 normal, vec3 local, vec3 rende
 }
 
 void main() {
+    if (inFrontOfWaterGate(gl_FragCoord)) {
+        discard;
+    }
     VolumeDraw draw = draws.volumeDraws[outDraw];
     uint slot = volumeDrawSlot(draw);
     // Distances along the ray in the brick's voxels, scale meters each

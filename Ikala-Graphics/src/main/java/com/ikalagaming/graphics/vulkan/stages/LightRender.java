@@ -475,6 +475,8 @@ public class LightRender implements RenderStage {
         uniformData.putInt(
                 ShaderBindings.Light.ENVIRONMENT_OCCLUSION_OFFSET,
                 GraphicsManager.getSettings().environmentOcclusion ? 1 : 0);
+        uniformData.putInt(
+                ShaderBindings.Light.WATER_GATE_OFFSET, frameData.waterGate.bindlessIndex);
         for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
             uniformData.putInt(
                     ShaderBindings.Light.SHADOW_MAP_0_INDEX_OFFSET + i * Integer.BYTES,

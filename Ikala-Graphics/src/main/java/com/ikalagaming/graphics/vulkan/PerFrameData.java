@@ -252,6 +252,16 @@ public class PerFrameData {
     public TextureInfoVulkan waterBehindDepth;
 
     /**
+     * The water's depth, before the transparent stages draw what lies behind the water, which they
+     * leave out what is in front of; then 0, so the second time they draw what is in front. See
+     * {@code waterGate} in {@code light_inputs.glsl}. Registered in the bindless array.
+     */
+    public TextureInfoVulkan waterGate;
+
+    /** Whether the gate holds the water's depth this frame, so what lies behind it is drawn. */
+    public boolean waterGated;
+
+    /**
      * The scene color after temporal anti-aliasing, in linear light: what the tone map stage reads
      * while it runs, and the history the next frame blends into. Registered in the bindless array.
      */

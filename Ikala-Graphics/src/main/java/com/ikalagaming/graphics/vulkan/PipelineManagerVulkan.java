@@ -179,6 +179,11 @@ public class PipelineManagerVulkan {
     /** Draws water tiles over the lit scene and the sky. */
     private final WaterRender stageWaterRender;
 
+    /** The transparent stages, for what lies behind the water and then for what is in front. */
+    private final TransparencyChain transparencyBehindWater;
+
+    private final TransparencyChain transparency;
+
     private final SwapchainPresent stageSwapchainPresent;
 
     private final LongBuffer longOutput = MemoryUtil.memAllocLong(1);
@@ -342,6 +347,16 @@ public class PipelineManagerVulkan {
         stageVolumeColor.initialize(state);
         stageOitResolve = new OitResolve(shaders.getShader(RenderStage.Type.OIT_RESOLVE), quadMesh);
         stageOitResolve.initialize(state);
+        final List<RenderStage> chain =
+                List.of(
+                        stageOitSplat,
+                        stageVolumeSplat,
+                        stageOitIntegrate,
+                        stageTranslucentRender,
+                        stageVolumeColor,
+                        stageOitResolve);
+        transparencyBehindWater = new TransparencyChain(chain, true);
+        transparency = new TransparencyChain(chain, false);
         stageAnimationRender = new AnimationRender(shaders.getShader(RenderStage.Type.ANIMATION));
         stageAnimationRender.initialize(state);
         Map<FilterView, ShaderVulkan> filterShaders = new EnumMap<>(FilterView.class);
@@ -414,19 +429,19 @@ public class PipelineManagerVulkan {
             stages.add(stageLightRender);
             // The sky the world is lit by, behind it
             stages.add(stageSkyboxRender);
-            // Water over both, seeing them through its surface, under what is translucent
+            // Distant cut out and translucent blocks as volumes: their bricks, and the solid faces
+            // among them into the depth, once
+            stages.add(stageVolumeUpload);
+            stages.add(stageVolumeDepth);
+            // The water's depth, which splits what is translucent: what lies behind the water is
+            // drawn first, which the water then sees through its surface; what is in front of it
+            // after, over it
+            stages.add(stageWaterRender.getGate());
+            stages.add(transparencyBehindWater);
             stages.add(stageWaterRender);
             // Translucent geometry, over the sky too, in any order: what is in front of each
             // surface first, then the surfaces weighted by it
-            // Distant cut out and translucent blocks as volumes
-            stages.add(stageVolumeUpload);
-            stages.add(stageVolumeDepth);
-            stages.add(stageOitSplat);
-            stages.add(stageVolumeSplat);
-            stages.add(stageOitIntegrate);
-            stages.add(stageTranslucentRender);
-            stages.add(stageVolumeColor);
-            stages.add(stageOitResolve);
+            stages.add(transparency);
             // Blends this frame into the ones before, in linear light
             stages.add(stageTaa);
             // From linear light to the image shown, before filters, debug lines and the GUI
@@ -882,6 +897,17 @@ public class PipelineManagerVulkan {
                         VK_FILTER_NEAREST,
                         VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
         state.bindlessTextures.register(state, data.waterBehindDepth);
+        data.waterGate =
+                createRenderTarget(
+                        state,
+                        imageExtent.width(),
+                        imageExtent.height(),
+                        DEPTH_FORMAT,
+                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                        VK_IMAGE_ASPECT_DEPTH_BIT,
+                        VK_FILTER_NEAREST,
+                        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+        state.bindlessTextures.register(state, data.waterGate);
         // Read through the bindless array, filtered, by the next frame's anti-aliasing as history,
         // and by the tone map stage
         data.taaColor =
@@ -1063,6 +1089,11 @@ public class PipelineManagerVulkan {
             state.bindlessTextures.release(state, data.waterBehindDepth);
             data.waterBehindDepth.destroy(state);
             data.waterBehindDepth = null;
+        }
+        if (data.waterGate != null) {
+            state.bindlessTextures.release(state, data.waterGate);
+            data.waterGate.destroy(state);
+            data.waterGate = null;
         }
         if (data.taaColor != null) {
             state.bindlessTextures.release(state, data.taaColor);

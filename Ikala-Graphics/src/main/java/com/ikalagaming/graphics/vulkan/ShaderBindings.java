@@ -1401,9 +1401,12 @@ public class ShaderBindings {
         public static final int ENVIRONMENT_OCCLUSION_OFFSET =
                 ENVIRONMENT_SCALE_OFFSET + 4 * Float.BYTES;
 
+        /** The water gate's bindless index, see {@code waterGate} in {@code light_inputs.glsl}. */
+        public static final int WATER_GATE_OFFSET = ENVIRONMENT_OCCLUSION_OFFSET + Integer.BYTES;
+
         /** The size of the uniforms buffer, padded out to 16 bytes under std140 rules. */
         public static final int UNIFORMS_BUFFER_SIZE =
-                (int) SharedBuffer.align(ENVIRONMENT_OCCLUSION_OFFSET + Integer.BYTES);
+                (int) SharedBuffer.align(WATER_GATE_OFFSET + Integer.BYTES);
 
         /** Uniforms buffer binding. */
         public static final int UNIFORMS_BINDING = 0;

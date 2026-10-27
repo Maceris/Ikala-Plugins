@@ -66,6 +66,9 @@ float depthWeight(float alpha, float depth) {
 }
 
 void main() {
+    if (inFrontOfWaterGate(gl_FragCoord)) {
+        discard;
+    }
     Material material = materials[outMaterialIdx];
     vec4 baseColor = material.baseColor;
     if (material.textureIndex > 0) {

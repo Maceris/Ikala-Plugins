@@ -114,6 +114,8 @@ layout(set = 0, binding = 0) uniform Uniforms {
     vec4 environmentScale;
     // Nonzero for the occupancy volume to bend the sky's diffuse light and hide its reflections
     int environmentOcclusion;
+    // The water gate's bindless index, see waterGate
+    int waterGateIndex;
 };
 
 // One point light shadow cube map: each face's matrix from render space, where it is drawn from in
@@ -145,5 +147,13 @@ layout(std430, set = 0, binding = 3) readonly buffer Clusters {
 layout(set = 1, binding = 0) uniform sampler2D bindlessTextures[];
 // The same array, for reading integer textures like the material indices
 layout(set = 1, binding = 0) uniform usampler2D bindlessUintTextures[];
+
+// Whether a transparent fragment is in front of the water gate, which it is left out for: the
+// transparent stages draw twice where there is water, first what lies behind it, the gate holding
+// the water's depth, before the water copies the scene to see through; then, the gate 0, what is
+// in front of it, which the water's own depth leaves to them. See WaterRender.
+bool inFrontOfWaterGate(vec4 fragCoord) {
+    return fragCoord.z < texelFetch(bindlessTextures[waterGateIndex], ivec2(fragCoord.xy), 0).x;
+}
 
 #endif

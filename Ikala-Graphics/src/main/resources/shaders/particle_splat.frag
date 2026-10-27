@@ -12,6 +12,9 @@
 #include "particle_fragment.glsl"
 
 void main() {
+    if (inFrontOfWaterGate(gl_FragCoord)) {
+        discard;
+    }
     float shapeAlpha = particleShapeAlpha();
     if (shapeAlpha <= 0.0) {
         return;

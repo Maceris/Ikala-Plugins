@@ -32,6 +32,9 @@ float depthWeight(float alpha, float depth) {
 }
 
 void main() {
+    if (inFrontOfWaterGate(gl_FragCoord)) {
+        discard;
+    }
     float shapeAlpha = particleShapeAlpha();
     if (shapeAlpha <= 0.0) {
         discard;

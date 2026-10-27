@@ -54,6 +54,9 @@ vec3 renderToView(vec3 renderPoint) {
 }
 
 void main() {
+    if (inFrontOfWaterGate(gl_FragCoord)) {
+        discard;
+    }
     VolumeDraw draw = draws.volumeDraws[outDraw];
     uint slot = volumeDrawSlot(draw);
     // Distances along the ray in the brick's voxels, scale meters each
