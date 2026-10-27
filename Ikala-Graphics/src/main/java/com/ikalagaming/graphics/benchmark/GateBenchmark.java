@@ -683,9 +683,11 @@ public final class GateBenchmark {
      * A test water tile the island run placed, kept to change its wind and flow.
      *
      * @param still The tile without flow.
+     * @param fetch The most fetch the wind has over it, in meters: a pool's width, or infinite for
+     *     the open sea.
      * @param handle Its handle, set once placed.
      */
-    private record PlacedWater(WaterTile still, WaterHandle[] handle) {}
+    private record PlacedWater(WaterTile still, float fetch, WaterHandle[] handle) {}
 
     /** The island's water tiles, see {@link #setWater}. */
     private final List<PlacedWater> placedWater = new ArrayList<>();
@@ -1865,7 +1867,8 @@ public final class GateBenchmark {
                                     bottoms,
                                     mask,
                                     FOUNTAIN_WATER)
-                            .withFlows(flows));
+                            .withFlows(flows),
+                    size);
         }
     }
 
@@ -1875,7 +1878,18 @@ public final class GateBenchmark {
      * @param still The tile, without flow.
      */
     private void placeWater(@NonNull WaterTile still) {
-        final PlacedWater placed = new PlacedWater(still, new WaterHandle[1]);
+        placeWater(still, Float.POSITIVE_INFINITY);
+    }
+
+    /**
+     * Place a test water tile with the run's wind and flow, remembering it so they can change.
+     *
+     * @param still The tile, without flow.
+     * @param fetch The most fetch the wind has over it, in meters: a pool's width, which keeps its
+     *     waves to ripples, or infinite for the open sea.
+     */
+    private void placeWater(@NonNull WaterTile still, float fetch) {
+        final PlacedWater placed = new PlacedWater(still, fetch, new WaterHandle[1]);
         placed.handle()[0] = graphics.water().add(withWaterSettings(placed));
         if (placed.handle()[0] != null) {
             testWater.add(placed.handle()[0]);
@@ -1893,13 +1907,13 @@ public final class GateBenchmark {
         final WaterTile still = placed.still();
         if (still.flows() != null) {
             // Water with its own flow, like the fountain's, keeps it
-            return still.withBody(withRunWind(still.body()));
+            return still.withBody(withRunWind(still.body(), placed.fetch()));
         }
         final int cornersX = still.cellsX() + 1;
         final int corners = cornersX * (still.cellsZ() + 1);
         final WaterLoop path = waterLoop;
         if (currentSpeed == 0 && (path == null || loopSpeed == 0)) {
-            return still.withBody(withRunWind(still.body()));
+            return still.withBody(withRunWind(still.body(), placed.fetch()));
         }
         final float[] flows = new float[2 * corners];
         final int originX = (int) Math.floor(still.origin().x());
@@ -1913,17 +1927,21 @@ public final class GateBenchmark {
             flows[2 * i] = onPath ? path.flowAt(x, z, loopSpeed, false) : seaX;
             flows[2 * i + 1] = onPath ? path.flowAt(x, z, loopSpeed, true) : seaZ;
         }
-        return still.withBody(withRunWind(still.body())).withFlows(flows);
+        return still.withBody(withRunWind(still.body(), placed.fetch())).withFlows(flows);
     }
 
     /**
      * What a placed tile's water holds, under the run's wind.
      *
      * @param own What the tile was placed holding.
-     * @return It, with the run's wind.
+     * @param fetch The most fetch the wind has over the tile, in meters.
+     * @return It, with the run's wind, over no more than that fetch.
      */
-    private WaterBody withRunWind(@NonNull WaterBody own) {
-        return own.withWind(waterBody.windSpeed(), waterBody.windDirection(), waterBody.fetch());
+    private WaterBody withRunWind(@NonNull WaterBody own, float fetch) {
+        return own.withWind(
+                waterBody.windSpeed(),
+                waterBody.windDirection(),
+                Math.min(waterBody.fetch(), fetch));
     }
 
     /**
