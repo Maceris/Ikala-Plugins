@@ -29,8 +29,9 @@ layout(push_constant) uniform Constants {
     // between depths and flow phases where a pixel is drawn from one
     float waveTime;
     uint frame;
-    // The camera's place along x and z kept to WATER_PATTERN_WRAP, which patterns fixed in the
-    // world are drawn from
+    // Seconds kept to WATER_SHEET_TIME_PERIOD, for falling sheets, and the camera's place along x
+    // and z kept to WATER_PATTERN_WRAP, which patterns fixed in the world are drawn from
+    float sheetTime;
     vec2 cameraWrap;
 };
 
