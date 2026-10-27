@@ -15,6 +15,7 @@ import com.ikalagaming.graphics.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.vulkan.SharedBuffer;
 import com.ikalagaming.graphics.vulkan.VoxelOitMath;
 import com.ikalagaming.graphics.vulkan.VulkanState;
+import com.ikalagaming.graphics.vulkan.WaterVolume;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -78,10 +79,13 @@ public class FogRender {
     private static final int INJECT_CONSTANTS_SIZE = INJECT_MEDIA_OFFSET + Long.BYTES;
 
     /**
-     * The size of the medium buffer's header, holding how many volumes follow, padded to a vec4,
-     * see {@code fog_inject.comp}.
+     * The size of the medium buffer's header, holding how many volumes follow, the particles' and
+     * the water's, padded to vec4s, see {@code fog_inject.comp}.
      */
-    private static final int MEDIA_HEADER_SIZE = 4 * Integer.BYTES;
+    private static final int MEDIA_HEADER_SIZE = 8 * Integer.BYTES;
+
+    /** Where it holds the water map's address, see {@link WaterVolume}. */
+    private static final int MEDIA_WATER_ADDRESS_OFFSET = 4 * Integer.BYTES;
 
     /** Where the media buffer's header says whether particles were splatted, an int. */
     private static final int MEDIA_PARTICLES_OFFSET = Integer.BYTES;
@@ -194,6 +198,9 @@ public class FogRender {
     private final long start = System.nanoTime();
 
     /** Each frame in flight's medium volumes, or null before its first. */
+    /** Where the water is around the camera, for the volume to fill with its medium. */
+    private final WaterVolume waterVolume = new WaterVolume();
+
     private final SharedBuffer[] mediaBuffers =
             new SharedBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
 
@@ -315,6 +322,7 @@ public class FogRender {
      * @param state The Vulkan state.
      */
     public void cleanup(@NonNull VulkanState state) {
+        waterVolume.cleanup(state);
         for (int i = 0; i < mediaBuffers.length; ++i) {
             if (mediaBuffers[i] != null) {
                 SharedBuffer.free(mediaBuffers[i], state);
@@ -430,7 +438,13 @@ public class FogRender {
                     VoxelOitMath.logScale(history ? previousViewDistance : viewDistance));
             inject.putLong(
                     INJECT_MEDIA_OFFSET,
-                    writeMedia(state, scene.getMediumRegistry(), camera, viewDistance, particles));
+                    writeMedia(
+                            state,
+                            scene.getMediumRegistry(),
+                            camera,
+                            viewDistance,
+                            particles,
+                            waterVolume.update(state, scene.getWaterRegistry(), camera)));
             vkCmdPushConstants(commandBuffer, injectLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, inject);
             vkCmdDispatch(commandBuffer, groupsX, groupsY, VoxelOitMath.SLICES);
 
@@ -491,6 +505,7 @@ public class FogRender {
      * @param camera The camera's position, in the world.
      * @param viewDistance The view distance.
      * @param particles Whether volumetric particles were splatted into the froxels.
+     * @param water The water map's address, see {@link WaterVolume}, or 0 for none.
      * @return The buffer's device address.
      */
     private long writeMedia(
@@ -498,7 +513,8 @@ public class FogRender {
             @NonNull MediumRegistry registry,
             @NonNull Vector3d camera,
             double viewDistance,
-            boolean particles) {
+            boolean particles,
+            long water) {
         registry.snapshot(media);
         SharedBuffer buffer = mediaBuffers[state.frameIndex];
         final long bytes = MEDIA_HEADER_SIZE + (long) media.size() * MEDIUM_SIZE;
@@ -562,6 +578,7 @@ public class FogRender {
             ++count;
         }
         MemoryUtil.memPutInt(address, count);
+        MemoryUtil.memPutLong(address + MEDIA_WATER_ADDRESS_OFFSET, water);
         MemoryUtil.memPutInt(address + MEDIA_PARTICLES_OFFSET, particles ? 1 : 0);
         MemoryUtil.memPutLong(
                 address + MEDIA_PARTICLE_ADDRESS_OFFSET,

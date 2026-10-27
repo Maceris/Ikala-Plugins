@@ -26,6 +26,7 @@
 #include "lighting.glsl"
 #include "atmosphere.glsl"
 #include "fog.glsl"
+#include "water_optics.glsl"
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
@@ -49,8 +50,39 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Me
     // particle_froxel.comp, and where their values are
     uint particleFroxels;
     uvec2 particleFroxelAddress;
+    // Where the water around the camera is, see WaterVolume, or 0 for none
+    uvec2 waterAddress;
+    uvec2 unused;
     MediumVolume media[];
 };
+
+// One water body's absorption, scattering and backscattering at red, green and blue, per meter
+struct WaterBodyOptics {
+    vec4 absorption;
+    vec4 scattering;
+    vec4 backscattering;
+};
+
+// The water around the camera, see WaterVolume: its corner in world cells, its size in cells and
+// how many bodies; its corner relative to the camera and the camera's height; the bodies; then each
+// cell's surface and bottom heights, its body, and 1 if it holds water
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer WaterMap {
+    ivec2 corner;
+    int size;
+    int bodyCount;
+    vec4 cornerCamera;
+    WaterBodyOptics bodies[16];
+    vec4 cells[];
+};
+
+// Which way water scatters light: strongly onward, its Henyey-Greenstein g for the 1.8% Petzold's
+// particles send back
+const float WATER_ANISOTROPY = 0.92;
+// The average cosine of the light coming down through water, which sets how fast it fades with
+// depth, (a + b_b) / that (Kirk)
+const float WATER_DOWNWELLING_COSINE = 0.8;
+// The share of the sky's light a calm surface reflects, averaged over the sky
+const float WATER_SKY_REFLECTANCE = 0.066;
 
 // What volumetric particles left in each froxel: density, scattering by color, the optical depth
 // out to their edge, scattering times anisotropy, the optical depth through them toward the sun,
@@ -308,6 +340,42 @@ void main() {
             + (rayleigh + mie) * ambient;
     }
 
+    // Under water the medium is the water's alone: the air's fog and haze stop at its surface. The
+    // sun's light comes in through the surface and down, bent toward straight down, dimmed along
+    // its way; the light the water scatters on the way, and the sky's, come down as a diffuse glow
+    // fading with depth
+    bool underWater = false;
+    vec3 waterExtinction = vec3(0.0);
+    if (any(notEqual(mediaList.waterAddress, uvec2(0)))) {
+        WaterMap map = WaterMap(mediaList.waterAddress);
+        ivec2 cell = ivec2(floor(renderPosition.xz - map.cornerCamera.xy));
+        if (all(greaterThanEqual(cell, ivec2(0))) && all(lessThan(cell, ivec2(map.size)))) {
+            vec4 water = map.cells[cell.y * map.size + cell.x];
+            float height = renderPosition.y + map.cornerCamera.z;
+            if (water.w > 0.0 && height < water.x && height > water.y) {
+                underWater = true;
+                WaterBodyOptics body = map.bodies[int(water.z)];
+                vec3 absorption = body.absorption.rgb;
+                vec3 waterScattering = body.scattering.rgb;
+                waterExtinction = absorption + waterScattering;
+                float below = water.x - height;
+                float cosSunDown = renderSun.y;
+                vec3 sunIn = cosSunDown > 0.0 ? sun * (1.0 - waterFresnel(cosSunDown)) : vec3(0.0);
+                float muSun = max(waterRefractedCosine(max(cosSunDown, 0.0)), LOW_SUN);
+                vec3 direct = sunIn * exp(-waterExtinction * below / muSun);
+                vec3 travel = refract(-renderSun, UP, 1.0 / WATER_INDEX);
+                vec3 fading = (absorption + body.backscattering.rgb) / WATER_DOWNWELLING_COSINE;
+                vec3 downwelling = (sunIn * max(cosSunDown, 0.0)
+                    + 3.14159265359 * ambient * (1.0 - WATER_SKY_REFLECTANCE))
+                    * exp(-fading * below);
+                scattered = waterScattering * (direct * henyeyGreenstein(dot(travel, toCamera),
+                    WATER_ANISOTROPY) + downwelling / (4.0 * 3.14159265359));
+                scattering = waterScattering;
+                anisotropy = WATER_ANISOTROPY;
+            }
+        }
+    }
+
     // The lights that can reach the froxel's cluster
     if (any(greaterThan(scattering, vec3(0.0)))) {
         uint cluster = findCluster(screen, depth);
@@ -342,7 +410,7 @@ void main() {
         }
     }
     vec4 sampled = vec4(scattered, 0.0);
-    vec4 sampledExtinction = vec4(vec3(extinction), 0.0);
+    vec4 sampledExtinction = vec4(underWater ? waterExtinction : vec3(extinction), 0.0);
 
     // Blended with where the froxel's middle was last frame, if it was on screen
     if (historyWeight > 0.0) {
