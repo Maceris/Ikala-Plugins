@@ -93,7 +93,7 @@ public class WaterVolume {
      * @param state The Vulkan state.
      * @param registry The scene's water.
      * @param camera The camera's position.
-     * @return The buffer's address, or 0 with no water around.
+     * @return The buffer's address, or 0 with no water around or the camera out of the water.
      */
     public long update(
             @NonNull VulkanState state,
@@ -109,7 +109,9 @@ public class WaterVolume {
             version = now;
             build(cameraX - SIZE / 2, cameraZ - SIZE / 2);
         }
-        if (!any) {
+        // Only under water: the froxels are too coarse for the water's edge, and from above the
+        // surface puts its own column on, so the medium would only bleed into the air around it
+        if (!any || !isUnderWater(tiles, camera)) {
             return 0;
         }
         final int frame = state.frameIndex;
