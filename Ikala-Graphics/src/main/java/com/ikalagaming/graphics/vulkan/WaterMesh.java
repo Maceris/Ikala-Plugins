@@ -24,9 +24,9 @@ import java.util.Set;
  *
  * <p>Surface corners are shared by the cells around them, and drawn through indices, so the waves
  * are worked out once a corner. Each vertex is {@link #VERTEX_FLOATS} floats: its place relative to
- * its tile's corner, its tile's index as an int's bits, its calm factor, or on a side how far the
- * water has fallen from the lip, for sides the face's outward normal along x and z, zero on the
- * surface, how fast the water flows there along x and z, and how deep it is, on a side at the lip.
+ * its tile's corner, its tile's index as an int's bits, its calm factor, for sides the face's
+ * outward normal along x and z, zero on the surface, how fast the water flows there along x and z,
+ * and how deep it is.
  */
 public final class WaterMesh {
 
@@ -36,7 +36,7 @@ public final class WaterMesh {
     /** Where in a vertex its tile's index is, as an int's bits. */
     public static final int TILE_FLOAT = 3;
 
-    /** Where in a vertex its calm factor is, or on a side how far the water has fallen. */
+    /** Where in a vertex its calm factor is. */
     public static final int CALM_FLOAT = 4;
 
     /** Where in a vertex its side's outward normal is, x then z. */
@@ -77,9 +77,6 @@ public final class WaterMesh {
 
     /** Corners of a cell. */
     private static final int CELL_CORNERS = 4;
-
-    /** Which of a side's corners is the low one under its first, see {@code addSide}. */
-    private static final int SIDE_LOW_A = 3;
 
     /** Where in a cell's data how far water falling onto it falls, in meters; 0 for none. */
     public static final int CELL_PLUNGE = 4;
@@ -277,19 +274,9 @@ public final class WaterMesh {
         final float size = tile.cellSize();
         final float[][] corners = {{ax, topA, az}, {bx, topB, bz}, {bx, lowB, bz}, {ax, lowA, az}};
         final int first = count;
-        for (int c = 0; c < corners.length; ++c) {
-            final float[] corner = corners[c];
-            // How far the water has fallen from the lip above this corner
-            final float fallen = (c == 0 || c == SIDE_LOW_A ? topA : topB) - corner[1];
+        for (float[] corner : corners) {
             final int vertex =
-                    add(
-                            index,
-                            corner[0] * size,
-                            corner[1],
-                            corner[2] * size,
-                            fallen,
-                            edge[0],
-                            edge[1]);
+                    add(index, corner[0] * size, corner[1], corner[2] * size, 0, edge[0], edge[1]);
             flowAndDepth(vertex, tile, (int) corner[0], (int) corner[2]);
         }
         for (int corner : SIDE_TRIANGLES) {

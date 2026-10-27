@@ -716,6 +716,13 @@ public final class GateBenchmark {
     /** How fast the loop's channel flows unless {@code .loopSpeed} says, in meters a second. */
     public static final float DEFAULT_LOOP_SPEED = 1;
 
+    /**
+     * What the fountain's pools hold: garden pool water, its dissolved organic matter tinting it
+     * like weak tea and fine sediment clouding it, so the water shows as a body; the run's wind
+     * blows over it.
+     */
+    private static final WaterBody FOUNTAIN_WATER = new WaterBody(1, 0.4f, 2.5f);
+
     /** How deep the fountain's pools are, in meters: a full water block's 7/8. */
     private static final double FOUNTAIN_POOL_DEPTH = 0.875;
 
@@ -1857,7 +1864,7 @@ public final class GateBenchmark {
                                     heights,
                                     bottoms,
                                     mask,
-                                    waterBody)
+                                    FOUNTAIN_WATER)
                             .withFlows(flows));
         }
     }
@@ -1886,13 +1893,13 @@ public final class GateBenchmark {
         final WaterTile still = placed.still();
         if (still.flows() != null) {
             // Water with its own flow, like the fountain's, keeps it
-            return still.withBody(waterBody);
+            return still.withBody(withRunWind(still.body()));
         }
         final int cornersX = still.cellsX() + 1;
         final int corners = cornersX * (still.cellsZ() + 1);
         final WaterLoop path = waterLoop;
         if (currentSpeed == 0 && (path == null || loopSpeed == 0)) {
-            return still.withBody(waterBody);
+            return still.withBody(withRunWind(still.body()));
         }
         final float[] flows = new float[2 * corners];
         final int originX = (int) Math.floor(still.origin().x());
@@ -1906,7 +1913,17 @@ public final class GateBenchmark {
             flows[2 * i] = onPath ? path.flowAt(x, z, loopSpeed, false) : seaX;
             flows[2 * i + 1] = onPath ? path.flowAt(x, z, loopSpeed, true) : seaZ;
         }
-        return still.withBody(waterBody).withFlows(flows);
+        return still.withBody(withRunWind(still.body())).withFlows(flows);
+    }
+
+    /**
+     * What a placed tile's water holds, under the run's wind.
+     *
+     * @param own What the tile was placed holding.
+     * @return It, with the run's wind.
+     */
+    private WaterBody withRunWind(@NonNull WaterBody own) {
+        return own.withWind(waterBody.windSpeed(), waterBody.windDirection(), waterBody.fetch());
     }
 
     /**

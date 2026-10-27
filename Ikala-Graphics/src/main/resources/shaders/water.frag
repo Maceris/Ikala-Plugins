@@ -35,8 +35,6 @@ layout(location = 14) in float outDepth;
 layout(location = 15) in vec2 outRestXZ;
 // The share of the water the foam breaking crests left covers here, see water_wavelets.comp
 layout(location = 16) in float outFoam;
-// On a side, how far the water has fallen from the lip, in meters
-layout(location = 17) in float outFall;
 
 layout(location = 0) out vec4 outColor;
 
@@ -58,32 +56,12 @@ const float FOAM_PATCH_SIZE = 0.6;
 const float FOAM_PATCH_EDGE = 0.08;
 // The least Jacobian foam is thickened by, where the surface squeezes it together
 const float FOAM_MIN_SQUEEZE = 0.25;
-// A falling sheet's streaks: how wide, in meters; how long apart in when their water left the
-// lip, in seconds, which the fall stretches as it speeds up; and how much they tilt the sheet
-const float SHEET_STREAK_WIDTH = 0.15;
-const float SHEET_STREAK_TIME = 0.125;
-const float SHEET_STREAK_TILT = 0.6;
-// Where a falling sheet breaks up and is white through, Horeni's fit for rectangular jets,
-// 6 q^0.32 meters, q its flow per meter of lip in m^2/s (small laboratory jets, q under about
-// 0.25; Castillo et al.); and how far down it starts to whiten, as a share of that
-const float SHEET_BREAKUP_SCALE = 6.0;
-const float SHEET_BREAKUP_POWER = 0.32;
-const float SHEET_AERATION_START = 0.3;
-// The finer strands in a white sheet: how many to a streak, where their pattern starts, and how
-// much they thin it
-const float SHEET_STRAND_SCALE = 3.0;
-const float SHEET_STRAND_OFFSET = 37.0;
-const float SHEET_STRAND_DEPTH = 0.55;
-// The bubbles in a broken-up sheet: their radius, in meters, about a millimeter as in aerated
-// flows, and the share of the sheet that is air where it is white through
-const float SHEET_BUBBLE_RADIUS = 1e-3;
-const float SHEET_MAX_AIR = 0.3;
-// How much of a broken-up sheet is gaps between its strands, where it is broken up through
-const float SHEET_MAX_GAP = 0.5;
 // How far the bottom shifts across the screen per unit of the surface's tilt, as a share of the
 // screen's height, per meter of water down to 2 m, over the distance
 const float REFRACTION_SHIFT = 0.25;
 const float REFRACTION_MAX_DEPTH = 2.0;
+// How far off the sky is taken to be, seen through a side, in meters
+const float SIDE_SKY_DISTANCE = 1e4;
 
 // A number from 0 to 1, advancing a seed (Jarzynski and Olano's PCG hash)
 float waterRandom(inout uint seed) {
@@ -130,6 +108,13 @@ float foamPatches(vec2 rest, float share, float squeeze, float footprint) {
     return mix(patches, thick, clamp(footprint / FOAM_PATCH_SIZE, 0.0, 1.0));
 }
 
+// Where what lies behind the water at a pixel is, relative to the camera, from its depth
+vec3 behindPoint(ivec2 pixel, float behindDepth) {
+    vec2 uv = (vec2(pixel) + 0.5) / screenSize;
+    vec4 view = invProjectionMatrix * vec4(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, behindDepth, 1.0);
+    return mat3(invViewMatrix) * (view.xyz / view.w);
+}
+
 void main() {
     WaterTileData tile = tileList.waterTiles[outTile];
     vec3 absorption = tile.absorption.rgb;
@@ -141,9 +126,8 @@ void main() {
     const vec3 up = vec3(0.0, 1.0, 0.0);
     vec3 normal = up;
     vec3 toEye = normalize(-outRenderPosition);
-    // How much of the pixel foam covers, and how much of it a falling sheet's water does
+    // How much of the pixel foam covers
     float foam = 0.0;
-    float sheetPresence = 1.0;
     float alpha = max(roughness * roughness, 1e-4);
     // A side, where the water ends: seen through its face, the way it faces the eye
     bool side = dot(outSideNormal, outSideNormal) > 0.0;
@@ -218,72 +202,6 @@ void main() {
         normal = normalize(vec3(-gradient.x, 1.0, -gradient.y));
         alpha = sqrt(alpha * alpha + variance);
     }
-    // A side is a falling sheet: water leaving the lip at its flow outward, falling faster as it
-    // goes, sqrt(v0^2 + 2 g s) after falling s. Its pattern is fixed to when its water left the lip
-    // and where along the lip, so it streams down, stretched as the water speeds up; the waves
-    // crossing the lip tilt it as they go over; and it whitens with air as it breaks up
-    if (side) {
-        vec2 outward = outSideNormal;
-        vec2 along = vec2(-outward.y, outward.x);
-        float fallen = max(outFall, 0.0);
-        float lip = max(dot(outFlow, outward), SHEET_MIN_SPEED);
-        float speed = sqrt(lip * lip + 2.0 * WATER_GRAVITY * fallen);
-        float launched = sheetTime - (speed - lip) / WATER_GRAVITY;
-        float across = dot(outRestXZ + cameraWrap, along);
-        vec2 point = vec2(across / SHEET_STREAK_WIDTH, launched / SHEET_STREAK_TIME);
-        ivec2 period = foamPeriod(vec2(WATER_PATTERN_WRAP, WATER_SHEET_TIME_PERIOD),
-            vec2(SHEET_STREAK_WIDTH, SHEET_STREAK_TIME));
-        float streak = foamNoise(point, period);
-        float streakSlope = foamNoise(point + vec2(0.5, 0.0), period)
-            - foamNoise(point - vec2(0.5, 0.0), period);
-        float lipTilt = 0.0;
-        if (climate >= 0 || gridOn != 0) {
-            WaveField lipField;
-            lipField.climates = climateList;
-            lipField.profiles = profileList;
-            lipField.grid = gridList;
-            lipField.climate = climate;
-            lipField.ripples = rippleClimate;
-            lipField.gridOn = gridOn != 0;
-            lipField.level = 0;
-            lipField.shift = vec2(0.0);
-            vec2 lipAmplitudes[WAVE_DIRECTIONS];
-            for (int i = 0; i < WAVE_AMPLITUDE_VECTORS; ++i) {
-                lipAmplitudes[2 * i] = outAmplitudes[i].xy;
-                lipAmplitudes[2 * i + 1] = outAmplitudes[i].zw;
-            }
-            vec3 lipSums;
-            lipTilt = dot(waveSlope(lipField, lipAmplitudes, WAVE_LAST_LAYER, outRestXZ,
-                lipSums).xy, along);
-        }
-        vec3 face = vec3(outward.x, 0.0, outward.y);
-        vec3 tangent = vec3(along.x, 0.0, along.y);
-        normal = normalize(face - tangent * (SHEET_STREAK_TILT * streakSlope + lipTilt));
-        if (dot(normal, toEye) < 0.0) {
-            normal = -normal;
-        }
-        // A free overfall's brink runs at about critical flow, v = sqrt(g d), so q = v^3 / g
-        float perWidth = lip * lip * lip / WATER_GRAVITY;
-        float breakup = SHEET_BREAKUP_SCALE * pow(perWidth, SHEET_BREAKUP_POWER);
-        float aerated = smoothstep(SHEET_AERATION_START * breakup, breakup, fallen);
-        // Thick and thin strands even where it is white through
-        float strands = foamNoise(point * vec2(SHEET_STRAND_SCALE, 1.0)
-            + vec2(0.0, SHEET_STRAND_OFFSET), period * ivec2(int(SHEET_STRAND_SCALE), 1));
-        float bubbly = smoothstep(1.0 - aerated - FOAM_PATCH_EDGE,
-            1.0 - aerated + FOAM_PATCH_EDGE, streak) * mix(1.0, strands, SHEET_STRAND_DEPTH);
-        // The sheet is thin water full of bubbles, not a coat of foam: as thick as its flow over its
-        // speed, q / v, its bubbles of radius r and air share a blocking 1.5 a / r of the light per
-        // meter, so it is clear seen square on and whitens toward grazing, where the view's way
-        // through it is longer
-        float thickness = perWidth / speed;
-        float depth = 1.5 * SHEET_MAX_AIR * bubbly * thickness / SHEET_BUBBLE_RADIUS;
-        float cosFace = max(abs(dot(face, toEye)), MIN_COSINE);
-        foam = 1.0 - exp(-depth / cosFace);
-        // Past where it breaks up, the sheet is strands and drops with air between them, up to
-        // SHEET_MAX_GAP of it: what is behind shows straight through the gaps
-        sheetPresence = 1.0 - aerated * (1.0 - smoothstep(SHEET_MAX_GAP - FOAM_PATCH_EDGE,
-            SHEET_MAX_GAP + FOAM_PATCH_EDGE, strands));
-    }
     float surfaceRoughness = sqrt(alpha);
     float cosView = max(dot(normal, toEye), MIN_COSINE);
     float reflected = waterFresnel(cosView);
@@ -349,16 +267,53 @@ void main() {
     if (shiftedBehind >= gl_FragCoord.z) {
         pixel = shifted;
     }
+    // Through a side, the view bends in at the face, crosses the water to where it leaves the
+    // tile, and bends out there; what it then reaches is what shows, which is how a block of water
+    // shows as one
+    float sideWater = -1.0;
+    if (side) {
+        vec3 into = normalize(outRenderPosition);
+        vec3 bent = refract(into, normal, 1.0 / WATER_INDEX);
+        vec2 low = tile.offset.xz;
+        vec2 high = low + vec2(tile.absorption.w, tile.scattering.w);
+        vec2 exits = mix((low - outRenderPosition.xz) / min(bent.xz, vec2(-1e-6)),
+            (high - outRenderPosition.xz) / max(bent.xz, vec2(1e-6)),
+            greaterThan(bent.xz, vec2(0.0)));
+        sideWater = max(min(exits.x, exits.y), 0.0);
+        // Something solid inside the tile's box, as the stone a pool stands on, stops the view first
+        float straight = straightBehind < 1.0
+            ? length(behindPoint(ivec2(gl_FragCoord.xy), straightBehind) - outRenderPosition)
+            : SIDE_SKY_DISTANCE;
+        bool stopped = straight < sideWater;
+        sideWater = min(sideWater, straight);
+        vec3 leaving = exits.x < exits.y ? vec3(sign(bent.x), 0.0, 0.0)
+            : vec3(0.0, 0.0, sign(bent.z));
+        vec3 exiting = refract(bent, -leaving, WATER_INDEX);
+        // Met too steeply, the far face reflects it back in, and it ends on what the water stands
+        // on or against, about where the straight view does
+        if (!stopped && dot(exiting, exiting) == 0.0) {
+            stopped = true;
+            sideWater = straight;
+        }
+        if (!stopped) {
+            vec3 exitPoint = outRenderPosition + bent * sideWater;
+            // What is behind, about as far on as the straight view's, or far off for the sky
+            vec3 seen = exitPoint + exiting * max(straight - sideWater, 0.0);
+            vec4 clip = inverse(invProjectionMatrix)
+                * vec4(transpose(mat3(invViewMatrix)) * seen, 1.0);
+            vec2 ndc = clip.xy / clip.w;
+            vec2 uv = vec2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+            pixel = clamp(ivec2(uv * screenSize), ivec2(0), ivec2(screenSize) - 1);
+        }
+    }
     float behindDepth = texelFetch(bindlessTextures[nonuniformEXT(behindDepthIndex)], pixel, 0).x;
     vec3 bottom = vec3(0.0);
     float depthBelow = DEEP;
     // Through a side, how far the view goes in the water
     float across = DEEP;
     if (behindDepth < 1.0) {
-        vec2 uv = (vec2(pixel) + 0.5) / screenSize;
-        vec4 view = invProjectionMatrix * vec4(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, behindDepth, 1.0);
-        view /= view.w;
-        vec3 render = mat3(invViewMatrix) * view.xyz;
+        vec3 render = behindPoint(pixel, behindDepth);
+        vec4 view = vec4(transpose(mat3(invViewMatrix)) * render, 1.0);
         depthBelow = max(outRenderPosition.y - render.y, 0.0);
         across = length(render - outRenderPosition);
         bottom = texelFetch(bindlessTextures[nonuniformEXT(behindColorIndex)], pixel, 0).rgb;
@@ -376,15 +331,8 @@ void main() {
     // the side's point, lit from the surface just above
     float down = depthBelow / muSun;
     if (side) {
-        // The view leaves the water by the far side of the tile at the latest: what lies behind
-        // a narrow column, a fall or a pool's wall, is past the air beyond it
-        vec2 way = normalize(outRenderPosition).xz;
-        vec2 low = tile.offset.xz;
-        vec2 high = low + vec2(tile.absorption.w, tile.scattering.w);
-        vec2 exits = mix((low - outRenderPosition.xz) / min(way, vec2(-1e-6)),
-            (high - outRenderPosition.xz) / max(way, vec2(1e-6)), greaterThan(way, vec2(0.0)));
-        float leave = min(exits.x, exits.y);
-        distance = min(across, max(leave, 0.0));
+        // The view leaves the water by the far side of the tile at the latest
+        distance = min(across, sideWater);
         down = 0.0;
     }
     // Lit through the water above it, and seen through the water in front of it
@@ -407,11 +355,6 @@ void main() {
 
     if ((fog.enabled & FOG_ENABLED) != 0) {
         color = fogApply(color, gl_FragCoord.xy, depth, fog.logScale);
-    }
-    if (sheetPresence < 1.0) {
-        vec3 through = texelFetch(bindlessTextures[nonuniformEXT(behindColorIndex)],
-            ivec2(gl_FragCoord.xy), 0).rgb;
-        color = mix(through, color, sheetPresence);
     }
     outColor = vec4(color, 1.0);
 }

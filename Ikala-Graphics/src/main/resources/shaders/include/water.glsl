@@ -134,20 +134,13 @@ const float WAVE_CELL_SIZE = 1.0;
 const int WAVE_BANDS = 2;
 const int WAVE_WIND_BAND = 0;
 const int WAVE_RIPPLE_BAND = 1;
-// Gravity, in meters a second squared
-const float WATER_GRAVITY = 9.81;
-// How fast water leaves a lip whose surface doesn't flow out over it, in meters a second: a gentle
-// spill
-const float SHEET_MIN_SPEED = 0.3;
-// How far out from the face it falls past a falling sheet is drawn, in meters, so the two never
-// fight over depth
-const float SHEET_GAP = 0.01;
+// How far out from what it stands against a side is drawn, in meters, so the two never fight over
+// depth
+const float SIDE_GAP = 0.01;
 
-// How often patterns fixed in the world repeat, in meters, and the falling sheets' time, in
-// seconds, see WaveMath.PATTERN_WRAP and SHEET_TIME_PERIOD: each a whole number of the patterns'
-// cells
+// How often patterns fixed in the world repeat, in meters, see WaveMath.PATTERN_WRAP: a whole
+// number of the patterns' cells
 const float WATER_PATTERN_WRAP = 614.4;
-const float WATER_SHEET_TIME_PERIOD = 512.0;
 
 // After the bands, the share of the cell the foam breaking crests left covers
 const int WAVE_FOAM_BAND = WAVE_BANDS;
