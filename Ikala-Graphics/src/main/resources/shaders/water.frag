@@ -33,6 +33,8 @@ layout(location = 13) in vec2 outFlow;
 layout(location = 14) in float outDepth;
 // Where the surface is at rest, which the waves are worked out from
 layout(location = 15) in vec2 outRestXZ;
+// The share of the water the foam breaking crests left covers here, see water_wavelets.comp
+layout(location = 16) in float outFoam;
 
 layout(location = 0) out vec4 outColor;
 
@@ -48,6 +50,12 @@ const float MIN_FOOTPRINT_COSINE = 0.2;
 // snow; whitecaps average about 0.22 with old, thinning foam (Koepke 1984), dense foam reaches about
 // 0.55 (Frouin et al. 2001)
 const float FOAM_ALBEDO = 0.55;
+// How big the patches of foam left behind are, in meters, and how sharp their edges, as a share of
+// the pattern's range
+const float FOAM_PATCH_SIZE = 0.6;
+const float FOAM_PATCH_EDGE = 0.08;
+// The least Jacobian foam is thickened by, where the surface squeezes it together
+const float FOAM_MIN_SQUEEZE = 0.25;
 // How far the bottom shifts across the screen per unit of the surface's tilt, as a share of the
 // screen's height, per meter of water down to 2 m, over the distance
 const float REFRACTION_SHIFT = 0.25;
@@ -58,6 +66,35 @@ float waterRandom(inout uint seed) {
     seed = seed * 747796405u + 2891336453u;
     uint word = ((seed >> ((seed >> 28u) + 4u)) ^ seed) * 277803737u;
     return float(((word >> 22u) ^ word) >> 8) / 16777216.0;
+}
+
+// A smooth value noise from 0 to 1 over a plane, each lattice point's value from a PCG hash
+float foamHash(ivec2 cell) {
+    uint seed = uint(cell.x) * 1973u + uint(cell.y) * 9277u + 26699u;
+    return waterRandom(seed);
+}
+
+float foamNoise(vec2 point) {
+    ivec2 cell = ivec2(floor(point));
+    vec2 f = fract(point);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(foamHash(cell), foamHash(cell + ivec2(1, 0)), f.x),
+        mix(foamHash(cell + ivec2(0, 1)), foamHash(cell + ivec2(1, 1)), f.x), f.y);
+}
+
+// How much of a pixel the foam breaking crests left covers: patches over the share of the water the
+// grid says, larger where the surface squeezes them, smaller where it stretches; a far pixel, too
+// wide for the patches, just the share
+float foamPatches(vec2 rest, float share, float squeeze, float footprint) {
+    if (share <= 0.0) {
+        return 0.0;
+    }
+    float thick = clamp(share / max(squeeze, FOAM_MIN_SQUEEZE), 0.0, 1.0);
+    vec2 point = rest / FOAM_PATCH_SIZE;
+    float pattern = 0.6 * foamNoise(point) + 0.4 * foamNoise(2.3 * point + 17.0);
+    float patches = smoothstep(1.0 - thick - FOAM_PATCH_EDGE, 1.0 - thick + FOAM_PATCH_EDGE,
+        pattern);
+    return mix(patches, thick, clamp(footprint / FOAM_PATCH_SIZE, 0.0, 1.0));
 }
 
 void main() {
@@ -142,6 +179,8 @@ void main() {
         if (climate >= 0) {
             foam = waveFoam(squeeze, variance, climateList.climates[climate].peak.y);
         }
+        float left = foamPatches(outRestXZ - field.shift, outFoam, squeeze, footprint);
+        foam = 1.0 - (1.0 - foam) * (1.0 - left);
         normal = normalize(vec3(-gradient.x, 1.0, -gradient.y));
         alpha = sqrt(alpha * alpha + variance);
     }

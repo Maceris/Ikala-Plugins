@@ -52,8 +52,10 @@ const float WAVE_FLOW_CYCLE = 4.0;
 // One wave climate, WaterRender: each direction's amplitude and where the camera stands along it in
 // its profile, in meters; the slope variance each layer leaves out; which depth's profiles each
 // depth reads, deep water's where its waves are the same, so those are never filled; and the
-// amplitude of its strongest direction, in x, which the grid's wind band keeps shares of, and the
-// Jacobian its waves break into foam under, in y, see WaveMath.foamJacobian
+// amplitude of its strongest direction, in x, which the grid's wind band keeps shares of; the
+// Jacobian its waves break into foam under, in y, see WaveMath.foamJacobian; and the variance of
+// the Jacobian's sum over all its waves, z, and over only the longest layer's, w, for a direction's
+// whole share, see WaveMath.jacobianVariance
 struct WaveClimate {
     float amplitudes[WAVE_DIRECTIONS];
     float offsets[WAVE_DIRECTIONS];
@@ -130,7 +132,35 @@ const float WAVE_CELL_SIZE = 1.0;
 const int WAVE_BANDS = 2;
 const int WAVE_WIND_BAND = 0;
 const int WAVE_RIPPLE_BAND = 1;
-const int WAVE_CELL_VALUES = WAVE_BANDS * WAVE_DIRECTIONS;
+// After the bands, the share of the cell the foam breaking crests left covers
+const int WAVE_FOAM_BAND = WAVE_BANDS;
+const int WAVE_CELL_VALUES = WAVE_BANDS * WAVE_DIRECTIONS + 1;
+// How much of the whitecaps' coverage is foam still being made, see WaveMath.ACTIVE_WHITECAP_SHARE,
+// and how long the foam left behind takes to fade, in seconds, see WaveMath.FOAM_LIFETIME
+const float WAVE_ACTIVE_WHITECAP_SHARE = 0.115;
+const float WAVE_FOAM_LIFETIME = 4.0;
+// How soft the edge of where the grid's crests break is, as a share of their Jacobian's spread
+const float WAVE_FOAM_CREST_EDGE = 0.25;
+
+// The normal distribution's cumulative function, in the tanh form, see WaveMath.normalCdf: close in
+// the tail, where foam's chances lie. Kept to WAVE_NORMAL_REACH standard deviations, where it is 0
+// or 1 already: tanh of a large number overflows to NaN on some drivers.
+const float WAVE_NORMAL_REACH = 8.0;
+
+float waveNormalCdf(float x) {
+    x = clamp(x, -WAVE_NORMAL_REACH, WAVE_NORMAL_REACH);
+    return 0.5 + 0.5 * tanh(0.7978845608 * (x + 0.044715 * x * x * x));
+}
+
+// The share of the water a climate's foam left behind covers on average, the rest of the
+// whitecaps' coverage after those breaking: what open water past the grid holds
+float waveFoamLeft(WaveClimate climate) {
+    if (climate.peak.z <= 0.0) {
+        return 0.0;
+    }
+    float breaking = waveNormalCdf((climate.peak.y - 1.0) / sqrt(climate.peak.z));
+    return breaking * (1.0 - WAVE_ACTIVE_WHITECAP_SHARE) / WAVE_ACTIVE_WHITECAP_SHARE;
+}
 // How fast each band carries its amplitude, in meters a second; how long the wind takes to build
 // its waves back and ripples to die away, in seconds; how much a shore reflects; and how fast
 // amplitude spreads into the neighboring directions, per second
@@ -330,11 +360,10 @@ mat2 waveJacobian(vec3 sums) {
 // threshold set so foam covers as much as measured whitecaps do (WaveMath.foamJacobian); War
 // Thunder's ocean uses a fixed 0.3 to 0.5 (Tcheblokov 2015). The waves left out add to the
 // Jacobian about as much spread as to the slope, so a far pixel's foam is the chance its waves
-// break, as Dupuy and Bruneton filter whitecaps (2012). The normal distribution's cumulative
-// function is the logistic one's, scaled, close enough here.
+// break, as Dupuy and Bruneton filter whitecaps (2012).
 float waveFoam(float jacobian, float missingVariance, float threshold) {
     float spread = sqrt(WAVE_CHOP * WAVE_CHOP * missingVariance + WAVE_FOAM_EDGE * WAVE_FOAM_EDGE);
-    return 1.0 / (1.0 + exp(-1.702 * (threshold - jacobian) / spread));
+    return waveNormalCdf((threshold - jacobian) / spread);
 }
 
 // Which layer suits waves seen at a footprint, as a fraction between two layers: the shortest

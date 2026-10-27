@@ -116,22 +116,16 @@ class WaveMathTest {
         assertEquals(0, WaveMath.whitecapCoverage(0));
         assertTrue(WaveMath.whitecapCoverage(100) <= WaveMath.MAX_WHITECAP_COVERAGE);
         final WaveMath.Waves waves = WaveMath.sample(14, OPEN, 3);
-        double variance = 0;
-        for (int i = 0; i < waves.wavenumbers().length; ++i) {
-            final double slope = waves.amplitudes()[i] * waves.wavenumbers()[i];
-            variance += slope * slope / 2;
-        }
+        final double variance = WaveMath.jacobianVariance(waves, 0);
+        assertTrue(WaveMath.jacobianVariance(waves, 4) < variance, "long waves are less steep");
         final double threshold = WaveMath.foamJacobian(waves, 14);
         assertTrue(threshold < 1);
-        // The logistic stand-in for the chance the Jacobian falls under it
-        final double under =
-                1
-                        / (1
-                                + Math.exp(
-                                        -WaveMath.LOGISTIC_SCALE
-                                                * (threshold - 1)
-                                                / Math.sqrt(variance)));
-        assertEquals(WaveMath.whitecapCoverage(14), under, 1e-9);
+        final double under = WaveMath.normalCdf((threshold - 1) / Math.sqrt(variance));
+        assertEquals(WaveMath.whitecapCoverage(14) * WaveMath.ACTIVE_WHITECAP_SHARE, under, 1e-9);
+        // Close to the normal distribution in the tail: 3.3 standard deviations out is 0.048%
+        assertEquals(4.8e-4, WaveMath.normalCdf(-3.3), 1e-4);
+        assertEquals(0.5, WaveMath.normalCdf(0), 1e-12);
+        assertEquals(-2, WaveMath.inverseNormalCdf(WaveMath.normalCdf(-2)), 1e-9);
         assertEquals(WaveMath.NO_FOAM_JACOBIAN, WaveMath.foamJacobian(waves, 0));
         assertTrue(WaveMath.foamJacobian(waves, 20) > threshold, "more foam in more wind");
     }

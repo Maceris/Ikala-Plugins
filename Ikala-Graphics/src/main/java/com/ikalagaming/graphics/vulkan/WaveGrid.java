@@ -194,6 +194,7 @@ public class WaveGrid {
      * @param disturbances This frame's disturbances, in the world.
      * @param climates The wind climates' address, for each direction's share of the wind's waves.
      * @param paints This frame's wave paints, in the world.
+     * @param profiles The wave profiles' address, for where crests break.
      * @param stack The stack to allocate on.
      */
     public void step(
@@ -206,6 +207,7 @@ public class WaveGrid {
             @NonNull List<WaterRegistry.Disturbance> disturbances,
             long climates,
             @NonNull List<WaterRegistry.WavePaint> paints,
+            long profiles,
             @NonNull MemoryStack stack) {
         final long nanos = System.nanoTime();
         final double seconds =
@@ -295,6 +297,13 @@ public class WaveGrid {
         constants.putLong(
                 ShaderBindings.Water.WAVELETS_PAINTS_OFFSET, paintBuffers[frame].deviceAddress);
         constants.putInt(ShaderBindings.Water.WAVELETS_PAINT_COUNT_OFFSET, paintCount);
+        constants.putLong(ShaderBindings.Water.WAVELETS_PROFILES_OFFSET, profiles);
+        constants.putFloat(
+                ShaderBindings.Water.WAVELETS_CORNER_RENDER_OFFSET,
+                (float) (cornerX * WaveletMath.CELL_SIZE - camera.x()));
+        constants.putFloat(
+                ShaderBindings.Water.WAVELETS_CORNER_RENDER_OFFSET + Float.BYTES,
+                (float) (cornerZ * WaveletMath.CELL_SIZE - camera.z()));
         vkCmdPushConstants(commandBuffer, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
         final int groups = WaveletMath.GRID_SIZE / WORKGROUP_SIDE;
         vkCmdDispatch(commandBuffer, groups, groups, 1);

@@ -264,13 +264,17 @@ class ShaderBindingsTest {
         assertEquals(64, ShaderBindings.Water.WAVELETS_CLIMATES_OFFSET);
         assertEquals(72, ShaderBindings.Water.WAVELETS_PAINTS_OFFSET);
         assertEquals(80, ShaderBindings.Water.WAVELETS_PAINT_COUNT_OFFSET);
-        assertEquals(84, ShaderBindings.Water.WAVELETS_CONSTANTS_SIZE);
+        // 4 bytes of padding, then WaveProfileList profiles; vec2 cornerRender;
+        assertEquals(88, ShaderBindings.Water.WAVELETS_PROFILES_OFFSET);
+        assertEquals(96, ShaderBindings.Water.WAVELETS_CORNER_RENDER_OFFSET);
+        assertEquals(104, ShaderBindings.Water.WAVELETS_CONSTANTS_SIZE);
         // WaveClimate: float amplitudes[16]; float offsets[16]; vec4 missingVariance;
         assertEquals(64, ShaderBindings.Water.CLIMATE_OFFSETS);
         assertEquals(128, ShaderBindings.Water.CLIMATE_MISSING_VARIANCE);
         assertEquals(144, ShaderBindings.Water.CLIMATE_LEVELS);
         assertEquals(160, ShaderBindings.Water.CLIMATE_PEAK);
         assertEquals(164, ShaderBindings.Water.CLIMATE_FOAM_JACOBIAN);
+        assertEquals(168, ShaderBindings.Water.CLIMATE_JACOBIAN_VARIANCE);
         assertEquals(176, ShaderBindings.Water.CLIMATE_SIZE);
         // The waves pass: two addresses; uint waveCount;
         assertEquals(16, ShaderBindings.Water.WAVES_CLIMATES_OFFSET);

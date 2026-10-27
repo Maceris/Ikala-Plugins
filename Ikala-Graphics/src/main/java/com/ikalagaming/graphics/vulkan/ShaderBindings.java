@@ -554,9 +554,17 @@ public class ShaderBindings {
         /** How many wave paints there are. */
         public static final int WAVELETS_PAINT_COUNT_OFFSET = WAVELETS_PAINTS_OFFSET + Long.BYTES;
 
+        /** The wave profiles' address, after 4 bytes of padding. */
+        public static final int WAVELETS_PROFILES_OFFSET =
+                WAVELETS_PAINT_COUNT_OFFSET + Integer.BYTES + Integer.BYTES;
+
+        /** The grid's corner relative to the camera, x and z, in meters. */
+        public static final int WAVELETS_CORNER_RENDER_OFFSET =
+                WAVELETS_PROFILES_OFFSET + Long.BYTES;
+
         /** The size of the step's push constants. */
         public static final int WAVELETS_CONSTANTS_SIZE =
-                WAVELETS_PAINT_COUNT_OFFSET + Integer.BYTES;
+                WAVELETS_CORNER_RENDER_OFFSET + 2 * Float.BYTES;
 
         /** Where in a wave climate each direction's amplitude is, 16 floats. */
         public static final int CLIMATE_AMPLITUDES = 0;
@@ -581,6 +589,13 @@ public class ShaderBindings {
 
         /** Where in it the Jacobian its waves break into foam under is, after the peak. */
         public static final int CLIMATE_FOAM_JACOBIAN = CLIMATE_PEAK + Float.BYTES;
+
+        /**
+         * Where in it the variance of its waves' Jacobian sum is, for a direction's whole share of
+         * them, then that of only the waves of the longest layer, see {@link
+         * WaveMath#jacobianVariance}.
+         */
+        public static final int CLIMATE_JACOBIAN_VARIANCE = CLIMATE_FOAM_JACOBIAN + Float.BYTES;
 
         /** The size of one wave climate. */
         public static final int CLIMATE_SIZE = CLIMATE_PEAK + 4 * Float.BYTES;

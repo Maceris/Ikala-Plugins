@@ -65,6 +65,9 @@ layout(push_constant) uniform Constants {
     WaveClimateList climates;
     WavePaintList paintList;
     int paintCount;
+    WaveProfileList profiles;
+    // The grid's corner relative to the camera, in meters, where the profiles are worked out from
+    vec2 cornerRender;
 };
 
 // This cell's climate's share of the wind's waves in each direction, what the wind builds them back
@@ -190,6 +193,8 @@ void main() {
     vec2 shore = vec2(waterAt(cell + ivec2(1, 0)) - waterAt(cell - ivec2(1, 0)),
         waterAt(cell + ivec2(0, 1)) - waterAt(cell - ivec2(0, 1)));
     float diffusion = WAVE_ANGULAR_DIFFUSION * seconds;
+    // The wind band's new values, for the cell's crests
+    float windValues[WAVE_DIRECTIONS];
     for (int band = 0; band < WAVE_BANDS; ++band) {
         // Shallow water slows the wind's long waves to sqrt(g h)
         float speed = (band == WAVE_WIND_BAND
@@ -208,15 +213,23 @@ void main() {
             }
         }
         for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
-            float before = moved[(b + WAVE_DIRECTIONS - 1) % WAVE_DIRECTIONS];
-            float after = moved[(b + 1) % WAVE_DIRECTIONS];
-            float value = (1.0 - 2.0 * diffusion) * moved[b] + diffusion * (before + after);
+            // The spread into the neighboring directions acts on the wind band's departure from
+            // the wind's own spreading, so open water keeps the climate's waves exactly
+            int previous = (b + WAVE_DIRECTIONS - 1) % WAVE_DIRECTIONS;
+            int following = (b + 1) % WAVE_DIRECTIONS;
+            bool wind = band == WAVE_WIND_BAND;
+            float base = wind ? windShares[b] : 0.0;
+            float before = moved[previous] - (wind ? windShares[previous] : 0.0);
+            float after = moved[following] - (wind ? windShares[following] : 0.0);
+            float value = base + (1.0 - 2.0 * diffusion) * (moved[b] - base)
+                + diffusion * (before + after);
             if (band == WAVE_WIND_BAND) {
                 value += (windShares[b] - value) * (1.0 - exp(-seconds / WAVE_WIND_RECOVERY));
                 if (paintWeight > 0.0) {
                     float along = max(0.0, dot(waveDirection(b), paint.way.xy));
                     value = mix(value, paint.place.w * pow(along, WAVE_PAINT_SPREAD), paintWeight);
                 }
+                windValues[b] = value;
             } else {
                 value *= exp(-seconds / WAVE_RIPPLE_LIFETIME);
                 for (int d = 0; d < disturbanceCount; ++d) {
@@ -237,4 +250,40 @@ void main() {
             next.values[slot * WAVE_CELL_VALUES + band * WAVE_DIRECTIONS + b] = value;
         }
     }
+    // The foam breaking crests leave: carried by the current, fading over WAVE_FOAM_LIFETIME, and
+    // made where the cell's crests break, as in War Thunder's ocean (Tcheblokov 2015): where the
+    // longest waves' Jacobian at the cell's middle, which a cell samples well, falls under a
+    // threshold of their own. Whitecaps break on the steepest of the big crests, the short waves
+    // riding them steepened there, which summing the short waves' spread as if independent would
+    // miss: so the long waves' threshold is set to be crossed as often as the whole spectrum's,
+    // 1 - sqrt(their variance / the whole's) (1 - the climate's), and foam gathers on big crests and
+    // trails behind them, settling over the wind's own waves at the rest of the whitecaps' measured
+    // coverage, see WaveMath.ACTIVE_WHITECAP_SHARE
+    float foam = lastAt(middle - carried, WAVE_FOAM_BAND, 0) * exp(-seconds / WAVE_FOAM_LIFETIME);
+    if (climate >= 0) {
+        vec4 extra = climates.climates[climate].peak;
+        vec2 render = cornerRender + (vec2(local) + 0.5) * WAVE_CELL_SIZE;
+        int depthLevel = min(int(floor(waveDepthLevel(max(here.w, 0.0)) + 0.5)), WAVE_DEPTHS - 1);
+        int level = climates.climates[climate].levels[depthLevel];
+        vec3 sums = vec3(0.0);
+        for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
+            float amplitude = peak * windValues[b];
+            if (amplitude <= WAVE_FAINTEST) {
+                continue;
+            }
+            vec2 direction = waveDirection(b);
+            float along = dot(render, direction) + climates.climates[climate].offsets[b];
+            float crest = waveProfile(profiles, climate, level, b, WAVE_LAST_LAYER, along).w;
+            sums += amplitude * crest * vec3(direction.x * direction.x,
+                direction.y * direction.y, direction.x * direction.y);
+        }
+        float squeeze = determinant(waveJacobian(sums));
+        float threshold = 1.0 - sqrt(extra.w / max(extra.z, 1e-12)) * (1.0 - extra.y);
+        // As sharp as the long waves' own spread allows, so breaking keeps to the crests
+        float edge = WAVE_FOAM_CREST_EDGE * WAVE_CHOP * sqrt(extra.w);
+        float breaking = waveNormalCdf((threshold - squeeze) / max(edge, 1e-6));
+        foam += breaking * (1.0 - WAVE_ACTIVE_WHITECAP_SHARE) / WAVE_ACTIVE_WHITECAP_SHARE
+            * seconds / WAVE_FOAM_LIFETIME;
+    }
+    next.values[slot * WAVE_CELL_VALUES + WAVE_FOAM_BAND * WAVE_DIRECTIONS] = min(foam, 1.0);
 }

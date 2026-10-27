@@ -38,6 +38,8 @@ layout(location = 13) out vec2 outFlow;
 layout(location = 14) out float outDepth;
 // Where the surface is at rest, relative to the camera, which the waves are worked out from
 layout(location = 15) out vec2 outRestXZ;
+// The share of the water the foam breaking crests left covers here
+layout(location = 16) out float outFoam;
 
 void main() {
     WaterTileData tile = tileList.waterTiles[inTile];
@@ -45,6 +47,7 @@ void main() {
     vec2 rest = render.xz;
     int climate = int(tile.offset.w);
     float waves = inCalm;
+    float foam = 0.0;
     vec2 amplitudes[WAVE_DIRECTIONS];
     for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
         amplitudes[b] = vec2(0.0);
@@ -59,6 +62,11 @@ void main() {
         field.gridOn = gridOn != 0;
         field.at = waveGridAt(render.xz, gridCorner, gridCornerCell);
         waveAmplitudesAll(field, amplitudes);
+        if (field.gridOn && field.at.inside) {
+            foam = waveGridValue(field.grid, field.at, WAVE_FOAM_BAND, 0);
+        } else if (climate >= 0) {
+            foam = waveFoamLeft(climateList.climates[climate]);
+        }
         if (climate >= 0) {
             // Between the two nearest depths' profiles, and the flow's two phases
             float level = waveDepthLevel(inDepth);
@@ -97,5 +105,6 @@ void main() {
     outFlow = inFlow;
     outDepth = inDepth;
     outRestXZ = rest;
+    outFoam = foam * inCalm;
     gl_Position = projectionMatrix * view;
 }

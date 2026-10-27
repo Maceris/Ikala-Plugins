@@ -80,14 +80,31 @@ public final class WaveMath {
     /** Its power of the wind's speed. */
     public static final double WHITECAP_POWER = 3.52;
 
+    /**
+     * How much of the whitecaps' coverage is foam still being made by breaking crests, stage A in
+     * Monahan and Lu's (1990) terms, rather than the foam they leave behind, stage B: measurements
+     * put stage B at 1.5 to 40 times stage A (Callaghan et al. 2012; Yang et al.); this takes the
+     * middle of that, about 7.7 times.
+     */
+    public static final double ACTIVE_WHITECAP_SHARE = 0.115;
+
+    /** How long the foam breaking crests leave takes to fade to 1/e, in seconds. */
+    public static final double FOAM_LIFETIME = 4;
+
     /** The most of the sea whitecaps cover, past the fit's measured winds. */
     public static final double MAX_WHITECAP_COVERAGE = 0.2;
 
     /**
-     * The logistic function's scale that makes it close to the normal distribution's cumulative
-     * one, 1 / (1 + exp(-1.702 x)), see {@code waveFoam} in {@code water.glsl}.
+     * The cubic term of the tanh form of the normal distribution's cumulative function, see {@link
+     * #normalCdf}.
      */
-    public static final double LOGISTIC_SCALE = 1.702;
+    private static final double NORMAL_CDF_CUBIC = 0.044_715;
+
+    /** Steps of the bisection that inverts {@link #normalCdf}. */
+    private static final int NORMAL_CDF_STEPS = 60;
+
+    /** How far out in standard deviations the inverse of {@link #normalCdf} looks. */
+    private static final double NORMAL_CDF_REACH = 10;
 
     /** The foam Jacobian of a climate without whitecaps, which no surface falls under. */
     public static final double NO_FOAM_JACOBIAN = -1000;
@@ -504,6 +521,27 @@ public final class WaveMath {
     }
 
     /**
+     * The variance of the sum the choppy waves' Jacobian is made of, a k cos (k p + phase), over
+     * the waves at least some long: half of each one's (a k)^2, the same as the slope's along one
+     * direction.
+     *
+     * @param waves The waves, with their full amplitudes.
+     * @param shortest The shortest wave counted, in meters; 0 for all.
+     * @return The variance, for a direction's whole share of the waves.
+     */
+    public static double jacobianVariance(Waves waves, double shortest) {
+        double variance = 0;
+        for (int i = 0; i < waves.wavenumbers().length; ++i) {
+            if (TURN / waves.wavenumbers()[i] < shortest) {
+                continue;
+            }
+            final double slope = waves.amplitudes()[i] * waves.wavenumbers()[i];
+            variance += slope * slope / 2;
+        }
+        return variance;
+    }
+
+    /**
      * How much of the sea whitecaps cover in a wind, as Monahan and O'Muircheartaigh (1980) fit it:
      * {@link #WHITECAP_SCALE} U^{@link #WHITECAP_POWER}, U the wind 10 m up in meters a second, up
      * to {@link #MAX_WHITECAP_COVERAGE}.
@@ -520,30 +558,58 @@ public final class WaveMath {
     }
 
     /**
-     * Where the choppy waves' Jacobian breaks into foam for a wind's waves, so that foam covers as
-     * much of the sea as whitecaps do, see {@link #whitecapCoverage}: the surface squeezes by J = 1
-     * - T, T = sum of a k cos (k p + phase) over every wave, which is about normal with the
-     * variance of the slope along one direction, sum of (a k)^2 / 2; foam is where J falls under
-     * the threshold, as often as whitecaps cover. Measured coverage, rather than a fixed threshold,
-     * keeps the foam right where a profile leaves out the longest waves. The water shader's normal
-     * distribution is the logistic one scaled by {@link #LOGISTIC_SCALE}, so its inverse is used.
+     * Where the choppy waves' Jacobian breaks into foam for a wind's waves, so that breaking crests
+     * cover as much of the sea as actively breaking whitecaps do, {@link #ACTIVE_WHITECAP_SHARE} of
+     * {@link #whitecapCoverage}; the foam they leave, the wave grid's, makes up the rest. The
+     * surface squeezes by J = 1 - T, T = sum of a k cos (k p + phase) over every wave, which is
+     * about normal with the variance of the slope along one direction, sum of (a k)^2 / 2; foam is
+     * where J falls under the threshold, as often as whitecaps cover. Measured coverage, rather
+     * than a fixed threshold, keeps the foam right where a profile leaves out the longest waves.
+     * The inverse of {@link #normalCdf}, which the water shader uses too.
      *
      * @param waves The wind's waves, deep water's.
      * @param windSpeed The wind's speed, in meters a second.
      * @return The Jacobian foam starts under, or {@link #NO_FOAM_JACOBIAN} for a calm.
      */
     public static double foamJacobian(Waves waves, double windSpeed) {
-        final double coverage = whitecapCoverage(windSpeed);
-        double variance = 0;
-        for (int i = 0; i < waves.wavenumbers().length; ++i) {
-            final double slope = waves.amplitudes()[i] * waves.wavenumbers()[i];
-            variance += slope * slope / 2;
-        }
+        final double coverage = whitecapCoverage(windSpeed) * ACTIVE_WHITECAP_SHARE;
+        final double variance = jacobianVariance(waves, 0);
         if (coverage <= 0 || variance <= 0) {
             return NO_FOAM_JACOBIAN;
         }
-        final double standard = Math.log((1 - coverage) / coverage) / LOGISTIC_SCALE;
-        return 1 - Math.sqrt(variance) * standard;
+        return 1 - Math.sqrt(variance) * inverseNormalCdf(1 - coverage);
+    }
+
+    /**
+     * The normal distribution's cumulative function, in the tanh form, 0.5 (1 + tanh(sqrt(2 / pi)
+     * (x + 0.044715 x^3))), as the water shaders have it: close in the tail, where foam's chances
+     * lie, unlike the logistic one, whose tail is several times too heavy there.
+     *
+     * @param x How many standard deviations.
+     * @return The chance of falling under it.
+     */
+    public static double normalCdf(double x) {
+        return 0.5 * (1 + Math.tanh(Math.sqrt(2 / Math.PI) * (x + NORMAL_CDF_CUBIC * x * x * x)));
+    }
+
+    /**
+     * The inverse of {@link #normalCdf}, by bisection.
+     *
+     * @param chance The chance, 0 to 1.
+     * @return How many standard deviations fall under it with that chance.
+     */
+    public static double inverseNormalCdf(double chance) {
+        double low = -NORMAL_CDF_REACH;
+        double high = NORMAL_CDF_REACH;
+        for (int i = 0; i < NORMAL_CDF_STEPS; ++i) {
+            final double middle = (low + high) / 2;
+            if (normalCdf(middle) < chance) {
+                low = middle;
+            } else {
+                high = middle;
+            }
+        }
+        return (low + high) / 2;
     }
 
     /**

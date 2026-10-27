@@ -396,6 +396,8 @@ public class WaterRender implements RenderStage {
         scene.getWaterRegistry().takePaints(WaveletMath.MAX_PAINTS, paints);
         final Vector3dc camera = scene.getCamera().getPosition();
         try (MemoryStack stack = MemoryStack.stackPush()) {
+            // The profiles first: the grid's step reads them for where crests break
+            fillProfiles(commandBuffer, frame, stack);
             grid.step(
                     commandBuffer,
                     state,
@@ -406,8 +408,8 @@ public class WaterRender implements RenderStage {
                     disturbances,
                     climateBuffers[frame].deviceAddress,
                     paints,
+                    profileBuffers[frame].deviceAddress,
                     stack);
-            fillProfiles(commandBuffer, frame, stack);
             copyBehind(commandBuffer, frameData, width, height, stack);
 
             VkRenderingAttachmentInfo.Buffer colorAttachments =
@@ -643,6 +645,14 @@ public class WaterRender implements RenderStage {
             MemoryUtil.memPutFloat(
                     at + ShaderBindings.Water.CLIMATE_FOAM_JACOBIAN,
                     (float) climate.foamJacobian());
+            MemoryUtil.memPutFloat(
+                    at + ShaderBindings.Water.CLIMATE_JACOBIAN_VARIANCE,
+                    (float) WaveMath.jacobianVariance(climate.waves(), 0));
+            MemoryUtil.memPutFloat(
+                    at + ShaderBindings.Water.CLIMATE_JACOBIAN_VARIANCE + Float.BYTES,
+                    (float)
+                            WaveMath.jacobianVariance(
+                                    climate.waves(), WaveMath.LAYER_CUTOFFS[WaveMath.LAYERS - 1]));
             for (int level = 0; level < WaveMath.DEPTHS; ++level) {
                 MemoryUtil.memPutInt(
                         at + ShaderBindings.Water.CLIMATE_LEVELS + (long) level * Integer.BYTES,
@@ -701,7 +711,8 @@ public class WaterRender implements RenderStage {
                 .srcAccessMask(VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT)
                 .dstStageMask(
                         VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
-                                | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT)
+                                | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
+                                | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
                 .dstAccessMask(VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
         vkCmdPipelineBarrier2(
                 commandBuffer,

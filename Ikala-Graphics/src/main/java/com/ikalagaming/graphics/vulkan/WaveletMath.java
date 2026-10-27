@@ -30,7 +30,13 @@ public final class WaveletMath {
     public static final int RIPPLE_BAND = 1;
 
     /** Values a cell holds: each band's amplitude in each direction. */
-    public static final int CELL_VALUES = BANDS * WaveMath.DIRECTIONS;
+    public static final int CELL_VALUES = BANDS * WaveMath.DIRECTIONS + 1;
+
+    /**
+     * Where in a cell the foam breaking crests left is, the share of the cell it covers, after the
+     * bands.
+     */
+    public static final int FOAM_VALUE = BANDS * WaveMath.DIRECTIONS;
 
     /**
      * How fast the wind band's waves carry their amplitude, in meters a second: the group speed of
