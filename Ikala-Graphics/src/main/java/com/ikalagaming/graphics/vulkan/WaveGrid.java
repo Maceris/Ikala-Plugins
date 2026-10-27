@@ -79,8 +79,14 @@ public class WaveGrid {
     /** Mask values after the first, copied from a cell's data: flow along x and z, and depth. */
     private static final int MASK_COPIED = 3;
 
-    /** Values a cell of the mask holds: water or not, flow along x and z, and depth. */
-    private static final int MASK_VALUES = 4;
+    /**
+     * Values a cell of the mask holds: water or not, flow along x and z, and depth; then how far
+     * water falls onto it, and padding to a second vec4.
+     */
+    private static final int MASK_VALUES = 8;
+
+    /** Where in a cell of the mask how far water falls onto it is. */
+    private static final int MASK_PLUNGE = 4;
 
     /**
      * Each cell's water, by world cell wrapping around: 1 if it holds water, else 0, its flow along
@@ -360,6 +366,7 @@ public class WaveGrid {
                     for (int i = 0; i < MASK_COPIED; ++i) {
                         mask[at + 1 + i] = data == null ? 0 : data[i];
                     }
+                    mask[at + MASK_PLUNGE] = data == null ? 0 : data[WaterMesh.CELL_PLUNGE];
                 }
             }
         }

@@ -40,19 +40,24 @@ layout(location = 14) out float outDepth;
 layout(location = 15) out vec2 outRestXZ;
 // The share of the water the foam breaking crests left covers here
 layout(location = 16) out float outFoam;
+// On a side, how far the water has fallen from the lip, in meters
+layout(location = 17) out float outFall;
 
 void main() {
     WaterTileData tile = tileList.waterTiles[inTile];
     vec3 render = tile.offset.xyz + inPosition;
     vec2 rest = render.xz;
     int climate = int(tile.offset.w);
-    float waves = inCalm;
+    // A side's calm slot holds how far its water has fallen instead, see WaterMesh
+    bool side = dot(inSideNormal, inSideNormal) > 0.0;
+    float waves = side ? 0.0 : inCalm;
     float foam = 0.0;
     vec2 amplitudes[WAVE_DIRECTIONS];
     for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
         amplitudes[b] = vec2(0.0);
     }
-    if ((climate >= 0 || gridOn != 0) && waves > 0.0) {
+    // Sides read the amplitudes too, for the waves crossing the lip above them
+    if ((climate >= 0 || gridOn != 0) && (waves > 0.0 || side)) {
         WaveField field;
         field.climates = climateList;
         field.profiles = profileList;
@@ -67,7 +72,7 @@ void main() {
         } else if (climate >= 0) {
             foam = waveFoamLeft(climateList.climates[climate]);
         }
-        if (climate >= 0) {
+        if (climate >= 0 && waves > 0.0) {
             // Between the two nearest depths' profiles, and the flow's two phases
             float level = waveDepthLevel(inDepth);
             int lower = int(floor(level));
@@ -105,6 +110,7 @@ void main() {
     outFlow = inFlow;
     outDepth = inDepth;
     outRestXZ = rest;
-    outFoam = foam * inCalm;
+    outFoam = foam * waves;
+    outFall = side ? inCalm : 0.0;
     gl_Position = projectionMatrix * view;
 }

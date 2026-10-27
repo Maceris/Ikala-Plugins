@@ -109,6 +109,15 @@ public final class WaveMath {
     /** The foam Jacobian of a climate without whitecaps, which no surface falls under. */
     public static final double NO_FOAM_JACOBIAN = -1000;
 
+    /**
+     * How often the water's patterns fixed in the world repeat, in meters: the camera's place is
+     * kept to it for the shaders, so it stays precise; a whole number of each pattern's cells.
+     */
+    public static final double PATTERN_WRAP = 614.4;
+
+    /** How often falling sheets' patterns repeat in time, in seconds. */
+    public static final double SHEET_TIME_PERIOD = 512;
+
     /** The most shoaling raises a wave, short of where it breaks. */
     public static final double MAX_SHOALING = 1.6;
 

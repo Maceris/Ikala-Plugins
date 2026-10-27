@@ -18,9 +18,21 @@ layout(local_size_x = 8, local_size_y = 8) in;
 // Each cell's water, by world cell wrapping around the grid: 0 for land, else its wind climate plus
 // WAVE_MASK_CLIMATE_BASE, -1 for none; how fast it flows along x and z, in meters a second; and how
 // deep it is, in meters
-layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer WaveMaskList {
-    vec4 cells[];
+// ... then, in the second vec4's x, how far water falls onto it from a higher neighbor, in meters
+struct WaveMaskCell {
+    vec4 cell;
+    vec4 more;
 };
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer WaveMaskList {
+    WaveMaskCell cells[];
+};
+
+// Where water falls onto a cell: how fast it makes foam, per second, up to covering the cell, and
+// how fast it raises ripples, in meters a second per square root meter of the fall: a falling sheet
+// churns the water it lands in into a patch of foam and sends ripples off it
+const float WAVE_PLUNGE_FOAM = 2.0;
+const float WAVE_PLUNGE_RIPPLE = 0.004;
 
 // Gravity, in meters a second squared: in shallow water waves go at sqrt(g h)
 const float GRAVITY = 9.81;
@@ -81,7 +93,7 @@ float waterAt(ivec2 cell) {
     if (any(lessThan(local, ivec2(0))) || any(greaterThanEqual(local, ivec2(WAVE_GRID_SIZE)))) {
         return 1.0;
     }
-    return mask.cells[waveGridSlot(cell)].x > 0.0 ? 1.0 : 0.0;
+    return mask.cells[waveGridSlot(cell)].cell.x > 0.0 ? 1.0 : 0.0;
 }
 
 // The last step's amplitude at a point in world cells, between the four nearest cells' middles;
@@ -169,7 +181,8 @@ void main() {
         return;
     }
     vec2 middle = vec2(cell) + 0.5;
-    vec4 here = mask.cells[slot];
+    vec4 here = mask.cells[slot].cell;
+    float plunge = mask.cells[slot].more.x;
     int climate = int(here.x + 0.5) - WAVE_MASK_CLIMATE_BASE;
     float peak = climate >= 0 ? climates.climates[climate].peak.x : 0.0;
     for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
@@ -244,6 +257,7 @@ void main() {
                         ? max(0.0, dot(waveDirection(b), offset / distance)) : 1.0;
                     value += disturbance.w * fade * outward;
                 }
+                value += WAVE_PLUNGE_RIPPLE * sqrt(plunge) * seconds;
                 // Ripples too faint to draw are gone, which keeps calm water calm for lastAtSharp
                 value = value > WAVE_FAINTEST ? value : 0.0;
             }
@@ -284,6 +298,9 @@ void main() {
         float breaking = waveNormalCdf((threshold - squeeze) / max(edge, 1e-6));
         foam += breaking * (1.0 - WAVE_ACTIVE_WHITECAP_SHARE) / WAVE_ACTIVE_WHITECAP_SHARE
             * seconds / WAVE_FOAM_LIFETIME;
+    }
+    if (plunge > 0.0) {
+        foam += WAVE_PLUNGE_FOAM * seconds;
     }
     next.values[slot * WAVE_CELL_VALUES + WAVE_FOAM_BAND * WAVE_DIRECTIONS] = min(foam, 1.0);
 }

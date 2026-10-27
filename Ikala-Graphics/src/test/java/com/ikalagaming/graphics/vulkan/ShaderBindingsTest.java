@@ -252,7 +252,10 @@ class ShaderBindingsTest {
         // float waveTime; uint frame;
         assertEquals(80, ShaderBindings.Water.PUSH_CONSTANT_WAVE_TIME_OFFSET);
         assertEquals(84, ShaderBindings.Water.PUSH_CONSTANT_FRAME_OFFSET);
-        assertEquals(88, ShaderBindings.Water.PUSH_CONSTANTS_SIZE);
+        // float sheetTime; 4 bytes of padding; vec2 cameraWrap;
+        assertEquals(88, ShaderBindings.Water.PUSH_CONSTANT_SHEET_TIME_OFFSET);
+        assertEquals(96, ShaderBindings.Water.PUSH_CONSTANT_CAMERA_WRAP_OFFSET);
+        assertEquals(104, ShaderBindings.Water.PUSH_CONSTANTS_SIZE);
         // water_wavelets.comp: four addresses; ivec2 corner, lastCorner; float seconds; int
         // disturbanceCount; int lastValid;
         assertEquals(32, ShaderBindings.Water.WAVELETS_CORNER_OFFSET);

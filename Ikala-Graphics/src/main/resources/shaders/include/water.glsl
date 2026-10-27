@@ -134,6 +134,12 @@ const float WAVE_CELL_SIZE = 1.0;
 const int WAVE_BANDS = 2;
 const int WAVE_WIND_BAND = 0;
 const int WAVE_RIPPLE_BAND = 1;
+// How often patterns fixed in the world repeat, in meters, and the falling sheets' time, in
+// seconds, see WaveMath.PATTERN_WRAP and SHEET_TIME_PERIOD: each a whole number of the patterns'
+// cells
+const float WATER_PATTERN_WRAP = 614.4;
+const float WATER_SHEET_TIME_PERIOD = 512.0;
+
 // After the bands, the share of the cell the foam breaking crests left covers
 const int WAVE_FOAM_BAND = WAVE_BANDS;
 const int WAVE_CELL_VALUES = WAVE_BANDS * WAVE_DIRECTIONS + 1;

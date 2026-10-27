@@ -4,6 +4,7 @@ import com.ikalagaming.graphics.scene.WaterTile;
 
 import lombok.NonNull;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -23,9 +24,9 @@ import java.util.Set;
  *
  * <p>Surface corners are shared by the cells around them, and drawn through indices, so the waves
  * are worked out once a corner. Each vertex is {@link #VERTEX_FLOATS} floats: its place relative to
- * its tile's corner, its tile's index as an int's bits, its calm factor, for sides the face's
- * outward normal along x and z, zero on the surface, how fast the water flows there along x and z,
- * and how deep it is.
+ * its tile's corner, its tile's index as an int's bits, its calm factor, or on a side how far the
+ * water has fallen from the lip, for sides the face's outward normal along x and z, zero on the
+ * surface, how fast the water flows there along x and z, and how deep it is, on a side at the lip.
  */
 public final class WaterMesh {
 
@@ -35,7 +36,7 @@ public final class WaterMesh {
     /** Where in a vertex its tile's index is, as an int's bits. */
     public static final int TILE_FLOAT = 3;
 
-    /** Where in a vertex its calm factor is. */
+    /** Where in a vertex its calm factor is, or on a side how far the water has fallen. */
     public static final int CALM_FLOAT = 4;
 
     /** Where in a vertex its side's outward normal is, x then z. */
@@ -65,14 +66,23 @@ public final class WaterMesh {
     /** Vertices a quad is drawn with: two triangles. */
     private static final int QUAD_VERTICES = 6;
 
-    /** Values a cell's data has: flow along x and z, depth, and its wind climate. */
-    public static final int CELL_DATA = 4;
+    /**
+     * Values a cell's data has: flow along x and z, depth, its wind climate, and how far water
+     * falling onto it falls.
+     */
+    public static final int CELL_DATA = 5;
 
     /** Where in a cell's data its wind climate is, -1 for none. */
     public static final int CELL_CLIMATE = 3;
 
     /** Corners of a cell. */
     private static final int CELL_CORNERS = 4;
+
+    /** Which of a side's corners is the low one under its first, see {@code addSide}. */
+    private static final int SIDE_LOW_A = 3;
+
+    /** Where in a cell's data how far water falling onto it falls, in meters; 0 for none. */
+    public static final int CELL_PLUNGE = 4;
 
     /** A side's four corners in its two triangles. */
     private static final int[] SIDE_TRIANGLES = {0, 1, 2, 0, 2, 3};
@@ -254,9 +264,19 @@ public final class WaterMesh {
         final float size = tile.cellSize();
         final float[][] corners = {{ax, topA, az}, {bx, topB, bz}, {bx, lowB, bz}, {ax, lowA, az}};
         final int first = count;
-        for (float[] corner : corners) {
+        for (int c = 0; c < corners.length; ++c) {
+            final float[] corner = corners[c];
+            // How far the water has fallen from the lip above this corner
+            final float fallen = (c == 0 || c == SIDE_LOW_A ? topA : topB) - corner[1];
             final int vertex =
-                    add(index, corner[0] * size, corner[1], corner[2] * size, 0, edge[0], edge[1]);
+                    add(
+                            index,
+                            corner[0] * size,
+                            corner[1],
+                            corner[2] * size,
+                            fallen,
+                            edge[0],
+                            edge[1]);
             flowAndDepth(vertex, tile, (int) corner[0], (int) corner[2]);
         }
         for (int corner : SIDE_TRIANGLES) {
@@ -455,8 +475,9 @@ public final class WaterMesh {
 
     /**
      * What each one meter cell water covers holds, for the wave grid: how fast the water flows
-     * there, along x and z, and how deep it is, from the cell's corners, and its tile's wind
-     * climate, by {@link #worldKey}.
+     * there, along x and z, and how deep it is, from the cell's corners, its tile's wind climate,
+     * and how far water falls onto it from a higher neighbor, the most of any, by {@link
+     * #worldKey}.
      *
      * @param tiles The tiles.
      * @param climates Each tile's wind climate, -1 for none.
@@ -497,8 +518,57 @@ public final class WaterMesh {
                 }
             }
         }
+        // Falls: a neighbor's surface standing higher than a cell's pours onto it
+        final Map<Long, Float> surfaces = new HashMap<>();
+        final List<long[]> cells = new ArrayList<>();
+        for (WaterTile tile : tiles) {
+            for (int z = 0; z < tile.cellsZ(); ++z) {
+                for (int x = 0; x < tile.cellsX(); ++x) {
+                    if (!tile.isWater(x, z)) {
+                        continue;
+                    }
+                    final float surface =
+                            (float) tile.origin().y()
+                                    + (tile.heightAt(x, z)
+                                                    + tile.heightAt(x + 1, z)
+                                                    + tile.heightAt(x, z + 1)
+                                                    + tile.heightAt(x + 1, z + 1))
+                                            / CELL_CORNERS;
+                    final long wx = (long) Math.floor(tile.origin().x() + x * tile.cellSize());
+                    final long wz = (long) Math.floor(tile.origin().z() + z * tile.cellSize());
+                    surfaces.merge(worldKey(wx, wz), surface, Math::max);
+                    cells.add(new long[] {wx, wz});
+                }
+            }
+        }
+        for (long[] cell : cells) {
+            final long wx = cell[0];
+            final long wz = cell[1];
+            final long key = worldKey(wx, wz);
+            final Float here = surfaces.get(key);
+            final float[] data = covered.get(key);
+            if (here == null || data == null) {
+                continue;
+            }
+            float drop = 0;
+            for (int[] step : PLUNGE_NEIGHBORS) {
+                final Float above = surfaces.get(worldKey(wx + step[0], wz + step[1]));
+                if (above != null && above - here > LEVEL_STEP) {
+                    drop = Math.max(drop, above - here);
+                }
+            }
+            if (drop > data[CELL_PLUNGE]) {
+                // Cells of one tile share their data array: give this one its own
+                final float[] own = data.clone();
+                own[CELL_PLUNGE] = drop;
+                covered.put(key, own);
+            }
+        }
         return covered;
     }
+
+    /** The four neighbors a cell's water can fall from. */
+    private static final int[][] PLUNGE_NEIGHBORS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
 
     /**
      * Add an index.

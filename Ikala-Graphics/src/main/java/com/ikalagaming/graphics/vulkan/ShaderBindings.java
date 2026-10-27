@@ -514,8 +514,19 @@ public class ShaderBindings {
         public static final int PUSH_CONSTANT_FRAME_OFFSET =
                 PUSH_CONSTANT_WAVE_TIME_OFFSET + Float.BYTES;
 
+        /** Seconds kept to the falling sheets' period. */
+        public static final int PUSH_CONSTANT_SHEET_TIME_OFFSET =
+                PUSH_CONSTANT_FRAME_OFFSET + Integer.BYTES;
+
+        /**
+         * The camera's place along x and z kept to the patterns' wrap, after 4 bytes of padding.
+         */
+        public static final int PUSH_CONSTANT_CAMERA_WRAP_OFFSET =
+                PUSH_CONSTANT_SHEET_TIME_OFFSET + Float.BYTES + Float.BYTES;
+
         /** The size of the push constants, which the vertex and fragment shaders share. */
-        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_FRAME_OFFSET + Integer.BYTES;
+        public static final int PUSH_CONSTANTS_SIZE =
+                PUSH_CONSTANT_CAMERA_WRAP_OFFSET + 2 * Float.BYTES;
 
         /** The grid's step: the last grid's address, then the next's, the mask's, disturbances'. */
         public static final int WAVELETS_LAST_OFFSET = 0;

@@ -482,6 +482,21 @@ public class WaterRender implements RenderStage {
                     (float) (seconds % WaveMath.FLOW_CYCLE));
             constants.putInt(
                     ShaderBindings.Water.PUSH_CONSTANT_FRAME_OFFSET, (int) state.frameNumber);
+            constants.putFloat(
+                    ShaderBindings.Water.PUSH_CONSTANT_SHEET_TIME_OFFSET,
+                    (float) (seconds % WaveMath.SHEET_TIME_PERIOD));
+            constants.putFloat(
+                    ShaderBindings.Water.PUSH_CONSTANT_CAMERA_WRAP_OFFSET,
+                    (float)
+                            (camera.x()
+                                    - WaveMath.PATTERN_WRAP
+                                            * Math.floor(camera.x() / WaveMath.PATTERN_WRAP)));
+            constants.putFloat(
+                    ShaderBindings.Water.PUSH_CONSTANT_CAMERA_WRAP_OFFSET + Float.BYTES,
+                    (float)
+                            (camera.z()
+                                    - WaveMath.PATTERN_WRAP
+                                            * Math.floor(camera.z() / WaveMath.PATTERN_WRAP)));
             constants.putFloat(ShaderBindings.Water.PUSH_CONSTANT_SCREEN_SIZE_OFFSET, width);
             constants.putFloat(
                     ShaderBindings.Water.PUSH_CONSTANT_SCREEN_SIZE_OFFSET + Float.BYTES, height);
