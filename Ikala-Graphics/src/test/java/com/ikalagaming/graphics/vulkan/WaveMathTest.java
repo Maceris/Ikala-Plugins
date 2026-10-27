@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.vulkan;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -32,6 +33,77 @@ class WaveMathTest {
         assertEquals(Math.sqrt(9.81 * 0.1), WaveMath.frequency(0.1), 1e-6);
         final double ripple = 2 * Math.PI / 0.01;
         assertTrue(WaveMath.frequency(ripple) > 1.5 * Math.sqrt(9.81 * ripple));
+    }
+
+    /**
+     * In shallow water the same wave is shorter, its energy slower, tending to sqrt(g h), and
+     * taller as its energy bunches up; in deep water nothing changes.
+     */
+    @Test
+    void testDepth() {
+        final double k = 2 * Math.PI / 20;
+        final double w = WaveMath.frequency(k);
+        assertEquals(k, WaveMath.wavenumberAt(w, Double.POSITIVE_INFINITY), 1e-9);
+        assertEquals(k, WaveMath.wavenumberAt(w, 100), 1e-6, "deep enough");
+        final double shallow = WaveMath.wavenumberAt(w, 1);
+        // About sqrt(g h) slow: a 20 m wave is some 10.6 m long in a meter of water
+        assertTrue(shallow > 1.8 * k, "shorter: " + shallow);
+        assertEquals(w, WaveMath.frequency(shallow, 1), 1e-9);
+        assertEquals(Math.sqrt(9.81 * 0.5), WaveMath.groupSpeed(2 * Math.PI / 200, 0.5), 0.02);
+        assertEquals(
+                WaveMath.frequency(k) / (2 * k),
+                WaveMath.groupSpeed(k, Double.POSITIVE_INFINITY),
+                1e-4);
+        assertTrue(WaveMath.shoaling(k, 1) > 1);
+        assertTrue(WaveMath.shoaling(k, 0.05) <= WaveMath.MAX_SHOALING);
+        assertEquals(1, WaveMath.shoaling(k, Double.POSITIVE_INFINITY));
+
+        final WaveMath.Waves deep = WaveMath.sample(WIND, OPEN, 2);
+        final WaveMath.Waves atOne = WaveMath.atDepth(deep, 1);
+        for (int i = 0; i < deep.wavenumbers().length; ++i) {
+            assertTrue(atOne.wavenumbers()[i] >= deep.wavenumbers()[i] - 1e-9);
+            final double harmonic =
+                    atOne.wavenumbers()[i] * WaveMath.PROFILE_LENGTH / (2 * Math.PI);
+            assertEquals(Math.rint(harmonic), harmonic, 1e-9);
+            // Turning in step with the deep water's
+            assertEquals(deep.frequencies()[i], atOne.frequencies()[i]);
+        }
+        assertTrue(WaveMath.significantHeight(atOne) > WaveMath.significantHeight(deep));
+        assertEquals(deep, WaveMath.atDepth(deep, Double.POSITIVE_INFINITY));
+        assertArrayEquals(new int[] {0, 1, 2}, levelsUsed(deep));
+        assertEquals(0, WaveMath.changedShare(deep, deep));
+
+        // Ripples a few decimeters long are deep water's even at 1 m
+        final double fundamental = 2 * Math.PI / WaveMath.PROFILE_LENGTH;
+        final double[] wavenumbers = new double[RIPPLE_WAVES];
+        final double[] amplitudes = new double[RIPPLE_WAVES];
+        for (int i = 0; i < RIPPLE_WAVES; ++i) {
+            wavenumbers[i] = (RIPPLE_HARMONIC + i) * fundamental;
+            amplitudes[i] = 0.01;
+        }
+        final WaveMath.Waves ripples =
+                new WaveMath.Waves(wavenumbers, amplitudes, new double[RIPPLE_WAVES]);
+        assertArrayEquals(new int[] {0, 0, 0}, levelsUsed(ripples));
+    }
+
+    /** Ripple-like waves in the levels test. */
+    private static final int RIPPLE_WAVES = 8;
+
+    /** The lowest ripple-like wave's harmonic of the profile, about 0.4 m long. */
+    private static final int RIPPLE_HARMONIC = 400;
+
+    /**
+     * Which depth's profiles each depth level reads for some deep water waves.
+     *
+     * @param deep The waves in deep water.
+     * @return The levels, see {@link WaveMath#levelsUsed}.
+     */
+    private static int[] levelsUsed(WaveMath.Waves deep) {
+        final WaveMath.Waves[] atDepths = new WaveMath.Waves[WaveMath.DEPTHS];
+        for (int level = 0; level < WaveMath.DEPTHS; ++level) {
+            atDepths[level] = WaveMath.atDepth(deep, WaveMath.DEPTH_LEVELS[level]);
+        }
+        return WaveMath.levelsUsed(atDepths);
     }
 
     /** The directions' energies sum to the whole, and none go against the wind. */

@@ -16,7 +16,7 @@ import org.lwjgl.vulkan.*;
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 import java.util.function.Supplier;
 
 /**
@@ -63,11 +63,17 @@ public class WaveGrid {
     private final SharedBuffer[] disturbanceBuffers =
             new SharedBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
 
-    /** Whether each cell holds water, 1 or 0, by world cell wrapping around. */
-    private final float[] mask = new float[CELLS];
+    /** Values a cell of the mask holds: water or not, flow along x and z, and depth. */
+    private static final int MASK_VALUES = 4;
 
-    /** The world cells water covers, as of {@link #maskVersion}. */
-    private Set<Long> waterCells = Set.of();
+    /**
+     * Each cell's water, by world cell wrapping around: 1 if it holds water, else 0, its flow along
+     * x and z, and its depth.
+     */
+    private final float[] mask = new float[CELLS * MASK_VALUES];
+
+    /** The world cells water covers and their flow and depth, as of {@link #maskVersion}. */
+    private Map<Long, float[]> waterCells = Map.of();
 
     /** The tiles' version the mask was worked out for, -1 for none. */
     private long maskVersion = -1;
@@ -166,7 +172,8 @@ public class WaveGrid {
      * @param frame The frame in flight.
      * @param camera The camera's position.
      * @param tilesVersion The tiles' version.
-     * @param water The world cells water covers, worked out again only when the version changes.
+     * @param water The world cells water covers and their flow and depth, see {@link
+     *     WaterMesh#waterCellData}, worked out again only when the version changes.
      * @param disturbances This frame's disturbances, in the world.
      * @param stack The stack to allocate on.
      */
@@ -176,7 +183,7 @@ public class WaveGrid {
             int frame,
             @NonNull Vector3dc camera,
             long tilesVersion,
-            @NonNull Supplier<Set<Long>> water,
+            @NonNull Supplier<Map<Long, float[]>> water,
             @NonNull List<WaterRegistry.Disturbance> disturbances,
             @NonNull MemoryStack stack) {
         final long nanos = System.nanoTime();
@@ -189,8 +196,8 @@ public class WaveGrid {
         cornerZ = (int) Math.floor(camera.z() / WaveletMath.CELL_SIZE) - WaveletMath.GRID_SIZE / 2;
         updateMask(tilesVersion, water);
 
-        masks[frame] = ensure(state, masks[frame], (long) CELLS * Float.BYTES);
-        MemoryUtil.memFloatBuffer(masks[frame].allocationInfo.pMappedData(), CELLS).put(mask);
+        masks[frame] = ensure(state, masks[frame], (long) mask.length * Float.BYTES);
+        MemoryUtil.memFloatBuffer(masks[frame].allocationInfo.pMappedData(), mask.length).put(mask);
         final int count = Math.min(disturbances.size(), WaveletMath.MAX_DISTURBANCES);
         disturbanceBuffers[frame] =
                 ensure(
@@ -271,9 +278,9 @@ public class WaveGrid {
      * newly covers.
      *
      * @param tilesVersion The tiles' version.
-     * @param water The world cells water covers.
+     * @param water The world cells water covers and their flow and depth.
      */
-    private void updateMask(long tilesVersion, Supplier<Set<Long>> water) {
+    private void updateMask(long tilesVersion, Supplier<Map<Long, float[]>> water) {
         final boolean all = tilesVersion != maskVersion;
         if (all) {
             waterCells = water.get();
@@ -292,8 +299,12 @@ public class WaveGrid {
                                 || worldX < maskCornerX
                                 || worldX >= maskCornerX + WaveletMath.GRID_SIZE;
                 if (all || newCell) {
-                    mask[slot(worldX, worldZ)] =
-                            waterCells.contains(WaterMesh.worldKey(worldX, worldZ)) ? 1 : 0;
+                    final int at = slot(worldX, worldZ) * MASK_VALUES;
+                    final float[] data = waterCells.get(WaterMesh.worldKey(worldX, worldZ));
+                    mask[at] = data == null ? 0 : 1;
+                    for (int i = 0; i < WaterMesh.CELL_DATA; ++i) {
+                        mask[at + 1 + i] = data == null ? 0 : data[i];
+                    }
                 }
             }
         }

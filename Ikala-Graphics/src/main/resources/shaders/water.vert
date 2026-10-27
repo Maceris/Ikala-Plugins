@@ -23,6 +23,9 @@ layout(location = 1) in uint inTile;
 layout(location = 2) in float inCalm;
 // A side's outward normal along x and z, zero on the surface
 layout(location = 3) in vec2 inSideNormal;
+// How fast the water flows here, x and z, and how deep it is
+layout(location = 4) in vec2 inFlow;
+layout(location = 5) in float inDepth;
 
 layout(location = 0) out vec3 outRenderPosition;
 layout(location = 1) out vec4 outViewPosition;
@@ -31,6 +34,8 @@ layout(location = 3) out float outCalm;
 layout(location = 4) out vec2 outSideNormal;
 // Each direction's amplitudes here, the wind's waves' and the ripples', two directions a vector
 layout(location = 5) out vec4 outAmplitudes[WAVE_AMPLITUDE_VECTORS];
+layout(location = 13) out vec2 outFlow;
+layout(location = 14) out float outDepth;
 
 void main() {
     WaterTileData tile = tileList.waterTiles[inTile];
@@ -52,7 +57,29 @@ void main() {
         field.at = waveGridAt(render.xz, gridCorner, gridCornerCell);
         waveAmplitudesAll(field, amplitudes);
         if (climate >= 0) {
-            render.y += waves * waveHeight(field, WAVE_VERTEX_LAYER, render.xz);
+            // Between the two nearest depths' profiles, and the flow's two phases
+            float level = waveDepthLevel(inDepth);
+            int lower = int(floor(level));
+            int upper = min(lower + 1, WAVE_DEPTHS - 1);
+            float depthBlend = level - float(lower);
+            float phaseBlend = dot(inFlow, inFlow) > 0.0 ? waveFlowWeight(waveTime) : 0.0;
+            float height = 0.0;
+            for (int phase = 0; phase < 2; ++phase) {
+                float phaseWeight = phase == 0 ? 1.0 - phaseBlend : phaseBlend;
+                if (phaseWeight <= 0.0) {
+                    continue;
+                }
+                field.shift = waveFlowShift(inFlow, waveTime, phase);
+                field.level = lower;
+                float atLevel = waveHeight(field, amplitudes, WAVE_VERTEX_LAYER, render.xz);
+                if (depthBlend > 0.0) {
+                    field.level = upper;
+                    atLevel = mix(atLevel,
+                        waveHeight(field, amplitudes, WAVE_VERTEX_LAYER, render.xz), depthBlend);
+                }
+                height += phaseWeight * atLevel;
+            }
+            render.y += waves * height;
         }
     }
     for (int i = 0; i < WAVE_AMPLITUDE_VECTORS; ++i) {
@@ -64,5 +91,7 @@ void main() {
     outTile = inTile;
     outCalm = waves;
     outSideNormal = inSideNormal;
+    outFlow = inFlow;
+    outDepth = inDepth;
     gl_Position = projectionMatrix * view;
 }

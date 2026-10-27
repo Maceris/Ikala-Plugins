@@ -1581,7 +1581,8 @@ public final class GateBenchmark {
      * whose ground is under {@link SyntheticTerrain#SEA_LEVEL}, the bottom at the ground's top. The
      * {@code .waterBody} property picks what it holds: ocean (the default), green or muddy; {@code
      * .wind=speed[,degrees[,fetch]]} sets its wind, blowing that many degrees from +x toward +z
-     * over a fetch in meters, the open sea if none.
+     * over a fetch in meters, the open sea if none; {@code .current=speed[,degrees]} makes the sea
+     * flow that many meters a second, that many degrees from +x toward +z.
      */
     private void placeOcean() {
         final SyntheticTerrain world = terrain;
@@ -1612,6 +1613,19 @@ public final class GateBenchmark {
         final int reach = radius * SyntheticTerrain.SECTION;
         final int tiles = (2 * reach + OCEAN_CELLS - 1) / OCEAN_CELLS;
         final int corners = OCEAN_CELLS + 1;
+        float[] flows = null;
+        final String current = option("current");
+        if (current != null) {
+            final String[] parts = current.split(",");
+            final double speed = Double.parseDouble(parts[0].trim());
+            final double direction =
+                    parts.length > 1 ? Math.toRadians(Double.parseDouble(parts[1].trim())) : 0;
+            flows = new float[corners * corners * 2];
+            for (int i = 0; i < corners * corners; ++i) {
+                flows[2 * i] = (float) (speed * Math.cos(direction));
+                flows[2 * i + 1] = (float) (speed * Math.sin(direction));
+            }
+        }
         for (int tileZ = 0; tileZ < tiles; ++tileZ) {
             for (int tileX = 0; tileX < tiles; ++tileX) {
                 final int startX = -reach + tileX * OCEAN_CELLS;
@@ -1643,14 +1657,15 @@ public final class GateBenchmark {
                         graphics.water()
                                 .add(
                                         new WaterTile(
-                                                new Vector3d(startX, 0, startZ),
-                                                1,
-                                                OCEAN_CELLS,
-                                                OCEAN_CELLS,
-                                                heights,
-                                                bottoms,
-                                                mask,
-                                                body));
+                                                        new Vector3d(startX, 0, startZ),
+                                                        1,
+                                                        OCEAN_CELLS,
+                                                        OCEAN_CELLS,
+                                                        heights,
+                                                        bottoms,
+                                                        mask,
+                                                        body)
+                                                .withFlows(flows));
                 if (handle != null) {
                     testWater.add(handle);
                 }

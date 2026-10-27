@@ -506,8 +506,16 @@ public class ShaderBindings {
         public static final int PUSH_CONSTANT_GRID_ON_OFFSET =
                 PUSH_CONSTANT_RIPPLE_CLIMATE_OFFSET + Integer.BYTES;
 
+        /** The waves' time, in seconds, kept to a flow cycle. */
+        public static final int PUSH_CONSTANT_WAVE_TIME_OFFSET =
+                PUSH_CONSTANT_GRID_ON_OFFSET + Integer.BYTES;
+
+        /** The frame's number. */
+        public static final int PUSH_CONSTANT_FRAME_OFFSET =
+                PUSH_CONSTANT_WAVE_TIME_OFFSET + Float.BYTES;
+
         /** The size of the push constants, which the vertex and fragment shaders share. */
-        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_GRID_ON_OFFSET + Integer.BYTES;
+        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_FRAME_OFFSET + Integer.BYTES;
 
         /** The grid's step: the last grid's address, then the next's, the mask's, disturbances'. */
         public static final int WAVELETS_LAST_OFFSET = 0;
@@ -549,19 +557,29 @@ public class ShaderBindings {
         /** Where in it the slope variance each layer leaves out is, a vec4. */
         public static final int CLIMATE_MISSING_VARIANCE = 2 * WaveMath.DIRECTIONS * Float.BYTES;
 
+        /**
+         * Where in it which depth's profiles each of {@link WaveMath#DEPTH_LEVELS} reads is, an
+         * ivec4.
+         */
+        public static final int CLIMATE_LEVELS = CLIMATE_MISSING_VARIANCE + 4 * Float.BYTES;
+
         /** The size of one wave climate. */
-        public static final int CLIMATE_SIZE = CLIMATE_MISSING_VARIANCE + 4 * Float.BYTES;
+        public static final int CLIMATE_SIZE = CLIMATE_LEVELS + 4 * Integer.BYTES;
 
         /**
-         * The waves pass: the samples' address, the profiles', and how many waves a climate has.
+         * The waves pass: the samples' address, the profiles', the climates', and how many waves a
+         * climate has.
          */
         public static final int WAVES_SAMPLES_OFFSET = 0;
 
         /** The profiles' address. */
         public static final int WAVES_PROFILES_OFFSET = Long.BYTES;
 
+        /** The climates' address, see {@link #CLIMATE_SIZE}. */
+        public static final int WAVES_CLIMATES_OFFSET = 2 * Long.BYTES;
+
         /** How many waves each climate has. */
-        public static final int WAVES_COUNT_OFFSET = 2 * Long.BYTES;
+        public static final int WAVES_COUNT_OFFSET = 3 * Long.BYTES;
 
         /** The size of the waves pass's push constants. */
         public static final int WAVES_CONSTANTS_SIZE = WAVES_COUNT_OFFSET + Integer.BYTES;

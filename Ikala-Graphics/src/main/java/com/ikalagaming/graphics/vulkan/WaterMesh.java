@@ -23,13 +23,14 @@ import java.util.Set;
  *
  * <p>Surface corners are shared by the cells around them, and drawn through indices, so the waves
  * are worked out once a corner. Each vertex is {@link #VERTEX_FLOATS} floats: its place relative to
- * its tile's corner, its tile's index as an int's bits, its calm factor, and for sides the face's
- * outward normal along x and z, zero on the surface.
+ * its tile's corner, its tile's index as an int's bits, its calm factor, for sides the face's
+ * outward normal along x and z, zero on the surface, how fast the water flows there along x and z,
+ * and how deep it is.
  */
 public final class WaterMesh {
 
     /** Floats in a vertex. */
-    public static final int VERTEX_FLOATS = 7;
+    public static final int VERTEX_FLOATS = 10;
 
     /** Where in a vertex its tile's index is, as an int's bits. */
     public static final int TILE_FLOAT = 3;
@@ -39,6 +40,15 @@ public final class WaterMesh {
 
     /** Where in a vertex its side's outward normal is, x then z. */
     public static final int NORMAL_FLOAT = 5;
+
+    /** Where in a vertex how fast the water flows is, x then z, in meters a second. */
+    public static final int FLOW_FLOAT = 7;
+
+    /** Where in a vertex how deep the water is, in meters. */
+    public static final int DEPTH_FLOAT = 9;
+
+    /** How deep water is taken to be where the tile doesn't give the bottom, in meters. */
+    public static final float UNKNOWN_DEPTH = 1000;
 
     /** How shallow water calms its waves from, in meters: none at the bottom, all this deep. */
     public static final float CALM_DEPTH = 2;
@@ -54,6 +64,12 @@ public final class WaterMesh {
 
     /** Vertices a quad is drawn with: two triangles. */
     private static final int QUAD_VERTICES = 6;
+
+    /** Values a cell's data has: flow along x and z, and depth. */
+    public static final int CELL_DATA = 3;
+
+    /** Corners of a cell. */
+    private static final int CELL_CORNERS = 4;
 
     /** A side's four corners in its two triangles. */
     private static final int[] SIDE_TRIANGLES = {0, 1, 2, 0, 2, 3};
@@ -183,6 +199,7 @@ public final class WaterMesh {
                                         calm(tile, cx, cz),
                                         0,
                                         0);
+                        flowAndDepth(vertex, tile, cx, cz);
                         cornerVertices[cz * stride + cx] = vertex;
                     }
                     addIndex(vertex);
@@ -235,7 +252,9 @@ public final class WaterMesh {
         final float[][] corners = {{ax, topA, az}, {bx, topB, bz}, {bx, lowB, bz}, {ax, lowA, az}};
         final int first = count;
         for (float[] corner : corners) {
-            add(index, corner[0] * size, corner[1], corner[2] * size, 0, edge[0], edge[1]);
+            final int vertex =
+                    add(index, corner[0] * size, corner[1], corner[2] * size, 0, edge[0], edge[1]);
+            flowAndDepth(vertex, tile, (int) corner[0], (int) corner[2]);
         }
         for (int corner : SIDE_TRIANGLES) {
             addIndex(first + corner);
@@ -411,6 +430,65 @@ public final class WaterMesh {
         vertices[at + NORMAL_FLOAT] = normalX;
         vertices[at + NORMAL_FLOAT + 1] = normalZ;
         return count++;
+    }
+
+    /**
+     * Set a vertex's flow and depth from its tile's corner.
+     *
+     * @param vertex The vertex.
+     * @param tile Its tile.
+     * @param cx The corner along x.
+     * @param cz Along z.
+     */
+    private void flowAndDepth(int vertex, WaterTile tile, int cx, int cz) {
+        final int at = vertex * VERTEX_FLOATS;
+        vertices[at + FLOW_FLOAT] = tile.flowAt(cx, cz, false);
+        vertices[at + FLOW_FLOAT + 1] = tile.flowAt(cx, cz, true);
+        vertices[at + DEPTH_FLOAT] =
+                tile.hasBottoms()
+                        ? Math.max(0, tile.heightAt(cx, cz) - tile.bottomAt(cx, cz))
+                        : UNKNOWN_DEPTH;
+    }
+
+    /**
+     * What each one meter cell water covers holds, for the wave grid: how fast the water flows
+     * there, along x and z, and how deep it is, from the cell's corners, by {@link #worldKey}.
+     *
+     * @param tiles The tiles.
+     * @return The cells' flows and depths.
+     */
+    public static Map<Long, float[]> waterCellData(@NonNull List<WaterTile> tiles) {
+        final Map<Long, float[]> covered = new HashMap<>();
+        for (WaterTile tile : tiles) {
+            final double size = tile.cellSize();
+            for (int z = 0; z < tile.cellsZ(); ++z) {
+                for (int x = 0; x < tile.cellsX(); ++x) {
+                    if (!tile.isWater(x, z)) {
+                        continue;
+                    }
+                    final float[] data = new float[CELL_DATA];
+                    for (int c = 0; c < CELL_CORNERS; ++c) {
+                        final int cx = x + (c & 1);
+                        final int cz = z + (c >> 1);
+                        data[0] += tile.flowAt(cx, cz, false) / CELL_CORNERS;
+                        data[1] += tile.flowAt(cx, cz, true) / CELL_CORNERS;
+                        data[2] +=
+                                (tile.hasBottoms()
+                                                ? tile.heightAt(cx, cz) - tile.bottomAt(cx, cz)
+                                                : UNKNOWN_DEPTH)
+                                        / CELL_CORNERS;
+                    }
+                    final double minX = tile.origin().x() + x * size;
+                    final double minZ = tile.origin().z() + z * size;
+                    for (long wz = (long) Math.floor(minZ); wz < Math.ceil(minZ + size); ++wz) {
+                        for (long wx = (long) Math.floor(minX); wx < Math.ceil(minX + size); ++wx) {
+                            covered.put(worldKey(wx, wz), data);
+                        }
+                    }
+                }
+            }
+        }
+        return covered;
     }
 
     /**

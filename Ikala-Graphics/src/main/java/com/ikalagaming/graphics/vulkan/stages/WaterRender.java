@@ -83,9 +83,16 @@ public class WaterRender implements RenderStage {
      * @param amplitudes Each direction's amplitude.
      * @param offsets Each direction's random offset, in meters.
      * @param missingVariance Each layer's left out slope variance.
+     * @param atDepths The waves at each of {@link WaveMath#DEPTH_LEVELS}, deep water's first.
+     * @param levels Which depth's profiles each depth reads, see {@link WaveMath#levelsUsed}.
      */
     private record Climate(
-            WaveMath.Waves waves, double[] amplitudes, double[] offsets, double[] missingVariance) {
+            WaveMath.Waves waves,
+            double[] amplitudes,
+            double[] offsets,
+            double[] missingVariance,
+            WaveMath.Waves[] atDepths,
+            int[] levels) {
 
         /**
          * Work a wind's climate out.
@@ -118,7 +125,12 @@ public class WaterRender implements RenderStage {
             for (int layer = 0; layer < missing.length; ++layer) {
                 missing[layer] = WaveMath.missingSlopeVariance(waves, layer);
             }
-            return new Climate(waves, amplitudes, offsets, missing);
+            final WaveMath.Waves[] atDepths = new WaveMath.Waves[WaveMath.DEPTHS];
+            for (int level = 0; level < atDepths.length; ++level) {
+                atDepths[level] = WaveMath.atDepth(waves, WaveMath.DEPTH_LEVELS[level]);
+            }
+            return new Climate(
+                    waves, amplitudes, offsets, missing, atDepths, WaveMath.levelsUsed(atDepths));
         }
     }
 
@@ -374,7 +386,7 @@ public class WaterRender implements RenderStage {
                     frame,
                     camera,
                     version,
-                    () -> WaterMesh.waterCells(tiles),
+                    () -> WaterMesh.waterCellData(tiles),
                     disturbances,
                     stack);
             fillProfiles(commandBuffer, frame, stack);
@@ -445,6 +457,11 @@ public class WaterRender implements RenderStage {
             constants.putInt(
                     ShaderBindings.Water.PUSH_CONSTANT_RIPPLE_CLIMATE_OFFSET, climates.size() - 1);
             constants.putInt(ShaderBindings.Water.PUSH_CONSTANT_GRID_ON_OFFSET, 1);
+            constants.putFloat(
+                    ShaderBindings.Water.PUSH_CONSTANT_WAVE_TIME_OFFSET,
+                    (float) (seconds % WaveMath.FLOW_CYCLE));
+            constants.putInt(
+                    ShaderBindings.Water.PUSH_CONSTANT_FRAME_OFFSET, (int) state.frameNumber);
             constants.putFloat(ShaderBindings.Water.PUSH_CONSTANT_SCREEN_SIZE_OFFSET, width);
             constants.putFloat(
                     ShaderBindings.Water.PUSH_CONSTANT_SCREEN_SIZE_OFFSET + Float.BYTES, height);
@@ -551,13 +568,17 @@ public class WaterRender implements RenderStage {
                 ensure(
                         state,
                         sampleBuffers[frame],
-                        (long) count * WaveMath.WAVES * ShaderBindings.Water.WAVE_SAMPLE_SIZE,
+                        (long) count
+                                * WaveMath.DEPTHS
+                                * WaveMath.WAVES
+                                * ShaderBindings.Water.WAVE_SAMPLE_SIZE,
                         false);
         profileBuffers[frame] =
                 ensure(
                         state,
                         profileBuffers[frame],
                         (long) count
+                                * WaveMath.DEPTHS
                                 * WaveMath.DIRECTIONS
                                 * WaveMath.LAYERS
                                 * WaveMath.PROFILE_SAMPLES
@@ -596,18 +617,26 @@ public class WaterRender implements RenderStage {
                                 + (long) layer * Float.BYTES,
                         (float) climate.missingVariance()[layer]);
             }
-            final WaveMath.Waves waves = climate.waves();
-            for (int i = 0; i < waves.wavenumbers().length; ++i) {
-                final long sample =
-                        sampleAddress
-                                + ((long) c * WaveMath.WAVES + i)
-                                        * ShaderBindings.Water.WAVE_SAMPLE_SIZE;
-                final double k = waves.wavenumbers()[i];
-                MemoryUtil.memPutFloat(sample, (float) k);
-                MemoryUtil.memPutFloat(sample + Float.BYTES, (float) waves.amplitudes()[i]);
-                MemoryUtil.memPutFloat(
-                        sample + 2 * Float.BYTES, (float) WaveMath.phaseAt(waves, i, seconds));
-                MemoryUtil.memPutFloat(sample + 3 * Float.BYTES, (float) (2 * Math.PI / k));
+            for (int level = 0; level < WaveMath.DEPTHS; ++level) {
+                MemoryUtil.memPutInt(
+                        at + ShaderBindings.Water.CLIMATE_LEVELS + (long) level * Integer.BYTES,
+                        climate.levels()[level]);
+                if (climate.levels()[level] != level) {
+                    continue;
+                }
+                final WaveMath.Waves waves = climate.atDepths()[level];
+                for (int i = 0; i < waves.wavenumbers().length; ++i) {
+                    final long sample =
+                            sampleAddress
+                                    + (((long) c * WaveMath.DEPTHS + level) * WaveMath.WAVES + i)
+                                            * ShaderBindings.Water.WAVE_SAMPLE_SIZE;
+                    final double k = waves.wavenumbers()[i];
+                    MemoryUtil.memPutFloat(sample, (float) k);
+                    MemoryUtil.memPutFloat(sample + Float.BYTES, (float) waves.amplitudes()[i]);
+                    MemoryUtil.memPutFloat(
+                            sample + 2 * Float.BYTES, (float) WaveMath.phaseAt(waves, i, seconds));
+                    MemoryUtil.memPutFloat(sample + 3 * Float.BYTES, (float) (2 * Math.PI / k));
+                }
             }
         }
     }
@@ -630,12 +659,14 @@ public class WaterRender implements RenderStage {
                 ShaderBindings.Water.WAVES_SAMPLES_OFFSET, sampleBuffers[frame].deviceAddress);
         constants.putLong(
                 ShaderBindings.Water.WAVES_PROFILES_OFFSET, profileBuffers[frame].deviceAddress);
+        constants.putLong(
+                ShaderBindings.Water.WAVES_CLIMATES_OFFSET, climateBuffers[frame].deviceAddress);
         constants.putInt(ShaderBindings.Water.WAVES_COUNT_OFFSET, WaveMath.WAVES);
         vkCmdPushConstants(commandBuffer, wavesLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
         vkCmdDispatch(
                 commandBuffer,
                 WaveMath.PROFILE_SAMPLES / WaveMath.WORKGROUP_SIZE,
-                climates.size() * WaveMath.DIRECTIONS,
+                climates.size() * WaveMath.DEPTHS * WaveMath.DIRECTIONS,
                 1);
         VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
         barrier.get(0)
@@ -882,7 +913,19 @@ public class WaterRender implements RenderStage {
                 .stride(ShaderBindings.Water.VERTEX_SIZE)
                 .inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
         VkVertexInputAttributeDescription.Buffer attributes =
-                VkVertexInputAttributeDescription.calloc(4, stack);
+                VkVertexInputAttributeDescription.calloc(6, stack);
+        attributes
+                .get(4)
+                .binding(0)
+                .location(4)
+                .format(VK_FORMAT_R32G32_SFLOAT)
+                .offset(WaterMesh.FLOW_FLOAT * Float.BYTES);
+        attributes
+                .get(5)
+                .binding(0)
+                .location(5)
+                .format(VK_FORMAT_R32_SFLOAT)
+                .offset(WaterMesh.DEPTH_FLOAT * Float.BYTES);
         attributes
                 .get(2)
                 .binding(0)

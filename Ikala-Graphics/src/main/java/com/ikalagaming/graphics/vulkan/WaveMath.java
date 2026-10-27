@@ -49,6 +49,34 @@ public final class WaveMath {
     /** How sharply the spectrum falls below its peak: exp(-5/4 (wp / w)^4). */
     public static final double PEAK_SHAPE = 1.25;
 
+    /**
+     * The depths each climate's profiles are worked out for, in meters: deep water, then shallower,
+     * where waves are shorter, slower and taller. Water between two is drawn from both.
+     */
+    public static final double[] DEPTH_LEVELS = {Double.POSITIVE_INFINITY, 3, 1};
+
+    /** How many depths a climate's profiles are worked out for. */
+    public static final int DEPTHS = DEPTH_LEVELS.length;
+
+    /**
+     * How long a current's two phases take to come round, in seconds: the surface's pattern is
+     * carried by the flow for half of it before fading out for the other phase's, so it never
+     * stretches far, see {@code water.glsl}.
+     */
+    public static final double FLOW_CYCLE = 4;
+
+    /** How far a wave's height may be from deep water's and still count as the same, a share. */
+    public static final double SAME_HEIGHT = 0.02;
+
+    /**
+     * The share of their energy some waves may have in waves shallow water changes, and still be
+     * drawn from deep water's profiles there.
+     */
+    public static final double SAME_AS_DEEP = 0.01;
+
+    /** The most shoaling raises a wave, short of where it breaks. */
+    public static final double MAX_SHOALING = 1.6;
+
     /** Threads in a workgroup of the profiles' compute shader. */
     public static final int WORKGROUP_SIZE = 64;
 
@@ -96,6 +124,12 @@ public final class WaveMath {
     /** Bits dropped from the hash to make a fraction, keeping 24, a float's precision. */
     private static final int PCG_DROP_BITS = 8;
 
+    /** Steps of the bisection that finds a wavenumber, to well below a float's precision. */
+    private static final int BISECTION_STEPS = 60;
+
+    /** The step a group speed's derivative takes, as a share of the wavenumber. */
+    private static final double DERIVATIVE_STEP = 1e-6;
+
     /** A full turn. */
     private static final double TURN = 2 * Math.PI;
 
@@ -109,8 +143,37 @@ public final class WaveMath {
      * @param wavenumbers Each wave's wavenumber, per meter, a whole harmonic of the profile.
      * @param amplitudes Each wave's amplitude, in meters, from the spectrum around it.
      * @param phases Each wave's phase at time 0, radians.
+     * @param frequencies Each wave's angular frequency, radians a second: in deep water it follows
+     *     from the wavenumber, and in shallow water the wavenumber follows from it.
      */
-    public record Waves(double[] wavenumbers, double[] amplitudes, double[] phases) {}
+    public record Waves(
+            double[] wavenumbers, double[] amplitudes, double[] phases, double[] frequencies) {
+
+        /**
+         * Waves in deep water, their frequencies from their wavenumbers.
+         *
+         * @param wavenumbers Each wave's wavenumber.
+         * @param amplitudes Each wave's amplitude.
+         * @param phases Each wave's phase at time 0.
+         */
+        public Waves(double[] wavenumbers, double[] amplitudes, double[] phases) {
+            this(wavenumbers, amplitudes, phases, deepFrequencies(wavenumbers));
+        }
+
+        /**
+         * Each wavenumber's frequency in deep water.
+         *
+         * @param wavenumbers The wavenumbers.
+         * @return The frequencies.
+         */
+        private static double[] deepFrequencies(double[] wavenumbers) {
+            final double[] frequencies = new double[wavenumbers.length];
+            for (int i = 0; i < wavenumbers.length; ++i) {
+                frequencies[i] = frequency(wavenumbers[i]);
+            }
+            return frequencies;
+        }
+    }
 
     /** Static helpers only. */
     private WaveMath() {}
@@ -123,6 +186,144 @@ public final class WaveMath {
      */
     public static double frequency(double wavenumber) {
         return Math.sqrt(GRAVITY * wavenumber + TENSION * wavenumber * wavenumber * wavenumber);
+    }
+
+    /**
+     * How fast a wave of a wavenumber turns in water of a depth: w^2 = (g k + (tension / density)
+     * k^3) tanh(k h), so waves in water shallower than about half their length slow down.
+     *
+     * @param wavenumber The wavenumber, per meter.
+     * @param depth The water's depth, in meters; infinite for deep water.
+     * @return The angular frequency, radians a second.
+     */
+    public static double frequency(double wavenumber, double depth) {
+        if (!Double.isFinite(depth)) {
+            return frequency(wavenumber);
+        }
+        return frequency(wavenumber) * Math.sqrt(Math.tanh(wavenumber * depth));
+    }
+
+    /**
+     * The wavenumber a wave of some frequency has in water of a depth, solving the dispersion
+     * relation by bisection: shallow water makes the same wave shorter.
+     *
+     * @param frequency The angular frequency, radians a second.
+     * @param depth The water's depth, in meters; infinite for deep water.
+     * @return The wavenumber, per meter.
+     */
+    public static double wavenumberAt(double frequency, double depth) {
+        double low = 0;
+        double high = frequency * frequency / GRAVITY;
+        while (frequency(high, depth) < frequency) {
+            high *= 2;
+        }
+        for (int i = 0; i < BISECTION_STEPS; ++i) {
+            final double middle = (low + high) / 2;
+            if (frequency(middle, depth) < frequency) {
+                low = middle;
+            } else {
+                high = middle;
+            }
+        }
+        return (low + high) / 2;
+    }
+
+    /**
+     * How fast a wave's energy travels in water of a depth, dw / dk, worked out numerically.
+     *
+     * @param wavenumber The wavenumber, per meter.
+     * @param depth The depth, in meters; infinite for deep water.
+     * @return The group speed, in meters a second.
+     */
+    public static double groupSpeed(double wavenumber, double depth) {
+        final double step = wavenumber * DERIVATIVE_STEP;
+        return (frequency(wavenumber + step, depth) - frequency(wavenumber - step, depth))
+                / (2 * step);
+    }
+
+    /**
+     * How much a wave from deep water grows coming into water of a depth: its energy flux kept as
+     * its group speed falls, sqrt(cg deep / cg), up to {@link #MAX_SHOALING}, short of where it
+     * would break.
+     *
+     * @param deepWavenumber Its wavenumber in deep water, per meter.
+     * @param depth The depth, in meters.
+     * @return The factor on its height.
+     */
+    public static double shoaling(double deepWavenumber, double depth) {
+        if (!Double.isFinite(depth)) {
+            return 1;
+        }
+        final double shallow = wavenumberAt(frequency(deepWavenumber), depth);
+        final double factor =
+                Math.sqrt(
+                        groupSpeed(deepWavenumber, Double.POSITIVE_INFINITY)
+                                / groupSpeed(shallow, depth));
+        return Math.min(MAX_SHOALING, factor);
+    }
+
+    /**
+     * Deep water's waves as they are in water of a depth: the same frequencies and phases, so they
+     * turn in step, with the wavenumbers the depth gives them, rounded to whole harmonics of the
+     * profile, and the heights shoaling gives them.
+     *
+     * @param deep The waves in deep water.
+     * @param depth The depth, in meters; infinite for deep water.
+     * @return The waves there.
+     */
+    public static Waves atDepth(Waves deep, double depth) {
+        if (!Double.isFinite(depth)) {
+            return deep;
+        }
+        final double fundamental = TURN / PROFILE_LENGTH;
+        final int count = deep.wavenumbers().length;
+        final double[] wavenumbers = new double[count];
+        final double[] amplitudes = new double[count];
+        for (int i = 0; i < count; ++i) {
+            final double k = wavenumberAt(deep.frequencies()[i], depth);
+            wavenumbers[i] = Math.max(1, Math.rint(k / fundamental)) * fundamental;
+            amplitudes[i] = deep.amplitudes()[i] * shoaling(deep.wavenumbers()[i], depth);
+        }
+        return new Waves(wavenumbers, amplitudes, deep.phases(), deep.frequencies());
+    }
+
+    /**
+     * How much of some waves' energy is in waves that shallow water changes: a different
+     * wavenumber, or a height off by more than {@link #SAME_HEIGHT}. Where it is little, the
+     * shallow water's profiles can be deep water's.
+     *
+     * @param deep The waves in deep water.
+     * @param shallow The same waves in shallow water, see {@link #atDepth}.
+     * @return The share of the deep waves' energy, 0 to 1.
+     */
+    public static double changedShare(Waves deep, Waves shallow) {
+        double total = 0;
+        double changed = 0;
+        for (int i = 0; i < deep.wavenumbers().length; ++i) {
+            final double amplitude = deep.amplitudes()[i];
+            final double energy = amplitude * amplitude;
+            total += energy;
+            if (deep.wavenumbers()[i] != shallow.wavenumbers()[i]
+                    || Math.abs(shallow.amplitudes()[i] - amplitude) > SAME_HEIGHT * amplitude) {
+                changed += energy;
+            }
+        }
+        return total > 0 ? changed / total : 0;
+    }
+
+    /**
+     * Which depth's profiles each of {@link #DEPTH_LEVELS} can use: its own, or deep water's where
+     * no more than {@link #SAME_AS_DEEP} of the energy is in waves it changes.
+     *
+     * @param atDepths The waves at each depth, deep water's first.
+     * @return The level each depth reads.
+     */
+    public static int[] levelsUsed(Waves[] atDepths) {
+        final int[] levels = new int[atDepths.length];
+        for (int level = 1; level < atDepths.length; ++level) {
+            levels[level] = changedShare(atDepths[0], atDepths[level]) > SAME_AS_DEEP ? level : 0;
+        }
+        return levels;
     }
 
     /**
@@ -357,7 +558,7 @@ public final class WaveMath {
      * @return The phase, 0 to 2 pi.
      */
     public static double phaseAt(Waves waves, int index, double time) {
-        final double phase = waves.phases()[index] - frequency(waves.wavenumbers()[index]) * time;
+        final double phase = waves.phases()[index] - waves.frequencies()[index] * time;
         return phase - TURN * Math.floor(phase / TURN);
     }
 

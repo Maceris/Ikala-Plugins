@@ -25,6 +25,10 @@ layout(push_constant) uniform Constants {
     // The ripples' climate, and nonzero if the grid has been stepped this frame
     int rippleClimate;
     int gridOn;
+    // The waves' time, in seconds, kept to a few flow cycles, and the frame's number, which picks
+    // between depths and flow phases where a pixel is drawn from one
+    float waveTime;
+    uint frame;
 };
 
 #endif

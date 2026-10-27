@@ -3,9 +3,9 @@
 #extension GL_EXT_buffer_reference : require
 
 // Fills each wave climate's profiles for this frame, see WaterRender and WaveMath.profile: one
-// thread per sample of a profile, x along it and y the climate's direction, summing the climate's
-// waves, each turned by the direction's own phase, each layer leaving out the waves shorter than
-// its cutoff. Height is a cos (k p + phase) summed; the
+// thread per sample of a profile, x along it and y the climate's depth and direction, summing the
+// climate's waves at that depth, each turned by the direction's own phase, each layer leaving out
+// the waves shorter than its cutoff. Height is a cos (k p + phase) summed; the
 // slope along the profile its derivative, -a k sin (k p + phase). The phases come wrapped to a turn
 // from the CPU, so they stay precise.
 
@@ -28,6 +28,7 @@ layout(buffer_reference, std430, buffer_reference_align = 8) writeonly buffer Wa
 layout(push_constant) uniform Constants {
     WaveSampleList samples;
     WaveProfileOut profiles;
+    WaveClimateList climates;
     // How many waves each climate has, padded with zeros
     uint waveCount;
 };
@@ -43,9 +44,12 @@ float directionPhase(uint direction, uint wave) {
 
 void main() {
     uint sampleIndex = gl_GlobalInvocationID.x;
-    uint climate = gl_GlobalInvocationID.y / uint(WAVE_DIRECTIONS);
+    uint climate = gl_GlobalInvocationID.y / uint(WAVE_DEPTHS * WAVE_DIRECTIONS);
+    uint level = (gl_GlobalInvocationID.y / uint(WAVE_DIRECTIONS)) % uint(WAVE_DEPTHS);
     uint direction = gl_GlobalInvocationID.y % uint(WAVE_DIRECTIONS);
-    if (sampleIndex >= uint(WAVE_PROFILE_SAMPLES)) {
+    uint depthClimate = climate * uint(WAVE_DEPTHS) + level;
+    if (sampleIndex >= uint(WAVE_PROFILE_SAMPLES)
+            || climates.climates[climate].levels[level] != int(level)) {
         return;
     }
     float distance = float(sampleIndex) / float(WAVE_PROFILE_SAMPLES) * WAVE_PROFILE_LENGTH;
@@ -54,7 +58,7 @@ void main() {
         sums[layer] = vec2(0.0);
     }
     for (uint i = 0; i < waveCount; ++i) {
-        vec4 wave = samples.waves[climate * waveCount + i];
+        vec4 wave = samples.waves[depthClimate * waveCount + i];
         if (wave.y <= 0.0) {
             continue;
         }
@@ -67,7 +71,7 @@ void main() {
         }
     }
     for (int layer = 0; layer < WAVE_LAYERS; ++layer) {
-        uint profile = (climate * uint(WAVE_DIRECTIONS) + direction) * uint(WAVE_LAYERS)
+        uint profile = (depthClimate * uint(WAVE_DIRECTIONS) + direction) * uint(WAVE_LAYERS)
             + uint(layer);
         profiles.values[profile * uint(WAVE_PROFILE_SAMPLES) + sampleIndex] = sums[layer];
     }

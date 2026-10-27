@@ -15,10 +15,14 @@
 
 layout(local_size_x = 8, local_size_y = 8) in;
 
-// Whether each cell holds water, 1 or 0, by world cell wrapping around the grid
-layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer WaveMaskList {
-    float water[];
+// Each cell's water, by world cell wrapping around the grid: 1 if it holds water, else 0; how fast
+// it flows along x and z, in meters a second; and how deep it is, in meters
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer WaveMaskList {
+    vec4 cells[];
 };
+
+// Gravity, in meters a second squared: in shallow water waves go at sqrt(g h)
+const float GRAVITY = 9.81;
 
 // This frame's disturbances: x and z relative to the grid's corner in cells, radius in cells, and
 // strength, the ripples' height in meters
@@ -54,7 +58,7 @@ float waterAt(ivec2 cell) {
     if (any(lessThan(local, ivec2(0))) || any(greaterThanEqual(local, ivec2(WAVE_GRID_SIZE)))) {
         return 1.0;
     }
-    return mask.water[waveGridSlot(cell)];
+    return mask.cells[waveGridSlot(cell)].x;
 }
 
 // The last step's amplitude at a point in world cells, between the four nearest cells' middles;
@@ -73,6 +77,50 @@ float lastAt(vec2 point, int band, int direction) {
     float v01 = last.values[waveGridSlot(base + ivec2(0, 1)) * WAVE_CELL_VALUES + channel];
     float v11 = last.values[waveGridSlot(base + ivec2(1, 1)) * WAVE_CELL_VALUES + channel];
     return mix(mix(v00, v10, f.x), mix(v01, v11, f.x), f.y);
+}
+
+// One Catmull-Rom spline's weights for the four samples around a fraction
+vec4 catmullRom(float f) {
+    float f2 = f * f;
+    float f3 = f2 * f;
+    return 0.5 * vec4(-f3 + 2.0 * f2 - f, 3.0 * f3 - 5.0 * f2 + 2.0, -3.0 * f3 + 4.0 * f2 + f,
+        f3 - f2);
+}
+
+// The last step's amplitude at a point, like lastAt but through the sixteen nearest cells, kept
+// between the four nearest: a short ring carried a fraction of a cell each step blurs away with
+// lastAt's straight lines, all the faster in a current
+float lastAtSharp(vec2 point, int band, int direction) {
+    vec2 local = point - vec2(lastCorner) - 0.5;
+    if (lastValid == 0 || any(lessThan(local, vec2(1.0)))
+            || any(greaterThan(local, vec2(float(WAVE_GRID_SIZE - 2))))) {
+        return lastAt(point, band, direction);
+    }
+    ivec2 base = ivec2(floor(local)) + lastCorner;
+    vec2 f = fract(local);
+    int channel = band * WAVE_DIRECTIONS + direction;
+    float v00 = last.values[waveGridSlot(base) * WAVE_CELL_VALUES + channel];
+    float v10 = last.values[waveGridSlot(base + ivec2(1, 0)) * WAVE_CELL_VALUES + channel];
+    float v01 = last.values[waveGridSlot(base + ivec2(0, 1)) * WAVE_CELL_VALUES + channel];
+    float v11 = last.values[waveGridSlot(base + ivec2(1, 1)) * WAVE_CELL_VALUES + channel];
+    float low = min(min(v00, v10), min(v01, v11));
+    float high = max(max(v00, v10), max(v01, v11));
+    // Most of the grid is calm, where the straight lines are as good
+    if (high - low <= WAVE_FAINTEST) {
+        return mix(mix(v00, v10, f.x), mix(v01, v11, f.x), f.y);
+    }
+    vec4 wx = catmullRom(f.x);
+    vec4 wy = catmullRom(f.y);
+    float sum = 0.0;
+    for (int y = 0; y < 4; ++y) {
+        float row = 0.0;
+        for (int x = 0; x < 4; ++x) {
+            row += wx[x] * last.values[waveGridSlot(base + ivec2(x - 1, y - 1))
+                * WAVE_CELL_VALUES + channel];
+        }
+        sum += wy[y] * row;
+    }
+    return clamp(sum, low, high);
 }
 
 // The direction a shore of some outward normal reflects into a direction, see
@@ -98,21 +146,28 @@ void main() {
         return;
     }
     vec2 middle = vec2(cell) + 0.5;
+    vec4 here = mask.cells[slot];
+    // The current carries every band's waves along with it
+    vec2 carried = here.yz / WAVE_CELL_SIZE * seconds;
     // The way out of the land nearby, toward the water
     vec2 shore = vec2(waterAt(cell + ivec2(1, 0)) - waterAt(cell - ivec2(1, 0)),
         waterAt(cell + ivec2(0, 1)) - waterAt(cell - ivec2(0, 1)));
     float diffusion = WAVE_ANGULAR_DIFFUSION * seconds;
     for (int band = 0; band < WAVE_BANDS; ++band) {
-        float speed = (band == WAVE_WIND_BAND ? WAVE_WIND_SPEED : WAVE_RIPPLE_SPEED)
+        // Shallow water slows the wind's long waves to sqrt(g h)
+        float speed = (band == WAVE_WIND_BAND
+                ? min(WAVE_WIND_SPEED, sqrt(GRAVITY * max(here.w, 0.0)))
+                : WAVE_RIPPLE_SPEED)
             / WAVE_CELL_SIZE * seconds;
         float moved[WAVE_DIRECTIONS];
         for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
-            vec2 upstream = middle - speed * waveDirection(b);
+            vec2 upstream = middle - speed * waveDirection(b) - carried;
             if (waterAt(ivec2(floor(upstream))) <= 0.0) {
                 vec2 normal = dot(shore, shore) > 0.0 ? normalize(shore) : -waveDirection(b);
                 moved[b] = WAVE_REFLECTION * lastAt(middle, band, reflectedFrom(b, normal));
             } else {
-                moved[b] = lastAt(upstream, band, b);
+                moved[b] = band == WAVE_WIND_BAND
+                    ? lastAt(upstream, band, b) : lastAtSharp(upstream, band, b);
             }
         }
         for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
@@ -135,6 +190,8 @@ void main() {
                         ? max(0.0, dot(waveDirection(b), offset / distance)) : 1.0;
                     value += disturbance.w * fade * outward;
                 }
+                // Ripples too faint to draw are gone, which keeps calm water calm for lastAtSharp
+                value = value > WAVE_FAINTEST ? value : 0.0;
             }
             next.values[slot * WAVE_CELL_VALUES + band * WAVE_DIRECTIONS + b] = value;
         }

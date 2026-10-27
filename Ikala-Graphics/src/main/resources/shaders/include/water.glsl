@@ -32,34 +32,68 @@ const float WAVE_LAYER_CUTOFFS[WAVE_LAYERS] = float[](0.0, 0.25, 1.0, 4.0);
 const int WAVE_VERTEX_LAYER = 3;
 // How much each layer's cutoff grows over the one before
 const float WAVE_LAYER_RATIO = 4.0;
+// The depths each climate's profiles are worked out for, see WaveMath.DEPTH_LEVELS: deep water,
+// 3 m and 1 m. Water deeper than twice the first shallow one is deep.
+const int WAVE_DEPTHS = 3;
+const float WAVE_SHALLOW_DEPTHS[WAVE_DEPTHS - 1] = float[](3.0, 1.0);
+// How long the flow's two phases take to come round, in seconds: the surface's pattern is carried
+// by the current for half of it before fading out for the other phase's
+const float WAVE_FLOW_CYCLE = 4.0;
 
 // One wave climate, WaterRender: each direction's amplitude and where the camera stands along it in
-// its profile, in meters; the slope variance each layer leaves out
+// its profile, in meters; the slope variance each layer leaves out; and which depth's profiles each
+// depth reads, deep water's where its waves are the same, so those are never filled
 struct WaveClimate {
     float amplitudes[WAVE_DIRECTIONS];
     float offsets[WAVE_DIRECTIONS];
     vec4 missingVariance;
+    ivec4 levels;
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer WaveClimateList {
     WaveClimate climates[];
 };
 
-// Each climate's profiles, direction after direction, and in each layer after layer, each
-// WAVE_PROFILE_SAMPLES of height and slope
+// Each climate's profiles, depth after depth, in each direction after direction, and in each layer
+// after layer, each WAVE_PROFILE_SAMPLES of height and slope
 layout(buffer_reference, std430, buffer_reference_align = 8) readonly buffer WaveProfileList {
     vec2 profiles[];
 };
 
 // A profile's height and slope at a distance along it, between its two nearest samples, wrapping
-vec2 waveProfile(WaveProfileList list, int climate, int direction, int layer, float distance) {
+vec2 waveProfile(WaveProfileList list, int climate, int level, int direction, int layer,
+        float distance) {
     float at = distance / WAVE_PROFILE_LENGTH * float(WAVE_PROFILE_SAMPLES);
     float lower = floor(at);
     int i0 = int(lower) & (WAVE_PROFILE_SAMPLES - 1);
     int i1 = (i0 + 1) & (WAVE_PROFILE_SAMPLES - 1);
-    int base = ((climate * WAVE_DIRECTIONS + direction) * WAVE_LAYERS + layer)
-        * WAVE_PROFILE_SAMPLES;
+    int base = (((climate * WAVE_DEPTHS + level) * WAVE_DIRECTIONS + direction) * WAVE_LAYERS
+        + layer) * WAVE_PROFILE_SAMPLES;
     return mix(list.profiles[base + i0], list.profiles[base + i1], at - lower);
+}
+
+// Which depth's profiles suit water of a depth, as a fraction between two of them
+float waveDepthLevel(float depth) {
+    float first = WAVE_SHALLOW_DEPTHS[0];
+    if (depth >= 2.0 * first) {
+        return 0.0;
+    }
+    if (depth >= first) {
+        return (2.0 * first - depth) / first;
+    }
+    float second = WAVE_SHALLOW_DEPTHS[1];
+    return depth >= second ? 1.0 + (first - depth) / (first - second) : 2.0;
+}
+
+// How far the flow has carried the surface's pattern in one of its two phases, see WAVE_FLOW_CYCLE
+vec2 waveFlowShift(vec2 flow, float time, int phase) {
+    float along = fract(time / WAVE_FLOW_CYCLE + 0.5 * float(phase));
+    return flow * WAVE_FLOW_CYCLE * (along - 0.5);
+}
+
+// How much the second phase counts: none when the first is halfway, when its pattern is unstretched
+float waveFlowWeight(float time) {
+    return abs(2.0 * fract(time / WAVE_FLOW_CYCLE) - 1.0);
 }
 
 // A direction's unit vector along the water, x and z
@@ -145,6 +179,9 @@ struct WaveField {
     int ripples;
     bool gridOn;
     WaveGridSample at;
+    // Which depth's profiles, and how far the flow carried the pattern
+    int level;
+    vec2 shift;
 };
 
 // One direction's amplitudes at the field's point, the wind's waves' and the ripples'
@@ -157,19 +194,29 @@ vec2 waveAmplitudes(WaveField field, int b) {
         waveGridValue(field.grid, field.at, WAVE_RIPPLE_BAND, b));
 }
 
-// The surface's height above its rest at a point relative to the camera, from one layer
-float waveHeight(WaveField field, int layer, vec2 renderXZ) {
+// Which depth's profiles a climate reads for the field's depth
+int waveClimateLevel(WaveField field, int climate) {
+    return climate >= 0 ? field.climates.climates[climate].levels[field.level] : 0;
+}
+
+// The surface's height above its rest at a point relative to the camera, from one layer and the
+// directions' amplitudes there
+float waveHeight(WaveField field, vec2 all[WAVE_DIRECTIONS], int layer, vec2 renderXZ) {
     float height = 0.0;
+    int windLevel = waveClimateLevel(field, field.climate);
+    int rippleLevel = waveClimateLevel(field, field.ripples);
     for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
-        vec2 amplitudes = waveAmplitudes(field, b);
-        float along = dot(renderXZ, waveDirection(b));
+        vec2 amplitudes = all[b];
+        float along = dot(renderXZ - field.shift, waveDirection(b));
         if (amplitudes.x > WAVE_FAINTEST) {
             float distance = along + field.climates.climates[field.climate].offsets[b];
-            height += amplitudes.x * waveProfile(field.profiles, field.climate, b, layer, distance).x;
+            height += amplitudes.x
+                * waveProfile(field.profiles, field.climate, windLevel, b, layer, distance).x;
         }
         if (amplitudes.y > WAVE_FAINTEST) {
             float distance = along + field.climates.climates[field.ripples].offsets[b];
-            height += amplitudes.y * waveProfile(field.profiles, field.ripples, b, layer, distance).x;
+            height += amplitudes.y
+                * waveProfile(field.profiles, field.ripples, rippleLevel, b, layer, distance).x;
         }
     }
     return height;
@@ -192,20 +239,22 @@ vec3 waveSlope(WaveField field, vec2 all[WAVE_DIRECTIONS], int layer, vec2 rende
     vec2 slope = vec2(0.0);
     float windEnergy = 0.0;
     float rippleEnergy = 0.0;
+    int windLevel = waveClimateLevel(field, field.climate);
+    int rippleLevel = waveClimateLevel(field, field.ripples);
     for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
         vec2 amplitudes = all[b];
         vec2 direction = waveDirection(b);
-        float along = dot(renderXZ, direction);
+        float along = dot(renderXZ - field.shift, direction);
         if (amplitudes.x > WAVE_FAINTEST) {
             float distance = along + field.climates.climates[field.climate].offsets[b];
-            slope += amplitudes.x
-                * waveProfile(field.profiles, field.climate, b, layer, distance).y * direction;
+            slope += amplitudes.x * direction
+                * waveProfile(field.profiles, field.climate, windLevel, b, layer, distance).y;
             windEnergy += amplitudes.x * amplitudes.x;
         }
         if (amplitudes.y > WAVE_FAINTEST) {
             float distance = along + field.climates.climates[field.ripples].offsets[b];
-            slope += amplitudes.y
-                * waveProfile(field.profiles, field.ripples, b, layer, distance).y * direction;
+            slope += amplitudes.y * direction
+                * waveProfile(field.profiles, field.ripples, rippleLevel, b, layer, distance).y;
             rippleEnergy += amplitudes.y * amplitudes.y;
         }
     }

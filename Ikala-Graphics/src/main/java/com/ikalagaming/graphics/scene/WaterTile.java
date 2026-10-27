@@ -28,6 +28,9 @@ import javax.annotation.Nullable;
  *     unknown; graphics sees the bottom anyway where it is drawn.
  * @param mask Which cells hold water, cellsX * cellsZ of them, or null for every cell.
  * @param body What the water holds.
+ * @param flows How fast the water flows at each corner, in meters a second: x then z, two values a
+ *     corner, the same layout as the heights, or null for still water. A river's current carries
+ *     its waves and ripples downstream.
  */
 public record WaterTile(
         @NonNull Vector3dc origin,
@@ -37,7 +40,8 @@ public record WaterTile(
         float @NonNull [] heights,
         @Nullable float[] bottoms,
         @Nullable boolean[] mask,
-        @NonNull WaterBody body) {
+        @NonNull WaterBody body,
+        @Nullable float[] flows) {
 
     /** The most cells a tile has along each side. */
     public static final int MAX_CELLS = 64;
@@ -75,10 +79,62 @@ public record WaterTile(
             throw new IllegalArgumentException(
                     "A water tile's mask needs " + cellsX * cellsZ + " cells, not " + mask.length);
         }
+        if (flows != null && flows.length != 2 * corners) {
+            throw new IllegalArgumentException(
+                    "A water tile needs " + 2 * corners + " flow values, not " + flows.length);
+        }
         origin = new Vector3d(origin);
         heights = heights.clone();
         bottoms = bottoms == null ? null : bottoms.clone();
         mask = mask == null ? null : mask.clone();
+        flows = flows == null ? null : flows.clone();
+    }
+
+    /**
+     * A tile of still water.
+     *
+     * @param origin The grid's corner with the smallest x and z, in the world.
+     * @param cellSize How wide each cell is, in meters.
+     * @param cellsX How many cells across x.
+     * @param cellsZ How many cells across z.
+     * @param heights The surface's height above the origin at each corner.
+     * @param bottoms The bottom's height above the origin at each corner, or null.
+     * @param mask Which cells hold water, or null for every cell.
+     * @param body What the water holds.
+     */
+    public WaterTile(
+            @NonNull Vector3dc origin,
+            float cellSize,
+            int cellsX,
+            int cellsZ,
+            float @NonNull [] heights,
+            @Nullable float[] bottoms,
+            @Nullable boolean[] mask,
+            @NonNull WaterBody body) {
+        this(origin, cellSize, cellsX, cellsZ, heights, bottoms, mask, body, null);
+    }
+
+    /**
+     * The same water, flowing.
+     *
+     * @param flowsNow How fast it flows at each corner, x then z, or null for still water.
+     * @return A changed copy.
+     */
+    public WaterTile withFlows(@Nullable float[] flowsNow) {
+        return new WaterTile(
+                origin, cellSize, cellsX, cellsZ, heights, bottoms, mask, body, flowsNow);
+    }
+
+    /**
+     * How fast the water flows at a corner, along x or z, without copying the array out.
+     *
+     * @param x The corner along x.
+     * @param z The corner along z.
+     * @param alongZ Whether along z, rather than x.
+     * @return The speed, in meters a second, 0 for still water.
+     */
+    public float flowAt(int x, int z, boolean alongZ) {
+        return flows == null ? 0 : flows[2 * (z * (cellsX + 1) + x) + (alongZ ? 1 : 0)];
     }
 
     /**
@@ -111,7 +167,7 @@ public record WaterTile(
      * @return A changed copy.
      */
     public WaterTile withBody(@NonNull WaterBody body) {
-        return new WaterTile(origin, cellSize, cellsX, cellsZ, heights, bottoms, mask, body);
+        return new WaterTile(origin, cellSize, cellsX, cellsZ, heights, bottoms, mask, body, flows);
     }
 
     /**
@@ -187,5 +243,10 @@ public record WaterTile(
     @Override
     public @Nullable boolean[] mask() {
         return mask == null ? null : mask.clone();
+    }
+
+    @Override
+    public @Nullable float[] flows() {
+        return flows == null ? null : flows.clone();
     }
 }

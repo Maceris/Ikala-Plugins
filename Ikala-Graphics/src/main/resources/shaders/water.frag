@@ -28,6 +28,9 @@ layout(location = 3) in float outCalm;
 layout(location = 4) in vec2 outSideNormal;
 // Each direction's amplitudes here, from the vertices
 layout(location = 5) in vec4 outAmplitudes[WAVE_AMPLITUDE_VECTORS];
+// How fast the water flows here, and how deep it is
+layout(location = 13) in vec2 outFlow;
+layout(location = 14) in float outDepth;
 
 layout(location = 0) out vec4 outColor;
 
@@ -43,6 +46,13 @@ const float MIN_FOOTPRINT_COSINE = 0.2;
 // screen's height, per meter of water down to 2 m, over the distance
 const float REFRACTION_SHIFT = 0.25;
 const float REFRACTION_MAX_DEPTH = 2.0;
+
+// A number from 0 to 1, advancing a seed (Jarzynski and Olano's PCG hash)
+float waterRandom(inout uint seed) {
+    seed = seed * 747796405u + 2891336453u;
+    uint word = ((seed >> ((seed >> 28u) + 4u)) ^ seed) * 277803737u;
+    return float(((word >> 22u) ^ word) >> 8) / 16777216.0;
+}
 
 void main() {
     WaterTileData tile = tileList.waterTiles[outTile];
@@ -76,6 +86,15 @@ void main() {
         field.climate = climate;
         field.ripples = rippleClimate;
         field.gridOn = gridOn != 0;
+        // One depth's profiles a pixel, picked at random each frame by how much each counts, which
+        // the anti-aliasing blends. The flow's two phases are blended here: their patterns are
+        // meters apart, so picking one a pixel only leaves grain.
+        uint seed = (uint(gl_FragCoord.x) * 1973u + uint(gl_FragCoord.y) * 9277u + frame * 26699u)
+            | 1u;
+        float level = waveDepthLevel(outDepth);
+        field.level = min(int(floor(level)) + (waterRandom(seed) < fract(level) ? 1 : 0),
+            WAVE_DEPTHS - 1);
+        float phaseBlend = dot(outFlow, outFlow) > 0.0 ? waveFlowWeight(waveTime) : 0.0;
         float footprint = length(outRenderPosition) * pixelAngle
             / max(dot(up, toEye), MIN_FOOTPRINT_COSINE);
         float layer = waveLayer(footprint);
@@ -87,8 +106,15 @@ void main() {
             amplitudes[2 * i] = outAmplitudes[i].xy;
             amplitudes[2 * i + 1] = outAmplitudes[i].zw;
         }
+        field.shift = waveFlowShift(outFlow, waveTime, 0);
         vec3 slope = mix(waveSlope(field, amplitudes, lower, outRenderPosition.xz),
-            waveSlope(field, amplitudes, upper, outRenderPosition.xz), blend) * outCalm;
+            waveSlope(field, amplitudes, upper, outRenderPosition.xz), blend);
+        if (phaseBlend > 0.0) {
+            field.shift = waveFlowShift(outFlow, waveTime, 1);
+            slope = mix(slope, mix(waveSlope(field, amplitudes, lower, outRenderPosition.xz),
+                waveSlope(field, amplitudes, upper, outRenderPosition.xz), blend), phaseBlend);
+        }
+        slope *= outCalm;
         float variance = slope.z * outCalm;
         normal = normalize(vec3(-slope.x, 1.0, -slope.y));
         alpha = sqrt(alpha * alpha + variance);
