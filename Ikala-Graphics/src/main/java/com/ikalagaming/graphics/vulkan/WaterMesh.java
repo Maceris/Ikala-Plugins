@@ -65,8 +65,11 @@ public final class WaterMesh {
     /** Vertices a quad is drawn with: two triangles. */
     private static final int QUAD_VERTICES = 6;
 
-    /** Values a cell's data has: flow along x and z, and depth. */
-    public static final int CELL_DATA = 3;
+    /** Values a cell's data has: flow along x and z, depth, and its wind climate. */
+    public static final int CELL_DATA = 4;
+
+    /** Where in a cell's data its wind climate is, -1 for none. */
+    public static final int CELL_CLIMATE = 3;
 
     /** Corners of a cell. */
     private static final int CELL_CORNERS = 4;
@@ -452,14 +455,19 @@ public final class WaterMesh {
 
     /**
      * What each one meter cell water covers holds, for the wave grid: how fast the water flows
-     * there, along x and z, and how deep it is, from the cell's corners, by {@link #worldKey}.
+     * there, along x and z, and how deep it is, from the cell's corners, and its tile's wind
+     * climate, by {@link #worldKey}.
      *
      * @param tiles The tiles.
-     * @return The cells' flows and depths.
+     * @param climates Each tile's wind climate, -1 for none.
+     * @return The cells' flows, depths and climates.
      */
-    public static Map<Long, float[]> waterCellData(@NonNull List<WaterTile> tiles) {
+    public static Map<Long, float[]> waterCellData(
+            @NonNull List<WaterTile> tiles, @NonNull List<Integer> climates) {
         final Map<Long, float[]> covered = new HashMap<>();
-        for (WaterTile tile : tiles) {
+        for (int t = 0; t < tiles.size(); ++t) {
+            final WaterTile tile = tiles.get(t);
+            final int climate = t < climates.size() ? climates.get(t) : -1;
             final double size = tile.cellSize();
             for (int z = 0; z < tile.cellsZ(); ++z) {
                 for (int x = 0; x < tile.cellsX(); ++x) {
@@ -467,6 +475,7 @@ public final class WaterMesh {
                         continue;
                     }
                     final float[] data = new float[CELL_DATA];
+                    data[CELL_CLIMATE] = climate;
                     for (int c = 0; c < CELL_CORNERS; ++c) {
                         final int cx = x + (c & 1);
                         final int cz = z + (c >> 1);

@@ -544,9 +544,19 @@ public class ShaderBindings {
         public static final int WAVELETS_LAST_VALID_OFFSET =
                 WAVELETS_DISTURBANCE_COUNT_OFFSET + Integer.BYTES;
 
+        /** The wind climates' address, after 4 bytes of padding, see {@link #CLIMATE_SIZE}. */
+        public static final int WAVELETS_CLIMATES_OFFSET =
+                WAVELETS_LAST_VALID_OFFSET + Integer.BYTES + Integer.BYTES;
+
+        /** The wave paints' address. */
+        public static final int WAVELETS_PAINTS_OFFSET = WAVELETS_CLIMATES_OFFSET + Long.BYTES;
+
+        /** How many wave paints there are. */
+        public static final int WAVELETS_PAINT_COUNT_OFFSET = WAVELETS_PAINTS_OFFSET + Long.BYTES;
+
         /** The size of the step's push constants. */
         public static final int WAVELETS_CONSTANTS_SIZE =
-                WAVELETS_LAST_VALID_OFFSET + Integer.BYTES;
+                WAVELETS_PAINT_COUNT_OFFSET + Integer.BYTES;
 
         /** Where in a wave climate each direction's amplitude is, 16 floats. */
         public static final int CLIMATE_AMPLITUDES = 0;
@@ -563,8 +573,14 @@ public class ShaderBindings {
          */
         public static final int CLIMATE_LEVELS = CLIMATE_MISSING_VARIANCE + 4 * Float.BYTES;
 
+        /**
+         * Where in it the amplitude of its strongest direction is, the first of a vec4: the wave
+         * grid keeps the wind's waves as shares of it.
+         */
+        public static final int CLIMATE_PEAK = CLIMATE_LEVELS + 4 * Integer.BYTES;
+
         /** The size of one wave climate. */
-        public static final int CLIMATE_SIZE = CLIMATE_LEVELS + 4 * Integer.BYTES;
+        public static final int CLIMATE_SIZE = CLIMATE_PEAK + 4 * Float.BYTES;
 
         /**
          * The waves pass: the samples' address, the profiles', the climates', and how many waves a

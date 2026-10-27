@@ -11,6 +11,16 @@ class WaveletMathTest {
     /** A quarter turn, in directions. */
     private static final int QUARTER = WaveMath.DIRECTIONS / 4;
 
+    /** A paint's waves keep to its way, the nearest directions taking some. */
+    @Test
+    void testPaintShare() {
+        assertEquals(1, WaveletMath.paintShare(4, Math.PI / 2), 1e-9);
+        final double next = WaveletMath.paintShare(5, Math.PI / 2);
+        assertTrue(next > 0.4 && next < 0.6, "22.5 degrees off: " + next);
+        assertEquals(0, WaveletMath.paintShare(12, Math.PI / 2), 1e-9);
+        assertEquals(0, WaveletMath.paintShare(0, Math.PI / 2), 1e-9);
+    }
+
     /**
      * A shore facing +x sends waves going +x back from the ones that came in going -x, and a
      * glancing wave keeps its sideways part.

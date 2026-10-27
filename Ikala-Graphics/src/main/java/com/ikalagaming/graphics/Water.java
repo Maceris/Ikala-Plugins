@@ -109,6 +109,28 @@ public final class Water {
     }
 
     /**
+     * Set the wind's waves over a patch of water by hand for the next frame, as the water surface
+     * wavelets paper's amplitude painting does: in the patch the waves go only the way it points,
+     * and they carry on past it, so painting along a path every frame sends waves along it. Only
+     * water near the camera, under a wind, takes paint.
+     *
+     * @param position Where, in the world.
+     * @param radius How far around it, in meters; it fades out toward the edge.
+     * @param direction The way the waves go, in radians from +x toward +z.
+     * @param strength How tall they are, as a share of the wind's waves in its own direction: 1 for
+     *     as tall, 0 to calm the patch.
+     */
+    public void paintWaves(
+            @NonNull Vector3dc position, float radius, float direction, float strength) {
+        final WaterRegistry registry = registryOrNull();
+        if (registry != null && radius > 0 && strength >= 0) {
+            registry.paint(
+                    new WaterRegistry.WavePaint(
+                            new Vector3d(position), radius, direction, strength));
+        }
+    }
+
+    /**
      * Whether a handle still refers to a water tile.
      *
      * @param handle The handle to check.

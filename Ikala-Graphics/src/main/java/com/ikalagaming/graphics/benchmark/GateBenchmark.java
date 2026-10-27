@@ -679,6 +679,51 @@ public final class GateBenchmark {
     /** The test water tiles the run placed, removed when it ends. */
     private final List<WaterHandle> testWater = new ArrayList<>();
 
+    /**
+     * A test water tile the island run placed, kept to change its wind and flow.
+     *
+     * @param still The tile without flow.
+     * @param handle Its handle, set once placed.
+     */
+    private record PlacedWater(WaterTile still, WaterHandle[] handle) {}
+
+    /** The island's water tiles, see {@link #setWater}. */
+    private final List<PlacedWater> placedWater = new ArrayList<>();
+
+    /** The flowing path out at sea, from the {@code .loop} option, or null for none. */
+    private WaterLoop waterLoop;
+
+    /** What the island's water holds and its wind, null until placed. */
+    private WaterBody waterBody;
+
+    /** How fast the sea flows, in meters a second, and which way, radians from +x toward +z. */
+    private float currentSpeed;
+
+    private float currentDirection;
+
+    /** How fast the loop's channel flows in its middle, in meters a second. */
+    private float loopSpeed;
+
+    /**
+     * How tall the waves painted along the loop are, as a share of the wind's waves in its own
+     * direction, 0 for none.
+     */
+    private float loopWaves;
+
+    /** How far around each spot painting waves along the loop reaches, in meters. */
+    private static final float PAINT_RADIUS = 4;
+
+    /** How fast the loop's channel flows unless {@code .loopSpeed} says, in meters a second. */
+    public static final float DEFAULT_LOOP_SPEED = 1;
+
+    /** The test splash's radius, in meters, and its ripples' height, in meters. */
+    private static final float SPLASH_RADIUS = 1;
+
+    private static final float SPLASH_STRENGTH = 0.06f;
+
+    /** Where on the sea the test splash drops without a loop, along z: off the island's shore. */
+    private static final double SPLASH_SEA_Z = 44;
+
     /** How far apart the test water tiles are, in meters: the huts' grid in HUTS. */
     private static final double WATER_SPACING = 12;
 
@@ -762,6 +807,24 @@ public final class GateBenchmark {
                             8,
                             false,
                             Map.of("view", "0,6,70,0.15,0")),
+                    new Preset(
+                            "loop",
+                            "Figure eight waves",
+                            "The island, with waves painted round a figure eight offshore",
+                            SyntheticTerrain.Recipe.ISLAND,
+                            8,
+                            false,
+                            Map.of(
+                                    "loop",
+                                    "infinity",
+                                    "wind",
+                                    "6,30",
+                                    "loopSpeed",
+                                    "0",
+                                    "loopWaves",
+                                    "2",
+                                    "view",
+                                    "0,30,140,0.45,0")),
                     new Preset(
                             "green-lake",
                             "Green lake",
@@ -989,6 +1052,53 @@ public final class GateBenchmark {
     private String option(@NonNull String key, @NonNull String fallback) {
         final String value = option(key);
         return value != null ? value : fallback;
+    }
+
+    /**
+     * The flowing path out at sea, from the {@code .loop=circle|infinity} option, see {@link
+     * WaterLoop}.
+     *
+     * @return The loop, or null for none.
+     */
+    private @Nullable WaterLoop loopOption() {
+        final String value = option("loop");
+        if (value == null || recipe != SyntheticTerrain.Recipe.ISLAND) {
+            return null;
+        }
+        try {
+            return new WaterLoop(WaterLoop.Shape.valueOf(value.trim().toUpperCase(Locale.ROOT)));
+        } catch (IllegalArgumentException e) {
+            log.warn("The benchmark's loop must be circle or infinity, not {}", value);
+            return null;
+        }
+    }
+
+    /**
+     * Start a run with scene options, stopping any in progress and removing a kept world. Render
+     * thread only.
+     *
+     * @param recipe The world.
+     * @param radius The view distance, in sections.
+     * @param lights How many torches to scatter over the world.
+     * @param keepWorld Whether to leave the world in place when the run finishes.
+     * @param lod Whether the world's opaque blocks are drawn by live level of detail.
+     * @param gate Whether to check the level of detail gate after the turn.
+     * @param sceneOptions The scene's options, like {@code loop} or {@code wind}, which come before
+     *     the startup properties.
+     */
+    public static void start(
+            SyntheticTerrain.@NonNull Recipe recipe,
+            int radius,
+            int lights,
+            boolean keepWorld,
+            boolean lod,
+            boolean gate,
+            @NonNull Map<String, String> sceneOptions) {
+        stop();
+        removeWorld();
+        current = new GateBenchmark(recipe, radius, Math.max(0, lights), keepWorld, lod, gate);
+        current.options.putAll(sceneOptions);
+        current.begin();
     }
 
     /** Remove the world a finished run kept. Render thread only. */
@@ -1425,6 +1535,7 @@ public final class GateBenchmark {
      */
     private void step(@NonNull Scene scene) {
         rippleTestWater();
+        paintTestWater();
         switch (phase) {
             case BAKING -> {
                 if (composedAt == 0) {
@@ -1582,7 +1693,9 @@ public final class GateBenchmark {
      * {@code .waterBody} property picks what it holds: ocean (the default), green or muddy; {@code
      * .wind=speed[,degrees[,fetch]]} sets its wind, blowing that many degrees from +x toward +z
      * over a fetch in meters, the open sea if none; {@code .current=speed[,degrees]} makes the sea
-     * flow that many meters a second, that many degrees from +x toward +z.
+     * flow that many meters a second, that many degrees from +x toward +z, except on the {@code
+     * .loop=circle|infinity} path out at sea, which flows along itself, {@code .loopSpeed=speed} in
+     * its middle. All of these can be changed while the world is kept, see {@link #setWater}.
      */
     private void placeOcean() {
         final SyntheticTerrain world = terrain;
@@ -1610,22 +1723,23 @@ public final class GateBenchmark {
                     parts.length > 2 ? Float.parseFloat(parts[2].trim()) : Float.POSITIVE_INFINITY;
             body = body.withWind(speed, direction, fetch);
         }
-        final int reach = radius * SyntheticTerrain.SECTION;
-        final int tiles = (2 * reach + OCEAN_CELLS - 1) / OCEAN_CELLS;
-        final int corners = OCEAN_CELLS + 1;
-        float[] flows = null;
+        waterBody = body;
+        waterLoop = loopOption();
         final String current = option("current");
         if (current != null) {
             final String[] parts = current.split(",");
-            final double speed = Double.parseDouble(parts[0].trim());
-            final double direction =
-                    parts.length > 1 ? Math.toRadians(Double.parseDouble(parts[1].trim())) : 0;
-            flows = new float[corners * corners * 2];
-            for (int i = 0; i < corners * corners; ++i) {
-                flows[2 * i] = (float) (speed * Math.cos(direction));
-                flows[2 * i + 1] = (float) (speed * Math.sin(direction));
-            }
+            currentSpeed = Float.parseFloat(parts[0].trim());
+            currentDirection =
+                    parts.length > 1
+                            ? (float) Math.toRadians(Double.parseDouble(parts[1].trim()))
+                            : 0;
         }
+        loopSpeed =
+                Float.parseFloat(option("loopSpeed", Float.toString(DEFAULT_LOOP_SPEED)).trim());
+        loopWaves = Float.parseFloat(option("loopWaves", "0").trim());
+        final int reach = radius * SyntheticTerrain.SECTION;
+        final int tiles = (2 * reach + OCEAN_CELLS - 1) / OCEAN_CELLS;
+        final int corners = OCEAN_CELLS + 1;
         for (int tileZ = 0; tileZ < tiles; ++tileZ) {
             for (int tileX = 0; tileX < tiles; ++tileX) {
                 final int startX = -reach + tileX * OCEAN_CELLS;
@@ -1650,27 +1764,174 @@ public final class GateBenchmark {
                         any |= water;
                     }
                 }
-                if (!any) {
-                    continue;
-                }
-                final WaterHandle handle =
-                        graphics.water()
-                                .add(
-                                        new WaterTile(
-                                                        new Vector3d(startX, 0, startZ),
-                                                        1,
-                                                        OCEAN_CELLS,
-                                                        OCEAN_CELLS,
-                                                        heights,
-                                                        bottoms,
-                                                        mask,
-                                                        body)
-                                                .withFlows(flows));
-                if (handle != null) {
-                    testWater.add(handle);
+                if (any) {
+                    placeWater(
+                            new WaterTile(
+                                    new Vector3d(startX, 0, startZ),
+                                    1,
+                                    OCEAN_CELLS,
+                                    OCEAN_CELLS,
+                                    heights,
+                                    bottoms,
+                                    mask,
+                                    body));
                 }
             }
         }
+    }
+
+    /**
+     * Place a test water tile with the run's wind and flow, remembering it so they can change.
+     *
+     * @param still The tile, without flow.
+     */
+    private void placeWater(@NonNull WaterTile still) {
+        final PlacedWater placed = new PlacedWater(still, new WaterHandle[1]);
+        placed.handle()[0] = graphics.water().add(withWaterSettings(placed));
+        if (placed.handle()[0] != null) {
+            testWater.add(placed.handle()[0]);
+            placedWater.add(placed);
+        }
+    }
+
+    /**
+     * A placed tile as the run's wind and flow have it now.
+     *
+     * @param placed The tile.
+     * @return It with the run's body and wind, and its flow.
+     */
+    private WaterTile withWaterSettings(@NonNull PlacedWater placed) {
+        final WaterTile still = placed.still();
+        final int cornersX = still.cellsX() + 1;
+        final int corners = cornersX * (still.cellsZ() + 1);
+        final WaterLoop path = waterLoop;
+        if (currentSpeed == 0 && (path == null || loopSpeed == 0)) {
+            return still.withBody(waterBody);
+        }
+        final float[] flows = new float[2 * corners];
+        final int originX = (int) Math.floor(still.origin().x());
+        final int originZ = (int) Math.floor(still.origin().z());
+        final float seaX = (float) (currentSpeed * Math.cos(currentDirection));
+        final float seaZ = (float) (currentSpeed * Math.sin(currentDirection));
+        for (int i = 0; i < corners; ++i) {
+            final int x = originX + i % cornersX;
+            final int z = originZ + i / cornersX;
+            final boolean onPath = path != null && path.coversCorner(x, z);
+            flows[2 * i] = onPath ? path.flowAt(x, z, loopSpeed, false) : seaX;
+            flows[2 * i + 1] = onPath ? path.flowAt(x, z, loopSpeed, true) : seaZ;
+        }
+        return still.withBody(waterBody).withFlows(flows);
+    }
+
+    /**
+     * Change the test water's wind and flow while its world is kept, from the debug window. Render
+     * thread only.
+     *
+     * @param windSpeed The wind's speed 10 m up, in meters a second.
+     * @param windDegrees The way it blows, in degrees from +x toward +z.
+     * @param seaCurrent How fast the sea flows, in meters a second.
+     * @param currentDegrees The way it flows, in degrees from +x toward +z.
+     * @param channelSpeed How fast the loop's path flows in its middle, in meters a second;
+     *     negative runs it the other way.
+     * @param pathWaves How tall the waves painted along the loop are, as a share of the wind's
+     *     waves in its own direction, 0 for none.
+     */
+    public void setWater(
+            float windSpeed,
+            float windDegrees,
+            float seaCurrent,
+            float currentDegrees,
+            float channelSpeed,
+            float pathWaves) {
+        if (waterBody == null) {
+            return;
+        }
+        loopWaves = Math.max(0, pathWaves);
+        final WaterBody body =
+                waterBody.withWind(
+                        Math.max(0, windSpeed),
+                        (float) Math.toRadians(windDegrees),
+                        waterBody.fetch());
+        final float direction = (float) Math.toRadians(currentDegrees);
+        if (body.equals(waterBody)
+                && seaCurrent == currentSpeed
+                && direction == currentDirection
+                && channelSpeed == loopSpeed) {
+            return;
+        }
+        waterBody = body;
+        currentSpeed = seaCurrent;
+        currentDirection = direction;
+        loopSpeed = channelSpeed;
+        for (PlacedWater placed : placedWater) {
+            graphics.water().update(placed.handle()[0], withWaterSettings(placed));
+        }
+    }
+
+    /**
+     * Paint waves going along the loop, every frame while the world is up, as the water surface
+     * wavelets paper's figure eight does.
+     */
+    private void paintTestWater() {
+        final WaterLoop path = waterLoop;
+        if (path == null || loopWaves <= 0 || released || graphics.isClosed()) {
+            return;
+        }
+        final float reverse = loopSpeed < 0 ? (float) Math.PI : 0;
+        for (int i = 0; i < path.paintSpotCount(); ++i) {
+            graphics.water()
+                    .paintWaves(
+                            new Vector3d(
+                                    path.paintSpot(i, 0),
+                                    SyntheticTerrain.SEA_LEVEL,
+                                    path.paintSpot(i, 1)),
+                            PAINT_RADIUS,
+                            (float) path.paintSpot(i, 2) + reverse,
+                            loopWaves);
+        }
+    }
+
+    /**
+     * The test water's settings, for the debug window: the wind's speed and degrees, the sea's
+     * current's speed and degrees, the loop's speed, and its painted waves' height.
+     *
+     * @return The settings, or null if the run placed no island water.
+     */
+    public @Nullable float[] getWater() {
+        if (waterBody == null) {
+            return null;
+        }
+        return new float[] {
+            waterBody.windSpeed(),
+            (float) Math.toDegrees(waterBody.windDirection()),
+            currentSpeed,
+            (float) Math.toDegrees(currentDirection),
+            loopSpeed,
+            loopWaves
+        };
+    }
+
+    /**
+     * Whether the sea has a flowing path, for the debug window.
+     *
+     * @return Whether there is one.
+     */
+    public boolean hasWaterLoop() {
+        return waterLoop != null;
+    }
+
+    /**
+     * Drop a ring of ripples on the test water: on the flowing path if there is one, else on the
+     * sea in front of the island. Render thread only.
+     */
+    public void splashTestWater() {
+        final WaterLoop path = waterLoop;
+        final Vector3d at =
+                path != null
+                        ? new Vector3d(
+                                path.getSplashX(), SyntheticTerrain.SEA_LEVEL, path.getSplashZ())
+                        : new Vector3d(0, SyntheticTerrain.SEA_LEVEL, SPLASH_SEA_Z);
+        graphics.water().disturb(at, SPLASH_RADIUS, SPLASH_STRENGTH);
     }
 
     /**
@@ -3016,6 +3277,9 @@ public final class GateBenchmark {
             testEmitters.clear();
             testWater.forEach(graphics.water()::remove);
             testWater.clear();
+            placedWater.clear();
+            waterBody = null;
+            waterLoop = null;
         }
         if (scene != null && !Double.isNaN(previousViewDistance)) {
             scene.setViewDistance(previousViewDistance);

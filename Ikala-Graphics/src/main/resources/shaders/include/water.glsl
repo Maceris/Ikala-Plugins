@@ -41,13 +41,15 @@ const float WAVE_SHALLOW_DEPTHS[WAVE_DEPTHS - 1] = float[](3.0, 1.0);
 const float WAVE_FLOW_CYCLE = 4.0;
 
 // One wave climate, WaterRender: each direction's amplitude and where the camera stands along it in
-// its profile, in meters; the slope variance each layer leaves out; and which depth's profiles each
-// depth reads, deep water's where its waves are the same, so those are never filled
+// its profile, in meters; the slope variance each layer leaves out; which depth's profiles each
+// depth reads, deep water's where its waves are the same, so those are never filled; and the
+// amplitude of its strongest direction, in x, which the grid's wind band keeps shares of
 struct WaveClimate {
     float amplitudes[WAVE_DIRECTIONS];
     float offsets[WAVE_DIRECTIONS];
     vec4 missingVariance;
     ivec4 levels;
+    vec4 peak;
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer WaveClimateList {
@@ -121,6 +123,8 @@ const float WAVE_REFLECTION = 0.7;
 const float WAVE_ANGULAR_DIFFUSION = 0.5;
 // Amplitudes below this, in meters, are left out of the sums: ripples dying away never reach 0
 const float WAVE_FAINTEST = 1e-4;
+// How narrowly a wave paint's waves keep to its way, the power on the cosine, see WaveletMath
+const float WAVE_PAINT_SPREAD = 8.0;
 
 layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer WaveGridList {
     float values[];
@@ -184,14 +188,19 @@ struct WaveField {
     vec2 shift;
 };
 
-// One direction's amplitudes at the field's point, the wind's waves' and the ripples'
+// One direction's amplitudes at the field's point, the wind's waves' and the ripples': in the grid
+// the wind band holds shares of the climate's strongest direction, so shores and paint can send
+// waves any way, even against the wind; past it, the climate's own
 vec2 waveAmplitudes(WaveField field, int b) {
     float wind = field.climate >= 0 ? field.climates.climates[field.climate].amplitudes[b] : 0.0;
     if (!field.gridOn) {
         return vec2(wind, 0.0);
     }
-    return vec2(wind * waveGridValue(field.grid, field.at, WAVE_WIND_BAND, b),
-        waveGridValue(field.grid, field.at, WAVE_RIPPLE_BAND, b));
+    if (field.at.inside && field.climate >= 0) {
+        wind = field.climates.climates[field.climate].peak.x
+            * waveGridValue(field.grid, field.at, WAVE_WIND_BAND, b);
+    }
+    return vec2(wind, waveGridValue(field.grid, field.at, WAVE_RIPPLE_BAND, b));
 }
 
 // Which depth's profiles a climate reads for the field's depth

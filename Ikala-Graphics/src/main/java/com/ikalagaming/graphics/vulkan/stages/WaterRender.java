@@ -173,6 +173,9 @@ public class WaterRender implements RenderStage {
     /** This frame's disturbances, a scratch list. */
     private final List<WaterRegistry.Disturbance> disturbances = new ArrayList<>();
 
+    /** This frame's wave paints, reused. */
+    private final List<WaterRegistry.WavePaint> paints = new ArrayList<>();
+
     /** Each tile's climate, in step with {@link #tiles}, -1 for still water. */
     private final List<Integer> tileClimates = new ArrayList<>();
 
@@ -378,6 +381,7 @@ public class WaterRender implements RenderStage {
         final TextureInfoVulkan color = frameData.sceneColor;
         final TextureInfoVulkan depth = frameData.gBuffer.depth();
         scene.getWaterRegistry().takeDisturbances(WaveletMath.MAX_DISTURBANCES, disturbances);
+        scene.getWaterRegistry().takePaints(WaveletMath.MAX_PAINTS, paints);
         final Vector3dc camera = scene.getCamera().getPosition();
         try (MemoryStack stack = MemoryStack.stackPush()) {
             grid.step(
@@ -386,8 +390,10 @@ public class WaterRender implements RenderStage {
                     frame,
                     camera,
                     version,
-                    () -> WaterMesh.waterCellData(tiles),
+                    () -> WaterMesh.waterCellData(tiles, tileClimates),
                     disturbances,
+                    climateBuffers[frame].deviceAddress,
+                    paints,
                     stack);
             fillProfiles(commandBuffer, frame, stack);
             copyBehind(commandBuffer, frameData, width, height, stack);
@@ -617,6 +623,11 @@ public class WaterRender implements RenderStage {
                                 + (long) layer * Float.BYTES,
                         (float) climate.missingVariance()[layer]);
             }
+            double peak = 0;
+            for (double amplitude : climate.amplitudes()) {
+                peak = Math.max(peak, amplitude);
+            }
+            MemoryUtil.memPutFloat(at + ShaderBindings.Water.CLIMATE_PEAK, (float) peak);
             for (int level = 0; level < WaveMath.DEPTHS; ++level) {
                 MemoryUtil.memPutInt(
                         at + ShaderBindings.Water.CLIMATE_LEVELS + (long) level * Integer.BYTES,

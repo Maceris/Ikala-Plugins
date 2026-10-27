@@ -15,14 +15,29 @@
 
 layout(local_size_x = 8, local_size_y = 8) in;
 
-// Each cell's water, by world cell wrapping around the grid: 1 if it holds water, else 0; how fast
-// it flows along x and z, in meters a second; and how deep it is, in meters
+// Each cell's water, by world cell wrapping around the grid: 0 for land, else its wind climate plus
+// WAVE_MASK_CLIMATE_BASE, -1 for none; how fast it flows along x and z, in meters a second; and how
+// deep it is, in meters
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer WaveMaskList {
     vec4 cells[];
 };
 
 // Gravity, in meters a second squared: in shallow water waves go at sqrt(g h)
 const float GRAVITY = 9.81;
+
+// What a water cell's first mask value is over its wind climate, see WaveGrid
+const int WAVE_MASK_CLIMATE_BASE = 2;
+
+// This frame's wave paints, see WaterRegistry.WavePaint: x and z relative to the grid's corner in
+// cells, radius in cells and strength, then the way its waves go, x and z
+struct WavePaint {
+    vec4 place;
+    vec4 way;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer WavePaintList {
+    WavePaint paints[];
+};
 
 // This frame's disturbances: x and z relative to the grid's corner in cells, radius in cells, and
 // strength, the ripples' height in meters
@@ -47,10 +62,15 @@ layout(push_constant) uniform Constants {
     // How many disturbances there are, and nonzero if the last step's grid can be read
     int disturbanceCount;
     int lastValid;
+    WaveClimateList climates;
+    WavePaintList paintList;
+    int paintCount;
 };
 
-// The wind band's amplitude past the grid or before it was stepped, and the ripples'
-const float OPEN_WIND = 1.0;
+// This cell's climate's share of the wind's waves in each direction, what the wind builds them back
+// toward and open water holds; none without wind
+float windShares[WAVE_DIRECTIONS];
+
 
 // Whether a world cell holds water, as far as the grid knows; land past it
 float waterAt(ivec2 cell) {
@@ -58,7 +78,7 @@ float waterAt(ivec2 cell) {
     if (any(lessThan(local, ivec2(0))) || any(greaterThanEqual(local, ivec2(WAVE_GRID_SIZE)))) {
         return 1.0;
     }
-    return mask.cells[waveGridSlot(cell)].x;
+    return mask.cells[waveGridSlot(cell)].x > 0.0 ? 1.0 : 0.0;
 }
 
 // The last step's amplitude at a point in world cells, between the four nearest cells' middles;
@@ -67,7 +87,7 @@ float lastAt(vec2 point, int band, int direction) {
     vec2 local = point - vec2(lastCorner) - 0.5;
     if (lastValid == 0 || any(lessThan(local, vec2(0.0)))
             || any(greaterThan(local, vec2(float(WAVE_GRID_SIZE - 1))))) {
-        return band == WAVE_WIND_BAND ? OPEN_WIND : 0.0;
+        return band == WAVE_WIND_BAND ? windShares[direction] : 0.0;
     }
     ivec2 base = ivec2(floor(local)) + lastCorner;
     vec2 f = fract(local);
@@ -147,6 +167,23 @@ void main() {
     }
     vec2 middle = vec2(cell) + 0.5;
     vec4 here = mask.cells[slot];
+    int climate = int(here.x + 0.5) - WAVE_MASK_CLIMATE_BASE;
+    float peak = climate >= 0 ? climates.climates[climate].peak.x : 0.0;
+    for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
+        windShares[b] = peak > 0.0 ? climates.climates[climate].amplitudes[b] / peak : 0.0;
+    }
+    // The paint covering this cell most, if any
+    float paintWeight = 0.0;
+    WavePaint paint;
+    for (int p = 0; p < paintCount; ++p) {
+        WavePaint candidate = paintList.paints[p];
+        float weight = 1.0 - length(vec2(local) + 0.5 - candidate.place.xy) / candidate.place.z;
+        if (weight > paintWeight) {
+            paintWeight = weight;
+            paint = candidate;
+        }
+    }
+    paintWeight = smoothstep(0.0, 1.0, paintWeight);
     // The current carries every band's waves along with it
     vec2 carried = here.yz / WAVE_CELL_SIZE * seconds;
     // The way out of the land nearby, toward the water
@@ -175,7 +212,11 @@ void main() {
             float after = moved[(b + 1) % WAVE_DIRECTIONS];
             float value = (1.0 - 2.0 * diffusion) * moved[b] + diffusion * (before + after);
             if (band == WAVE_WIND_BAND) {
-                value += (OPEN_WIND - value) * (1.0 - exp(-seconds / WAVE_WIND_RECOVERY));
+                value += (windShares[b] - value) * (1.0 - exp(-seconds / WAVE_WIND_RECOVERY));
+                if (paintWeight > 0.0) {
+                    float along = max(0.0, dot(waveDirection(b), paint.way.xy));
+                    value = mix(value, paint.place.w * pow(along, WAVE_PAINT_SPREAD), paintWeight);
+                }
             } else {
                 value *= exp(-seconds / WAVE_RIPPLE_LIFETIME);
                 for (int d = 0; d < disturbanceCount; ++d) {

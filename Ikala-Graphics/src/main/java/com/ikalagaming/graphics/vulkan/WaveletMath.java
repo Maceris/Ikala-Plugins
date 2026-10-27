@@ -56,6 +56,12 @@ public final class WaveletMath {
     /** The most disturbances taken in a frame; more wait for the next. */
     public static final int MAX_DISTURBANCES = 64;
 
+    /** The most wave paints a step takes in. */
+    public static final int MAX_PAINTS = 256;
+
+    /** How narrowly a paint's waves keep to its way: the power on the cosine. */
+    public static final int PAINT_SPREAD = 8;
+
     /** The shortest and longest ripples, in meters. */
     public static final double SHORTEST_RIPPLE = 0.08;
 
@@ -63,6 +69,20 @@ public final class WaveletMath {
 
     /** How many ripple waves the ripple profiles sum. */
     public static final int RIPPLE_WAVES = 48;
+
+    /**
+     * How much of a paint's strength a direction gets: cos^{@link #PAINT_SPREAD} of the angle to
+     * the paint's way, none past a right angle; mirrors {@code water_wavelets.comp}.
+     *
+     * @param direction The direction.
+     * @param paintDirection The paint's way, in radians from +x toward +z.
+     * @return The share, 0 to 1.
+     */
+    public static double paintShare(int direction, double paintDirection) {
+        final double[] way = direction(direction);
+        final double cos = way[0] * Math.cos(paintDirection) + way[1] * Math.sin(paintDirection);
+        return Math.pow(Math.max(0, cos), PAINT_SPREAD);
+    }
 
     /** A full turn. */
     private static final double TURN = 2 * Math.PI;

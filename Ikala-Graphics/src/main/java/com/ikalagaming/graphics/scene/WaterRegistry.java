@@ -37,6 +37,25 @@ public class WaterRegistry {
     /** The disturbances waiting, oldest first. */
     private final Deque<Disturbance> disturbances = new ArrayDeque<>();
 
+    /** The most wave paints waiting at once; past it new ones are dropped. */
+    public static final int MAX_WAITING_PAINTS = 1024;
+
+    /**
+     * A patch of water whose wind waves are set by hand for a frame, as the water surface wavelets
+     * paper's amplitude painting does: waves leave it the way it points.
+     *
+     * @param position Where, in the world.
+     * @param radius How far around it, in meters; it fades out toward the edge.
+     * @param direction The way its waves go, in radians from +x toward +z.
+     * @param strength How tall they are, as a share of the wind's waves in the wind's own
+     *     direction.
+     */
+    public record WavePaint(
+            @NonNull Vector3dc position, float radius, float direction, float strength) {}
+
+    /** This frame's wave paints. */
+    private final List<WavePaint> paints = new ArrayList<>();
+
     /** Guards everything below. */
     private final ReentrantLock lock = new ReentrantLock();
 
@@ -222,6 +241,39 @@ public class WaterRegistry {
                 disturbances.removeFirst();
             }
             disturbances.addLast(disturbance);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Set the wind waves over a patch for the next frame.
+     *
+     * @param paint The patch.
+     */
+    public void paint(@NonNull WavePaint paint) {
+        lock.lock();
+        try {
+            if (paints.size() < MAX_WAITING_PAINTS) {
+                paints.add(paint);
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Take the waiting wave paints, up to a count, dropping the rest: they last one frame.
+     *
+     * @param most The most to take.
+     * @param into Filled with them.
+     */
+    public void takePaints(int most, @NonNull List<WavePaint> into) {
+        into.clear();
+        lock.lock();
+        try {
+            into.addAll(paints.subList(0, Math.min(most, paints.size())));
+            paints.clear();
         } finally {
             lock.unlock();
         }

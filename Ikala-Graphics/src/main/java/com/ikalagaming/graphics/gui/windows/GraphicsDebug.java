@@ -13,6 +13,7 @@ import com.ikalagaming.graphics.benchmark.GateBenchmark;
 import com.ikalagaming.graphics.benchmark.GateScene;
 import com.ikalagaming.graphics.benchmark.SyntheticSections;
 import com.ikalagaming.graphics.benchmark.SyntheticTerrain;
+import com.ikalagaming.graphics.benchmark.WaterLoop;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
@@ -163,6 +164,31 @@ public class GraphicsDebug extends GuiWindow {
 
     /** Digs a second when digging on a timer. */
     private static final double RAPID_DIGS_PER_SECOND = 10;
+
+    /** The island recipe's flowing path choices, see {@link WaterLoop}: none, then its shapes. */
+    private static final String[] LOOP_NAMES = {"None", "Circle", "Infinity"};
+
+    /** The loop picked, an index into {@link #LOOP_NAMES}. */
+    private final IkInt benchmarkLoop = new IkInt(0);
+
+    /**
+     * The kept island's water settings while being changed: wind speed and degrees, the sea's
+     * current's speed and degrees, the loop's speed, and its painted waves' height; see {@link
+     * GateBenchmark#getWater}.
+     */
+    private final float[][] waterSettings = {{0}, {0}, {0}, {0}, {0}, {0}};
+
+    /** The tallest painted waves the slider reaches, as a share of the wind's. */
+    private static final float MAX_PATH_WAVES = 4;
+
+    /** The fastest wind the water sliders reach, in meters a second. */
+    private static final float MAX_WIND = 25;
+
+    /** The fastest flow the water sliders reach, in meters a second. */
+    private static final float MAX_FLOW = 4;
+
+    /** Degrees in a full turn, for the direction sliders. */
+    private static final float FULL_TURN_DEGREES = 360;
 
     /** The level of detail colorings' names, in ordinal order. */
     private static final String[] LOD_COLOR_NAMES = {
@@ -1180,6 +1206,60 @@ public class GraphicsDebug extends GuiWindow {
         }
     }
 
+    /**
+     * The kept island's water controls: wind, the sea's current, and the loop's flow, applied as
+     * they change.
+     *
+     * @param run The run.
+     */
+    private void drawBenchmarkWater(@NonNull GateBenchmark run) {
+        final float[] now = run.getWater();
+        if (now == null || !IkGui.treeNode("Water##benchmark")) {
+            return;
+        }
+        // Show the run's values unless a slider is being dragged
+        if (!IkGui.isAnyItemActive()) {
+            for (int i = 0; i < now.length; ++i) {
+                waterSettings[i][0] = now[i];
+            }
+        }
+        boolean changed = IkGui.sliderFloat("Wind (m/s)", waterSettings[0], 0, MAX_WIND);
+        changed |=
+                IkGui.sliderFloat("Wind direction (deg)", waterSettings[1], 0, FULL_TURN_DEGREES);
+        IkGui.setItemTooltip("The way the wind blows, in degrees from +x toward +z.");
+        changed |= IkGui.sliderFloat("Sea current (m/s)", waterSettings[2], 0, MAX_FLOW);
+        changed |=
+                IkGui.sliderFloat(
+                        "Current direction (deg)", waterSettings[3], 0, FULL_TURN_DEGREES);
+        if (run.hasWaterLoop()) {
+            changed |= IkGui.sliderFloat("Loop flow (m/s)", waterSettings[4], -MAX_FLOW, MAX_FLOW);
+            IkGui.setItemTooltip(
+                    "How fast the path flows in its middle; it slows to nothing at its edges."
+                            + " Negative runs it the other way round.");
+            changed |= IkGui.sliderFloat("Path waves", waterSettings[5], 0, MAX_PATH_WAVES);
+            IkGui.setItemTooltip(
+                    "Paint waves going along the path every frame, as tall as this share of the"
+                            + " wind's own; 0 for none.");
+        }
+        if (changed) {
+            run.setWater(
+                    waterSettings[0][0],
+                    waterSettings[1][0],
+                    waterSettings[2][0],
+                    waterSettings[3][0],
+                    waterSettings[4][0],
+                    waterSettings[5][0]);
+        }
+        if (IkGui.button("Splash")) {
+            run.splashTestWater();
+        }
+        IkGui.setItemTooltip(
+                run.hasWaterLoop()
+                        ? "Drop a ring of ripples where the flowing path starts."
+                        : "Drop a ring of ripples on the sea in front of the island.");
+        IkGui.treePop();
+    }
+
     /** Run the gate benchmark and show what it found. */
     private void drawBenchmark() {
         IkGui.textWrapped(
@@ -1212,14 +1292,26 @@ public class GraphicsDebug extends GuiWindow {
                         + GateBenchmark.GATE_DIGS
                         + " blocks near the camera timing each edit, and report what the disk cache"
                         + " did while loading. Draws with level of detail.");
+        final boolean island = benchmarkRecipe.get() == SyntheticTerrain.Recipe.ISLAND.ordinal();
+        if (island) {
+            IkGui.combo("Flowing path##benchmark", benchmarkLoop, LOOP_NAMES);
+            IkGui.setItemTooltip(
+                    "Make the sea off the island flow round a circle or a figure eight, to watch"
+                            + " waves and ripples carried round bends.");
+        }
         if (IkGui.button("Run")) {
+            final Map<String, String> sceneOptions = new HashMap<>();
+            if (island && benchmarkLoop.get() > 0) {
+                sceneOptions.put("loop", WaterLoop.Shape.values()[benchmarkLoop.get() - 1].name());
+            }
             GateBenchmark.start(
                     SyntheticTerrain.Recipe.values()[benchmarkRecipe.get()],
                     benchmarkRadius[0],
                     benchmarkLights[0],
                     benchmarkKeepWorld.get(),
                     benchmarkLod.get(),
-                    benchmarkGate.get());
+                    benchmarkGate.get(),
+                    sceneOptions);
         }
         IkGui.sameLine();
         if (IkGui.button("Stop")) {
@@ -1257,6 +1349,7 @@ public class GraphicsDebug extends GuiWindow {
                                         .getOverrideCount()));
             }
         }
+        drawBenchmarkWater(run);
         IkGui.text(run.status());
         final GateBenchmark.Results results = run.getResults();
         if (results == null) {

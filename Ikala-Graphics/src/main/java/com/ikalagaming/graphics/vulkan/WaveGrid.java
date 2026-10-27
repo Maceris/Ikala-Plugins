@@ -63,6 +63,22 @@ public class WaveGrid {
     private final SharedBuffer[] disturbanceBuffers =
             new SharedBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
 
+    /** Each frame in flight's wave paints. */
+    private final SharedBuffer[] paintBuffers =
+            new SharedBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
+    /** Floats in a wave paint: x, z, radius, strength, then its way's x and z, and padding. */
+    private static final int PAINT_FLOATS = 8;
+
+    /**
+     * What a water cell's first mask value is over its wind climate: 1 for water with no wind, so
+     * land, 0, stays apart; see {@code water_wavelets.comp}.
+     */
+    private static final int MASK_CLIMATE_BASE = 2;
+
+    /** Mask values after the first, copied from a cell's data: flow along x and z, and depth. */
+    private static final int MASK_COPIED = 3;
+
     /** Values a cell of the mask holds: water or not, flow along x and z, and depth. */
     private static final int MASK_VALUES = 4;
 
@@ -146,7 +162,8 @@ public class WaveGrid {
      * @param state The Vulkan state.
      */
     public void cleanup(@NonNull VulkanState state) {
-        for (SharedBuffer[] buffers : new SharedBuffer[][] {grids, masks, disturbanceBuffers}) {
+        for (SharedBuffer[] buffers :
+                new SharedBuffer[][] {grids, masks, disturbanceBuffers, paintBuffers}) {
             for (int i = 0; i < buffers.length; ++i) {
                 if (buffers[i] != null) {
                     SharedBuffer.free(buffers[i], state);
@@ -175,6 +192,8 @@ public class WaveGrid {
      * @param water The world cells water covers and their flow and depth, see {@link
      *     WaterMesh#waterCellData}, worked out again only when the version changes.
      * @param disturbances This frame's disturbances, in the world.
+     * @param climates The wind climates' address, for each direction's share of the wind's waves.
+     * @param paints This frame's wave paints, in the world.
      * @param stack The stack to allocate on.
      */
     public void step(
@@ -185,6 +204,8 @@ public class WaveGrid {
             long tilesVersion,
             @NonNull Supplier<Map<Long, float[]>> water,
             @NonNull List<WaterRegistry.Disturbance> disturbances,
+            long climates,
+            @NonNull List<WaterRegistry.WavePaint> paints,
             @NonNull MemoryStack stack) {
         final long nanos = System.nanoTime();
         final double seconds =
@@ -216,6 +237,27 @@ public class WaveGrid {
             MemoryUtil.memPutFloat(
                     entry + 2 * Float.BYTES, (float) (d.radius() / WaveletMath.CELL_SIZE));
             MemoryUtil.memPutFloat(entry + 3 * Float.BYTES, d.strength());
+        }
+        final int paintCount = Math.min(paints.size(), WaveletMath.MAX_PAINTS);
+        paintBuffers[frame] =
+                ensure(
+                        state,
+                        paintBuffers[frame],
+                        (long) WaveletMath.MAX_PAINTS * PAINT_FLOATS * Float.BYTES);
+        final long paintAt = paintBuffers[frame].allocationInfo.pMappedData();
+        for (int i = 0; i < paintCount; ++i) {
+            final WaterRegistry.WavePaint p = paints.get(i);
+            final long entry = paintAt + (long) i * PAINT_FLOATS * Float.BYTES;
+            MemoryUtil.memPutFloat(
+                    entry, (float) (p.position().x() / WaveletMath.CELL_SIZE - cornerX));
+            MemoryUtil.memPutFloat(
+                    entry + Float.BYTES,
+                    (float) (p.position().z() / WaveletMath.CELL_SIZE - cornerZ));
+            MemoryUtil.memPutFloat(
+                    entry + 2 * Float.BYTES, (float) (p.radius() / WaveletMath.CELL_SIZE));
+            MemoryUtil.memPutFloat(entry + 3 * Float.BYTES, p.strength());
+            MemoryUtil.memPutFloat(entry + 4 * Float.BYTES, (float) Math.cos(p.direction()));
+            MemoryUtil.memPutFloat(entry + 5 * Float.BYTES, (float) Math.sin(p.direction()));
         }
 
         barrier(
@@ -249,6 +291,10 @@ public class WaveGrid {
         constants.putInt(ShaderBindings.Water.WAVELETS_DISTURBANCE_COUNT_OFFSET, count);
         constants.putInt(
                 ShaderBindings.Water.WAVELETS_LAST_VALID_OFFSET, stepped && !jumped ? 1 : 0);
+        constants.putLong(ShaderBindings.Water.WAVELETS_CLIMATES_OFFSET, climates);
+        constants.putLong(
+                ShaderBindings.Water.WAVELETS_PAINTS_OFFSET, paintBuffers[frame].deviceAddress);
+        constants.putInt(ShaderBindings.Water.WAVELETS_PAINT_COUNT_OFFSET, paintCount);
         vkCmdPushConstants(commandBuffer, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
         final int groups = WaveletMath.GRID_SIZE / WORKGROUP_SIDE;
         vkCmdDispatch(commandBuffer, groups, groups, 1);
@@ -301,8 +347,8 @@ public class WaveGrid {
                 if (all || newCell) {
                     final int at = slot(worldX, worldZ) * MASK_VALUES;
                     final float[] data = waterCells.get(WaterMesh.worldKey(worldX, worldZ));
-                    mask[at] = data == null ? 0 : 1;
-                    for (int i = 0; i < WaterMesh.CELL_DATA; ++i) {
+                    mask[at] = data == null ? 0 : MASK_CLIMATE_BASE + data[WaterMesh.CELL_CLIMATE];
+                    for (int i = 0; i < MASK_COPIED; ++i) {
                         mask[at + 1 + i] = data == null ? 0 : data[i];
                     }
                 }
