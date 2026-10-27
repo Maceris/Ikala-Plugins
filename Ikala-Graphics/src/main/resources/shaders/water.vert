@@ -112,5 +112,13 @@ void main() {
     outRestXZ = rest;
     outFoam = foam * waves;
     outFall = side ? inCalm : 0.0;
+    if (side) {
+        // The sheet leaves its lip outward and keeps going as it falls
+        float lip = max(dot(inFlow, inSideNormal), SHEET_MIN_SPEED);
+        render.xz += inSideNormal * sheetOut(lip, inCalm);
+        view = viewMatrix * vec4(render, 1.0);
+        outRenderPosition = render;
+        outViewPosition = view;
+    }
     gl_Position = projectionMatrix * view;
 }

@@ -58,11 +58,6 @@ const float FOAM_PATCH_SIZE = 0.6;
 const float FOAM_PATCH_EDGE = 0.08;
 // The least Jacobian foam is thickened by, where the surface squeezes it together
 const float FOAM_MIN_SQUEEZE = 0.25;
-// Gravity, in meters a second squared
-const float WATER_GRAVITY = 9.81;
-// How fast water leaves a lip whose surface doesn't flow out over it, in meters a second: a gentle
-// spill
-const float SHEET_MIN_SPEED = 0.3;
 // A falling sheet's streaks: how wide, in meters; how long apart in when their water left the
 // lip, in seconds, which the fall stretches as it speeds up; and how much they tilt the sheet
 const float SHEET_STREAK_WIDTH = 0.15;

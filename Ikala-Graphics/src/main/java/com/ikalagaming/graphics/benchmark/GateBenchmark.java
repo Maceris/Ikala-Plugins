@@ -716,11 +716,8 @@ public final class GateBenchmark {
     /** How fast the loop's channel flows unless {@code .loopSpeed} says, in meters a second. */
     public static final float DEFAULT_LOOP_SPEED = 1;
 
-    /** The fountain's pools, cells across each from the outermost in. */
-    private static final int[] FOUNTAIN_SIZES = {12, 8, 4};
-
-    /** How much higher each of the fountain's pools stands than the one around it, in meters. */
-    private static final double FOUNTAIN_STEP = 1.5;
+    /** How deep the fountain's pools are, in meters: a full water block's 7/8. */
+    private static final double FOUNTAIN_POOL_DEPTH = 0.875;
 
     /** How fast the fountain's water drifts outward, in meters a second. */
     private static final double FOUNTAIN_FLOW = 0.4;
@@ -1421,6 +1418,7 @@ public final class GateBenchmark {
         try {
             final long start = System.nanoTime();
             final SyntheticTerrain terrain = new SyntheticTerrain(recipe, SEED, sources);
+            terrain.setFountain(option("fountain") != null);
             this.terrain = terrain;
             final GateScene.Layout layout = GateScene.build(terrain, radius);
             if (testMesh != null) {
@@ -1798,30 +1796,36 @@ public final class GateBenchmark {
     }
 
     /**
-     * In the island recipe, with the {@code .fountain} option, stack square pools on the island's
-     * top, each smaller one {@link #FOUNTAIN_STEP} m above the one around it and drifting outward,
-     * so water falls off every side of each onto the one below and the outermost onto the ground:
-     * the water's sides seen from all around.
+     * In the island recipe, with the {@code .fountain} option, fill the pools on the island's
+     * stepped stone fountain, see {@link SyntheticTerrain#fountainTier}, each drifting outward, so
+     * water falls off every side of each past the stone onto the pool below, and off the outermost
+     * onto the ground: the water's sides seen from all around, with stone behind them.
      */
     private void placeFountain() {
         final SyntheticTerrain world = terrain;
         if (world == null
                 || world.getRecipe() != SyntheticTerrain.Recipe.ISLAND
-                || option("fountain") == null
+                || !world.isFountain()
                 || waterBody == null) {
             return;
         }
-        final double ground = Math.floor(world.islandHeight(0, 0)) + 1;
-        for (int tier = 0; tier < FOUNTAIN_SIZES.length; ++tier) {
-            final int size = FOUNTAIN_SIZES[tier];
-            final int inner = tier + 1 < FOUNTAIN_SIZES.length ? FOUNTAIN_SIZES[tier + 1] : 0;
+        final int[] sizes = SyntheticTerrain.FOUNTAIN_SIZES;
+        for (int tier = 0; tier < sizes.length; ++tier) {
+            final int size = sizes[tier];
+            final int inner = tier + 1 < sizes.length ? sizes[tier + 1] : 0;
+            // On the tier's top block, as deep as a full water block
+            final double surface =
+                    world.fountainBase()
+                            + SyntheticTerrain.FOUNTAIN_STEP * tier
+                            + 1
+                            + FOUNTAIN_POOL_DEPTH;
             final int start = -size / 2;
             final int corners = size + 1;
             final float[] heights = new float[corners * corners];
             final float[] bottoms = new float[corners * corners];
             final float[] flows = new float[2 * corners * corners];
             final boolean[] mask = new boolean[size * size];
-            Arrays.fill(heights, (float) (ground + FOUNTAIN_STEP * (tier + 1)));
+            Arrays.fill(heights, (float) surface);
             for (int z = 0; z < corners; ++z) {
                 for (int x = 0; x < corners; ++x) {
                     final int at = z * corners + x;

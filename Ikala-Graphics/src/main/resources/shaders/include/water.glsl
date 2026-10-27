@@ -134,6 +134,22 @@ const float WAVE_CELL_SIZE = 1.0;
 const int WAVE_BANDS = 2;
 const int WAVE_WIND_BAND = 0;
 const int WAVE_RIPPLE_BAND = 1;
+// Gravity, in meters a second squared
+const float WATER_GRAVITY = 9.81;
+// How fast water leaves a lip whose surface doesn't flow out over it, in meters a second: a gentle
+// spill
+const float SHEET_MIN_SPEED = 0.3;
+// How far out from its lip a falling sheet starts, in meters, so it never lies on what it falls
+// past
+const float SHEET_GAP = 0.01;
+
+// How far out from its lip a falling sheet has gone after falling some way: leaving at the lip's
+// speed, it keeps it as it falls, for (v - v0) / g seconds, v = sqrt(v0^2 + 2 g s)
+float sheetOut(float lip, float fallen) {
+    float speed = sqrt(lip * lip + 2.0 * WATER_GRAVITY * max(fallen, 0.0));
+    return SHEET_GAP + lip * (speed - lip) / WATER_GRAVITY;
+}
+
 // How often patterns fixed in the world repeat, in meters, and the falling sheets' time, in
 // seconds, see WaveMath.PATTERN_WRAP and SHEET_TIME_PERIOD: each a whole number of the patterns'
 // cells

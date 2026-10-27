@@ -8,6 +8,7 @@ import com.ikalagaming.graphics.bake.SectionBaker;
 
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -255,6 +256,18 @@ public final class SyntheticTerrain {
      * @return The recipe.
      */
     @Getter private final Recipe recipe;
+
+    /**
+     * Whether the island has a stepped stone fountain on its top, see {@link #fountainTier}: set
+     * before any blocks are read.
+     */
+    @Getter @Setter private volatile boolean fountain;
+
+    /** The fountain's tiers, blocks across each from the outermost in, centered on the origin. */
+    public static final int[] FOUNTAIN_SIZES = {12, 8, 4};
+
+    /** How many blocks higher each of the fountain's tiers stands than the one around it. */
+    public static final int FOUNTAIN_STEP = 2;
 
     /** The seed every noise value is hashed with. */
     private final long seed;
@@ -833,6 +846,51 @@ public final class SyntheticTerrain {
      * @return The ground's height, a fractional block y.
      */
     public double islandHeight(int x, int z) {
+        final int tier = fountainTier(x, z);
+        if (tier >= 0) {
+            return fountainBase() + FOUNTAIN_STEP * tier;
+        }
+        return naturalIslandHeight(x, z);
+    }
+
+    /**
+     * Which of the fountain's tiers a column is under, the highest whose square covers it.
+     *
+     * @param x The column's x.
+     * @param z The column's z.
+     * @return The tier, 0 the outermost, or -1 off the fountain or without one.
+     */
+    public int fountainTier(int x, int z) {
+        if (!fountain || recipe != Recipe.ISLAND) {
+            return -1;
+        }
+        final double reach = Math.max(Math.abs(x + 0.5), Math.abs(z + 0.5));
+        int tier = -1;
+        for (int i = 0; i < FOUNTAIN_SIZES.length; ++i) {
+            if (reach < FOUNTAIN_SIZES[i] / 2.0) {
+                tier = i;
+            }
+        }
+        return tier;
+    }
+
+    /**
+     * The top block of the fountain's outermost tier: the island's summit.
+     *
+     * @return The block y.
+     */
+    public int fountainBase() {
+        return (int) Math.floor(naturalIslandHeight(0, 0));
+    }
+
+    /**
+     * The island's ground without the fountain.
+     *
+     * @param x The column's x.
+     * @param z The column's z.
+     * @return The ground's height, a fractional block y.
+     */
+    private double naturalIslandHeight(int x, int z) {
         final double wobble =
                 ISLAND_WOBBLE
                         * (fbm2(x / ISLAND_WOBBLE_SCALE, z / ISLAND_WOBBLE_SCALE, 2) - 0.5)
@@ -851,6 +909,9 @@ public final class SyntheticTerrain {
      */
     private byte island(int x, int y, int z) {
         final int top = (int) Math.floor(islandHeight(x, z));
+        if (fountainTier(x, z) >= 0) {
+            return y > top ? AIR : STONE;
+        }
         if (y > top) {
             return AIR;
         }
