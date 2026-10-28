@@ -10,6 +10,7 @@ import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.vulkan.GeometryArena;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.PipelineManagerVulkan;
+import com.ikalagaming.graphics.vulkan.ShaderBindings;
 import com.ikalagaming.graphics.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.vulkan.TextureInfoVulkan;
 import com.ikalagaming.graphics.vulkan.VulkanState;
@@ -22,12 +23,12 @@ import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
 
 /**
- * Draws see-through surfaces into each sun cascade's translucent maps, every frame, for shadows
- * through glass, see {@code translucent_shadow.glsl}: the translucent meshes culling listed for any
- * cascade, standard and baked, blended by adding into the moments of their depths and their
- * absorbance. Drawn whole each time with the cascade's matrix, off its edges clipped away; the maps
- * are left read only for the light stage. Part of the shadow stage, with its pipeline layout,
- * descriptor sets and push constants.
+ * Draws see-through surfaces into each sun cascade's translucent maps, for shadows through glass,
+ * see {@code translucent_shadow.glsl}: the translucent meshes culling listed for any cascade,
+ * standard and baked, and the see-through voxels of volume bricks standing in for far sections,
+ * blended by adding into the moments of their depths and their absorbance. Drawn whole each time
+ * with the cascade's matrix, off its edges clipped away; the maps are left read only for the light
+ * stage. Part of the shadow stage, with its pipeline layout, descriptor sets and push constants.
  */
 final class TranslucentShadowPass {
 
@@ -40,20 +41,36 @@ final class TranslucentShadowPass {
     /** The shader for baked sections' translucent meshes. */
     @NonNull private final ShaderVulkan bakedShader;
 
+    /** The shader for volume bricks' see-through voxels. */
+    @NonNull private final ShaderVulkan brickShader;
+
+    /** Vertices of a volume brick's box: 12 triangles. */
+    private static final int BRICK_VERTICES = 36;
+
+    /** The descriptor set the volume brick atlas is bound as. */
+    private static final int BRICK_SET = 2;
+
     /** The pipelines, VK_NULL_HANDLE until set up. */
     private long standardPipeline = VK_NULL_HANDLE;
 
     private long bakedPipeline = VK_NULL_HANDLE;
+
+    private long brickPipeline = VK_NULL_HANDLE;
 
     /**
      * Set up the pass.
      *
      * @param standardShader The shader for standard meshes.
      * @param bakedShader The shader for baked sections' translucent meshes.
+     * @param brickShader The shader for volume bricks' see-through voxels.
      */
-    TranslucentShadowPass(@NonNull ShaderVulkan standardShader, @NonNull ShaderVulkan bakedShader) {
+    TranslucentShadowPass(
+            @NonNull ShaderVulkan standardShader,
+            @NonNull ShaderVulkan bakedShader,
+            @NonNull ShaderVulkan brickShader) {
         this.standardShader = standardShader;
         this.bakedShader = bakedShader;
+        this.brickShader = brickShader;
     }
 
     /**
@@ -63,8 +80,9 @@ final class TranslucentShadowPass {
      * @param layout The shadow stage's pipeline layout.
      */
     void initialize(@NonNull VulkanState state, long layout) {
-        standardPipeline = createPipeline(state, standardShader, layout, false);
-        bakedPipeline = createPipeline(state, bakedShader, layout, true);
+        standardPipeline = createPipeline(state, standardShader, layout, false, false);
+        bakedPipeline = createPipeline(state, bakedShader, layout, true, false);
+        brickPipeline = createPipeline(state, brickShader, layout, false, true);
     }
 
     /**
@@ -75,8 +93,10 @@ final class TranslucentShadowPass {
     void cleanup(@NonNull VulkanState state) {
         vkDestroyPipeline(state.device.logical, standardPipeline, null);
         vkDestroyPipeline(state.device.logical, bakedPipeline, null);
+        vkDestroyPipeline(state.device.logical, brickPipeline, null);
         standardPipeline = VK_NULL_HANDLE;
         bakedPipeline = VK_NULL_HANDLE;
+        brickPipeline = VK_NULL_HANDLE;
     }
 
     /**
@@ -135,7 +155,9 @@ final class TranslucentShadowPass {
                         .layerCount(1)
                         .pColorAttachments(attachments));
 
-        if (frameData.meshSlotCount + frameData.bakedSlotCount > 0) {
+        final int bricks =
+                state.volumeBricks != null ? state.volumeBricks.shadowCount(state.frameIndex) : 0;
+        if (frameData.meshSlotCount + frameData.bakedSlotCount > 0 || bricks > 0) {
             VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
             viewports.get(0).width(size).height(size).minDepth(0).maxDepth(1);
             vkCmdSetViewport(commandBuffer, 0, viewports);
@@ -181,6 +203,27 @@ final class TranslucentShadowPass {
                                 * InstanceDrawUpdate.DRAW_COMMAND_SIZE,
                         slots,
                         InstanceDrawUpdate.DRAW_COMMAND_SIZE);
+            }
+            // Volume bricks standing in for far sections, walked along the map's direction; their
+            // list's address goes where level of detail's worlds go in the shadow stage
+            if (bricks > 0) {
+                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, brickPipeline);
+                vkCmdBindDescriptorSets(
+                        commandBuffer,
+                        VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        layout,
+                        BRICK_SET,
+                        stack.longs(state.volumeBricks.getSet()),
+                        null);
+                final ByteBuffer brickConstants = stack.calloc(Long.BYTES);
+                brickConstants.putLong(0, state.volumeBricks.shadowList(state.frameIndex));
+                vkCmdPushConstants(
+                        commandBuffer,
+                        layout,
+                        VK_SHADER_STAGE_VERTEX_BIT,
+                        ShaderBindings.Shadow.PUSH_CONSTANT_LOD_WORLDS_OFFSET,
+                        brickConstants);
+                vkCmdDraw(commandBuffer, BRICK_VERTICES, bricks, 0, 0);
             }
         }
         vkCmdEndRendering(commandBuffer);
@@ -241,17 +284,23 @@ final class TranslucentShadowPass {
 
     /**
      * Create a pipeline: the position, texture coordinates and, for baked meshes, the material of
-     * each vertex; both sides of every surface, as the transparent stage draws them; no depth; both
-     * maps blended by adding.
+     * each vertex; both sides of every surface, as the transparent stage draws them; or for volume
+     * bricks, no vertices, and their boxes' faces toward the sun, one fragment a ray. No depth;
+     * both maps blended by adding.
      *
      * @param state The Vulkan state.
      * @param shader The shader.
      * @param layout The shadow stage's pipeline layout.
      * @param baked Whether it reads baked vertices.
+     * @param brick Whether it walks volume bricks.
      * @return The VkPipeline.
      */
     private static long createPipeline(
-            @NonNull VulkanState state, @NonNull ShaderVulkan shader, long layout, boolean baked) {
+            @NonNull VulkanState state,
+            @NonNull ShaderVulkan shader,
+            long layout,
+            boolean baked,
+            boolean brick) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkVertexInputAttributeDescription.Buffer attributes =
                     VkVertexInputAttributeDescription.calloc(baked ? 3 : 2, stack);
@@ -300,6 +349,14 @@ final class TranslucentShadowPass {
                                         | VK_COLOR_COMPONENT_A_BIT);
             }
 
+            VkPipelineVertexInputStateCreateInfo vertexInput =
+                    VkPipelineVertexInputStateCreateInfo.calloc(stack).sType$Default();
+            if (!brick) {
+                vertexInput
+                        .pVertexBindingDescriptions(bindings)
+                        .pVertexAttributeDescriptions(attributes);
+            }
+
             VkGraphicsPipelineCreateInfo.Buffer info =
                     VkGraphicsPipelineCreateInfo.calloc(1, stack);
             info.get(0)
@@ -315,11 +372,7 @@ final class TranslucentShadowPass {
                                                     PipelineManagerVulkan
                                                             .TRANSLUCENT_ABSORBANCE_FORMAT)))
                     .pStages(shader.shaderStages)
-                    .pVertexInputState(
-                            VkPipelineVertexInputStateCreateInfo.calloc(stack)
-                                    .sType$Default()
-                                    .pVertexBindingDescriptions(bindings)
-                                    .pVertexAttributeDescriptions(attributes))
+                    .pVertexInputState(vertexInput)
                     .pInputAssemblyState(
                             VkPipelineInputAssemblyStateCreateInfo.calloc(stack)
                                     .sType$Default()
@@ -333,7 +386,7 @@ final class TranslucentShadowPass {
                             VkPipelineRasterizationStateCreateInfo.calloc(stack)
                                     .sType$Default()
                                     .polygonMode(VK_POLYGON_MODE_FILL)
-                                    .cullMode(VK_CULL_MODE_NONE)
+                                    .cullMode(brick ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_NONE)
                                     .frontFace(VK_FRONT_FACE_CLOCKWISE)
                                     .lineWidth(1.0f))
                     .pMultisampleState(

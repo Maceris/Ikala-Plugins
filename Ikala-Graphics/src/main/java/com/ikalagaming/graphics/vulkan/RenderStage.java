@@ -57,6 +57,7 @@ public interface RenderStage {
         SHADOW_BAKED_CUTOUT,
         TRANSLUCENT_SHADOW,
         TRANSLUCENT_SHADOW_BAKED,
+        TRANSLUCENT_SHADOW_BRICK,
         POINT_SHADOW,
         POINT_SHADOW_BAKED,
         OCCUPANCY_CLEAR,

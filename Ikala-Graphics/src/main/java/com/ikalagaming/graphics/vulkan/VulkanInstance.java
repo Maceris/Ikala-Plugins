@@ -1771,6 +1771,20 @@ public class VulkanInstance {
                             ShaderVulkan.Location.BUNDLED));
             shaderMap.addShader(type, new ShaderVulkan(translucentModules, state));
         }
+        List<ShaderVulkan.ShaderModuleData> translucentBrickModules = new ArrayList<>();
+        translucentBrickModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/shadow_brick.vert",
+                        ShaderVulkan.Type.VERTEX,
+                        ShaderVulkan.Location.BUNDLED));
+        translucentBrickModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/shadow_brick_translucent.frag",
+                        ShaderVulkan.Type.FRAGMENT,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(
+                RenderStage.Type.TRANSLUCENT_SHADOW_BRICK,
+                new ShaderVulkan(translucentBrickModules, state));
 
         List<ShaderVulkan.ShaderModuleData> pointModules = new ArrayList<>();
         pointModules.add(

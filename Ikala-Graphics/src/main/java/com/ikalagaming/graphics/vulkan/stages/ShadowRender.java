@@ -189,6 +189,7 @@ public class ShadowRender implements RenderStage {
      * @param skinnedShader The shader for skinned instances.
      * @param translucentShader The shader for standard see-through meshes' shadows.
      * @param translucentBakedShader The shader for baked see-through meshes' shadows.
+     * @param translucentBrickShader The shader for volume bricks' see-through voxels' shadows.
      */
     public ShadowRender(
             final @NonNull ShaderVulkan bakedShader,
@@ -203,8 +204,11 @@ public class ShadowRender implements RenderStage {
             final @NonNull ShaderVulkan scrollShader,
             final @NonNull ShaderVulkan skinnedShader,
             final @NonNull ShaderVulkan translucentShader,
-            final @NonNull ShaderVulkan translucentBakedShader) {
-        this.translucent = new TranslucentShadowPass(translucentShader, translucentBakedShader);
+            final @NonNull ShaderVulkan translucentBakedShader,
+            final @NonNull ShaderVulkan translucentBrickShader) {
+        this.translucent =
+                new TranslucentShadowPass(
+                        translucentShader, translucentBakedShader, translucentBrickShader);
         this.skinnedShader = skinnedShader;
         this.skinnedPipeline = VK_NULL_HANDLE;
         this.bakedShader = bakedShader;

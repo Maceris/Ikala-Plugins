@@ -276,7 +276,8 @@ public class PipelineManagerVulkan {
                         shaders.getShader(RenderStage.Type.SHADOW_SCROLL),
                         shaders.getShader(RenderStage.Type.SHADOW_SKINNED),
                         shaders.getShader(RenderStage.Type.TRANSLUCENT_SHADOW),
-                        shaders.getShader(RenderStage.Type.TRANSLUCENT_SHADOW_BAKED));
+                        shaders.getShader(RenderStage.Type.TRANSLUCENT_SHADOW_BAKED),
+                        shaders.getShader(RenderStage.Type.TRANSLUCENT_SHADOW_BRICK));
         stageShadowRender.initialize(state);
         stageLightCull = new LightCull(shaders.getShader(RenderStage.Type.LIGHT_CULL));
         stageLightCull.initialize(state);
