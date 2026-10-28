@@ -240,6 +240,15 @@ What the renderer does and the work it builds on.
   and Forward Shading*, HPG 2012).
 - Cascaded sun shadows with PCF; the middle and far cascades are kept in place in the world and
   redrawn only where something changes.
+- Colored shadows through glass and other see-through surfaces, and far glass and water voxels:
+  each cascade has translucent maps at 1024^2 of the absorbance along each texel's line toward the
+  sun, per color, and the power moments of its depths, from which the share in front of a point is
+  bounded as in moment shadow mapping (Peters and Klein 2015, the 4 moment Hamburger bound), as
+  Smolder does for volumetric shadows (Mueller, SIGGRAPH 2026). So a surface between two panes only
+  takes the one in front. A pane passes what it doesn't cover and its color of what it does, as the
+  camera sees a white light through it. Surfaces, fog, particles and the water all take it.
+  `TranslucentShadowMath` has the math in Java, with tests; `GraphicsSettings.translucentShadows`
+  turns it off.
 - Point light shadows from a light tree: nearby lights share cube maps, within a per-frame budget.
 - A top-down sky occlusion map dims ambient light under cover.
 - An occupancy volume around the camera (which voxels hold something static) for ambient
@@ -333,6 +342,9 @@ What the renderer does and the work it builds on.
   glow past it, and the fog volume fills with the water's medium per color, so things fade toward
   the water's color with distance. Glass, particles and fog behind the water are drawn before it
   and seen through it; those in front, after it.
+- Whatever is under water is lit through it, from any view: the light stage dims the sun along its
+  refracted way down by the water's extinction, and the sky's light by its diffuse fading,
+  (a + b_b) / 0.8 per meter; the surface then takes off only the view's way through the water.
 - Spray and splashes through the particles: the wave grid's step records where crests break, where
   falling water lands and where the water is disturbed, and the next frame's splash pass throws up
   the water's effects there: spray, mist and droplets (`WaterEffects`, which
@@ -405,6 +417,7 @@ These are Java system properties, given before `-jar`:
 | `-Dikala.benchmark.cracks=<views>` | `4` | With the gate, checks only the first this many views for cracks, 0 to skip them; each takes minutes at a large radius. |
 | `-Dikala.benchmark.editCracks=false` | `true` | With the gate, skips the crack check over the edits; the edits are still made and timed. A run that checks nothing reports "Cracks: not checked". |
 | `-Dikala.benchmark.coarseBricks=false` | `true` | Turns coarse volume bricks off, for comparing. |
+| `-Dikala.benchmark.translucentShadows=false` | `true` | Turns shadows through glass and other see-through surfaces off, for comparing. |
 | `-Dikala.benchmark.fog=<density>[,<falloff>,<base>,<anisotropy>]` | not set | Turns the scene's fog on with this density (per meter) and, optionally, height falloff (per meter), base height and anisotropy. |
 | `-Dikala.benchmark.haze=true` | `false` | Adds the physical sky's haze to the fog; it only shows with a physical sky (`-Dikala.benchmark.physicalSky=true`). |
 | `-Dikala.benchmark.smoke=<x>,<y>,<z>` | not set | Places test media there: a column of white smoke drifting up, a glowing orange sphere 25 m along -x and a fog bank in front. |
