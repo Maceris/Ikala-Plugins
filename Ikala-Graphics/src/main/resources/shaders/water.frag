@@ -390,7 +390,8 @@ void main() {
     vec3 sun = vec3(0.0);
     if (max(cosSun, cosSunDown) > 0.0) {
         sun = directionalLight.color * directionalLight.intensity
-            * sunVisibility(outViewPosition.xyz, outRenderPosition, up);
+            * sunVisibility(outViewPosition.xyz, outRenderPosition, up)
+            * sunTransmittance(outViewPosition.xyz, outRenderPosition, up);
     }
 
     // The sky: reflected along the mirror direction, and its average lighting the water from above

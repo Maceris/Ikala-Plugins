@@ -234,6 +234,10 @@ void main() {
     }
 
     vec3 sun = directionalLight.color * directionalLight.intensity * sunVisible;
+    // Tinted by any glass on its way, for colored shafts
+    if (sunVisible > 0.0) {
+        sun *= sunTransmittance(viewPosition, renderPosition, vec3(0.0));
+    }
     // The sky's average light, which for the skybox is the ambient light, and for the physical sky
     // follows the sun, dimmed under cover
     vec3 ambient = environmentEnabled != 0 && environmentScale.w > 0.5

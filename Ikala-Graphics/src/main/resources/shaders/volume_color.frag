@@ -199,6 +199,7 @@ void main() {
                         shadowDistance, scale);
                     float facing = max(dot(normal, renderSun), 0.0);
                     vec3 light = sun * (facing / PI) * seen.x
+                        * sunTransmittance(renderToView(hit), hit, normal)
                         + ambient * mix(skyLightFloor, 1.0, seen.y);
                     // Without a texture, the face's holes show the canopy's inside, which only
                     // the dim light under cover reaches, by how much they cover
@@ -231,6 +232,7 @@ void main() {
                 vec2 seen = visibility(slot, renderPoint, UP, inVoxels - corner,
                     renderSun, shadowDistance, scale);
                 vec3 color = voxel.rgb * (sun * SUN_SCATTER * seen.x
+                    * sunTransmittance(renderToView(renderPoint), renderPoint, UP)
                     + ambient * mix(skyLightFloor, 1.0, seen.y));
                 if ((fog.enabled & FOG_ENABLED) != 0) {
                     color = fogApply(color, gl_FragCoord.xy, -renderToView(renderPoint).z,

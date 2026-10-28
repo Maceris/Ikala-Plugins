@@ -77,6 +77,9 @@ void main() {
     }
     vec3 light = directionalLight.color * directionalLight.intensity * sunVisible
         * multipleScattering(0.5 * thickness, thickness, cosTheta, anisotropy, albedo);
+    if (sunVisible > 0.0) {
+        light *= sunTransmittance(viewPosition, renderPosition, vec3(0.0));
+    }
 
     // The sky, the same from every way, which scattering keeps as it is
     vec3 ambient = environmentEnabled != 0 && environmentScale.w > 0.5
