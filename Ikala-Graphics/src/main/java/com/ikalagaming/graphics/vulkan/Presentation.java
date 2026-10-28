@@ -10,6 +10,7 @@ import static org.lwjgl.vulkan.KHRSwapchain.*;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.GraphicsSettings;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.exceptions.RenderException;
 
@@ -471,16 +472,19 @@ public class Presentation {
     }
 
     /**
-     * How frames are presented: FIFO, v-synced and available everywhere, unless {@code
-     * -Dikala.vulkan.presentMode=mailbox} or {@code immediate} asks for a mode without waiting for
-     * the display, for measuring how fast frames really go; FIFO if the surface doesn't offer it.
+     * How frames are presented: mailbox, where a finished frame replaces one waiting and is shown
+     * at the next refresh, without tearing, so a frame a little late doesn't hold the next back a
+     * whole refresh as v-sync does; the main loop's frame cap keeps it from rendering far more
+     * frames than are shown, see {@link GraphicsSettings#targetFPS}. FIFO, v-synced and available
+     * everywhere, where the surface doesn't offer mailbox. {@code -Dikala.vulkan.presentMode=fifo}
+     * or {@code immediate} picks another.
      *
      * @param state The Vulkan state.
      * @param stack The stack to allocate on.
      * @return The VkPresentModeKHR.
      */
     private int presentMode(@NonNull VulkanState state, @NonNull MemoryStack stack) {
-        final String wanted = System.getProperty(PRESENT_MODE_PROPERTY, "fifo");
+        final String wanted = System.getProperty(PRESENT_MODE_PROPERTY, "mailbox");
         final int mode =
                 switch (wanted.trim().toLowerCase(Locale.ROOT)) {
                     case "mailbox" -> VK_PRESENT_MODE_MAILBOX_KHR;
@@ -500,7 +504,7 @@ public class Presentation {
                 return mode;
             }
         }
-        log.warn("The surface doesn't offer the {} present mode; presenting v-synced", wanted);
+        log.debug("The surface doesn't offer the {} present mode; presenting v-synced", wanted);
         return VK_PRESENT_MODE_FIFO_KHR;
     }
 }

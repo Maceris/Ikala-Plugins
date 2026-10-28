@@ -98,7 +98,6 @@ public class GraphicsPlugin extends Plugin {
     public boolean onEnable() {
         GraphicsSettings settings = GraphicsManager.getSettings();
         settings.antiAliasing = true;
-        settings.targetFPS = GraphicsManager.TARGET_FPS;
         readLodCache(settings);
         final PluginConfig config = ConfigManager.loadConfig(GraphicsPlugin.PLUGIN_NAME);
         if (config.isPresent(GUI_VIEWPORTS)) {

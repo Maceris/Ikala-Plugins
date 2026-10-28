@@ -1,6 +1,8 @@
 package com.ikalagaming.graphics;
 
+import static org.lwjgl.glfw.GLFW.glfwGetPrimaryMonitor;
 import static org.lwjgl.glfw.GLFW.glfwGetTime;
+import static org.lwjgl.glfw.GLFW.glfwGetVideoMode;
 
 import com.ikalagaming.graphics.benchmark.GateBenchmark;
 import com.ikalagaming.graphics.events.WindowCreated;
@@ -32,6 +34,7 @@ import com.ikalagaming.plugins.PluginManager;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.lwjgl.glfw.GLFWVidMode;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -82,14 +85,27 @@ public class GraphicsManager {
     /** The maximum number of frames in flight we have. */
     public static final int MAX_FRAMES_IN_FLIGHT = 2;
 
-    /** The target frames per second that we want to hit. */
+    /**
+     * The refresh rate frames are paced to when the monitor's isn't known, and the frames per
+     * second it gives.
+     */
     public static final int TARGET_FPS = 144;
+
+    /**
+     * How much faster than the monitor's refresh rate frames are rendered by default, see {@link
+     * GraphicsSettings#targetFPS}: a little, so every refresh has a new frame without rendering
+     * many that are never shown.
+     */
+    public static final double REFRESH_HEADROOM = 1.1;
 
     /** The target updates per second that we want to hit. */
     public static final int TARGET_UPS = 60;
 
-    /** The (fractional) number of seconds between frame renders at the target FPS. */
-    private static final float FRAME_TIME = 1f / TARGET_FPS;
+    /**
+     * The seconds between frames: from {@link GraphicsSettings#targetFPS}, or the monitor's refresh
+     * rate with {@link #REFRESH_HEADROOM}, worked out once the main window exists.
+     */
+    private static float frameTime = 1f / TARGET_FPS;
 
     /** How long before the next frame or update the main thread stops waiting, in seconds. */
     private static final double WAKE_EARLY = 0.0015;
@@ -238,8 +254,10 @@ public class GraphicsManager {
 
         cameraManager = new CameraManager(scene.getCamera(), GraphicsManager::getSceneWindow);
 
+        frameTime = (float) (1 / framesPerSecond(settings.targetFPS));
+        log.debug("Rendering at most {} frames a second", String.format("%.0f", 1 / frameTime));
         lastRenderTime = getTime();
-        nextRenderTime = lastRenderTime + FRAME_TIME;
+        nextRenderTime = lastRenderTime + frameTime;
 
         lastUpdateTime = getTime();
         nextUpdateTime = lastUpdateTime + UPDATE_TIME;
@@ -901,7 +919,7 @@ public class GraphicsManager {
             render();
             // Update the next time we should render a frame
             lastRenderTime = currentTime;
-            nextRenderTime = currentTime + FRAME_TIME;
+            nextRenderTime = currentTime + frameTime;
         }
 
         // Nothing is due until the next update or frame: wait for input rather than spin the main
@@ -913,7 +931,7 @@ public class GraphicsManager {
         final double due = Math.min(nextUpdateTime, nextRenderTime);
         final double idle = due - getTime() - WAKE_EARLY;
         if (idle > 0) {
-            GlfwPlatform.waitEvents(Math.min(idle, FRAME_TIME));
+            GlfwPlatform.waitEvents(Math.min(idle, frameTime));
         } else {
             while (getTime() < due) {
                 Thread.onSpinWait();
@@ -921,6 +939,29 @@ public class GraphicsManager {
         }
 
         return Launcher.STATUS_OK;
+    }
+
+    /**
+     * How many frames a second to render at most: a target above 0 as it is, else the primary
+     * monitor's refresh rate with {@link #REFRESH_HEADROOM}, or {@link #TARGET_FPS} with it if the
+     * monitor doesn't say.
+     *
+     * @param target The target frames per second, 0 or less for the monitor's.
+     * @return The frames per second.
+     */
+    static double framesPerSecond(int target) {
+        if (target > 0) {
+            return target;
+        }
+        int refresh = TARGET_FPS;
+        final long monitor = glfwGetPrimaryMonitor();
+        if (monitor != 0) {
+            final GLFWVidMode mode = glfwGetVideoMode(monitor);
+            if (mode != null && mode.refreshRate() > 0) {
+                refresh = mode.refreshRate();
+            }
+        }
+        return refresh * REFRESH_HEADROOM;
     }
 
     /** Private constructor so this class is not initialized. */

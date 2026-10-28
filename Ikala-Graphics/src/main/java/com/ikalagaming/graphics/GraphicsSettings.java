@@ -46,8 +46,11 @@ public class GraphicsSettings {
     public String guiLayoutFile = null;
 
     /**
-     * The target frames per second. If zero (or negative), this will be interpreted as requesting
-     * VSync and thus will be effectively whatever the monitor's refresh rate is.
+     * The most frames a second to render. Zero or less renders a little faster than the monitor
+     * refreshes, see {@link GraphicsManager#REFRESH_HEADROOM}, so every refresh has a new frame:
+     * frames are presented without waiting for the display where it allows, see {@link
+     * com.ikalagaming.graphics.vulkan.Presentation}, and this keeps a fast scene from rendering far
+     * more frames than are shown. Read when graphics start.
      */
     public int targetFPS = 0;
 
