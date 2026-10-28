@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.graph;
 import com.ikalagaming.graphics.scene.Projection;
 
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4d;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
@@ -43,6 +44,7 @@ import java.util.List;
  *
  * <p>Render thread only.
  */
+@Slf4j
 public class SunShadowCache {
 
     /** What of a cascade's map is drawn this frame. */
@@ -469,6 +471,7 @@ public class SunShadowCache {
                 } else {
                     pending.get(i).clear();
                     cascade.redraw = Redraw.ALL;
+                    log.debug("Sun shadow cascade {} drawn again whole", i);
                 }
             } else if (!pending.get(i).isEmpty()) {
                 cascade.redraw = Redraw.PART;

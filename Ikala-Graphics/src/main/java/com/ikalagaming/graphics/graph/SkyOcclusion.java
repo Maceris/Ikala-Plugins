@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.graph;
 
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4d;
 import org.joml.Matrix4f;
 import org.joml.Vector3d;
@@ -20,6 +21,7 @@ import org.joml.Vector3dc;
  *
  * <p>Render thread only.
  */
+@Slf4j
 public class SkyOcclusion {
 
     /** The width and height of the map, in texels. */
@@ -113,6 +115,7 @@ public class SkyOcclusion {
             SunShadowCache.clear(dirty);
             view.redraw = SunShadowCache.Redraw.ALL;
             fullRedraws += 1;
+            log.debug("Sky occlusion map drawn again whole, moved to {}", placement.center);
             texelsRedrawn += (long) MAP_SIZE * MAP_SIZE;
         } else if (dirty[2] > dirty[0] && dirty[3] > dirty[1]) {
             view.redraw = SunShadowCache.Redraw.PART;
