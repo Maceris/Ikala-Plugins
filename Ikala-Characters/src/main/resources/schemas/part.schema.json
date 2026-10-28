@@ -14,6 +14,57 @@
     }
   ],
   "$defs": {
+    "FxUse": {
+      "type": "object",
+      "description": "An effect placed on a character: which effect, the bone or socket it follows, and tuning.",
+      "properties": {
+        "fx": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "The effect, like \"ikala:fx/hand_flame\"."
+        },
+        "bone": {
+          "type": "string",
+          "description": "The bone it follows, like \"hand.R\". Give a bone or a socket."
+        },
+        "socket": {
+          "type": "string",
+          "description": "The socket it follows, like \"head_top\". Give a bone or a socket."
+        },
+        "offset": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "Its offset from the bone or socket, in meters, in the bone's space, up to 1.27 each way."
+        },
+        "color": {
+          "type": "string",
+          "description": "The palette channel that tints it, like \"accent\". Left out, it keeps the effect's own colors."
+        },
+        "scale": {
+          "type": "number",
+          "description": "Its size and speed, times the effect's, above 0 and up to 4.",
+          "default": 1
+        },
+        "rate": {
+          "type": "number",
+          "description": "How many particles it spawns, times the effect's, 0 to 4.",
+          "default": 1
+        },
+        "intensity": {
+          "type": "number",
+          "description": "How brightly it glows, times the effect's, 0 to 4.",
+          "default": 1
+        }
+      },
+      "required": [
+        "fx"
+      ],
+      "additionalProperties": false
+    },
     "MaterialSlot": {
       "type": "object",
       "description": "One of the mesh's materials.",
@@ -148,6 +199,13 @@
             "$ref": "#/$defs/SocketMove"
           },
           "description": "Sockets this moves, for stumps and missing limbs, so held items still have somewhere to go."
+        },
+        "fx": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FxUse"
+          },
+          "description": "Effects it carries, like sparks on a robot arm, gone when it is swapped."
         },
         "extends": {
           "type": "string",

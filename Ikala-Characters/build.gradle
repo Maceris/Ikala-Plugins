@@ -69,6 +69,8 @@ dependencies {
 
 	// Testing
 	testImplementation project(':Ikala-Core')
+	// For effects' tuning, which works on graphics particle effects
+	testImplementation project(':Ikala-Graphics')
 	testImplementation project(':Random')
 	testImplementation "com.google.code.gson:gson:${gsonVersion}"
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"

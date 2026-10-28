@@ -6,7 +6,9 @@ asset editor's test content (see tools/blender). This reads their meshes and wri
     part/mannequin.json   a body part per mannequin mesh, one per biped slot
     part/rpg_human.json   the RPG body, heads, hands and feet as body parts, and hair, armor,
                           boots, gloves and helmets as layers, male and female meshes together
-    design/test.json      a mannequin, an RPG man and an RPG woman
+    design/test.json      a mannequin, an RPG man with a hand flame and an RPG woman with an aura
+    effects/*.effect.yml  graphics particle effects: a flame, motes, sparks and embers
+    fx/test.json          an effect definition for each
 
 all in the "test" namespace. Load them in the editor by listing the folder in Ikala-Characters'
 config, as test=<folder>. Mesh paths are relative to the folder, as file.glb#mesh name.
@@ -128,8 +130,98 @@ def rpg_parts(root):
     return parts
 
 
+# Graphics particle effects, in Ikala-Graphics' YAML format (see ParticleEffectLoader), small
+# enough to sit on a character. Unlit and glowing, so they read against any lighting. The
+# flame takes on half the hand's speed, and the motes go along with the character.
+EFFECTS = {
+    "flame": """rate: 60
+lifetime: [0.3, 0.6]
+speed: [0.3, 0.6]
+direction: [0, 1, 0]
+spread: 20
+spawnRadius: 0.03
+acceleration: [0, 1.5, 0]
+inheritVelocity: 0.5
+size: [0.08, 0.02]
+color:
+  start: [1, 0.55, 0.2, 1]
+  end: [1, 0.15, 0.02, 0]
+emissive: 4
+lit: false
+""",
+    "motes": """rate: 25
+lifetime: [1.5, 2.5]
+speed: [0.1, 0.3]
+direction: [0, 1, 0]
+spread: 60
+spawnRadius: 0.5
+drag: 0.5
+follow: 1
+size: [0.03, 0.01]
+color:
+  start: [0.6, 0.8, 1, 0.9]
+  end: [0.6, 0.8, 1, 0]
+emissive: 3
+lit: false
+""",
+    "sparks": """rate: 30
+lifetime: [0.2, 0.5]
+speed: [1, 2.5]
+direction: [0, 1, 0]
+spread: 70
+acceleration: [0, -9.81, 0]
+size: [0.02, 0.01]
+color:
+  start: [1, 0.8, 0.4, 1]
+  end: [1, 0.3, 0.05, 0]
+emissive: 6
+lit: false
+collision: bounce
+""",
+    "embers": """rate: 15
+lifetime: [1, 2]
+speed: [0.2, 0.5]
+direction: [0, 1, 0]
+spread: 40
+acceleration: [0, 0.4, 0]
+drag: 0.3
+size: [0.03, 0.01]
+color:
+  start: [1, 0.5, 0.15, 1]
+  end: [0.8, 0.1, 0, 0]
+emissive: 3
+lit: false
+""",
+}
+
+# Effect definitions' tags, by effect
+EFFECT_TAGS = {"flame": ["hand"], "motes": ["aura"], "sparks": ["part"], "embers": ["aura"]}
+
+
+def fx_definitions():
+    """An effect definition for each particle effect."""
+    return [
+        {
+            "id": f"{NAMESPACE}:fx/{name}",
+            "effect": f"effects/{name}.effect.yml",
+            "tags": EFFECT_TAGS[name],
+        }
+        for name in EFFECTS
+    ]
+
+
+def write_effects(root):
+    """Write the particle effect files."""
+    for name, text in EFFECTS.items():
+        path = root / "effects" / f"{name}.effect.yml"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        header = "# Written by Ikala-Characters/tools/test_content/make_definitions.py\n"
+        path.write_text(header + text, encoding="utf8")
+        print("wrote", path)
+
+
 def designs():
-    """A mannequin, an RPG man and an RPG woman."""
+    """A mannequin, an RPG man with a hand flame and an RPG woman with an aura."""
     mannequin_slots = ["head", "torso", "pelvis", "upperArm.L", "upperArm.R", "lowerArm.L",
                        "lowerArm.R", "hand.L", "hand.R", "upperLeg.L", "upperLeg.R",
                        "lowerLeg.L", "lowerLeg.R", "foot.L", "foot.R"]
@@ -153,6 +245,7 @@ def designs():
             "variant": "male",
             "parts": rpg,
             "layers": {"hair": f"{NAMESPACE}:part/rpg/hair_1"},
+            "fx": [{"fx": f"{NAMESPACE}:fx/flame", "bone": "hand.R", "offset": [0, 0.08, 0]}],
         },
         {
             "id": f"{NAMESPACE}:design/rpg_female",
@@ -160,6 +253,7 @@ def designs():
             "variant": "female",
             "parts": rpg,
             "layers": {"hair": f"{NAMESPACE}:part/rpg/hair_1"},
+            "fx": [{"fx": f"{NAMESPACE}:fx/motes", "socket": "aura_center", "color": "primary"}],
         },
     ]
 
@@ -179,6 +273,8 @@ def main():
     write(root / "part" / "mannequin.json", mannequin_parts(root), "The mannequin's parts")
     write(root / "part" / "rpg_human.json", rpg_parts(root), "The modular RPG characters' parts")
     write(root / "design" / "test.json", designs(), "Designs made of the test parts")
+    write(root / "fx" / "test.json", fx_definitions(), "Effects for the test characters")
+    write_effects(root)
 
 
 if __name__ == "__main__":

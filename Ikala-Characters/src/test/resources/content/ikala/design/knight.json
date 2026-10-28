@@ -1,4 +1,5 @@
-// A test design: a male biped in an iron helmet with a stump right arm, a little taller than usual.
+// A test design: a male biped in an iron helmet with a stump right arm, a little taller than usual,
+// with embers rising from his back.
 {
   "id": "ikala:design/knight",
   "plan": "ikala:biped",
@@ -7,5 +8,6 @@
   "parts": { "lowerArm.R": "ikala:part/biped/forearm_stump" },
   "layers": { "helmet": "ikala:part/biped/helmet_iron" },
   "palette": "ikala:palette/hero_blue",
-  "colors": { "primary": "#3355aa", "skin": "#c58c62" }
+  "colors": { "primary": "#3355aa", "skin": "#c58c62" },
+  "fx": [ { "fx": "ikala:fx/embers", "socket": "back", "offset": [0, 0.15, -0.1], "color": "primary", "scale": 1.5 } ]
 }

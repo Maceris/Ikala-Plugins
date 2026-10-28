@@ -3,6 +3,7 @@ package com.ikalagaming.characters.editor;
 import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.data.Range;
 import com.ikalagaming.characters.definition.BodyPlan;
+import com.ikalagaming.characters.definition.FxUse;
 import com.ikalagaming.characters.definition.Palette;
 import com.ikalagaming.characters.definition.Slider;
 import com.ikalagaming.characters.view.PartSlots;
@@ -13,6 +14,7 @@ import lombok.NonNull;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -49,9 +51,14 @@ final class CharacterLook {
      * @param values Each slider's values, by ID.
      * @param variant Which variant of the body plan, or -1 for none.
      * @param colors Each palette channel's color code, for the channels colored.
+     * @param fx The effects the design wears.
      */
     record Snapshot(
-            int[] choices, Map<Id, float[]> values, int variant, Map<String, Integer> colors) {}
+            int[] choices,
+            Map<Id, float[]> values,
+            int variant,
+            Map<String, Integer> colors,
+            List<FxUse> fx) {}
 
     /** The slots. */
     private final PartSlots slots;
@@ -79,6 +86,9 @@ final class CharacterLook {
 
     /** Each palette channel's color code; channels left out keep the parts' own colors. */
     private final Map<String, Integer> colors = new LinkedHashMap<>();
+
+    /** The effects the design wears, on top of its parts' own. */
+    private final List<FxUse> fx = new ArrayList<>();
 
     /** Earlier looks, the latest first. */
     private final Deque<Snapshot> history = new ArrayDeque<>();
@@ -173,11 +183,13 @@ final class CharacterLook {
      * @param variantIndex The variant's position in {@link #variants()}, or -1 for the first.
      * @param startValues Slider values by ID; sliders left out start where the variant says.
      * @param startColors Color codes by palette channel.
+     * @param startFx The effects the design wears.
      */
     void start(
             int variantIndex,
             @NonNull Map<Id, float[]> startValues,
-            @NonNull Map<String, Integer> startColors) {
+            @NonNull Map<String, Integer> startColors,
+            @NonNull List<FxUse> startFx) {
         if (!variants.isEmpty()) {
             variant = variantIndex < 0 ? 0 : variantIndex;
             startSliders();
@@ -191,6 +203,8 @@ final class CharacterLook {
                 });
         colors.clear();
         colors.putAll(startColors);
+        fx.clear();
+        fx.addAll(startFx);
         history.clear();
         ++version;
     }
@@ -283,6 +297,66 @@ final class CharacterLook {
             colors.remove(channel);
         } else {
             colors.put(channel, code);
+        }
+        ++version;
+    }
+
+    /**
+     * The effects the design wears.
+     *
+     * @return The effects, which can't be changed here.
+     */
+    List<FxUse> fx() {
+        return Collections.unmodifiableList(fx);
+    }
+
+    /**
+     * Add an effect, remembering the look before to undo.
+     *
+     * @param use The effect.
+     */
+    void addFx(@NonNull FxUse use) {
+        remember();
+        fx.add(use);
+        ++version;
+    }
+
+    /**
+     * Change or remove an effect, remembering the look before to undo.
+     *
+     * @param index The effect's position.
+     * @param use The new effect, or null to remove it.
+     */
+    void setFx(int index, FxUse use) {
+        if (Objects.equals(fx.get(index), use)) {
+            return;
+        }
+        remember();
+        putFx(index, use);
+    }
+
+    /**
+     * Change an effect without remembering the look before, for a drag that remembered it when it
+     * started; see {@link #push}.
+     *
+     * @param index The effect's position.
+     * @param use The new effect.
+     */
+    void dragFx(int index, @NonNull FxUse use) {
+        putFx(index, use);
+    }
+
+    /**
+     * Change or remove an effect.
+     *
+     * @param index The effect's position.
+     * @param use The new effect, or null to remove it.
+     */
+    private void putFx(int index, FxUse use) {
+        if (use == null) {
+            fx.remove(index);
+        } else {
+            fx.set(index, use);
         }
         ++version;
     }
@@ -498,7 +572,8 @@ final class CharacterLook {
     Snapshot snapshot() {
         Map<Id, float[]> copied = new LinkedHashMap<>();
         values.forEach((id, value) -> copied.put(id, value.clone()));
-        return new Snapshot(choices.clone(), copied, variant, new LinkedHashMap<>(colors));
+        return new Snapshot(
+                choices.clone(), copied, variant, new LinkedHashMap<>(colors), List.copyOf(fx));
     }
 
     /** Remember the look now, to undo the next change. */
@@ -542,6 +617,8 @@ final class CharacterLook {
         variant = last.variant();
         colors.clear();
         colors.putAll(last.colors());
+        fx.clear();
+        fx.addAll(last.fx());
         ++version;
         return true;
     }
@@ -593,6 +670,7 @@ final class CharacterLook {
             PartSlots.Slot slot = slots.slots().get(i);
             choices[i] = slot.optional() ? EMPTY : slot.initial();
         }
+        fx.clear();
         ++version;
     }
 

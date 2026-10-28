@@ -31,6 +31,7 @@ import java.util.Set;
  * @param hidesRegions Mask regions of the body it hides.
  * @param hidesLayers Layers it hides.
  * @param sockets Sockets it moves.
+ * @param fx Effects it carries, gone when it is swapped.
  * @author Ches Burks
  */
 @Doc(
@@ -73,7 +74,9 @@ public record Part(
                         "Sockets this moves, for stumps and missing limbs, so held items still"
                                 + " have somewhere to go.")
                 @Optional
-                Map<String, SocketMove> sockets)
+                Map<String, SocketMove> sockets,
+        @Doc("Effects it carries, like sparks on a robot arm, gone when it is swapped.") @Optional
+                List<FxUse> fx)
         implements Definition {
 
     /** The field for the plan. */
@@ -111,6 +114,9 @@ public record Part(
 
     /** The field for moved sockets. */
     public static final String FIELD_SOCKETS = "sockets";
+
+    /** The field for the effects. */
+    public static final String FIELD_FX = "fx";
 
     /** The tint mask channels a material slot maps to palette channels. */
     public static final Set<String> MASK_CHANNELS = Set.of("r", "g", "b", "a");
@@ -249,6 +255,15 @@ public record Part(
                 });
         checkRelated(checks, conflicts, FIELD_CONFLICTS);
         checkRelated(checks, requires, FIELD_REQUIRES);
+        for (int i = 0; i < fx.size(); ++i) {
+            fx.get(i)
+                    .check(
+                            body,
+                            rig,
+                            (effect, path) -> checks.require(Fx.class, effect, path),
+                            checks,
+                            JsonPath.at(FIELD_FX, i));
+        }
     }
 
     /**

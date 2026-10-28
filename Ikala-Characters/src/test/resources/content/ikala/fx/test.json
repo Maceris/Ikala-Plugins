@@ -1,0 +1,4 @@
+[
+  { "id": "ikala:fx/sparks", "effect": "effects/sparks.effect.yml", "tags": ["part"] },
+  { "id": "ikala:fx/embers", "effect": "effects/embers.effect.yml", "tags": ["aura"] }
+]

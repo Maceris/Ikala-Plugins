@@ -36,6 +36,7 @@ import java.util.function.Function;
  * @param layers Layer parts by layer.
  * @param palette A palette whose colors fill channels without their own.
  * @param colors Colors by palette channel.
+ * @param fx Effects the design wears, on top of its parts' own.
  * @author Ches Burks
  */
 @Doc(
@@ -61,7 +62,9 @@ public record Design(
         @Doc("A palette whose colors fill channels the design doesn't color itself.") @Optional
                 Id palette,
         @Doc("Colors by palette channel, like {\"skin\": \"#c58c62\"}.") @Optional
-                Map<String, Color> colors)
+                Map<String, Color> colors,
+        @Doc("Effects it wears, like an aura, on top of its parts' own. Up to 4.") @Optional
+                List<FxUse> fx)
         implements Definition {
 
     /** The field for the plan. */
@@ -84,6 +87,12 @@ public record Design(
 
     /** The field for the colors. */
     public static final String FIELD_COLORS = "colors";
+
+    /** The field for the effects. */
+    public static final String FIELD_FX = "fx";
+
+    /** The most effects a design wears itself, so crowds stay within the scene's emitters. */
+    public static final int MAX_FX = 4;
 
     /** Finds the definitions a design refers to. */
     private interface Lookup {
@@ -221,6 +230,23 @@ public record Design(
                         JsonPath.field(colorsPath, channel),
                         "The plan has no palette channel '" + channel + "'");
             }
+        }
+        if (fx.size() > MAX_FX) {
+            report.error(JsonPath.at(FIELD_FX), "A design wears up to " + MAX_FX + " effects");
+        }
+        Rig rig =
+                lookup.all(Rig.class).stream()
+                        .filter(r -> r.id().equals(body.rig()))
+                        .findFirst()
+                        .orElse(null);
+        for (int i = 0; i < fx.size(); ++i) {
+            fx.get(i)
+                    .check(
+                            body,
+                            rig,
+                            (effect, path) -> lookup.find(Fx.class, effect, path),
+                            report,
+                            JsonPath.at(FIELD_FX, i));
         }
     }
 

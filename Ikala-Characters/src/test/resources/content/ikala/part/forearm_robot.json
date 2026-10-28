@@ -6,5 +6,6 @@
   "mirror": true,
   "meshes": { "male": "robot/forearm_m", "*": "robot/forearm_n" },
   "materialSlots": [ { "name": "plating", "template": "ikala:mat/metal", "channels": { "r": "primary", "g": "secondary" } } ],
-  "tags": ["robot", "scifi"]
+  "tags": ["robot", "scifi"],
+  "fx": [ { "fx": "ikala:fx/sparks", "bone": "forearm.L", "offset": [0, 0.1, 0], "color": "secondary", "rate": 0.5 } ]
 }

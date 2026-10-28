@@ -26,6 +26,8 @@ public enum Kind {
     PALETTE(Palette.class),
     /** Mappings from another skeleton's bones onto a rig. */
     RIG_MAP(RigMap.class),
+    /** Effects characters wear, which name graphics particle effects. */
+    FX(Fx.class),
     /** Saved characters. */
     DESIGN(Design.class);
 

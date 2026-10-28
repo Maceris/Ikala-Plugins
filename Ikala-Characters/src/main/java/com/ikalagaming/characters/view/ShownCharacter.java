@@ -110,6 +110,15 @@ public final class ShownCharacter implements AutoCloseable {
     /** Whether this was closed. */
     private boolean closed;
 
+    /** Where its root stands. */
+    private final Vector3d position;
+
+    /** Which way it faces. */
+    private final Quaternionf facing;
+
+    /** Its effects, moved with it each pose, or null for none. */
+    private volatile CharacterFx fx;
+
     /**
      * Load a character and place it, standing at rest until a clip is played.
      *
@@ -152,6 +161,8 @@ public final class ShownCharacter implements AutoCloseable {
             @NonNull Collection<Integer> shown) {
         this.plugin = plugin;
         this.character = character;
+        this.position = new Vector3d(position);
+        this.facing = new Quaternionf(facing);
         skeleton = character.skeleton();
         proportions = Proportions.neutral(skeleton);
         var graphics = GraphicsManager.forPlugin(plugin);
@@ -350,6 +361,20 @@ public final class ShownCharacter implements AutoCloseable {
         proportions = newProportions;
     }
 
+    /**
+     * Give it effects, which follow its bones from the next pose on. Its earlier effects are
+     * stopped.
+     *
+     * @param newFx The effects, or null for none.
+     */
+    public void setFx(CharacterFx newFx) {
+        CharacterFx old = fx;
+        fx = newFx;
+        if (old != null && old != newFx) {
+            old.close();
+        }
+    }
+
     /** Poses the character on the timer's thread, which alone touches the pose and solver. */
     private final class Updater implements Runnable {
         /** The skins API. */
@@ -417,6 +442,10 @@ public final class ShownCharacter implements AutoCloseable {
                 min.sub(BOUNDS_MARGIN, BOUNDS_MARGIN, BOUNDS_MARGIN);
                 max.add(BOUNDS_MARGIN, BOUNDS_MARGIN, BOUNDS_MARGIN);
                 skins.setPose(instance, palette, 0, min, max);
+                final CharacterFx effects = fx;
+                if (effects != null) {
+                    effects.update(solver, position, facing);
+                }
             } catch (RuntimeException e) {
                 log.warn("The shown character {} stopped updating", character.name(), e);
                 throw e;
@@ -489,6 +518,7 @@ public final class ShownCharacter implements AutoCloseable {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+        setFx(null);
         var graphics = GraphicsManager.forPlugin(plugin);
         if (graphics.isClosed()) {
             return;

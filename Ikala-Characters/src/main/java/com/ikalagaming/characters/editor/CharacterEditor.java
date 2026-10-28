@@ -8,7 +8,10 @@ import com.ikalagaming.characters.data.Problem;
 import com.ikalagaming.characters.data.Range;
 import com.ikalagaming.characters.definition.BodyPlan;
 import com.ikalagaming.characters.definition.Design;
+import com.ikalagaming.characters.definition.Fx;
+import com.ikalagaming.characters.definition.FxUse;
 import com.ikalagaming.characters.definition.Part;
+import com.ikalagaming.characters.definition.Rig;
 import com.ikalagaming.characters.definition.Slider;
 import com.ikalagaming.characters.demo.CharacterPreview;
 import com.ikalagaming.characters.design.DesignCodec;
@@ -18,6 +21,8 @@ import com.ikalagaming.characters.pose.PoseSolver;
 import com.ikalagaming.characters.pose.Proportions;
 import com.ikalagaming.characters.pose.Skeleton;
 import com.ikalagaming.characters.registry.CharacterRegistry;
+import com.ikalagaming.characters.view.CharacterFx;
+import com.ikalagaming.characters.view.FxEffects;
 import com.ikalagaming.characters.view.PartAssembler;
 import com.ikalagaming.characters.view.PartCategories;
 import com.ikalagaming.characters.view.PartRegions;
@@ -87,10 +92,10 @@ import java.util.function.Supplier;
  * glides to frame the open one. Each slot's dropdown puts the hovered choice on the character while
  * it is open, as a preview; clicking keeps it.
  *
- * <p>For now the characters are glTF files listed in the plugin's config, put on the loaded rigs as
- * {@link CharacterFiles#readAny} does, and parts are sorted into slots by name with {@link
- * PartSlots} and into regions by height with {@link PartCategories}. Render thread only, apart from
- * loading characters.
+ * <p>The editor works from the loaded designs: each is built out of its parts' meshes by {@link
+ * PartAssembler}, its plan's slots and layers become the panel's slots, and saving writes the
+ * current look as a design into the content folder the plugin's config names. Slots are sorted into
+ * regions by height with {@link PartCategories}. Render thread only, apart from loading characters.
  *
  * @author Ches Burks
  */
@@ -244,6 +249,9 @@ public final class CharacterEditor {
 
     /** How many characters the save name holds. */
     private static final int SAVE_NAME_CAPACITY = 64;
+
+    /** The smallest effect scale offered, as effects can't be scaled to nothing. */
+    private static final float MIN_FX_SCALE = 1 / DesignCodec.FACTOR_STEPS;
 
     /** Room left beside the save name for its button, in pixels. */
     private static final float SAVE_BUTTON_WIDTH = 60;
@@ -460,6 +468,12 @@ public final class CharacterEditor {
     /** What the last save did, shown under the name. */
     private String saveStatus = "";
 
+    /** The particle effects characters wear, loaded while the editor is open. */
+    private FxEffects fxEffects;
+
+    /** What the shown effects were built from, to tell when to build them again. */
+    private List<Object> shownFx = List.of();
+
     /** The character shown, or null while loading or if it failed. */
     private ShownCharacter shown;
 
@@ -584,6 +598,9 @@ public final class CharacterEditor {
         }
         back = goBack;
         current = settings.get();
+        fxEffects = new FxEffects(plugin);
+        // Effect files follow their edits while the editor is open
+        graphics.particles().setHotReload(true);
         stage.enter();
         Scene scene = GraphicsManager.getScene();
         orbit.look(
@@ -704,7 +721,8 @@ public final class CharacterEditor {
         look.start(
                 plan.variants().indexOf(plan.variant(design.variant())),
                 sliderValues(design),
-                colorCodes(design));
+                colorCodes(design),
+                design.fx());
         beforeEditVersion = -1;
         editing = false;
         lastWorn = look.worn(CharacterLook.NO_PREVIEW, 0);
@@ -720,6 +738,7 @@ public final class CharacterEditor {
                         lastWorn);
         shown.setHiddenRegions(regions.hidden(lastWorn));
         shownColorVersion = -1;
+        shownFx = List.of();
         characterName.set(design.id().toString());
         String path = design.id().path();
         saveName.set(path.substring(path.lastIndexOf('/') + 1));
@@ -818,7 +837,16 @@ public final class CharacterEditor {
                 colors.put(channel, ColorCode.toColor(code));
             }
         }
-        return new Design(id, plan.id(), variant, sliders, parts, layers, null, colors);
+        return new Design(
+                id,
+                plan.id(),
+                variant,
+                sliders,
+                parts,
+                layers,
+                null,
+                colors,
+                List.copyOf(look.fx()));
     }
 
     /**
@@ -1314,8 +1342,13 @@ public final class CharacterEditor {
                 hovered = drawColors();
                 IkGui.endTabItem();
             }
+            if (IkGui.beginTabItem("Effects")) {
+                drawEffects();
+                IkGui.endTabItem();
+            }
             IkGui.endTabBar();
         }
+        showFx();
         if (editing && !IkGui.isAnyItemActive()) {
             editing = false;
         }
@@ -1357,6 +1390,218 @@ public final class CharacterEditor {
             look.touch();
             applySliders();
         }
+    }
+
+    /**
+     * Draw the Effects tab: each effect the design wears, with what it is, where it goes, its color
+     * and its tuning, and a button to add another, up to {@link Design#MAX_FX}.
+     */
+    private void drawEffects() {
+        List<Fx> all = registry.get().all(Fx.class);
+        if (all.isEmpty()) {
+            IkGui.textDisabled("No effects loaded");
+            return;
+        }
+        List<FxUse> uses = look.fx();
+        for (int i = 0; i < uses.size(); ++i) {
+            IkGui.pushID(i);
+            IkGui.separatorText("Effect " + (i + 1));
+            drawEffect(i, uses.get(i), all);
+            IkGui.popID();
+        }
+        IkGui.spacing();
+        if (uses.size() < Design.MAX_FX && IkGui.button("Add effect")) {
+            String socket = plan.sockets().isEmpty() ? null : plan.sockets().get(0).id();
+            String bone = socket == null ? prepared.character().rig().bones().get(0).name() : null;
+            changeLook(
+                    changed ->
+                            changed.addFx(
+                                    new FxUse(all.get(0).id(), bone, socket, null, null, 1, 1, 1)));
+        }
+        if (uses.size() >= Design.MAX_FX) {
+            IkGui.textDisabled("A design wears up to " + Design.MAX_FX + " effects");
+        }
+    }
+
+    /**
+     * Draw one effect's rows.
+     *
+     * @param index Its position.
+     * @param use The effect.
+     * @param all The loaded effects.
+     */
+    private void drawEffect(int index, FxUse use, List<Fx> all) {
+        if (IkGui.beginCombo("Effect##fx", Prepared.label(use.fx()))) {
+            for (Fx fx : all) {
+                if (IkGui.selectable(
+                        Prepared.label(fx.id()) + "##" + fx.id(), fx.id().equals(use.fx()))) {
+                    changeLook(changed -> changed.setFx(index, withFx(use, fx.id())));
+                }
+            }
+            IkGui.endCombo();
+        }
+        String place = use.socket() != null ? use.socket() : use.bone();
+        if (IkGui.beginCombo("On##place", place)) {
+            for (BodyPlan.Socket socket : plan.sockets()) {
+                if (IkGui.selectable(
+                        socket.id() + "##socket-" + socket.id(),
+                        socket.id().equals(use.socket()))) {
+                    changeLook(changed -> changed.setFx(index, onPlace(use, null, socket.id())));
+                }
+            }
+            IkGui.separator();
+            for (Rig.Bone bone : prepared.character().rig().bones()) {
+                if (bone.kind() != Rig.BoneKind.DEFORM) {
+                    continue;
+                }
+                if (IkGui.selectable(
+                        bone.name() + "##bone-" + bone.name(), bone.name().equals(use.bone()))) {
+                    changeLook(changed -> changed.setFx(index, onPlace(use, bone.name(), null)));
+                }
+            }
+            IkGui.endCombo();
+        }
+        String color = use.color() == null ? "its own" : use.color();
+        if (IkGui.beginCombo("Color##color", color)) {
+            if (IkGui.selectable("its own##own", use.color() == null)) {
+                changeLook(changed -> changed.setFx(index, colored(use, null)));
+            }
+            for (String channel : plan.allChannels()) {
+                if (IkGui.selectable(channel + "##" + channel, channel.equals(use.color()))) {
+                    changeLook(changed -> changed.setFx(index, colored(use, channel)));
+                }
+            }
+            IkGui.endCombo();
+        }
+        float[] scale = {use.scale()};
+        float[] rate = {use.rate()};
+        float[] intensity = {use.intensity()};
+        boolean changed =
+                IkGui.sliderFloat("Scale##scale", scale, MIN_FX_SCALE, FxUse.FACTORS.max());
+        changed |= IkGui.sliderFloat("Rate##rate", rate, 0, FxUse.FACTORS.max());
+        changed |= IkGui.sliderFloat("Glow##intensity", intensity, 0, FxUse.FACTORS.max());
+        if (changed) {
+            startEdit();
+            look.dragFx(
+                    index,
+                    new FxUse(
+                            use.fx(),
+                            use.bone(),
+                            use.socket(),
+                            use.offset(),
+                            use.color(),
+                            Math.max(MIN_FX_SCALE, DesignCodec.snapFactor(scale[0])),
+                            DesignCodec.snapFactor(rate[0]),
+                            DesignCodec.snapFactor(intensity[0])));
+        }
+        if (IkGui.button("Remove")) {
+            changeLook(changed2 -> changed2.setFx(index, null));
+        }
+    }
+
+    /**
+     * An effect with another effect definition.
+     *
+     * @param use The effect.
+     * @param fx The new definition.
+     * @return The changed effect.
+     */
+    private static FxUse withFx(FxUse use, Id fx) {
+        return new FxUse(
+                fx,
+                use.bone(),
+                use.socket(),
+                use.offset(),
+                use.color(),
+                use.scale(),
+                use.rate(),
+                use.intensity());
+    }
+
+    /**
+     * An effect on another bone or socket, without its offset.
+     *
+     * @param use The effect.
+     * @param bone The bone, or null.
+     * @param socket The socket, or null.
+     * @return The changed effect.
+     */
+    private static FxUse onPlace(FxUse use, String bone, String socket) {
+        return new FxUse(
+                use.fx(),
+                bone,
+                socket,
+                null,
+                use.color(),
+                use.scale(),
+                use.rate(),
+                use.intensity());
+    }
+
+    /**
+     * An effect with another color.
+     *
+     * @param use The effect.
+     * @param channel The palette channel, or null for the effect's own colors.
+     * @return The changed effect.
+     */
+    private static FxUse colored(FxUse use, String channel) {
+        return new FxUse(
+                use.fx(),
+                use.bone(),
+                use.socket(),
+                use.offset(),
+                channel,
+                use.scale(),
+                use.rate(),
+                use.intensity());
+    }
+
+    /**
+     * Put the effects of the worn parts and the design on the character, if they or the colors
+     * changed since they were last put on.
+     */
+    private void showFx() {
+        if (shown == null || look == null || fxEffects == null) {
+            return;
+        }
+        List<Part> worn = new ArrayList<>();
+        List<FxUse> uses = new ArrayList<>();
+        for (int s = 0; s < look.slots().slots().size(); ++s) {
+            int choice = look.choice(s);
+            if (choice == CharacterLook.EMPTY) {
+                continue;
+            }
+            Part part = registry.get().get(Part.class, prepared.optionIds().get(s).get(choice));
+            if (part != null) {
+                worn.add(part);
+                uses.addAll(part.fx());
+            }
+        }
+        uses.addAll(look.fx());
+        Map<String, Color> colors = new HashMap<>();
+        for (String channel : plan.allChannels()) {
+            Integer code = look.color(channel);
+            if (code != null) {
+                colors.put(channel, ColorCode.toColor(code));
+            }
+        }
+        List<Object> key = List.of(uses, colors);
+        if (key.equals(shownFx)) {
+            return;
+        }
+        shownFx = key;
+        shown.setFx(
+                uses.isEmpty()
+                        ? null
+                        : new CharacterFx(
+                                uses,
+                                worn,
+                                plan,
+                                shown.getSkeleton(),
+                                colors,
+                                registry.get(),
+                                fxEffects));
     }
 
     /**
@@ -1628,6 +1873,10 @@ public final class CharacterEditor {
         look = null;
         prepared = null;
         readFiles.clear();
+        shownFx = List.of();
+        graphics.particles().setHotReload(false);
+        fxEffects.close();
+        fxEffects = null;
         regions = null;
         categories = null;
         openCategory = -1;

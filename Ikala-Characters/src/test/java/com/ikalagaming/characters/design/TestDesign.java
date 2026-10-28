@@ -4,8 +4,10 @@ import com.ikalagaming.characters.data.Color;
 import com.ikalagaming.characters.data.ColorCode;
 import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.data.Problem;
+import com.ikalagaming.characters.data.Vec3;
 import com.ikalagaming.characters.definition.BodyPlan;
 import com.ikalagaming.characters.definition.Design;
+import com.ikalagaming.characters.definition.FxUse;
 import com.ikalagaming.characters.definition.Part;
 import com.ikalagaming.characters.definition.Slider;
 import com.ikalagaming.characters.registry.CharacterLoader;
@@ -31,6 +33,9 @@ import java.util.stream.Collectors;
 class TestDesign {
     /** The test knight's ID. */
     private static final Id KNIGHT = Id.parse("ikala:design/knight");
+
+    /** The sparks effect's ID. */
+    private static final Id SPARKS = Id.parse("ikala:fx/sparks");
 
     /** The height slider's ID. */
     private static final String HEIGHT = "ikala:slider/biped/height";
@@ -76,7 +81,41 @@ class TestDesign {
                 parts,
                 layers,
                 null,
-                colors);
+                colors,
+                List.of());
+    }
+
+    /**
+     * A design wearing effects and nothing else.
+     *
+     * @param fx The effects.
+     * @return The design.
+     */
+    private static Design wearing(FxUse... fx) {
+        return new Design(
+                Id.parse("ikala:design/test"),
+                Id.parse("ikala:biped"),
+                "male",
+                Map.of(),
+                Map.of(),
+                Map.of(),
+                null,
+                Map.of(),
+                List.of(fx));
+    }
+
+    /**
+     * Sparks with a bone, a socket and tuning.
+     *
+     * @param bone The bone, or null.
+     * @param socket The socket, or null.
+     * @param color The palette channel, or null.
+     * @param scale The scale.
+     * @param rate The rate.
+     * @return The effect.
+     */
+    private static FxUse sparks(String bone, String socket, String color, float scale, float rate) {
+        return new FxUse(SPARKS, bone, socket, null, color, scale, rate, 1);
     }
 
     /**
@@ -145,12 +184,67 @@ class TestDesign {
                         .contains("no palette channel 'fur'"));
     }
 
+    /** Effects are checked against the plan, its rig and the effect limits. */
+    @Test
+    void testFxProblems() {
+        Assertions.assertEquals("", problems(wearing(sparks("hand.L", null, "accent", 2, 0.5f))));
+        Assertions.assertEquals("", problems(wearing(sparks(null, "back", null, 1, 1))));
+        Assertions.assertTrue(
+                problems(wearing(sparks("hand.L", "back", null, 1, 1)))
+                        .contains("either a bone or a socket"));
+        Assertions.assertTrue(
+                problems(wearing(sparks(null, null, null, 1, 1)))
+                        .contains("either a bone or a socket"));
+        Assertions.assertTrue(
+                problems(wearing(sparks("tail.01", null, null, 1, 1)))
+                        .contains("no bone named 'tail.01'"));
+        Assertions.assertTrue(
+                problems(wearing(sparks(null, "head_top", null, 1, 1)))
+                        .contains("no socket 'head_top'"));
+        Assertions.assertTrue(
+                problems(wearing(sparks("hand.L", null, "fur", 1, 1)))
+                        .contains("no palette channel 'fur'"));
+        Assertions.assertTrue(
+                problems(wearing(sparks("hand.L", null, null, 0, 1))).contains("The scale"));
+        Assertions.assertTrue(
+                problems(wearing(sparks("hand.L", null, null, 1, 5))).contains("The rate"));
+        Assertions.assertTrue(
+                problems(
+                                wearing(
+                                        new FxUse(
+                                                Id.parse("ikala:fx/missing"),
+                                                "hand.L",
+                                                null,
+                                                null,
+                                                null,
+                                                1,
+                                                1,
+                                                1)))
+                        .contains("ikala:fx/missing"));
+        Assertions.assertTrue(
+                problems(
+                                wearing(
+                                        new FxUse(
+                                                SPARKS,
+                                                "hand.L",
+                                                null,
+                                                new Vec3(0, 2, 0),
+                                                null,
+                                                1,
+                                                1,
+                                                1)))
+                        .contains("Offsets go up to"));
+        FxUse[] many = new FxUse[Design.MAX_FX + 1];
+        java.util.Arrays.fill(many, sparks("hand.L", null, null, 1, 1));
+        Assertions.assertTrue(problems(wearing(many)).contains("up to " + Design.MAX_FX));
+    }
+
     /** A design survives encoding once its values are on the encoding's steps. */
     @Test
     void testRoundTrip() {
         Design knight = registry.get(Design.class, KNIGHT);
         byte[] bytes = DesignCodec.encode(knight, registry);
-        Assertions.assertTrue(bytes.length < 40, "The knight took " + bytes.length + " bytes");
+        Assertions.assertTrue(bytes.length < 50, "The knight took " + bytes.length + " bytes");
         Design back = DesignCodec.decode(bytes, KNIGHT, registry);
 
         Assertions.assertEquals(knight.plan(), back.plan());
@@ -158,6 +252,7 @@ class TestDesign {
         Assertions.assertEquals(knight.parts(), back.parts());
         Assertions.assertEquals(knight.layers(), back.layers());
         Assertions.assertEquals(knight.palette(), back.palette());
+        Assertions.assertEquals(knight.fx(), back.fx());
         Assertions.assertEquals(DesignCodec.snap(0.25f), back.sliders().get(HEIGHT).get(0));
         Assertions.assertEquals(
                 ColorCode.toColor(ColorCode.encode(Color.parse("#3355aa"))),

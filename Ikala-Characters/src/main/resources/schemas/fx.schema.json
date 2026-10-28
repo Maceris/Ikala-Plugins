@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ikala character fx",
+  "description": "An effect characters can wear, like a hand flame or an aura: a graphics particle effect file that parts and designs place on a bone or socket.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Fx"
+    },
+    {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Fx"
+      }
+    }
+  ],
+  "$defs": {
+    "Fx": {
+      "type": "object",
+      "description": "An effect characters can wear, like a hand flame or an aura: a graphics particle effect file that parts and designs place on a bone or socket.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "This effect's ID, like \"ikala:fx/hand_flame\"."
+        },
+        "effect": {
+          "type": "string",
+          "description": "The graphics particle effect file, like \"effects/flame.effect.yml\", relative to its namespace's content folder."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Tags that editors filter by, like \"aura\"."
+        },
+        "extends": {
+          "type": "string",
+          "description": "The ID of a definition of the same kind to start from. Fields written here replace the parent's, and objects merge field by field."
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "extends"
+          ]
+        },
+        {
+          "required": [
+            "id",
+            "effect"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -3,12 +3,16 @@ package com.ikalagaming.characters.design;
 import com.ikalagaming.characters.data.Color;
 import com.ikalagaming.characters.data.ColorCode;
 import com.ikalagaming.characters.data.Id;
+import com.ikalagaming.characters.data.Vec3;
 import com.ikalagaming.characters.definition.BodyPlan;
 import com.ikalagaming.characters.definition.Definition;
 import com.ikalagaming.characters.definition.Design;
+import com.ikalagaming.characters.definition.Fx;
+import com.ikalagaming.characters.definition.FxUse;
 import com.ikalagaming.characters.definition.Kind;
 import com.ikalagaming.characters.definition.Palette;
 import com.ikalagaming.characters.definition.Part;
+import com.ikalagaming.characters.definition.Rig;
 import com.ikalagaming.characters.definition.Slider;
 import com.ikalagaming.characters.registry.CharacterRegistry;
 
@@ -41,11 +45,18 @@ import java.util.Map;
  * sliders: count, then (slider numeric ID, value count byte, values as signed bytes) each
  * colors:  count, then (channel index: standard channels then the plan's own, code as 2 bytes)
  * palette (0 for none, else numeric ID + 1)
+ * fx:      count, then each:
+ *          effect numeric ID
+ *          place (socket index in the plan, or socket count + bone index in the rig)
+ *          color (0 for none, else channel index + 1)
+ *          offset (3 signed bytes of centimeters)
+ *          scale, rate, intensity (unsigned bytes of 1/{@value #FACTOR_STEPS})
  * </pre>
  *
  * Encoding is lossy where the steps are coarse: slider values go to steps of 1/{@value #STEPS},
- * covering -2 to 2, and colors to the nearest code. Editors snap to both, so their designs survive
- * the trip unchanged.
+ * covering -2 to 2, colors to the nearest code, effect offsets to centimeters and their factors to
+ * steps of 1/{@value #FACTOR_STEPS}. Editors snap to all of them, so their designs survive the trip
+ * unchanged.
  *
  * @author Ches Burks
  */
@@ -55,6 +66,15 @@ public final class DesignCodec {
 
     /** Slider steps per unit: a signed byte covers -2 to 2, with 1 and 2 exactly on a step. */
     public static final float STEPS = 63;
+
+    /** Effect scale, rate and intensity steps per unit: an unsigned byte covers 0 to 4. */
+    public static final float FACTOR_STEPS = 32;
+
+    /** Effect offset steps per meter: a signed byte of centimeters. */
+    public static final float OFFSET_STEPS = 100;
+
+    /** The largest effect factor step. */
+    private static final int MAX_FACTOR_STEP = 0xFF;
 
     /** The largest slider step, either way. */
     private static final int MAX_STEP = 127;
@@ -121,6 +141,21 @@ public final class DesignCodec {
                 design.palette() == null
                         ? 0
                         : numeric(registry, Kind.PALETTE, design.palette()) + 1);
+
+        Rig rig = rigOf(registry, plan);
+        writeVarint(out, design.fx().size());
+        for (FxUse use : design.fx()) {
+            writeVarint(out, numeric(registry, Kind.FX, use.fx()));
+            writeVarint(out, place(plan, rig, use));
+            writeVarint(out, use.color() == null ? 0 : index(channels, use.color(), "channel") + 1);
+            Vec3 offset = use.offsetOrZero();
+            out.write(offsetStep(offset.x()));
+            out.write(offsetStep(offset.y()));
+            out.write(offsetStep(offset.z()));
+            out.write(factorStep(use.scale()));
+            out.write(factorStep(use.rate()));
+            out.write(factorStep(use.intensity()));
+        }
         return out.toByteArray();
     }
 
@@ -179,11 +214,46 @@ public final class DesignCodec {
             int palette = readVarint(in);
             Id paletteId =
                     palette == 0 ? null : definition(registry, Palette.class, palette - 1).id();
+
+            Rig rig = rigOf(registry, plan);
+            List<FxUse> fx = new ArrayList<>();
+            int fxCount = readVarint(in);
+            for (int f = 0; f < fxCount; ++f) {
+                Id effect = definition(registry, Fx.class, readVarint(in)).id();
+                int place = readVarint(in);
+                String socket = null;
+                String bone = null;
+                if (place < plan.sockets().size()) {
+                    socket = plan.sockets().get(place).id();
+                } else {
+                    bone = element(rig.bones(), place - plan.sockets().size(), "bone").name();
+                }
+                int color = readVarint(in);
+                String channel = color == 0 ? null : element(channels, color - 1, "channel");
+                Vec3 offset =
+                        new Vec3(
+                                in.get() / OFFSET_STEPS,
+                                in.get() / OFFSET_STEPS,
+                                in.get() / OFFSET_STEPS);
+                float scale = (in.get() & 0xFF) / FACTOR_STEPS;
+                float rate = (in.get() & 0xFF) / FACTOR_STEPS;
+                float intensity = (in.get() & 0xFF) / FACTOR_STEPS;
+                fx.add(
+                        new FxUse(
+                                effect,
+                                bone,
+                                socket,
+                                Vec3.ZERO.equals(offset) ? null : offset,
+                                channel,
+                                scale,
+                                rate,
+                                intensity));
+            }
             if (in.hasRemaining()) {
                 throw new IllegalArgumentException("Extra bytes after the design");
             }
             return new Design(
-                    id, plan.id(), variant.id(), sliders, parts, layers, paletteId, colors);
+                    id, plan.id(), variant.id(), sliders, parts, layers, paletteId, colors, fx);
         } catch (BufferUnderflowException e) {
             throw new IllegalArgumentException("The design is cut short", e);
         }
@@ -223,6 +293,87 @@ public final class DesignCodec {
      */
     public static float snap(float value) {
         return step(value) / STEPS;
+    }
+
+    /**
+     * An effect offset as a signed step.
+     *
+     * @param meters The offset along one axis.
+     * @return The step, in centimeters.
+     */
+    public static int offsetStep(float meters) {
+        return Math.clamp(Math.round(meters * OFFSET_STEPS), -MAX_STEP, MAX_STEP);
+    }
+
+    /**
+     * An effect offset snapped to what the encoding holds.
+     *
+     * @param meters The offset along one axis.
+     * @return The nearest centimeter.
+     */
+    public static float snapOffset(float meters) {
+        return offsetStep(meters) / OFFSET_STEPS;
+    }
+
+    /**
+     * An effect's scale, rate or intensity as an unsigned step.
+     *
+     * @param factor The factor.
+     * @return The step, 0 to 255.
+     */
+    public static int factorStep(float factor) {
+        return Math.clamp(Math.round(factor * FACTOR_STEPS), 0, MAX_FACTOR_STEP);
+    }
+
+    /**
+     * An effect's scale, rate or intensity snapped to what the encoding holds.
+     *
+     * @param factor The factor.
+     * @return The nearest value a design's bytes can hold.
+     */
+    public static float snapFactor(float factor) {
+        return factorStep(factor) / FACTOR_STEPS;
+    }
+
+    /**
+     * The rig a plan is built on.
+     *
+     * @param registry The loaded definitions.
+     * @param plan The plan.
+     * @return The rig.
+     * @throws IllegalArgumentException If it isn't loaded.
+     */
+    private static Rig rigOf(CharacterRegistry registry, BodyPlan plan) {
+        Rig rig = registry.get(Rig.class, plan.rig());
+        if (rig == null) {
+            throw new IllegalArgumentException("No loaded rig " + plan.rig());
+        }
+        return rig;
+    }
+
+    /**
+     * Where an effect is placed, as a number: a socket's index in the plan, or the socket count
+     * plus a bone's index in the rig.
+     *
+     * @param plan The plan.
+     * @param rig The plan's rig.
+     * @param use The effect.
+     * @return The number.
+     * @throws IllegalArgumentException If the socket or bone isn't there.
+     */
+    private static int place(BodyPlan plan, Rig rig, FxUse use) {
+        if (use.socket() != null) {
+            BodyPlan.Socket socket = plan.socket(use.socket());
+            if (socket == null) {
+                throw new IllegalArgumentException("The plan has no socket " + use.socket());
+            }
+            return plan.sockets().indexOf(socket);
+        }
+        Rig.Bone bone = use.bone() == null ? null : rig.bone(use.bone());
+        if (bone == null) {
+            throw new IllegalArgumentException("The rig has no bone " + use.bone());
+        }
+        return plan.sockets().size() + rig.bones().indexOf(bone);
     }
 
     /**
