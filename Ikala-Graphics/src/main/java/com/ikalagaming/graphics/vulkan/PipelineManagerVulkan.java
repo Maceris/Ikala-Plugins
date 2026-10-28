@@ -32,10 +32,12 @@ public class PipelineManagerVulkan {
     public static final int MODEL_MATRIX_SIZE = 4 * 4;
 
     /**
-     * Format of the base color, normal, and tangent textures in the g-buffer. Matches the OpenGL
-     * backend.
+     * Format of the base color, normal, and tangent textures in the g-buffer: half floats, which
+     * keep linear base colors from banding in the dark, as 8 bits would, and hold the normal's and
+     * tangent's signs and the negative "no override" flag in the normal's fourth channel. Full
+     * floats took twice the memory for precision the light stage can't show.
      */
-    public static final int GBUFFER_COLOR_FORMAT = VK_FORMAT_R32G32B32A32_SFLOAT;
+    public static final int GBUFFER_COLOR_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
 
     /** Format of the material index texture in the g-buffer. */
     public static final int GBUFFER_MATERIAL_FORMAT = VK_FORMAT_R32_UINT;

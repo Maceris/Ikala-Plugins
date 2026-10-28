@@ -44,11 +44,21 @@ public class GeometryArena {
      */
     public static final long BYTES_PER_FRAME = 32L * 1024 * 1024;
 
+    /** Bytes in a mebibyte, for logs. */
+    private static final long BYTES_PER_MIB = 1024L * 1024;
+
     /** How many vertices the buffer starts out holding. */
     public static final int INITIAL_VERTICES = 256 * 1024;
 
     /** How many indices the buffer starts out holding. */
     public static final int INITIAL_INDICES = 3 * INITIAL_VERTICES;
+
+    /**
+     * From what size a vertex or index buffer grows by a quarter at a time instead of doubling, in
+     * bytes, see {@link RangeAllocator#LARGE_GROWTH_DIVISOR}: past it, doubling for a few more
+     * meshes would leave hundreds of megabytes unused.
+     */
+    public static final long LARGE_BUFFER_BYTES = 256L * 1024 * 1024;
 
     /**
      * The largest a vertex or index buffer can grow, in bytes: 2 GiB, which desktop GPUs take as
@@ -160,19 +170,42 @@ public class GeometryArena {
     private final Queue<MeshRegistry.Retired> retiring = new ConcurrentLinkedQueue<>();
 
     /**
-     * Create the buffers.
+     * Whether the buffers shrink once they are mostly empty, see {@link #compactIfSparse}: only for
+     * arenas whose users look up where meshes are each frame, since compacting moves them.
+     */
+    private final boolean compacting;
+
+    /**
+     * Create the buffers, which never shrink.
      *
      * @param state The Vulkan state.
      * @param vertexStride The size of one vertex, in bytes.
      */
     public GeometryArena(@NonNull VulkanState state, int vertexStride) {
+        this(state, vertexStride, false);
+    }
+
+    /**
+     * Create the buffers.
+     *
+     * @param state The Vulkan state.
+     * @param vertexStride The size of one vertex, in bytes.
+     * @param compacting Whether the buffers shrink once they are mostly empty, moving meshes: only
+     *     if everything that uses the meshes looks up where they are each frame, through {@link
+     *     MeshRegistry#locate}, the mesh table or {@link #vertexAddress}, and the buffers through
+     *     their getters.
+     */
+    public GeometryArena(@NonNull VulkanState state, int vertexStride, boolean compacting) {
         this.vertexStride = vertexStride;
+        this.compacting = compacting;
         registry =
                 new MeshRegistry(
                         INITIAL_VERTICES,
                         INITIAL_INDICES,
                         maxElements(vertexStride),
-                        maxElements(Integer.BYTES));
+                        maxElements(Integer.BYTES),
+                        (int) (LARGE_BUFFER_BYTES / vertexStride),
+                        (int) (LARGE_BUFFER_BYTES / Integer.BYTES));
         meshTable = new DeviceTable(state, "mesh", MESH_ENTRY_SIZE, 256);
         vertices =
                 SharedBuffer.allocateDeviceLocal(
@@ -360,6 +393,9 @@ public class GeometryArena {
             final MeshRegistry.Retired free = retired;
             state.deferFree(() -> registry.free(free));
         }
+        if (compacting) {
+            compactIfSparse(state, commandBuffer);
+        }
         if (!uploads.isEmpty() || !firstUploads.isEmpty()) {
             recordUploads(state, commandBuffer);
         }
@@ -439,6 +475,70 @@ public class GeometryArena {
         } finally {
             entries.clear();
         }
+    }
+
+    /**
+     * Move the meshes into smaller buffers if live meshes fill little of them, as after a burst of
+     * loads that were mostly replaced, see {@link MeshRegistry#compactIfSparse}. The old buffers
+     * are freed once frames in flight are done drawing from them.
+     *
+     * @param state The Vulkan state.
+     * @param commandBuffer The frame's command buffer.
+     */
+    private void compactIfSparse(
+            @NonNull VulkanState state, @NonNull VkCommandBuffer commandBuffer) {
+        final long oldBytes = capacityBytes();
+        final List<MeshRegistry.Move> moves =
+                registry.compactIfSparse(INITIAL_VERTICES, INITIAL_INDICES);
+        if (moves == null) {
+            return;
+        }
+        final SharedBuffer oldVertices = vertices;
+        final SharedBuffer oldIndices = indices;
+        vertices = SharedBuffer.allocateDeviceLocal(vertexBytes(), state, VERTEX_USAGE);
+        indices = SharedBuffer.allocateDeviceLocal(indexBytes(), state, INDEX_USAGE);
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            // Earlier frames' uploads finish before their meshes are copied out
+            memoryBarrier(
+                    commandBuffer,
+                    VK_PIPELINE_STAGE_2_COPY_BIT,
+                    VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    VK_PIPELINE_STAGE_2_COPY_BIT,
+                    VK_ACCESS_2_TRANSFER_READ_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    stack);
+        }
+        if (!moves.isEmpty()) {
+            final VkBufferCopy.Buffer vertexRegions = VkBufferCopy.calloc(moves.size());
+            final VkBufferCopy.Buffer indexRegions = VkBufferCopy.calloc(moves.size());
+            try {
+                for (MeshRegistry.Move move : moves) {
+                    vertexRegions
+                            .get()
+                            .srcOffset((long) move.fromVertex() * vertexStride)
+                            .dstOffset((long) move.toVertex() * vertexStride)
+                            .size((long) move.vertexCount() * vertexStride);
+                    indexRegions
+                            .get()
+                            .srcOffset((long) move.fromIndex() * Integer.BYTES)
+                            .dstOffset((long) move.toIndex() * Integer.BYTES)
+                            .size((long) move.indexCount() * Integer.BYTES);
+                }
+                vkCmdCopyBuffer(
+                        commandBuffer, oldVertices.buffer, vertices.buffer, vertexRegions.flip());
+                vkCmdCopyBuffer(
+                        commandBuffer, oldIndices.buffer, indices.buffer, indexRegions.flip());
+            } finally {
+                vertexRegions.free();
+                indexRegions.free();
+            }
+        }
+        state.deferFree(() -> SharedBuffer.free(oldVertices, state));
+        state.deferFree(() -> SharedBuffer.free(oldIndices, state));
+        log.debug(
+                "Compacted a geometry arena from {} to {} MiB, moving {} meshes",
+                oldBytes / BYTES_PER_MIB,
+                capacityBytes() / BYTES_PER_MIB,
+                moves.size());
     }
 
     /**

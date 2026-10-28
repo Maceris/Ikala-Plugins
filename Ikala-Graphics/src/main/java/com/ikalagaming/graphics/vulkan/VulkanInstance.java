@@ -945,7 +945,7 @@ public class VulkanInstance {
         state.stagingRing = new StagingRing(state);
         state.textureUploads = new TextureUploads();
         state.geometry = new GeometryArena(state, MeshData.VERTEX_SIZE_IN_BYTES);
-        state.bakedGeometry = new GeometryArena(state, BakedVertex.SIZE);
+        state.bakedGeometry = new GeometryArena(state, BakedVertex.SIZE, true);
         state.shadowInvalidation = new ShadowInvalidation();
         state.sunShadows = new SunShadowCache();
         state.skyOcclusion = new SkyOcclusion();

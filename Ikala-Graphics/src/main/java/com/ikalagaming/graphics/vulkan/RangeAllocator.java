@@ -11,8 +11,8 @@ import java.util.TreeSet;
  *
  * <p>Allocation takes the smallest free range that fits (the lowest, among equal sizes), which
  * leaves big ranges whole for big meshes, and freeing merges a range with free neighbors on both
- * sides. When nothing fits, the space grows to at least double its size, and the caller grows the
- * real buffer to match.
+ * sides. When nothing fits, the space grows to at least double its size, or by a quarter once it is
+ * large, and the caller grows the real buffer to match.
  *
  * <p>Not thread safe; callers hold their own lock.
  */
@@ -31,8 +31,17 @@ public class RangeAllocator {
         }
     }
 
+    /**
+     * How much a large space grows by at a time, as a fraction of its size: a quarter, so a buffer
+     * of a gigabyte doesn't grow to two for a few more meshes.
+     */
+    public static final int LARGE_GROWTH_DIVISOR = 4;
+
     /** The most elements the space can ever hold. */
     private final int maxCapacity;
+
+    /** The size from which the space grows by {@link #LARGE_GROWTH_DIVISOR} instead of doubling. */
+    private final int largeCapacity;
 
     /** Free ranges by where they start, to merge neighbors. */
     private final TreeMap<Integer, Integer> freeByOffset = new TreeMap<>();
@@ -58,11 +67,26 @@ public class RangeAllocator {
      *     the maximum.
      */
     public RangeAllocator(int initialCapacity, int maxCapacity) {
+        this(initialCapacity, maxCapacity, maxCapacity);
+    }
+
+    /**
+     * Create an empty space that grows in smaller steps once it is large.
+     *
+     * @param initialCapacity How many elements it starts out holding.
+     * @param maxCapacity The most it can ever grow to.
+     * @param largeCapacity From what size it grows by a {@link #LARGE_GROWTH_DIVISOR} part at a
+     *     time instead of doubling.
+     * @throws IllegalArgumentException If the capacities are negative, or the initial one is over
+     *     the maximum.
+     */
+    public RangeAllocator(int initialCapacity, int maxCapacity, int largeCapacity) {
         if (initialCapacity < 0 || maxCapacity < initialCapacity) {
             throw new IllegalArgumentException(
                     "Bad capacities: " + initialCapacity + " of at most " + maxCapacity);
         }
         this.maxCapacity = maxCapacity;
+        this.largeCapacity = largeCapacity;
         capacity = initialCapacity;
         addFree(0, initialCapacity);
     }
@@ -168,7 +192,8 @@ public class RangeAllocator {
     }
 
     /**
-     * Grow the space to at least double its size, and enough for an allocation at its end.
+     * Grow the space to at least double its size, or by a {@link #LARGE_GROWTH_DIVISOR} part once
+     * it is large, and enough for an allocation at its end.
      *
      * @param length The allocation that needs to fit.
      * @return False if it can't fit even at the maximum capacity.
@@ -179,8 +204,11 @@ public class RangeAllocator {
         int freeAtEnd =
                 last != null && last.getKey() + last.getValue() == capacity ? last.getValue() : 0;
         long needed = (long) capacity + length - freeAtEnd;
-        long doubled = Math.max(1L, (long) capacity * 2);
-        long next = Math.min(maxCapacity, Math.max(needed, doubled));
+        long stepped =
+                capacity >= largeCapacity
+                        ? (long) capacity + capacity / LARGE_GROWTH_DIVISOR
+                        : Math.max(1L, (long) capacity * 2);
+        long next = Math.min(maxCapacity, Math.max(needed, stepped));
         if (next < needed) {
             return false;
         }

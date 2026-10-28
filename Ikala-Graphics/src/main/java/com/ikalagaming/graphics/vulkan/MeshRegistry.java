@@ -25,6 +25,9 @@ import javax.annotation.Nullable;
  * or ranges, since frames in flight may still draw from them: it returns a {@link Retired} for the
  * caller to {@link #free(Retired)} once those frames are done.
  *
+ * <p>Once most of the space is free, {@link #compact} packs the live meshes into less of it and
+ * says what moved, so the buffers can shrink.
+ *
  * <p>Meshes are registered from any thread, and plugins are unloaded from the event dispatcher
  * thread while the main thread renders, so every method holds {@link #lock}.
  */
@@ -54,9 +57,35 @@ public class MeshRegistry {
      * @param vertexCount How many vertices it had.
      * @param firstIndex Where its indices start.
      * @param indexCount How many indices it had.
+     * @param compactions How many times the space was compacted before it was removed: its ranges
+     *     are only in the space it was removed from, so a compaction since leaves them out.
      */
     public record Retired(
-            int slot, int vertexOffset, int vertexCount, int firstIndex, int indexCount) {}
+            int slot,
+            int vertexOffset,
+            int vertexCount,
+            int firstIndex,
+            int indexCount,
+            int compactions) {}
+
+    /**
+     * A resident mesh that {@link #compact} moved, whose data must be copied from the old buffers
+     * to the new ones.
+     *
+     * @param fromVertex Where its vertices were.
+     * @param toVertex Where they go.
+     * @param vertexCount How many vertices.
+     * @param fromIndex Where its indices were.
+     * @param toIndex Where they go.
+     * @param indexCount How many indices.
+     */
+    public record Move(
+            int fromVertex,
+            int toVertex,
+            int vertexCount,
+            int fromIndex,
+            int toIndex,
+            int indexCount) {}
 
     /**
      * The most vertices or indices the shared buffers can hold when no limit is given, leaving room
@@ -64,17 +93,45 @@ public class MeshRegistry {
      */
     public static final int MAX_ELEMENTS = Integer.MAX_VALUE / 64;
 
+    /**
+     * How many times the live meshes must fit in a space before {@link #compactIfSparse} packs them
+     * into a smaller one, which then holds twice them: a space shrinks at least by half, and has
+     * room to grow before it would grow again.
+     */
+    public static final int SPARSE_RATIO = 4;
+
     /** How many slots to add when the table runs out. */
     private static final int SLOT_GROWTH = 256;
 
     /** Guards every field below. */
     private final ReentrantLock lock = new ReentrantLock();
 
-    /** Hands out vertex ranges. */
-    private final RangeAllocator vertices;
+    /** The most vertices the space can grow to. */
+    private final int maxVertices;
 
-    /** Hands out index ranges. */
-    private final RangeAllocator indices;
+    /** The most indices the space can grow to. */
+    private final int maxIndices;
+
+    /** The vertex count from which the space grows in smaller steps, see {@link RangeAllocator}. */
+    private final int largeVertices;
+
+    /** The index count from which the space grows in smaller steps. */
+    private final int largeIndices;
+
+    /** Hands out vertex ranges. Replaced when compacted. */
+    private RangeAllocator vertices;
+
+    /** Hands out index ranges. Replaced when compacted. */
+    private RangeAllocator indices;
+
+    /** How many times the space was compacted. */
+    private int compactions;
+
+    /** How many vertices live meshes have, leaving out those retiring. */
+    private int liveVertices;
+
+    /** How many indices live meshes have, leaving out those retiring. */
+    private int liveIndices;
 
     /** The plugin that owns the mesh in each slot, or null if the slot is free or retiring. */
     private String[] owners = new String[0];
@@ -170,8 +227,34 @@ public class MeshRegistry {
      * @param maxIndices The most indices the buffers can ever hold.
      */
     public MeshRegistry(int vertexCapacity, int indexCapacity, int maxVertices, int maxIndices) {
-        vertices = new RangeAllocator(vertexCapacity, maxVertices);
-        indices = new RangeAllocator(indexCapacity, maxIndices);
+        this(vertexCapacity, indexCapacity, maxVertices, maxIndices, maxVertices, maxIndices);
+    }
+
+    /**
+     * Create an empty registry with limits on how far the buffers can grow, which grow in smaller
+     * steps once they are large.
+     *
+     * @param vertexCapacity How many vertices the shared buffers start out holding.
+     * @param indexCapacity How many indices the shared buffers start out holding.
+     * @param maxVertices The most vertices they can grow to.
+     * @param maxIndices The most indices they can grow to.
+     * @param largeVertices From how many vertices the space grows in smaller steps, see {@link
+     *     RangeAllocator#LARGE_GROWTH_DIVISOR}.
+     * @param largeIndices From how many indices it does.
+     */
+    public MeshRegistry(
+            int vertexCapacity,
+            int indexCapacity,
+            int maxVertices,
+            int maxIndices,
+            int largeVertices,
+            int largeIndices) {
+        this.maxVertices = maxVertices;
+        this.maxIndices = maxIndices;
+        this.largeVertices = largeVertices;
+        this.largeIndices = largeIndices;
+        vertices = new RangeAllocator(vertexCapacity, maxVertices, largeVertices);
+        indices = new RangeAllocator(indexCapacity, maxIndices, largeIndices);
     }
 
     /**
@@ -241,6 +324,8 @@ public class MeshRegistry {
             vertexOffsets[slot] = vertexOffset;
             firstIndices[slot] = firstIndex;
             liveCount += 1;
+            liveVertices += vertexCount;
+            liveIndices += indexCount;
             return new Reservation(handle, new Location(vertexOffset, firstIndex));
         } finally {
             lock.unlock();
@@ -422,8 +507,10 @@ public class MeshRegistry {
     public void free(@NonNull Retired retired) {
         lock.lock();
         try {
-            vertices.free(retired.vertexOffset(), retired.vertexCount());
-            indices.free(retired.firstIndex(), retired.indexCount());
+            if (retired.compactions() == compactions) {
+                vertices.free(retired.vertexOffset(), retired.vertexCount());
+                indices.free(retired.firstIndex(), retired.indexCount());
+            }
             freeSlots.add(retired.slot());
         } finally {
             lock.unlock();
@@ -638,6 +725,146 @@ public class MeshRegistry {
     }
 
     /**
+     * How many vertices live meshes have, leaving out those retiring, which is how many a compacted
+     * space would hold.
+     *
+     * @return The live vertex count.
+     */
+    public int getLiveVertices() {
+        lock.lock();
+        try {
+            return liveVertices;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * How many indices live meshes have, leaving out those retiring.
+     *
+     * @return The live index count.
+     */
+    public int getLiveIndices() {
+        lock.lock();
+        try {
+            return liveIndices;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * The size to compact a space to: twice what is live, rounded up to a power of two and no less
+     * than a floor, if it holds {@link #SPARSE_RATIO} times what is live; otherwise its size now.
+     *
+     * @param live How many elements live meshes have.
+     * @param capacity How many the space holds now.
+     * @param floor The least it shrinks to, such as its starting size.
+     * @return The size to compact to, the same as now if it isn't sparse.
+     */
+    static int compactedCapacity(int live, int capacity, int floor) {
+        if (capacity <= floor || (long) live * SPARSE_RATIO > capacity) {
+            return capacity;
+        }
+        final long twice = Math.max(1L, 2L * live);
+        final long rounded = Long.highestOneBit(twice - 1) << 1;
+        return (int) Math.min(capacity, Math.max(floor, rounded));
+    }
+
+    /**
+     * {@link #compact} the space, if live meshes fill little enough of the vertices or the indices
+     * that either would shrink, see {@link #compactedCapacity}.
+     *
+     * @param vertexFloor The fewest vertices the space shrinks to.
+     * @param indexFloor The fewest indices the space shrinks to.
+     * @return The resident meshes that moved, or null if the space wasn't compacted.
+     */
+    public List<Move> compactIfSparse(int vertexFloor, int indexFloor) {
+        lock.lock();
+        try {
+            final int vertexCapacity =
+                    compactedCapacity(liveVertices, vertices.getCapacity(), vertexFloor);
+            final int indexCapacity =
+                    compactedCapacity(liveIndices, indices.getCapacity(), indexFloor);
+            if (vertexCapacity == vertices.getCapacity()
+                    && indexCapacity == indices.getCapacity()) {
+                return null;
+            }
+            return compact(vertexCapacity, indexCapacity);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Pack the live meshes, pending or resident, into new spaces of the given sizes, back to back
+     * in slot order. Retiring meshes are left out: they stay in the old buffers, which frames in
+     * flight still draw from, and freeing them later only frees their slots. Every moved slot's GPU
+     * mesh table entry changes.
+     *
+     * <p>The caller copies each move's data into new buffers of the new sizes before anything draws
+     * from them, and keeps the old buffers until frames in flight are done. Pending meshes aren't
+     * moves: their uploads go to where they are now.
+     *
+     * @param vertexCapacity How many vertices the new space holds, at least the live count.
+     * @param indexCapacity How many indices the new space holds, at least the live count.
+     * @return The resident meshes that moved, with where from and to.
+     * @throws IllegalArgumentException If the live meshes don't fit.
+     */
+    public List<Move> compact(int vertexCapacity, int indexCapacity) {
+        lock.lock();
+        try {
+            if (vertexCapacity < liveVertices
+                    || indexCapacity < liveIndices
+                    || vertexCapacity > maxVertices
+                    || indexCapacity > maxIndices) {
+                throw new IllegalArgumentException(
+                        "Can't fit "
+                                + liveVertices
+                                + " vertices and "
+                                + liveIndices
+                                + " indices in "
+                                + vertexCapacity
+                                + " and "
+                                + indexCapacity);
+            }
+            final RangeAllocator newVertices =
+                    new RangeAllocator(vertexCapacity, maxVertices, largeVertices);
+            final RangeAllocator newIndices =
+                    new RangeAllocator(indexCapacity, maxIndices, largeIndices);
+            final List<Move> moves = new ArrayList<>();
+            for (int slot = 0; slot < handles.length; ++slot) {
+                final MeshHandle handle = handles[slot];
+                if (handle == null) {
+                    continue;
+                }
+                final int toVertex = newVertices.allocate(handle.vertexCount());
+                final int toIndex = newIndices.allocate(handle.indexCount());
+                if (states[slot] == State.RESIDENT
+                        && (toVertex != vertexOffsets[slot] || toIndex != firstIndices[slot])) {
+                    moves.add(
+                            new Move(
+                                    vertexOffsets[slot],
+                                    toVertex,
+                                    handle.vertexCount(),
+                                    firstIndices[slot],
+                                    toIndex,
+                                    handle.indexCount()));
+                    changed.set(slot);
+                }
+                vertexOffsets[slot] = toVertex;
+                firstIndices[slot] = toIndex;
+            }
+            vertices = newVertices;
+            indices = newIndices;
+            compactions += 1;
+            return moves;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
      * Take a free slot, growing the table if there is none. The lock must be held.
      *
      * @return The slot.
@@ -692,11 +919,14 @@ public class MeshRegistry {
         generations[slot] += 1;
         changed.set(slot);
         liveCount -= 1;
+        liveVertices -= handle.vertexCount();
+        liveIndices -= handle.indexCount();
         return new Retired(
                 slot,
                 vertexOffsets[slot],
                 handle.vertexCount(),
                 firstIndices[slot],
-                handle.indexCount());
+                handle.indexCount(),
+                compactions);
     }
 }

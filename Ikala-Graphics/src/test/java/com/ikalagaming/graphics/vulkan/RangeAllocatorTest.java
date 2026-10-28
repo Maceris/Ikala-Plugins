@@ -88,4 +88,17 @@ class RangeAllocatorTest {
         allocator.free(start, 4);
         assertThrows(IllegalArgumentException.class, () -> allocator.free(start, 4));
     }
+
+    @Test
+    void largeSpacesGrowByAQuarter() {
+        RangeAllocator allocator = new RangeAllocator(100, 10_000, 400);
+        allocator.allocate(150);
+        assertEquals(200, allocator.getCapacity(), "Doubles while small");
+        allocator.allocate(150);
+        assertEquals(400, allocator.getCapacity());
+        allocator.allocate(150);
+        assertEquals(500, allocator.getCapacity(), "A quarter more once large");
+        allocator.allocate(400);
+        assertEquals(850, allocator.getCapacity(), "Or what the allocation needs");
+    }
 }
