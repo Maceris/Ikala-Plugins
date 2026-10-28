@@ -673,6 +673,9 @@ public final class GateBenchmark {
     /** Values in the {@code .ripples} option. */
     private static final int RIPPLE_VALUES = 5;
 
+    /** Values in the {@code .turnAt} option: x, y and z. */
+    private static final int TURN_AT_VALUES = 3;
+
     /** The scene options a preset set, which come before the startup properties. */
     private final Map<String, String> options = new HashMap<>();
 
@@ -872,6 +875,34 @@ public final class GateBenchmark {
                             8,
                             false,
                             Map.of("glassTest", "true", "wind", "3,30", "view", "0,-4,72,-0.1,0")),
+                    new Preset(
+                            "water-gate",
+                            "Water gate",
+                            "Every water feature at once, to time: a strong wind's waves and"
+                                    + " spray, waves painted round a figure eight, the fountain"
+                                    + " behind glass with smoke, ripples, and rain",
+                            SyntheticTerrain.Recipe.ISLAND,
+                            8,
+                            false,
+                            Map.of(
+                                    "fountain",
+                                    "true",
+                                    "glassTest",
+                                    "true",
+                                    "wind",
+                                    "12,30",
+                                    "loop",
+                                    "infinity",
+                                    "loopWaves",
+                                    "6",
+                                    "loopSpeed",
+                                    "0",
+                                    "ripples",
+                                    "0,40,1,0.05,1",
+                                    "weather",
+                                    WEATHER_RAIN,
+                                    "view",
+                                    "0,16,16,0.45,0")),
                     new Preset(
                             "green-lake",
                             "Green lake",
@@ -1102,6 +1133,30 @@ public final class GateBenchmark {
     private String option(@NonNull String key, @NonNull String fallback) {
         final String value = option(key);
         return value != null ? value : fallback;
+    }
+
+    /**
+     * Where the camera turns while measuring: over the world's middle, or where the {@code
+     * .turnAt=x,y,z} option says, as under the sea.
+     *
+     * @param world The world.
+     * @return The place, in the world.
+     */
+    private Vector3d turnPosition(@NonNull SyntheticTerrain world) {
+        final Vector3d middle = new Vector3d(0.5, world.cameraY(), 0.5);
+        final String value = option("turnAt");
+        if (value == null) {
+            return middle;
+        }
+        final String[] parts = value.split(",");
+        if (parts.length != TURN_AT_VALUES) {
+            log.warn("The benchmark's turnAt must be x,y,z, not {}", value);
+            return middle;
+        }
+        return new Vector3d(
+                Double.parseDouble(parts[0].trim()),
+                Double.parseDouble(parts[1].trim()),
+                Double.parseDouble(parts[2].trim()));
     }
 
     /**
@@ -1482,7 +1537,7 @@ public final class GateBenchmark {
             }
             placeLights(terrain);
             load = layout.load();
-            cameraPosition = new Vector3d(0.5, terrain.cameraY(), 0.5);
+            cameraPosition = turnPosition(terrain);
             buildMilliseconds = (System.nanoTime() - start) / 1_000_000;
             log.info(
                     "Gate benchmark laid out {} sections with content of {} in the sphere in {} ms",
