@@ -37,6 +37,8 @@ layout(location = 15) in vec2 outRestXZ;
 layout(location = 16) in float outFoam;
 // On a side, how far its water has fallen from the lip, in meters
 layout(location = 17) in float outFall;
+// How hard it rains here, in drops a square meter a second, from the wave grid
+layout(location = 18) in float outRain;
 
 layout(location = 0) out vec4 outColor;
 
@@ -56,6 +58,25 @@ const float FOAM_ALBEDO = 0.55;
 // the pattern's range
 const float FOAM_PATCH_SIZE = 0.6;
 const float FOAM_PATCH_EDGE = 0.08;
+// Rings raindrops leave on the water, see rainRings: drawn in cells of this size, in meters, each
+// a whole number of times into WATER_PATTERN_WRAP, a ring at most a cell for every cycle of this
+// many seconds, a whole number of times into WATER_SHEET_TIME_PERIOD, in a few layers so rings
+// overlap. A ring spreads at about the speed of the shortest capillary-gravity waves, 0.23 m/s, as
+// a wave train a few centimeters long, fading over a fraction of a second.
+const float RAIN_RING_CELL = 0.4;
+const float RAIN_RING_PERIOD = 1.0;
+const int RAIN_RING_LAYERS = 2;
+const float RAIN_RING_SPEED = 0.23;
+const float RAIN_RING_WAVELENGTH = 0.03;
+const float RAIN_RING_WIDTH = 0.02;
+const float RAIN_RING_FADE = 0.3;
+// How steep a fresh ring's crests are, and how many rings each drop the particles count makes:
+// the particles' rain is far sparser than real rain's drops, so one stands for a few
+const float RAIN_RING_SLOPE = 0.3;
+const float RAIN_RINGS_PER_DROP = 1.0;
+// The slopes' variance rings too small for a pixel add to the roughness, where every cell rings
+const float RAIN_RING_VARIANCE = 0.01;
+
 // The least Jacobian foam is thickened by, where the surface squeezes it together
 const float FOAM_MIN_SQUEEZE = 0.25;
 // A falling sheet's streaks: how wide, in meters; how long apart in when their water left the
@@ -131,6 +152,64 @@ float foamPatches(vec2 rest, float share, float squeeze, float footprint) {
     float patches = smoothstep(1.0 - thick - FOAM_PATCH_EDGE, 1.0 - thick + FOAM_PATCH_EDGE,
         pattern);
     return mix(patches, thick, clamp(footprint / FOAM_PATCH_SIZE, 0.0, 1.0));
+}
+
+// The slope rain's rings give the surface at a point at rest, relative to the camera, for a rain
+// of some drops a square meter a second: in each layer's cells, a ring started at a random place
+// at a random time each cycle, as often as the rain gives. Rings too small for a pixel fade out
+// into roughness, as a variance of the slope, instead.
+vec2 rainRings(vec2 rest, float rate, float footprint, out float variance) {
+    variance = 0.0;
+    if (rate <= 0.0) {
+        return vec2(0.0);
+    }
+    float expected = rate * RAIN_RINGS_PER_DROP * RAIN_RING_CELL * RAIN_RING_CELL
+        * RAIN_RING_PERIOD / float(RAIN_RING_LAYERS);
+    float chance = 1.0 - exp(-expected);
+    // Shown while a pixel is under a quarter of the rings' wavelength, gone past half
+    float shown = 1.0 - smoothstep(0.25, 0.5, footprint / RAIN_RING_WAVELENGTH);
+    variance = RAIN_RING_VARIANCE * chance * (1.0 - shown);
+    if (shown <= 0.0) {
+        return vec2(0.0);
+    }
+    const float TWO_PI = 6.28318530718;
+    float k = TWO_PI / RAIN_RING_WAVELENGTH;
+    float width2 = RAIN_RING_WIDTH * RAIN_RING_WIDTH;
+    ivec2 period = foamPeriod(vec2(WATER_PATTERN_WRAP), vec2(RAIN_RING_CELL));
+    vec2 gradient = vec2(0.0);
+    for (int layer = 0; layer < RAIN_RING_LAYERS; ++layer) {
+        // Each layer's cells offset from the last, so their rings don't line up
+        vec2 point = (rest + cameraWrap) / RAIN_RING_CELL + vec2(0.37, 0.71) * float(layer);
+        ivec2 base = ivec2(floor(point));
+        for (int y = -1; y <= 1; ++y) {
+            for (int x = -1; x <= 1; ++x) {
+                ivec2 cell = base + ivec2(x, y);
+                ivec2 wrapped = ((cell % period) + period) % period;
+                uint seed = uint(wrapped.x) * 1973u + uint(wrapped.y) * 9277u
+                    + uint(layer) * 104729u + 26699u;
+                float cycles = sheetTime / RAIN_RING_PERIOD + waterRandom(seed);
+                seed ^= uint(floor(cycles)) * 2654435761u;
+                if (waterRandom(seed) >= chance) {
+                    continue;
+                }
+                vec2 center = vec2(cell) + vec2(waterRandom(seed), waterRandom(seed));
+                vec2 offset = (point - center) * RAIN_RING_CELL;
+                float away = length(offset);
+                float age = fract(cycles) * RAIN_RING_PERIOD;
+                float along = away - RAIN_RING_SPEED * age;
+                float envelope = exp(-along * along / width2);
+                if (envelope < 1e-3 || away <= 0.0) {
+                    continue;
+                }
+                // h = a e^(-x^2 / w^2) cos(k x) across the ring, x how far past the crest
+                float height = RAIN_RING_SLOPE / k * exp(-age / RAIN_RING_FADE);
+                float slope = height * envelope
+                    * (-2.0 * along / width2 * cos(k * along) - k * sin(k * along));
+                gradient += slope * offset / away;
+            }
+        }
+    }
+    return gradient * shown;
 }
 
 // Where what lies behind the water at a pixel is, relative to the camera, from its depth
@@ -227,6 +306,15 @@ void main() {
         foam = 1.0 - (1.0 - foam) * (1.0 - left);
         normal = normalize(vec3(-gradient.x, 1.0, -gradient.y));
         alpha = sqrt(alpha * alpha + variance);
+    }
+    // Rain's rings on the surface, up to the water's edge
+    if (!side && outRain > 0.0) {
+        float footprint = length(outRenderPosition) * pixelAngle
+            / max(dot(up, toEye), MIN_FOOTPRINT_COSINE);
+        float ringVariance;
+        vec2 rings = rainRings(outRestXZ, outRain, footprint, ringVariance);
+        normal = normalize(normal - vec3(rings.x, 0.0, rings.y));
+        alpha = sqrt(alpha * alpha + ringVariance);
     }
     // A side's face is water pouring off it: leaving the lip at its flow outward, falling faster
     // as it goes, sqrt(v0^2 + 2 g s) after falling s. Its pattern is fixed to when its water left

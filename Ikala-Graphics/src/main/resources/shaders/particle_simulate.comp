@@ -125,14 +125,20 @@ void main() {
         if (position.y < surface) {
             bool around = link != 0u && linkList.links[link - 1].center.w != 0.0;
             if (previous.y >= waterSurface(previous)) {
-                // Into the water: it goes in, splashing if it comes down fast enough
+                // Into the water: it goes in, splashing and counted as rain if it comes down fast
+                // enough
                 dies = true;
-                if (link != 0u && -velocity.y > WATER_DROP_SPEED
-                        && linkList.links[WATER_LINK_DROP - 1].splashCount > 0u) {
-                    uint recorded = atomicAdd(control.hits.x, 1);
-                    if (recorded < MAX_HITS) {
-                        hitList.hits[recorded] =
-                            Hit(vec3(position.x, surface, position.z), WATER_LINK_DROP);
+                if (link != 0u && -velocity.y > WATER_DROP_SPEED) {
+                    ivec2 cell = linkList.anchorCell + ivec2(floor(position.xz));
+                    int slot = (cell.y & (WATER_GRID_SIZE - 1)) * WATER_GRID_SIZE
+                        + (cell.x & (WATER_GRID_SIZE - 1));
+                    atomicAdd(WaterDropList(linkList.waterDrops).drops[slot], 1u);
+                    if (linkList.links[WATER_LINK_DROP - 1].splashCount > 0u) {
+                        uint recorded = atomicAdd(control.hits.x, 1);
+                        if (recorded < MAX_HITS) {
+                            hitList.hits[recorded] =
+                                Hit(vec3(position.x, surface, position.z), WATER_LINK_DROP);
+                        }
                     }
                 }
             } else if (around) {

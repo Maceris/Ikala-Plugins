@@ -67,9 +67,16 @@ struct WaterHit {
     uint link;
 };
 
-layout(buffer_reference, std430, buffer_reference_align = 16) writeonly buffer WaterHitList {
-    WaterHit hits[];
+// The hits, then how many drops landed in each cell since the last step, by world cell, see
+// ParticleMath.WATER_DROPS
+layout(buffer_reference, std430, buffer_reference_align = 16) buffer WaterHitList {
+    WaterHit hits[MAX_WATER_HITS];
+    uint drops[];
 };
+
+// How long the rain a cell felt takes to fade from its smoothed rate, in seconds: long enough to
+// even out the few drops a cell gets a frame
+const float WAVE_RAIN_SMOOTHING = 1.0;
 
 // How many hits the list holds, in the particles' control buffer
 layout(buffer_reference, std430, buffer_reference_align = 4) buffer WaterHitCount {
@@ -257,6 +264,14 @@ void main() {
     }
     ivec2 cell = corner + local;
     int slot = waveGridSlot(cell);
+    // The drops that landed here since the last step, taken in as rain
+    float drops = 0.0;
+    if (any(notEqual(hitListAddress, uvec2(0)))) {
+        WaterHitList list = WaterHitList(hitListAddress);
+        // Before the first step the counts hold whatever the buffer did
+        drops = lastValid != 0 ? float(list.drops[slot]) : 0.0;
+        list.drops[slot] = 0u;
+    }
     if (waterAt(cell) <= 0.0) {
         for (int i = 0; i < WAVE_CELL_VALUES; ++i) {
             next.values[slot * WAVE_CELL_VALUES + i] = 0.0;
@@ -424,4 +439,12 @@ void main() {
         }
     }
     next.values[slot * WAVE_CELL_VALUES + WAVE_FOAM_BAND * WAVE_DIRECTIONS] = min(foam, 1.0);
+    // How hard it rains here, smoothed over WAVE_RAIN_SMOOTHING
+    float rain = lastAt(middle, WAVE_FOAM_BAND, WAVE_RAIN_DIRECTION);
+    if (seconds > 0.0) {
+        float keep = exp(-seconds / WAVE_RAIN_SMOOTHING);
+        rain = rain * keep + drops / (WAVE_CELL_SIZE * WAVE_CELL_SIZE) * (1.0 - keep) / seconds;
+    }
+    next.values[slot * WAVE_CELL_VALUES + WAVE_FOAM_BAND * WAVE_DIRECTIONS + WAVE_RAIN_DIRECTION]
+        = rain;
 }

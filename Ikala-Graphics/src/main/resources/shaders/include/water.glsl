@@ -148,9 +148,12 @@ const float SHEET_GAP = 0.01;
 const float WATER_PATTERN_WRAP = 614.4;
 const float WATER_SHEET_TIME_PERIOD = 512.0;
 
-// After the bands, the share of the cell the foam breaking crests left covers
+// After the bands, the share of the cell the foam breaking crests left covers, then how hard it rains
+// on the cell, in drops a square meter a second, see WaveletMath.CELL_VALUES: read as the foam
+// band's directions 0 and 1
 const int WAVE_FOAM_BAND = WAVE_BANDS;
-const int WAVE_CELL_VALUES = WAVE_BANDS * WAVE_DIRECTIONS + 1;
+const int WAVE_RAIN_DIRECTION = 1;
+const int WAVE_CELL_VALUES = WAVE_BANDS * WAVE_DIRECTIONS + 2;
 // How much of the whitecaps' coverage is foam still being made, see WaveMath.ACTIVE_WHITECAP_SHARE,
 // and how long the foam left behind takes to fade, in seconds, see WaveMath.FOAM_LIFETIME
 const float WAVE_ACTIVE_WHITECAP_SHARE = 0.115;

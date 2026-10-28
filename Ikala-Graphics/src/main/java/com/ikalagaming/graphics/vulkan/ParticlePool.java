@@ -49,7 +49,8 @@ public class ParticlePool {
      * The hits the water recorded at its last step, for spray and splashes, {@link
      * ParticleMath#MAX_WATER_HITS} of {@link ParticleMath#HIT_SIZE} bytes, relative to the camera
      * as it was then; how many is in the control buffer, see {@link
-     * ParticleMath#CONTROL_WATER_HITS}.
+     * ParticleMath#CONTROL_WATER_HITS}. Then the drops that landed in the water, see {@link
+     * ParticleMath#WATER_DROPS}.
      */
     @Getter private final SharedBuffer waterHits;
 
@@ -100,9 +101,7 @@ public class ParticlePool {
                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
         waterHits =
                 SharedBuffer.allocateDeviceLocal(
-                        (long) ParticleMath.MAX_WATER_HITS * ParticleMath.HIT_SIZE,
-                        state,
-                        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+                        ParticleMath.WATER_HITS_SIZE, state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
         control =
                 SharedBuffer.allocate(
                         ParticleMath.CONTROL_SIZE,

@@ -83,6 +83,9 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Li
     uvec2 waterMap;
     uvec2 waterPadding;
     vec4 waterCorner;
+    // The water's hits buffer, for its drop counts, and the anchor's world cell along x and z
+    uvec2 waterDrops;
+    ivec2 anchorCell;
     Link links[];
 };
 
@@ -99,6 +102,9 @@ const uint MAX_WATER_HITS = 2048;
 // ParticleMath.WATER_DROP_SPEED
 const float WATER_DROP_SPEED = 2.0;
 
+// The wave grid's size, in cells of a meter, see WaveletMath.GRID_SIZE
+const int WATER_GRID_SIZE = 128;
+
 // A hit the simulation recorded for splashes: where, relative to the anchor, and the link
 struct Hit {
     vec3 position;
@@ -107,6 +113,13 @@ struct Hit {
 
 layout(buffer_reference, std430, buffer_reference_align = 16) buffer HitList {
     Hit hits[];
+};
+
+// The water's hits, then how many drops landed in each wave grid cell, by world cell, see
+// ParticleMath.WATER_DROPS
+layout(buffer_reference, std430, buffer_reference_align = 16) buffer WaterDropList {
+    Hit hits[MAX_WATER_HITS];
+    uint drops[];
 };
 
 // The most hits recorded in a frame, ParticleMath.MAX_HITS

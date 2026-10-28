@@ -29,8 +29,11 @@ public final class WaveletMath {
     /** Which band is ripples. */
     public static final int RIPPLE_BAND = 1;
 
-    /** Values a cell holds: each band's amplitude in each direction. */
-    public static final int CELL_VALUES = BANDS * WaveMath.DIRECTIONS + 1;
+    /**
+     * Values a cell holds: each band's amplitude in each direction, then the share of it foam
+     * covers and how hard it rains on it, in drops a square meter a second.
+     */
+    public static final int CELL_VALUES = BANDS * WaveMath.DIRECTIONS + 2;
 
     /**
      * Where in a cell the foam breaking crests left is, the share of the cell it covers, after the

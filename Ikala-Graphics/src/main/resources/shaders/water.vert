@@ -42,6 +42,8 @@ layout(location = 15) out vec2 outRestXZ;
 layout(location = 16) out float outFoam;
 // On a side, how far the water has fallen from the lip, in meters
 layout(location = 17) out float outFall;
+// How hard it rains here, in drops a square meter a second, from the wave grid
+layout(location = 18) out float outRain;
 
 void main() {
     WaterTileData tile = tileList.waterTiles[inTile];
@@ -52,6 +54,7 @@ void main() {
     bool side = dot(inSideNormal, inSideNormal) > 0.0;
     float waves = side ? 0.0 : inCalm;
     float foam = 0.0;
+    float rain = 0.0;
     vec2 amplitudes[WAVE_DIRECTIONS];
     for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
         amplitudes[b] = vec2(0.0);
@@ -98,6 +101,13 @@ void main() {
             render += waves * moved;
         }
     }
+    // Rain rings the water up to its edges, calm or not
+    if (gridOn != 0 && !side) {
+        WaveGridSample at = waveGridAt(rest, gridCorner, gridCornerCell);
+        if (at.inside) {
+            rain = waveGridValue(gridList, at, WAVE_FOAM_BAND, WAVE_RAIN_DIRECTION);
+        }
+    }
     for (int i = 0; i < WAVE_AMPLITUDE_VECTORS; ++i) {
         outAmplitudes[i] = vec4(amplitudes[2 * i], amplitudes[2 * i + 1]);
     }
@@ -111,6 +121,7 @@ void main() {
     outDepth = inDepth;
     outRestXZ = rest;
     outFoam = foam * waves;
+    outRain = side ? 0.0 : rain;
     outFall = side ? inCalm : 0.0;
     if (side) {
         // Just off what the sheet falls past, so the two never fight over depth

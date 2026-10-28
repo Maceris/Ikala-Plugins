@@ -326,7 +326,9 @@ What the renderer does and the work it builds on.
   falling water lands and where the water is disturbed, and the next frame's splash pass throws up
   the water's effects there: spray, mist and droplets (`WaterEffects`, which
   `graphics.water().setEffects()` replaces). Particles that collide stop at the water's surface, and
-  rain splashes there.
+  rain splashes there. The grid keeps how hard it rains on each cell from the drops that land, so
+  only water out in the rain gets rings: procedural rings spreading at 0.23 m/s near the camera,
+  and roughness where they are too small for a pixel.
 
 **Planned**: stochastic lightcuts for light visibility (Yuksel 2019).
 

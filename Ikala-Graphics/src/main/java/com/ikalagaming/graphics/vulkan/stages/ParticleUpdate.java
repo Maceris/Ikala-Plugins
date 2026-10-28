@@ -21,6 +21,7 @@ import com.ikalagaming.graphics.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.vulkan.SharedBuffer;
 import com.ikalagaming.graphics.vulkan.TextureInfoVulkan;
 import com.ikalagaming.graphics.vulkan.VulkanState;
+import com.ikalagaming.graphics.vulkan.WaveletMath;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -567,6 +568,14 @@ public class ParticleUpdate implements RenderStage {
                     (float) (state.waterVolume.getCornerX() - pool.getAnchor().x()),
                     (float) (state.waterVolume.getCornerZ() - pool.getAnchor().z()),
                     (float) pool.getAnchor().y());
+            MemoryUtil.memPutLong(
+                    address + ParticleMath.LINKS_WATER_DROPS, pool.getWaterHits().deviceAddress);
+            MemoryUtil.memPutInt(
+                    address + ParticleMath.LINKS_WATER_DROPS + Long.BYTES,
+                    (int) Math.floor(pool.getAnchor().x() / WaveletMath.CELL_SIZE));
+            MemoryUtil.memPutInt(
+                    address + ParticleMath.LINKS_WATER_DROPS + Long.BYTES + Integer.BYTES,
+                    (int) Math.floor(pool.getAnchor().z() / WaveletMath.CELL_SIZE));
         }
         splashes = false;
         final Vector3d position = new Vector3d();

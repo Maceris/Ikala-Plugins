@@ -98,6 +98,17 @@ public final class ParticleMath {
     /** The size of a recorded hit: where, relative to the anchor, and the emitter's link. */
     public static final int HIT_SIZE = 4 * Integer.BYTES;
 
+    /**
+     * Where in the water's hits buffer, after the hits, how many drops landed in each cell of the
+     * wave grid since its last step is, a uint each, kept by world cell as the grid is, see {@link
+     * WaveGrid#slot}: the grid takes them in as rain, for the ripples it makes.
+     */
+    public static final int WATER_DROPS = MAX_WATER_HITS * HIT_SIZE;
+
+    /** The size of the water's hits buffer. */
+    public static final long WATER_HITS_SIZE =
+            WATER_DROPS + (long) WaveletMath.GRID_SIZE * WaveletMath.GRID_SIZE * Integer.BYTES;
+
     /** The most splash particles one hit spawns. */
     public static final int MAX_SPLASH_COUNT = 16;
 
@@ -128,8 +139,15 @@ public final class ParticleMath {
      */
     public static final int LINKS_WATER_CORNER = 96;
 
+    /**
+     * Where in it the water's hits buffer's address is, whose drop counts the simulation adds the
+     * drops that land in the water to, see {@link #WATER_DROPS}, then the anchor's world cell along
+     * x and z, as ints.
+     */
+    public static final int LINKS_WATER_DROPS = 112;
+
     /** The size of its header, before the links. */
-    public static final int LINKS_HEADER = 112;
+    public static final int LINKS_HEADER = 128;
 
     /**
      * Where in one link its spawn box's middle is, relative to the anchor, then 1 if it follows the
