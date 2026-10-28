@@ -11,6 +11,7 @@ import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Quaternionfc;
 import org.joml.Vector3dc;
 
 import java.io.UncheckedIOException;
@@ -172,7 +173,11 @@ public final class Particles {
     }
 
     /**
-     * Move an emitter this plugin owns. Particles it already spawned stay where they are.
+     * Move an emitter this plugin owns, making it a point if it was a line. Its next frame's
+     * particles spawn along the way it moved, so a fast emitter leaves an even trail rather than
+     * clumps, unless it moved farther than {@link EmitterRegistry#TELEPORT_DISTANCE}. Particles it
+     * already spawned stay where they are, unless its effect {@link ParticleEffect#getFollow()
+     * follows} it.
      *
      * @param handle The emitter's handle.
      * @param position Where it is now, in the world.
@@ -181,6 +186,52 @@ public final class Particles {
         final EmitterRegistry registry = registryOrNull();
         if (registry != null && !registry.move(owner(), handle, position)) {
             ignored(registry, handle, "move");
+        }
+    }
+
+    /**
+     * Move an emitter this plugin owns and make it a line, which spawns anywhere along it, as along
+     * a blade from its base to its tip. Its next frame's particles sweep the area between where the
+     * line was and where it is, for trails. Call it every frame to keep it a line.
+     *
+     * @param handle The emitter's handle.
+     * @param from One end, in the world, which counts as its position.
+     * @param to The other end.
+     */
+    public void moveLine(
+            @Nullable EmitterHandle handle, @NonNull Vector3dc from, @NonNull Vector3dc to) {
+        final EmitterRegistry registry = registryOrNull();
+        if (registry != null && !registry.moveLine(owner(), handle, from, to)) {
+            ignored(registry, handle, "move");
+        }
+    }
+
+    /**
+     * Move an emitter this plugin owns, making it a point, without its next frame's particles
+     * spawning along the way, as when what it is on jumps.
+     *
+     * @param handle The emitter's handle.
+     * @param position Where it is now, in the world.
+     */
+    public void teleport(@Nullable EmitterHandle handle, @NonNull Vector3dc position) {
+        final EmitterRegistry registry = registryOrNull();
+        if (registry != null && !registry.teleport(owner(), handle, position)) {
+            ignored(registry, handle, "move");
+        }
+    }
+
+    /**
+     * Turn an emitter this plugin owns, as a bone it is on turns: its effect's spawn box and
+     * direction turn with it. Acceleration, such as gravity, stays in the world. Effects around the
+     * camera don't turn.
+     *
+     * @param handle The emitter's handle.
+     * @param rotation How it is turned, from the world's axes.
+     */
+    public void orient(@Nullable EmitterHandle handle, @NonNull Quaternionfc rotation) {
+        final EmitterRegistry registry = registryOrNull();
+        if (registry != null && !registry.orient(owner(), handle, rotation)) {
+            ignored(registry, handle, "turn");
         }
     }
 

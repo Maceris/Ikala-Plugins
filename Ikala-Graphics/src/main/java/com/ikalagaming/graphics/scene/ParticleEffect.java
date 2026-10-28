@@ -158,13 +158,26 @@ public class ParticleEffect {
     @Builder.Default int splashCount = 0;
 
     /**
+     * How much of its emitter's moves its particles go along with, 0 to 1: 1 keeps them where they
+     * are relative to it, as an aura on a running character; 0 leaves them where they were spawned,
+     * trailing behind. Turns are not followed.
+     */
+    @Builder.Default float follow = 0;
+
+    /**
+     * How much of its emitter's velocity particles start with, on top of their own: 1 for all of
+     * it, as sparks thrown from a swung blade.
+     */
+    @Builder.Default float inheritVelocity = 0;
+
+    /**
      * Whether its emitters need a link, a slot of their own the GPU looks up while their particles
-     * live: for a spawn box, following the camera, or splashes.
+     * live: for a spawn box, following the camera, splashes, or following the emitter.
      *
      * @return Whether it needs one.
      */
     public boolean needsLink() {
-        return aroundCamera || hasSpawnBox() || (splash != null && splashCount > 0);
+        return aroundCamera || hasSpawnBox() || (splash != null && splashCount > 0) || follow > 0;
     }
 
     /**

@@ -646,6 +646,9 @@ public final class GateBenchmark {
     /** The test particle emitters the run placed, stopped when it ends. */
     private final List<EmitterHandle> testEmitters = new ArrayList<>();
 
+    /** The moving test emitters from the {@code .fxTest} option, or null for none. */
+    private FxTest fxTest;
+
     /** Where the test sparks are from the fountain, in meters. */
     private static final Vector3d SPARKS_OFFSET = new Vector3d(6, 0, 0);
 
@@ -1643,6 +1646,9 @@ public final class GateBenchmark {
     private void step(@NonNull Scene scene) {
         rippleTestWater();
         paintTestWater();
+        if (fxTest != null && !released && !graphics.isClosed()) {
+            fxTest.step(graphics.particles());
+        }
         switch (phase) {
             case BAKING -> {
                 if (composedAt == 0) {
@@ -2226,9 +2232,26 @@ public final class GateBenchmark {
      * fountain there, glowing sparks 6 m along x, rising smoke puffs 6 m along -x, thick smoke in
      * the fog volume 8 m along -z and a fire 6 m along z, for looking at particles with the fog,
      * the lights and transparency; {@code .weather=rain} or {@code snow} makes it rain or snow
-     * around the camera.
+     * around the camera; {@code .fxTest=x,y,z} places emitters moving as a character's effects do
+     * there, see {@link FxTest}.
      */
     private void placeTestParticles() {
+        final String fx = option("fxTest");
+        if (fx != null) {
+            final String[] parts = fx.split(",");
+            if (parts.length != 3) {
+                log.warn("The benchmark's fxTest must be x,y,z, not {}", fx);
+            } else {
+                fxTest =
+                        new FxTest(
+                                graphics.particles(),
+                                new Vector3d(
+                                        Double.parseDouble(parts[0].trim()),
+                                        Double.parseDouble(parts[1].trim()),
+                                        Double.parseDouble(parts[2].trim())));
+                testEmitters.addAll(fxTest.handles());
+            }
+        }
         final String weather = option("weather");
         if (weather != null) {
             final ParticleEffect effect =
@@ -3512,6 +3535,7 @@ public final class GateBenchmark {
             testMedia.clear();
             testEmitters.forEach(graphics.particles()::stop);
             testEmitters.clear();
+            fxTest = null;
             testWater.forEach(graphics.water()::remove);
             testWater.clear();
             placedWater.clear();

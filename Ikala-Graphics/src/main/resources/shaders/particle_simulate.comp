@@ -98,12 +98,16 @@ void main() {
         freeParticle(slot);
         return;
     }
+    uint link = behaviorLink(particle.behavior);
     vec3 position = particle.position + shift;
+    if (link != 0u) {
+        // Along with its emitter, as much as its effect follows it
+        position += linkList.links[link - 1].moved.xyz;
+    }
     vec3 velocity = particle.velocity;
     vec3 previous = position;
     advanceParticle(position, velocity, particle.acceleration, particle.drag, seconds);
     uint collision = behaviorCollision(particle.behavior);
-    uint link = behaviorLink(particle.behavior);
     bool hit = false;
     bool dies = false;
     vec3 hitAt = previous;

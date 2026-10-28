@@ -55,7 +55,22 @@ struct Emitter {
     uint behavior;
     // How far their billboards stretch along their motion, in seconds
     float stretch;
+    // The far end of its line, where it was last frame and where its line's far end was, each
+    // relative to its position: spawns spread along the way, see particle_emit.comp
+    vec4 end;
+    vec4 from;
+    vec4 fromEnd;
+    // How it is turned, a quaternion, which its spawn box and direction turn by
+    vec4 rotation;
+    // The velocity its particles start with on top of their own, from its own
+    vec4 inherited;
 };
+
+// A vector turned by a quaternion of unit length
+vec3 rotateByQuaternion(vec4 q, vec3 v) {
+    vec3 t = 2.0 * cross(q.xyz, v);
+    return v + q.w * t + cross(q.xyz, t);
+}
 
 // What particles of a linked emitter look up while they live, ParticleMath.LINK_SIZE bytes: its
 // spawn box and the splash its particles' hits spawn
@@ -67,6 +82,8 @@ struct Link {
     vec3 halfSize;
     // How many splash particles a hit spawns
     uint splashCount;
+    // How far its particles move this frame following the emitter, see ParticleEffect.follow
+    vec4 moved;
     Emitter splash;
 };
 

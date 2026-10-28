@@ -111,7 +111,11 @@ already run this way.
   look; build one in Java, or write it as a YAML file (`*.effect.yml`, see `ParticleEffectLoader`
   for every key) and load it with `graphics.particles().loadEffect()`, which reloads it when the
   file changes. `spawn()` places an emitter and returns an `EmitterHandle` to `move()`, `burst()`
-  or `stop()`; a plugin's emitters and effects go when it unloads. `ParticleSamples` has a few to
+  or `stop()`; a plugin's emitters and effects go when it unloads. For effects on moving things,
+  as on a character's bones: a frame's spawns spread along the way the emitter moved (`teleport()`
+  skips that); `moveLine(from, to)` spawns along a segment, sweeping between frames for weapon
+  trails; `orient()` turns the spawn box and direction; and an effect's `follow` (0 to 1) carries
+  its particles along with the emitter, its `inheritVelocity` gives them the emitter's velocity. `ParticleSamples` has a few to
   start from, and the asset workbench's particle viewer (its Particles button, or opening an
   effect file) shows one on a stage with walls, glass, a roof and fog, with time controls and a
   repeatable measurement.
@@ -277,6 +281,9 @@ What the renderer does and the work it builds on.
 - Volumetric particles are soft balls splatted into the fog's froxels instead, lit and shaded as
   fog, with their optical depth toward the sun and out to their edges in closed form, for broad
   thick smoke.
+- An emitter's spawns spread over the frame along the way it moved and along its line, and its
+  spawn box and direction turn with it. Effects that follow their emitter take a link, through
+  which the simulation moves their particles by the emitter's move each frame.
 - Collisions test the occupancy volume's finest voxels near the camera (baked sections); weather
   around the camera tests the sky occlusion map, so rain and snow stop on roofs, and splashes come
   from the hits.
@@ -398,6 +405,7 @@ These are Java system properties, given before `-jar`:
 | `-Dikala.benchmark.haze=true` | `false` | Adds the physical sky's haze to the fog; it only shows with a physical sky (`-Dikala.benchmark.physicalSky=true`). |
 | `-Dikala.benchmark.smoke=<x>,<y>,<z>` | not set | Places test media there: a column of white smoke drifting up, a glowing orange sphere 25 m along -x and a fog bank in front. |
 | `-Dikala.benchmark.particles=<x>,<y>,<z>` | not set | Places test particle emitters: a fountain there, sparks 6 m along x, smoke puffs 6 m along -x, thick smoke drawn in the fog volume 8 m along -z and a fire 6 m along z. |
+| `-Dikala.benchmark.fxTest=<x>,<y>,<z>` | not set | Places emitters moving as a character's effects do, round a point 1.5 m over that one: a blade swung at about 20 m/s at its tip leaving a trail swept along its line, sparks thrown off its tip with its velocity, an aura whose motes go along with it, and a bar of particles spinning in place. |
 | `-Dikala.benchmark.weather=<rain or snow>` | not set | Makes it rain or snow around the camera, stopped by roofs and the ground. |
 | `-Dikala.benchmark.waterBody=<ocean, green or muddy>` | `ocean` | What the `ISLAND` recipe's sea holds: clear ocean, a green lake's phytoplankton, or a muddy river's sediment, each with its own wind. |
 | `-Dikala.benchmark.wind=<m/s>[,<degrees>[,<fetch>]]` | the body's | The `ISLAND` recipe's sea's wind: its speed 10 m up, the way it blows in degrees from +x toward +z, and how far it has blown over the water in meters (the open sea if not given). 0 for still water. |

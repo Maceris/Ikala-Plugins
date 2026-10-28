@@ -26,7 +26,9 @@ import com.ikalagaming.graphics.vulkan.WaveletMath;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4f;
+import org.joml.Quaternionfc;
 import org.joml.Vector3d;
+import org.joml.Vector3dc;
 import org.joml.Vector3f;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
@@ -515,14 +517,16 @@ public class ParticleUpdate implements RenderStage {
             }
             final int count = Math.min(spawn.count(), pool.getCapacity() - first);
             emitterPosition(spawn, position).sub(pool.getAnchor());
+            final long at = address + (long) written * ParticleMath.EMITTER_SIZE;
             putEmitter(
-                    address + (long) written * ParticleMath.EMITTER_SIZE,
+                    at,
                     spawn.effect(),
                     position,
                     first,
                     count,
                     frames * SEED_STEP + written,
                     spawn.link());
+            putPath(at, spawn);
             first += count;
             ++written;
         }
@@ -597,6 +601,7 @@ public class ParticleUpdate implements RenderStage {
                     at + ParticleMath.LINK_SPLASH_COUNT,
                     Math.min(effect.getBurst(), ParticleMath.MAX_SPLASH_COUNT));
             putEmitter(at + ParticleMath.LINK_SPLASH, effect, origin, 0, 0, 0, 0);
+            putStill(at + ParticleMath.LINK_SPLASH);
             // The simulation records drops into the water this frame for the splash pass
             if (ParticleMath.WATER_LINK_SPRAY + i == ParticleMath.WATER_LINK_DROP
                     && waterMap != 0) {
@@ -633,7 +638,14 @@ public class ParticleUpdate implements RenderStage {
             if (splashCount > 0) {
                 splashes = true;
                 putEmitter(at + ParticleMath.LINK_SPLASH, splash, origin, 0, 0, 0, 0);
+                putStill(at + ParticleMath.LINK_SPLASH);
             }
+            final float follow = Math.clamp(effect.getFollow(), 0, 1);
+            putVector(
+                    at + ParticleMath.LINK_MOVED,
+                    (float) (spawn.moved().x() * follow),
+                    (float) (spawn.moved().y() * follow),
+                    (float) (spawn.moved().z() * follow));
         }
     }
 
@@ -738,6 +750,61 @@ public class ParticleUpdate implements RenderStage {
                         effect.isVolumetric(),
                         link));
         MemoryUtil.memPutFloat(at + ParticleMath.EMITTER_STRETCH, Math.max(0, effect.getStretch()));
+    }
+
+    /**
+     * Write the rest of an emitter record: its line, the way it moved since last frame, how it is
+     * turned, and the velocity its particles inherit.
+     *
+     * @param at Where the record is.
+     * @param spawn Its spawns this frame.
+     */
+    private static void putPath(long at, @NonNull EmitterRegistry.Spawn spawn) {
+        final Vector3dc position = spawn.position();
+        putOffset(at + ParticleMath.EMITTER_END, spawn.end(), position);
+        putOffset(at + ParticleMath.EMITTER_FROM, spawn.from(), position);
+        putOffset(at + ParticleMath.EMITTER_FROM_END, spawn.fromEnd(), position);
+        final Quaternionfc rotation = spawn.rotation();
+        putFloats(
+                at + ParticleMath.EMITTER_ROTATION,
+                rotation.x(),
+                rotation.y(),
+                rotation.z(),
+                rotation.w());
+        final float inherit = Math.max(0, spawn.effect().getInheritVelocity());
+        putVector(
+                at + ParticleMath.EMITTER_INHERITED,
+                (float) (spawn.velocity().x() * inherit),
+                (float) (spawn.velocity().y() * inherit),
+                (float) (spawn.velocity().z() * inherit));
+    }
+
+    /**
+     * Write the rest of an emitter record for one that stays put and isn't turned, as a splash.
+     *
+     * @param at Where the record is.
+     */
+    private static void putStill(long at) {
+        MemoryUtil.memSet(
+                at + ParticleMath.EMITTER_END,
+                0,
+                ParticleMath.EMITTER_SIZE - ParticleMath.EMITTER_END);
+        MemoryUtil.memPutFloat(at + ParticleMath.EMITTER_ROTATION + 3 * Float.BYTES, 1);
+    }
+
+    /**
+     * Write a point's offset from another as three floats.
+     *
+     * @param at Where.
+     * @param point The point.
+     * @param origin What it is relative to.
+     */
+    private static void putOffset(long at, @NonNull Vector3dc point, @NonNull Vector3dc origin) {
+        putVector(
+                at,
+                (float) (point.x() - origin.x()),
+                (float) (point.y() - origin.y()),
+                (float) (point.z() - origin.z()));
     }
 
     /**

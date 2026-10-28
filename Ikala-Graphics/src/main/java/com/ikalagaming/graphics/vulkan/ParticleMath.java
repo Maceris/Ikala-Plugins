@@ -27,8 +27,23 @@ public final class ParticleMath {
     /** The size of one particle in the pool, in bytes, see {@code particles.glsl}. */
     public static final int PARTICLE_SIZE = 80;
 
-    /** The size of one emitter's record for a frame, in bytes: eight vec4s. */
-    public static final int EMITTER_SIZE = 8 * 4 * Float.BYTES;
+    /** The size of one emitter's record for a frame, in bytes: thirteen vec4s. */
+    public static final int EMITTER_SIZE = 13 * 4 * Float.BYTES;
+
+    /** Where in it the far end of its line is, relative to its position; 0 for a point. */
+    public static final int EMITTER_END = 128;
+
+    /** Where in it where it was last frame is, relative to its position. */
+    public static final int EMITTER_FROM = 144;
+
+    /** Where in it where its line's far end was last frame is, relative to its position. */
+    public static final int EMITTER_FROM_END = 160;
+
+    /** Where in it how it is turned is, a quaternion, x, y, z then w. */
+    public static final int EMITTER_ROTATION = 176;
+
+    /** Where in it the velocity its particles start with on top of their own is. */
+    public static final int EMITTER_INHERITED = 192;
 
     /** Where an emitter's position, relative to the anchor, and first spawn index are. */
     public static final int EMITTER_POSITION = 0;
@@ -161,8 +176,14 @@ public final class ParticleMath {
     /** Where in one link how many splash particles a hit spawns is. */
     public static final int LINK_SPLASH_COUNT = 28;
 
+    /**
+     * Where in one link how far its particles move this frame is, following the emitter: its move
+     * since last frame times its effect's follow.
+     */
+    public static final int LINK_MOVED = 32;
+
     /** Where in one link its splash's emitter record is. */
-    public static final int LINK_SPLASH = 32;
+    public static final int LINK_SPLASH = 48;
 
     /** The size of one link. */
     public static final int LINK_SIZE = LINK_SPLASH + EMITTER_SIZE;

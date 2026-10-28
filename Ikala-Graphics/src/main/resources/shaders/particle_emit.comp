@@ -5,9 +5,11 @@
 
 // Spawns this frame's particles, see ParticleUpdate: one thread per spawn, over every emitter's
 // spawns in turn. Each takes a particle off the free list, or counts as dropped when the pool is
-// full, and adds it to the alive list the simulation just wrote, so it is drawn this frame. A
-// linked emitter with a box spawns in it rather than a ball, and one around the camera spawns
-// nothing under cover.
+// full, and adds it to the alive list the simulation just wrote, so it is drawn this frame. An
+// emitter's spawns spread over the frame along the way it moved, from where it was to where it is,
+// and anywhere along its line if it has one, so a fast one leaves an even trail and a line sweeps
+// the area between frames. A linked emitter with a box spawns in it rather than a ball, turned
+// with the emitter, and one around the camera spawns nothing under cover.
 
 #include "particles.glsl"
 #include "particle_cover.glsl"
@@ -55,15 +57,23 @@ void main() {
     Emitter emitter = emitterList.emitters[findEmitter(spawn)];
     uint seed = particleHash(emitter.seed ^ particleHash(spawn));
 
-    vec3 position = emitter.position;
+    // When in the frame, by its place among the emitter's spawns, and where along its line
+    float when = (float(spawn - emitter.firstSpawn) + particleRandom(seed))
+        / float(max(emitter.spawnCount, 1u));
+    float along = particleRandom(seed);
+    vec3 position = emitter.position + mix(mix(emitter.from.xyz, emitter.fromEnd.xyz, along),
+        emitter.end.xyz * along, when);
     uint link = behaviorLink(emitter.behavior);
+    vec3 offset;
     if (link != 0u && any(greaterThan(linkList.links[link - 1].halfSize, vec3(0.0)))) {
         vec3 halfSize = linkList.links[link - 1].halfSize;
-        position += (vec3(particleRandom(seed), particleRandom(seed), particleRandom(seed)) * 2.0
+        offset = (vec3(particleRandom(seed), particleRandom(seed), particleRandom(seed)) * 2.0
             - 1.0) * halfSize;
     } else {
-        position += ballOffset(emitter.sizes.w, seed);
+        offset = ballOffset(emitter.sizes.w, seed);
     }
+    position += rotateByQuaternion(emitter.rotation, offset);
+    emitter.direction = rotateByQuaternion(emitter.rotation, emitter.direction);
     if (link != 0u && linkList.links[link - 1].center.w != 0.0
             && coverDepth(linkList, position) > COVER_BIAS) {
         // Under cover: rain doesn't fall indoors
@@ -78,6 +88,7 @@ void main() {
     }
     uint slot = dead.indices[free - 1];
     Particle particle = newParticle(emitter, position, seed);
+    particle.velocity += emitter.inherited.xyz;
     pool.particles[slot] = particle;
     to.indices[atomicAdd(control.alive[next], 1)] = slot;
     if (behaviorVolumetric(particle.behavior)) {

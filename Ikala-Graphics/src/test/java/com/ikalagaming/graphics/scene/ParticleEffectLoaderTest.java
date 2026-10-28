@@ -78,6 +78,8 @@ class ParticleEffectLoaderTest {
                           rate: 0
                           lifetime: 0.3
                           size: [0.05, 0.1]
+                        follow: 0.5
+                        inheritVelocity: 0.25
                         """);
         assertEquals(300, effect.getRate());
         assertEquals(20, effect.getBurst());
@@ -108,8 +110,13 @@ class ParticleEffectLoaderTest {
         assertNotNull(effect.getSplash());
         assertEquals(0.3f, effect.getSplash().getLifetimeMax());
         assertEquals(0.1f, effect.getSplash().getSizeEnd());
+        assertEquals(0.5f, effect.getFollow());
+        assertEquals(0.25f, effect.getInheritVelocity());
         assertTrue(effect.needsLink());
         assertFalse(ParticleEffect.builder().build().needsLink());
+        // Following the emitter takes a link of its own; inheriting its velocity doesn't
+        assertTrue(ParticleEffect.builder().follow(1).build().needsLink());
+        assertFalse(ParticleEffect.builder().inheritVelocity(1).build().needsLink());
     }
 
     /** Missing keys default, one number stands for both ends, and one color for both. */
@@ -158,6 +165,7 @@ class ParticleEffectLoaderTest {
         assertTrue(failure("splash:\n  splash:\n    rate: 1\n").contains("can't have a splash"));
         assertTrue(failure("splash:\n  rait: 1\n").contains("splash: unknown key 'rait'"));
         assertTrue(failure("splashCount: 100").contains("splashCount: must be from"));
+        assertTrue(failure("follow: 2").contains("follow: must be from"));
     }
 
     /** Every sample writes out and reads back the same. */
@@ -204,6 +212,8 @@ class ParticleEffectLoaderTest {
         assertEquals(original.isAroundCamera(), copy.isAroundCamera(), name);
         assertEquals(original.getStretch(), copy.getStretch(), name);
         assertEquals(original.getSplashCount(), copy.getSplashCount(), name);
+        assertEquals(original.getFollow(), copy.getFollow(), name);
+        assertEquals(original.getInheritVelocity(), copy.getInheritVelocity(), name);
         assertEquals(original.getSplash() == null, copy.getSplash() == null, name);
         if (original.getSplash() != null) {
             assertMatches(original.getSplash(), copy.getSplash(), name + " splash");

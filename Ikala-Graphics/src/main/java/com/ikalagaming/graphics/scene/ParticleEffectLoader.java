@@ -57,6 +57,8 @@ import java.util.Set;
  * splashCount: 0             # particles of the splash spawned where one hits the world
  * splash:                    # an effect, written the same way, for what hits spawn
  *   rate: 0
+ * follow: 0                  # how much of the emitter's moves particles go along with, 0 to 1
+ * inheritVelocity: 0         # how much of the emitter's velocity particles start with
  * </pre>
  */
 public final class ParticleEffectLoader {
@@ -136,6 +138,12 @@ public final class ParticleEffectLoader {
     /** How many particles a hit spawns. */
     public static final String SPLASH_COUNT = "splashCount";
 
+    /** How much of the emitter's moves particles go along with. */
+    public static final String FOLLOW = "follow";
+
+    /** How much of the emitter's velocity particles start with. */
+    public static final String INHERIT_VELOCITY = "inheritVelocity";
+
     /** The most anisotropy can be either way, short of all one way. */
     public static final double MAX_ANISOTROPY = 0.95;
 
@@ -164,7 +172,9 @@ public final class ParticleEffectLoader {
                     AROUND_CAMERA,
                     STRETCH,
                     SPLASH,
-                    SPLASH_COUNT);
+                    SPLASH_COUNT,
+                    FOLLOW,
+                    INHERIT_VELOCITY);
 
     /** The widest spread there is, in degrees: every way. */
     public static final double MAX_SPREAD_DEGREES = 180;
@@ -264,6 +274,8 @@ public final class ParticleEffectLoader {
         reader.number(STRETCH, 0, Float.MAX_VALUE).ifPresent(builder::stretch);
         reader.number(SPLASH_COUNT, 0, ParticleMath.MAX_SPLASH_COUNT)
                 .ifPresent(count -> builder.splashCount(Math.round(count)));
+        reader.number(FOLLOW, 0, 1).ifPresent(builder::follow);
+        reader.number(INHERIT_VELOCITY, 0, Float.MAX_VALUE).ifPresent(builder::inheritVelocity);
         if (root.containsKey(SPLASH)) {
             if (!splashAllowed) {
                 throw new ParticleEffectException(
@@ -323,6 +335,8 @@ public final class ParticleEffectLoader {
         root.put(AROUND_CAMERA, effect.isAroundCamera());
         root.put(STRETCH, effect.getStretch());
         root.put(SPLASH_COUNT, effect.getSplashCount());
+        root.put(FOLLOW, effect.getFollow());
+        root.put(INHERIT_VELOCITY, effect.getInheritVelocity());
         if (effect.getSplash() != null) {
             final Map<String, Object> splash = toMap(effect.getSplash());
             // A splash's own splash is left out
