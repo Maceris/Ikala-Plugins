@@ -269,6 +269,21 @@ public final class SyntheticTerrain {
      */
     @Getter @Setter private volatile boolean glassTest;
 
+    /**
+     * Whether the lakes are left to water tiles, see {@link #lakeBottom}: open cells at or below
+     * the water level are air rather than water blocks. Set before any blocks are read.
+     */
+    @Getter @Setter private volatile boolean waterTiles;
+
+    /** The lakes' surface: as far up the water level's block as the sea's is up its own. */
+    public static final double LAKE_SURFACE = WATER_LEVEL + SEA_LEVEL;
+
+    /** What {@link #lakeBottom} gives for a column without a lake. */
+    public static final int NO_LAKE = Integer.MIN_VALUE;
+
+    /** How far below the water level a lake's bottom is looked for, in blocks. */
+    private static final int LAKE_DEPTH = 32;
+
     /** Where the glass dome stands on the sea floor, along z from the island's middle. */
     public static final int DOME_Z = 60;
 
@@ -560,6 +575,49 @@ public final class SyntheticTerrain {
     }
 
     /**
+     * Whether the recipe has lakes: open cells at or below its water level, which hold water.
+     *
+     * @return True for the hills and the jumble.
+     */
+    public boolean hasLakes() {
+        return recipe == Recipe.TERRAIN || recipe == Recipe.HILLS || recipe == Recipe.JUMBLE;
+    }
+
+    /**
+     * Whether a column of the hills holds a lake: its ground is below the water level there, not
+     * counting caves inside the ground. Trees keep off the lakes, so they are open to the sky.
+     *
+     * @param x The column's x.
+     * @param z The column's z.
+     * @return True if it does.
+     */
+    private boolean isLake(int x, int z) {
+        return !solid(x, WATER_LEVEL, z, height(x, z));
+    }
+
+    /**
+     * Where a column's lake's bottom is: the top of the first block under the water level, if the
+     * ground is below the water level there, as the water blocks are placed, not where a cave
+     * inside the ground reaches it; the water stands from it up to {@link #LAKE_SURFACE}.
+     *
+     * @param x The column's x.
+     * @param z The column's z.
+     * @return The bottom's y, or {@link #NO_LAKE} if the column holds no lake.
+     */
+    public int lakeBottom(int x, int z) {
+        if (!hasLakes() || !isLake(x, z) || edits.containsKey(editKey(x, WATER_LEVEL, z))) {
+            return NO_LAKE;
+        }
+        for (int y = WATER_LEVEL - 1; y > WATER_LEVEL - LAKE_DEPTH; --y) {
+            final byte block = block(x, y, z);
+            if (block != AIR && block != WATER) {
+                return y + 1;
+            }
+        }
+        return WATER_LEVEL - LAKE_DEPTH + 1;
+    }
+
+    /**
      * The highest block of a column that isn't air.
      *
      * @param x The column's x.
@@ -622,7 +680,7 @@ public final class SyntheticTerrain {
             return y >= height - DIRT_DEPTH ? DIRT : STONE;
         }
         if (y <= WATER_LEVEL) {
-            return WATER;
+            return waterTiles ? AIR : WATER;
         }
         // On top of the ground: slabs, plants, then leaves, huts and glass in the air
         if (solid(x, y - 1, z, height)) {
@@ -637,7 +695,7 @@ public final class SyntheticTerrain {
         if (recipe == Recipe.HILLS) {
             return AIR;
         }
-        // A ragged blob of leaves on a few columns, a pane of glass on fewer
+        // A ragged blob of leaves on a few columns, a pane of glass on fewer, none over the lakes
         final int cellX = Math.floorDiv(x, TREE_SPACING);
         final int cellZ = Math.floorDiv(z, TREE_SPACING);
         final double tree = hash(cellX, 0, cellZ, 2);
@@ -649,7 +707,9 @@ public final class SyntheticTerrain {
                     && Math.abs(z - treeZ) <= 3
                     && y >= top
                     && y < top + LEAF_LAYERS
-                    && hash(x, y, z, 3) >= LEAF_GAPS) {
+                    && hash(x, y, z, 3) >= LEAF_GAPS
+                    && !isLake(treeX, treeZ)
+                    && !isLake(x, z)) {
                 return LEAVES;
             }
         } else if (tree < GLASS_CELLS) {
@@ -662,7 +722,8 @@ public final class SyntheticTerrain {
                     && x >= cellX * TREE_SPACING + 1
                     && x < cellX * TREE_SPACING + TREE_SPACING - 1
                     && y >= base
-                    && y < base + 4) {
+                    && y < base + 4
+                    && base > WATER_LEVEL + 1) {
                 return GLASS;
             }
         }
@@ -681,7 +742,7 @@ public final class SyntheticTerrain {
     private byte jumble(int x, int y, int z) {
         final double height = height(x, z);
         if (!solid(x, y, z, height)) {
-            return y <= WATER_LEVEL ? WATER : AIR;
+            return y <= WATER_LEVEL && !waterTiles ? WATER : AIR;
         }
         if (y < height - 4
                 && y > height - 24

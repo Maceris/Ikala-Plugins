@@ -393,12 +393,23 @@ level of detail cache.
 
 It can be run from the Benchmark section of the Graphics Debug window, or from the command line.
 
-Ready-made runs, `GateBenchmark.PRESETS`, pair a world with its scene options (the islands' water,
-rain and snow, particles, fog) and keep the world to look around in once measured; the asset
-editor's main menu lists them under Benchmarks, and `GateBenchmark.start(preset)` opens one.
-*Water gate* times every water feature at once: a 12 m/s wind's waves and spray, waves painted
-round a figure eight, the fountain behind glass with smoke, ripples, and rain with its rings and
-splashes. Add `-Dikala.benchmark.turnAt=0,-3,72` to time it from under the sea, by the glass dome.
+Ready-made runs, `GateBenchmark.PRESETS`, pair a world with its scene options and places to look
+from, and keep the world to look around in once measured; the asset editor's main menu lists them
+under Benchmarks, and `GateBenchmark.start(preset)` opens one. There is one per landscape, with
+every feature in it, and two worst cases:
+- *Island*: the sea with wind waves and a figure eight path offshore, the stepped fountain, a glass
+  wall with smoke behind it, and a glass dome on the sea floor; views of the shore, the fountain,
+  the glass and water, the figure eight and under the sea.
+- *Hills*: hills with trees, huts with glass, lakes as water tiles and caves, under a hazy physical
+  sky; views from above, from the middle, over a lake and by the huts. *Hills, far* is the same out
+  to 512 m with level of detail.
+- *Caves*, and the worst cases *Glass* (transparency) and *Jumble* (culling and level of detail on
+  real shapes).
+
+Weather, particle effects, the water body, fog, haze and the sky are changed from the debug window
+while the world is kept, see below, or as startup properties for timing: for every water feature at
+once, run the island with `.wind=12,30`, `.loopWaves=6`, `.ripples=0,40,1,0.05,1` and
+`.weather=rain`, and add `.turnAt=0,-3,72` to time it from under the sea, by the glass dome.
 
 **Command line options**
 
@@ -466,3 +477,7 @@ working directory. Each entry has:
   - *Hide plugin UI* hides plugin menus so the scene behind them can be seen.
   - On the `ISLAND` recipe, *Flowing path* picks a loop for the sea, and while a run is going, the
     *Water* sliders change the wind, the sea's current, and the loop's flow and painted waves.
+  - While a world is kept, *View* jumps to the run's places to look from, *Weather* makes it rain
+    or snow, *Particle effects* puts a fountain, sparks, smoke and a fire in front of the camera, and
+    *Water body* changes what the sea or lakes hold. Fog, haze and the sky are under Scene
+    Controls.

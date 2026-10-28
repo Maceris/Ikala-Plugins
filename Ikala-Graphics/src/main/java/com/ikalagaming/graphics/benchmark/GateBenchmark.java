@@ -44,6 +44,7 @@ import com.ikalagaming.util.IntArrayList;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector3d;
+import org.joml.Vector3dc;
 import org.joml.Vector3f;
 import org.joml.Vector3fc;
 import org.lwjgl.system.MemoryStack;
@@ -59,6 +60,7 @@ import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -646,6 +648,64 @@ public final class GateBenchmark {
     /** The test particle emitters the run placed, stopped when it ends. */
     private final List<EmitterHandle> testEmitters = new ArrayList<>();
 
+    /** Places to look from, its preset's and those the run finds, see {@link #getViews}. */
+    private final List<View> views = new ArrayList<>();
+
+    /** The weather falling, see {@link #setWeather}: none, {@link #WEATHER_RAIN} or snow. */
+    private String weather = WEATHER_NONE;
+
+    /** The weather's emitter, or null for none. */
+    private EmitterHandle weatherEmitter;
+
+    /** The particle effects placed from the debug window, see {@link #setEffects}. */
+    private final List<EmitterHandle> effectEmitters = new ArrayList<>();
+
+    /** The lakes' water tiles, laid out with the world, placed with its water. */
+    private final List<WaterTile> lakeTiles = new ArrayList<>();
+
+    /** Where a lake is near the world's middle, x and z, or null for none. */
+    private int[] lakeSpot;
+
+    /** How far the wind blows over a lake, at most, in meters. */
+    private static final float LAKE_FETCH = 100;
+
+    /** The lakes' wind, its speed 10 m up and the way it blows, in degrees from +x toward +z. */
+    private static final float LAKE_WIND = 3;
+
+    private static final float LAKE_WIND_DEGREES = 30;
+
+    /** How far a view stands back from what it looks at, and how high above it, in meters. */
+    private static final double VIEW_BACK = 20;
+
+    private static final double VIEW_HEIGHT = 10;
+
+    /** How far above the ground under it a view stands at least, in meters. */
+    private static final double VIEW_CLEARANCE = 4;
+
+    /** How high above a lake its view is at least, how far back along z, and how far down. */
+    private static final double LAKE_VIEW_HEIGHT = 37;
+
+    private static final double LAKE_VIEW_BACK = 10;
+
+    private static final float LAKE_VIEW_PITCH = 1.2f;
+
+    /** How far from the middle a lake to look at may be, along x and z, in meters. */
+    private static final int LAKE_VIEW_REACH = 96;
+
+    /** How far above the measuring turn the overview looks from, and how far down, in radians. */
+    private static final double OVERVIEW_HEIGHT = 40;
+
+    private static final float OVERVIEW_PITCH = 0.6f;
+
+    /** How far it looks down, in radians. */
+    private static final float VIEW_PITCH = 0.35f;
+
+    /** How many tree cells out the hut nearest the world's middle is looked for. */
+    private static final int HUT_SEARCH = 4;
+
+    /** How far in front of the camera effects are placed, in meters. */
+    private static final double EFFECTS_AHEAD = 8;
+
     /** The moving test emitters from the {@code .fxTest} option, or null for none. */
     private FxTest fxTest;
 
@@ -693,7 +753,8 @@ public final class GateBenchmark {
      *     the open sea.
      * @param handle Its handle, set once placed.
      */
-    private record PlacedWater(WaterTile still, float fetch, WaterHandle[] handle) {}
+    private record PlacedWater(
+            WaterTile still, float fetch, WaterHandle[] handle, boolean followsBody) {}
 
     /** The island's water tiles, see {@link #setWater}. */
     private final List<PlacedWater> placedWater = new ArrayList<>();
@@ -703,6 +764,12 @@ public final class GateBenchmark {
 
     /** What the island's water holds and its wind, null until placed. */
     private WaterBody waterBody;
+
+    /** Its name, one of {@link #WATER_BODY_CHOICES}. */
+    private String waterBodyName;
+
+    /** The lakes' water body's name. */
+    private static final String LAKE_BODY = "lake";
 
     /** How fast the sea flows, in meters a second, and which way, radians from +x toward +z. */
     private float currentSpeed;
@@ -761,7 +828,15 @@ public final class GateBenchmark {
 
     /** The {@code .waterBody} property's values, by what the ocean holds. */
     private static final Map<String, WaterBody> WATER_BODY_NAMES =
-            Map.of("ocean", WaterBody.OCEAN, "green", WaterBody.GREEN, "muddy", WaterBody.MUDDY);
+            Map.of(
+                    "ocean",
+                    WaterBody.OCEAN,
+                    "lake",
+                    WaterBody.ofChlorophyll(1),
+                    "green",
+                    WaterBody.GREEN,
+                    "muddy",
+                    WaterBody.MUDDY);
 
     /** How many cells across the ocean's tiles are, of a meter. */
     private static final int OCEAN_CELLS = WaterTile.MAX_CELLS;
@@ -772,9 +847,34 @@ public final class GateBenchmark {
     /** The {@code .weather} property's value for snow. */
     public static final String WEATHER_SNOW = "snow";
 
+    /** The {@code .weather} property's value for none. */
+    public static final String WEATHER_NONE = "none";
+
+    /** The weathers the debug window offers, in order. */
+    public static final List<String> WEATHERS = List.of(WEATHER_NONE, WEATHER_RAIN, WEATHER_SNOW);
+
+    /** The water bodies the debug window offers, in order, see {@link #setWaterBody}. */
+    public static final List<String> WATER_BODY_CHOICES =
+            List.of("ocean", "lake", "green", "muddy");
+
+    /**
+     * A place to look from in a preset's world, which the debug window can jump to.
+     *
+     * @param name What menus show for it.
+     * @param x Where the camera is, along x.
+     * @param y Along y.
+     * @param z Along z.
+     * @param pitch How far it looks down, in radians.
+     * @param yaw How far it is turned about y, in radians.
+     */
+    public record View(
+            @NonNull String name, double x, double y, double z, float pitch, float yaw) {}
+
     /**
      * A ready-made run to pick from a menu: a world, its view distance, and the options its scene
-     * takes, as the startup properties name them without the {@code ikala.benchmark.} prefix.
+     * takes, as the startup properties name them without the {@code ikala.benchmark.} prefix, with
+     * places to look from. Weather, particle effects, fog, the water and the sky can all be changed
+     * from the debug window while its world is kept, so one preset covers each kind of landscape.
      *
      * @param id What it is called in code and scripts.
      * @param name What menus show for it.
@@ -782,7 +882,9 @@ public final class GateBenchmark {
      * @param recipe The world.
      * @param radius The view distance, in sections.
      * @param lod Whether to draw with level of detail.
-     * @param options The scene's options, like {@code weather} or {@code view}.
+     * @param options The scene's options, like {@code weather} or {@code fog}.
+     * @param views Places to look from, the first taken when the world is ready; runs add more they
+     *     find, like a lake on the hills.
      */
     public record Preset(
             @NonNull String id,
@@ -791,19 +893,52 @@ public final class GateBenchmark {
             SyntheticTerrain.@NonNull Recipe recipe,
             int radius,
             boolean lod,
-            @NonNull Map<String, String> options) {}
+            @NonNull Map<String, String> options,
+            @NonNull List<View> views) {}
+
+    /** The physical sky, with height fog and haze, as the landscapes start. */
+    private static final Map<String, String> HAZY =
+            Map.of("physicalSky", "true", "fog", "0.01,0.05,20", "haze", "true");
 
     /** The ready-made runs, in the order menus show them. */
     public static final List<Preset> PRESETS =
             List.of(
                     new Preset(
+                            "island",
+                            "Island",
+                            "A hilly island in the sea: wind waves, a figure eight path offshore, a"
+                                    + " stepped fountain, a glass wall and smoke, and a glass dome"
+                                    + " on the sea floor",
+                            SyntheticTerrain.Recipe.ISLAND,
+                            8,
+                            false,
+                            Map.of(
+                                    "fountain",
+                                    "true",
+                                    "glassTest",
+                                    "true",
+                                    "wind",
+                                    "6,30",
+                                    "loop",
+                                    "infinity",
+                                    "loopSpeed",
+                                    "0"),
+                            List.of(
+                                    new View("Shore", 0, 6, 70, 0.15f, 0),
+                                    new View("Fountain", 0, 16, 16, 0.45f, 0),
+                                    new View("Glass and water", 0, 15, 20, 0.3f, 0),
+                                    new View("Figure eight", 0, 55, 130, 1.0f, 0),
+                                    new View("Under the sea", 0, -4, 72, -0.1f, 0))),
+                    new Preset(
                             "hills",
                             "Hills",
-                            "Rolling hills with trees, huts, lakes and caves",
+                            "Rolling hills with trees, huts with glass, lakes and caves, under a"
+                                    + " hazy physical sky",
                             SyntheticTerrain.Recipe.TERRAIN,
                             12,
                             false,
-                            Map.of()),
+                            HAZY,
+                            List.of()),
                     new Preset(
                             "hills-far",
                             "Hills, far",
@@ -811,155 +946,8 @@ public final class GateBenchmark {
                             SyntheticTerrain.Recipe.TERRAIN,
                             32,
                             true,
-                            Map.of()),
-                    new Preset(
-                            "hazy-hills",
-                            "Hazy hills",
-                            "The hills under the physical sky, with height fog and haze",
-                            SyntheticTerrain.Recipe.TERRAIN,
-                            12,
-                            false,
-                            Map.of("physicalSky", "true", "fog", "0.01,0.05,20", "haze", "true")),
-                    new Preset(
-                            "island",
-                            "Island",
-                            "A hilly island in clear ocean, with wind waves",
-                            SyntheticTerrain.Recipe.ISLAND,
-                            8,
-                            false,
-                            Map.of("view", "0,6,70,0.15,0")),
-                    new Preset(
-                            "loop",
-                            "Figure eight waves",
-                            "The island, with waves painted round a figure eight offshore",
-                            SyntheticTerrain.Recipe.ISLAND,
-                            8,
-                            false,
-                            Map.of(
-                                    "loop",
-                                    "infinity",
-                                    "wind",
-                                    "6,30",
-                                    "loopSpeed",
-                                    "0",
-                                    "loopWaves",
-                                    "6",
-                                    "view",
-                                    "0,30,140,0.45,0")),
-                    new Preset(
-                            "fountain",
-                            "Fountain",
-                            "Stepped pools on the island's top, water falling off every side",
-                            SyntheticTerrain.Recipe.ISLAND,
-                            8,
-                            false,
-                            Map.of("fountain", "true", "wind", "3,30", "view", "0,16,16,0.45,0")),
-                    new Preset(
-                            "glass-water",
-                            "Glass and water",
-                            "The fountain behind a glass wall, with smoke behind it",
-                            SyntheticTerrain.Recipe.ISLAND,
-                            8,
-                            false,
-                            Map.of(
-                                    "fountain",
-                                    "true",
-                                    "glassTest",
-                                    "true",
-                                    "wind",
-                                    "3,30",
-                                    "view",
-                                    "0,15,20,0.3,0")),
-                    new Preset(
-                            "under-sea",
-                            "Under the sea",
-                            "Under the island's sea, by a glass dome on the sea floor",
-                            SyntheticTerrain.Recipe.ISLAND,
-                            8,
-                            false,
-                            Map.of("glassTest", "true", "wind", "3,30", "view", "0,-4,72,-0.1,0")),
-                    new Preset(
-                            "water-gate",
-                            "Water gate",
-                            "Every water feature at once, to time: a strong wind's waves and"
-                                    + " spray, waves painted round a figure eight, the fountain"
-                                    + " behind glass with smoke, ripples, and rain",
-                            SyntheticTerrain.Recipe.ISLAND,
-                            8,
-                            false,
-                            Map.of(
-                                    "fountain",
-                                    "true",
-                                    "glassTest",
-                                    "true",
-                                    "wind",
-                                    "12,30",
-                                    "loop",
-                                    "infinity",
-                                    "loopWaves",
-                                    "6",
-                                    "loopSpeed",
-                                    "0",
-                                    "ripples",
-                                    "0,40,1,0.05,1",
-                                    "weather",
-                                    WEATHER_RAIN,
-                                    "view",
-                                    "0,16,16,0.45,0")),
-                    new Preset(
-                            "green-lake",
-                            "Green lake",
-                            "The island in green lake water, rich in phytoplankton",
-                            SyntheticTerrain.Recipe.ISLAND,
-                            8,
-                            false,
-                            Map.of("waterBody", "green", "view", "0,6,70,0.15,0")),
-                    new Preset(
-                            "muddy-water",
-                            "Muddy water",
-                            "The island in a muddy river's water",
-                            SyntheticTerrain.Recipe.ISLAND,
-                            8,
-                            false,
-                            Map.of("waterBody", "muddy", "view", "0,6,70,0.15,0")),
-                    new Preset(
-                            "rain",
-                            "Rain",
-                            "Rain falling between huts, splashing on the ground",
-                            SyntheticTerrain.Recipe.HUTS,
-                            4,
-                            false,
-                            Map.of("weather", WEATHER_RAIN, "view", "6.5,6,14,0.3,0")),
-                    new Preset(
-                            "snow",
-                            "Snow",
-                            "Snow settling between huts",
-                            SyntheticTerrain.Recipe.HUTS,
-                            4,
-                            false,
-                            Map.of("weather", WEATHER_SNOW, "view", "6.5,6,14,0.3,0")),
-                    new Preset(
-                            "effects",
-                            "Particles and smoke",
-                            "A fountain, sparks, smoke, thick smoke and fire among huts, with fog",
-                            SyntheticTerrain.Recipe.HUTS,
-                            4,
-                            false,
-                            Map.of(
-                                    "particles",
-                                    "6.5,1,4",
-                                    "fog",
-                                    "0.02",
-                                    "view",
-                                    "6.5,6,14,0.3,0")),
-                    new Preset(
-                            "glass",
-                            "Glass",
-                            "Walls of clear and tinted glass, many layers deep",
-                            SyntheticTerrain.Recipe.GLASS,
-                            8,
-                            false,
-                            Map.of()),
+                            HAZY,
+                            List.of()),
                     new Preset(
                             "caves",
                             "Caves",
@@ -967,15 +955,28 @@ public final class GateBenchmark {
                             SyntheticTerrain.Recipe.CAVES,
                             8,
                             false,
-                            Map.of()),
+                            Map.of(),
+                            List.of()),
+                    new Preset(
+                            "glass",
+                            "Glass",
+                            "Walls of clear and tinted glass, many layers deep: the worst case for"
+                                    + " transparency",
+                            SyntheticTerrain.Recipe.GLASS,
+                            8,
+                            false,
+                            Map.of(),
+                            List.of()),
                     new Preset(
                             "jumble",
                             "Jumble",
-                            "Hills of mixed block shapes, drawn with level of detail",
+                            "Hills of mixed block shapes, drawn with level of detail: the worst"
+                                    + " case for culling and level of detail on real shapes",
                             SyntheticTerrain.Recipe.JUMBLE,
                             16,
                             true,
-                            Map.of()));
+                            Map.of(),
+                            List.of()));
 
     /** How tall the test smoke column is, half of it, in meters. */
     private static final float SMOKE_HALF_HEIGHT = 20;
@@ -1112,6 +1113,7 @@ public final class GateBenchmark {
         removeWorld();
         current = new GateBenchmark(preset.recipe(), preset.radius(), 0, true, preset.lod(), false);
         current.options.putAll(preset.options());
+        current.views.addAll(preset.views());
         current.begin();
     }
 
@@ -1520,7 +1522,9 @@ public final class GateBenchmark {
             final SyntheticTerrain terrain = new SyntheticTerrain(recipe, SEED, sources);
             terrain.setFountain(option("fountain") != null);
             terrain.setGlassTest(option("glassTest") != null);
+            terrain.setWaterTiles(terrain.hasLakes());
             this.terrain = terrain;
+            layOutLakes(terrain);
             final GateScene.Layout layout = GateScene.build(terrain, radius);
             if (testMesh != null) {
                 testCells = testCells(terrain);
@@ -1843,6 +1847,10 @@ public final class GateBenchmark {
             body = body.withWind(speed, direction, fetch);
         }
         waterBody = body;
+        waterBodyName =
+                WATER_BODY_NAMES.containsKey(name.trim().toLowerCase(Locale.ROOT))
+                        ? name.trim().toLowerCase(Locale.ROOT)
+                        : WATER_BODY_CHOICES.getFirst();
         waterLoop = loopOption();
         final String current = option("current");
         if (current != null) {
@@ -1984,7 +1992,9 @@ public final class GateBenchmark {
      *     waves to ripples, or infinite for the open sea.
      */
     private void placeWater(@NonNull WaterTile still, float fetch) {
-        final PlacedWater placed = new PlacedWater(still, fetch, new WaterHandle[1]);
+        // The sea and lakes take the run's water body; water with its own flow keeps its own
+        final PlacedWater placed =
+                new PlacedWater(still, fetch, new WaterHandle[1], still.flows() == null);
         placed.handle()[0] = graphics.water().add(withWaterSettings(placed));
         if (placed.handle()[0] != null) {
             testWater.add(placed.handle()[0]);
@@ -2081,6 +2091,355 @@ public final class GateBenchmark {
         loopSpeed = channelSpeed;
         for (PlacedWater placed : placedWater) {
             graphics.water().update(placed.handle()[0], withWaterSettings(placed));
+        }
+    }
+
+    /**
+     * Lay out the lakes' water tiles, for a world whose lakes are left to them, see {@link
+     * SyntheticTerrain#lakeBottom}: tiles of the ocean's size over the view distance, each lake
+     * column's water from its bottom up to {@link SyntheticTerrain#LAKE_SURFACE}, and a lake near
+     * the middle to look at. On the worker that lays out the world.
+     *
+     * @param world The world.
+     */
+    private void layOutLakes(@NonNull SyntheticTerrain world) {
+        lakeTiles.clear();
+        lakeSpot = null;
+        if (!world.isWaterTiles()) {
+            return;
+        }
+        final float surface = (float) SyntheticTerrain.LAKE_SURFACE;
+        final int reach = radius * SyntheticTerrain.SECTION;
+        final int tiles = (2 * reach + OCEAN_CELLS - 1) / OCEAN_CELLS;
+        final int corners = OCEAN_CELLS + 1;
+        // The tile near the middle with the most lake, to look at
+        int most = 0;
+        long lakeCells = 0;
+        final int[] cellBottoms = new int[OCEAN_CELLS * OCEAN_CELLS];
+        for (int tileZ = 0; tileZ < tiles; ++tileZ) {
+            for (int tileX = 0; tileX < tiles; ++tileX) {
+                final int startX = -reach + tileX * OCEAN_CELLS;
+                final int startZ = -reach + tileZ * OCEAN_CELLS;
+                final boolean[] mask = new boolean[OCEAN_CELLS * OCEAN_CELLS];
+                int count = 0;
+                long sumX = 0;
+                long sumZ = 0;
+                for (int z = 0; z < OCEAN_CELLS; ++z) {
+                    for (int x = 0; x < OCEAN_CELLS; ++x) {
+                        final int bottom = world.lakeBottom(startX + x, startZ + z);
+                        cellBottoms[z * OCEAN_CELLS + x] = bottom;
+                        if (bottom == SyntheticTerrain.NO_LAKE) {
+                            continue;
+                        }
+                        mask[z * OCEAN_CELLS + x] = true;
+                        ++count;
+                        sumX += startX + x;
+                        sumZ += startZ + z;
+                    }
+                }
+                if (count == 0) {
+                    continue;
+                }
+                final boolean near =
+                        Math.abs(startX + OCEAN_CELLS / 2) <= LAKE_VIEW_REACH
+                                && Math.abs(startZ + OCEAN_CELLS / 2) <= LAKE_VIEW_REACH;
+                if (near && count > most) {
+                    most = count;
+                    lakeSpot = nearestLakeCell(mask, startX, startZ, sumX / count, sumZ / count);
+                }
+                final float[] heights = new float[corners * corners];
+                final float[] bottoms = new float[corners * corners];
+                Arrays.fill(heights, surface);
+                for (int z = 0; z < corners; ++z) {
+                    for (int x = 0; x < corners; ++x) {
+                        // The lowest of the lake cells touching the corner
+                        float bottom = surface;
+                        for (int cz = z - 1; cz <= z; ++cz) {
+                            for (int cx = x - 1; cx <= x; ++cx) {
+                                if (cx < 0 || cz < 0 || cx >= OCEAN_CELLS || cz >= OCEAN_CELLS) {
+                                    continue;
+                                }
+                                final int cell = cellBottoms[cz * OCEAN_CELLS + cx];
+                                if (cell != SyntheticTerrain.NO_LAKE) {
+                                    bottom = Math.min(bottom, cell);
+                                }
+                            }
+                        }
+                        bottoms[z * corners + x] = bottom;
+                    }
+                }
+                lakeCells += count;
+                lakeTiles.add(
+                        new WaterTile(
+                                new Vector3d(startX, 0, startZ),
+                                1,
+                                OCEAN_CELLS,
+                                OCEAN_CELLS,
+                                heights,
+                                bottoms,
+                                mask,
+                                WATER_BODY_NAMES.get(LAKE_BODY)));
+            }
+        }
+        log.info(
+                "Gate benchmark lakes: {} tiles, {} cells; spot {} holds water: {}",
+                lakeTiles.size(),
+                lakeCells,
+                lakeSpot == null ? "none" : lakeSpot[0] + "," + lakeSpot[1],
+                lakeSpot != null
+                        && world.lakeBottom(lakeSpot[0], lakeSpot[1]) != SyntheticTerrain.NO_LAKE);
+    }
+
+    /**
+     * The lake cell of a tile nearest a point, for a view to look down at water.
+     *
+     * @param mask Which of the tile's cells hold lake.
+     * @param startX The tile's corner along x.
+     * @param startZ Along z.
+     * @param x The point's x.
+     * @param z Its z.
+     * @return The cell's x and z.
+     */
+    private static int[] nearestLakeCell(
+            boolean @NonNull [] mask, int startX, int startZ, long x, long z) {
+        int[] best = null;
+        long bestDistance = Long.MAX_VALUE;
+        for (int cz = 0; cz < OCEAN_CELLS; ++cz) {
+            for (int cx = 0; cx < OCEAN_CELLS; ++cx) {
+                if (!mask[cz * OCEAN_CELLS + cx]) {
+                    continue;
+                }
+                final long dx = startX + cx - x;
+                final long dz = startZ + cz - z;
+                if (dx * dx + dz * dz < bestDistance) {
+                    bestDistance = dx * dx + dz * dz;
+                    best = new int[] {startX + cx, startZ + cz};
+                }
+            }
+        }
+        return best;
+    }
+
+    /** Place the lakes the world was laid out with, under a light wind. */
+    private void placeLakes() {
+        if (lakeTiles.isEmpty()) {
+            return;
+        }
+        if (waterBody == null) {
+            waterBody =
+                    WATER_BODY_NAMES
+                            .get(LAKE_BODY)
+                            .withWind(
+                                    LAKE_WIND,
+                                    (float) Math.toRadians(LAKE_WIND_DEGREES),
+                                    Float.POSITIVE_INFINITY);
+            waterBodyName = LAKE_BODY;
+        }
+        for (WaterTile tile : lakeTiles) {
+            placeWater(tile, LAKE_FETCH);
+        }
+    }
+
+    /**
+     * Add the places to look from the run finds: the world's middle, where the measuring turn is,
+     * if the preset gave none; a lake and the huts near the middle on the hills.
+     */
+    private void findViews() {
+        final SyntheticTerrain world = terrain;
+        if (world == null) {
+            return;
+        }
+        if (views.isEmpty()) {
+            views.add(
+                    new View(
+                            "Overview",
+                            0.5,
+                            world.cameraY() + OVERVIEW_HEIGHT,
+                            0.5 + OVERVIEW_HEIGHT,
+                            OVERVIEW_PITCH,
+                            0));
+            views.add(new View("Middle", 0.5, world.cameraY(), 0.5, PITCH, 0));
+        }
+        final int[] lake = lakeSpot;
+        if (lake != null) {
+            // From above, looking steeply down: the lakes lie in valleys under the trees
+            views.add(
+                    new View(
+                            "Over a lake",
+                            lake[0] + 0.5,
+                            Math.max(
+                                    SyntheticTerrain.LAKE_SURFACE + LAKE_VIEW_HEIGHT,
+                                    world.top(lake[0], lake[1]) + VIEW_HEIGHT),
+                            lake[1] + LAKE_VIEW_BACK,
+                            LAKE_VIEW_PITCH,
+                            0));
+        }
+        final int[] hut = world.hutNear(0, 0, HUT_SEARCH);
+        if (hut != null) {
+            views.add(lookingAt(world, "By the huts", hut[0], hut[1], hut[2]));
+        }
+        for (View view : views) {
+            log.info(
+                    "Gate benchmark view {}: {},{},{},{},{}",
+                    view.name(),
+                    view.x(),
+                    view.y(),
+                    view.z(),
+                    view.pitch(),
+                    view.yaw());
+        }
+    }
+
+    /**
+     * A view looking down at a point from back along +z and above it, clear of the ground there.
+     *
+     * @param world The world.
+     * @param name The view's name.
+     * @param x The point's x.
+     * @param y Its y.
+     * @param z Its z.
+     * @return The view.
+     */
+    private static View lookingAt(
+            @NonNull SyntheticTerrain world, @NonNull String name, int x, double y, int z) {
+        final int backZ = (int) (z + VIEW_BACK);
+        final double height = Math.max(y + VIEW_HEIGHT, world.top(x, backZ) + 1 + VIEW_CLEARANCE);
+        return new View(name, x + 0.5, height, backZ + 0.5, VIEW_PITCH, 0);
+    }
+
+    /**
+     * The places to look from: the preset's, then those the run found.
+     *
+     * @return The views.
+     */
+    public List<View> getViews() {
+        return Collections.unmodifiableList(views);
+    }
+
+    /**
+     * Put the camera at a place to look from. Render thread only.
+     *
+     * @param view Where.
+     */
+    public void goTo(@NonNull View view) {
+        final Scene scene = GraphicsManager.getScene();
+        if (scene == null) {
+            return;
+        }
+        scene.getCamera().setPosition(view.x(), view.y(), view.z());
+        scene.getCamera().setRotation(view.pitch(), view.yaw());
+    }
+
+    /**
+     * What falls around the camera, see {@link #WEATHERS}.
+     *
+     * @return The weather.
+     */
+    public String getWeather() {
+        return weather;
+    }
+
+    /**
+     * Make it rain or snow around the camera, or stop. Render thread only.
+     *
+     * @param kind {@link #WEATHER_NONE}, {@link #WEATHER_RAIN} or {@link #WEATHER_SNOW}.
+     */
+    public void setWeather(@NonNull String kind) {
+        final String wanted = kind.trim().toLowerCase(Locale.ROOT);
+        final ParticleEffect effect =
+                switch (wanted) {
+                    case WEATHER_RAIN -> ParticleSamples.RAIN;
+                    case WEATHER_SNOW -> ParticleSamples.SNOW;
+                    case WEATHER_NONE -> null;
+                    default -> {
+                        log.warn(
+                                "The benchmark's weather must be one of {}, not {}",
+                                WEATHERS,
+                                kind);
+                        yield null;
+                    }
+                };
+        if (wanted.equals(weather) || graphics.isClosed()) {
+            return;
+        }
+        if (weatherEmitter != null) {
+            graphics.particles().stop(weatherEmitter);
+            weatherEmitter = null;
+        }
+        weather = effect == null ? WEATHER_NONE : wanted;
+        if (effect != null) {
+            weatherEmitter = graphics.particles().spawn(effect, WEATHER_OFFSET);
+        }
+    }
+
+    /**
+     * Whether the particle effects are placed, see {@link #setEffects}.
+     *
+     * @return True if they are.
+     */
+    public boolean hasEffects() {
+        return !effectEmitters.isEmpty();
+    }
+
+    /**
+     * Place the test particle effects on the ground in front of the camera, as {@code .particles}
+     * does, or take them away. Render thread only.
+     *
+     * @param on Whether to place them.
+     */
+    public void setEffects(boolean on) {
+        effectEmitters.forEach(graphics.particles()::stop);
+        effectEmitters.clear();
+        final SyntheticTerrain world = terrain;
+        final Scene scene = GraphicsManager.getScene();
+        if (!on || world == null || scene == null || graphics.isClosed()) {
+            return;
+        }
+        final double yaw = scene.getCamera().getRotation().y;
+        final Vector3dc camera = scene.getCamera().getPosition();
+        final int x = (int) Math.floor(camera.x() + Math.sin(yaw) * EFFECTS_AHEAD);
+        final int z = (int) Math.floor(camera.z() - Math.cos(yaw) * EFFECTS_AHEAD);
+        final Vector3d at = new Vector3d(x + 0.5, world.top(x, z) + 1, z + 0.5);
+        for (EmitterHandle handle : placeEffectSet(at)) {
+            if (handle != null) {
+                effectEmitters.add(handle);
+            }
+        }
+    }
+
+    /**
+     * What the run's water holds, see {@link #WATER_BODY_CHOICES}.
+     *
+     * @return Its name, or null if the run placed no water.
+     */
+    public @Nullable String getWaterBody() {
+        return waterBody == null ? null : waterBodyName;
+    }
+
+    /**
+     * Change what the run's sea or lakes hold, keeping their wind; the fountain keeps its own
+     * water. Render thread only.
+     *
+     * @param name One of {@link #WATER_BODY_CHOICES}.
+     */
+    public void setWaterBody(@NonNull String name) {
+        final WaterBody base = WATER_BODY_NAMES.get(name);
+        if (base == null || waterBody == null || name.equals(waterBodyName)) {
+            return;
+        }
+        waterBodyName = name;
+        waterBody =
+                base.withWind(waterBody.windSpeed(), waterBody.windDirection(), waterBody.fetch());
+        for (int i = 0; i < placedWater.size(); ++i) {
+            final PlacedWater placed = placedWater.get(i);
+            if (!placed.followsBody()) {
+                continue;
+            }
+            final PlacedWater changed =
+                    new PlacedWater(
+                            placed.still().withBody(base), placed.fetch(), placed.handle(), true);
+            placedWater.set(i, changed);
+            graphics.water().update(changed.handle()[0], withWaterSettings(changed));
         }
     }
 
@@ -2195,7 +2554,9 @@ public final class GateBenchmark {
     private void placeTestWater() {
         placeOcean();
         placeFountain();
+        placeLakes();
         placeGlassTestSmoke();
+        findViews();
         final String value = option("water");
         if (value == null) {
             return;
@@ -2258,26 +2619,9 @@ public final class GateBenchmark {
                 testEmitters.addAll(fxTest.handles());
             }
         }
-        final String weather = option("weather");
-        if (weather != null) {
-            final ParticleEffect effect =
-                    switch (weather.trim().toLowerCase(Locale.ROOT)) {
-                        case WEATHER_RAIN -> ParticleSamples.RAIN;
-                        case WEATHER_SNOW -> ParticleSamples.SNOW;
-                        default -> null;
-                    };
-            if (effect == null) {
-                log.warn(
-                        "The benchmark's weather must be {} or {}, not {}",
-                        WEATHER_RAIN,
-                        WEATHER_SNOW,
-                        weather);
-            } else {
-                final EmitterHandle handle = graphics.particles().spawn(effect, WEATHER_OFFSET);
-                if (handle != null) {
-                    testEmitters.add(handle);
-                }
-            }
+        final String startWeather = option("weather");
+        if (startWeather != null) {
+            setWeather(startWeather);
         }
         final String value = option("particles");
         if (value == null) {
@@ -2293,7 +2637,22 @@ public final class GateBenchmark {
                         Double.parseDouble(parts[0].trim()),
                         Double.parseDouble(parts[1].trim()),
                         Double.parseDouble(parts[2].trim()));
-        final EmitterHandle[] handles = {
+        for (EmitterHandle handle : placeEffectSet(at)) {
+            if (handle != null) {
+                testEmitters.add(handle);
+            }
+        }
+    }
+
+    /**
+     * Place the test particle effects around a point: a fountain there, sparks, smoke puffs, thick
+     * smoke in the fog volume and a fire around it.
+     *
+     * @param at The point.
+     * @return Their emitters, null where the scene was full.
+     */
+    private EmitterHandle[] placeEffectSet(@NonNull Vector3dc at) {
+        return new EmitterHandle[] {
             graphics.particles().spawn(ParticleSamples.FOUNTAIN, at),
             graphics.particles().spawn(ParticleSamples.SPARKS, new Vector3d(at).add(SPARKS_OFFSET)),
             graphics.particles().spawn(ParticleSamples.SMOKE, new Vector3d(at).add(PUFFS_OFFSET)),
@@ -2301,11 +2660,6 @@ public final class GateBenchmark {
                     .spawn(ParticleSamples.THICK_SMOKE, new Vector3d(at).add(THICK_SMOKE_OFFSET)),
             graphics.particles().spawn(ParticleSamples.FIRE, new Vector3d(at).add(FIRE_OFFSET))
         };
-        for (EmitterHandle handle : handles) {
-            if (handle != null) {
-                testEmitters.add(handle);
-            }
-        }
     }
 
     /**
@@ -2543,10 +2897,14 @@ public final class GateBenchmark {
      */
     private void placeView(@NonNull Scene scene) {
         final String view = option("view");
-        if (viewPlaced || view == null) {
+        if (viewPlaced || (view == null && views.isEmpty())) {
             return;
         }
         viewPlaced = true;
+        if (view == null) {
+            goTo(views.getFirst());
+            return;
+        }
         final String[] parts = view.split(",");
         if (parts.length != VIEW_VALUES) {
             log.warn("The benchmark view must be x,y,z,pitch,yaw, not {}", view);
@@ -3542,6 +3900,13 @@ public final class GateBenchmark {
             testEmitters.forEach(graphics.particles()::stop);
             testEmitters.clear();
             fxTest = null;
+            if (weatherEmitter != null) {
+                graphics.particles().stop(weatherEmitter);
+                weatherEmitter = null;
+            }
+            weather = WEATHER_NONE;
+            effectEmitters.forEach(graphics.particles()::stop);
+            effectEmitters.clear();
             testWater.forEach(graphics.water()::remove);
             testWater.clear();
             placedWater.clear();

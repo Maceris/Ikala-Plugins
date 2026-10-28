@@ -171,6 +171,24 @@ public class GraphicsDebug extends GuiWindow {
     /** The loop picked, an index into {@link #LOOP_NAMES}. */
     private final IkInt benchmarkLoop = new IkInt(0);
 
+    /** The kept run's view, weather and water body picked, by index. */
+    private final IkInt benchmarkView = new IkInt(0);
+
+    private final IkInt benchmarkWeather = new IkInt(0);
+
+    private final IkInt benchmarkWaterBody = new IkInt(0);
+
+    /** The kept run's views' names, made again only when its views change. */
+    private String[] benchmarkViewNames = new String[0];
+
+    private List<GateBenchmark.View> benchmarkViewsNamed = List.of();
+
+    /** The weathers' and water bodies' names, for the combos. */
+    private static final String[] WEATHER_NAMES = GateBenchmark.WEATHERS.toArray(new String[0]);
+
+    private static final String[] WATER_BODY_NAMES =
+            GateBenchmark.WATER_BODY_CHOICES.toArray(new String[0]);
+
     /**
      * The kept island's water settings while being changed: wind speed and degrees, the sea's
      * current's speed and degrees, the loop's speed, and its painted waves' height; see {@link
@@ -1213,6 +1231,53 @@ public class GraphicsDebug extends GuiWindow {
     }
 
     /**
+     * The kept world's scene controls: where to look from, the weather, the test particle effects
+     * and what the water holds, applied as they change. Fog, haze and the sky are under Scene
+     * Controls.
+     *
+     * @param run The run.
+     */
+    private void drawBenchmarkScene(@NonNull GateBenchmark run) {
+        final List<GateBenchmark.View> views = run.getViews();
+        if (!views.equals(benchmarkViewsNamed)) {
+            benchmarkViewsNamed = List.copyOf(views);
+            benchmarkViewNames = new String[views.size()];
+            for (int i = 0; i < views.size(); ++i) {
+                benchmarkViewNames[i] = views.get(i).name();
+            }
+        }
+        if (benchmarkViewNames.length > 0) {
+            if (IkGui.combo("View##benchmark", benchmarkView, benchmarkViewNames)) {
+                run.goTo(views.get(Math.clamp(benchmarkView.get(), 0, views.size() - 1)));
+            }
+            IkGui.sameLine();
+            if (IkGui.button("Go##benchmarkView")) {
+                run.goTo(views.get(Math.clamp(benchmarkView.get(), 0, views.size() - 1)));
+            }
+        }
+        benchmarkWeather.set(Math.max(0, GateBenchmark.WEATHERS.indexOf(run.getWeather())));
+        if (IkGui.combo("Weather##benchmark", benchmarkWeather, WEATHER_NAMES)) {
+            run.setWeather(WEATHER_NAMES[benchmarkWeather.get()]);
+        }
+        if (IkGui.checkbox("Particle effects##benchmark", run.hasEffects())) {
+            run.setEffects(!run.hasEffects());
+        }
+        IkGui.setItemTooltip(
+                "A fountain, sparks, smoke puffs, thick smoke and a fire on the ground in front of"
+                        + " the camera.");
+        final String body = run.getWaterBody();
+        if (body != null) {
+            benchmarkWaterBody.set(Math.max(0, GateBenchmark.WATER_BODY_CHOICES.indexOf(body)));
+            if (IkGui.combo("Water body##benchmark", benchmarkWaterBody, WATER_BODY_NAMES)) {
+                run.setWaterBody(WATER_BODY_NAMES[benchmarkWaterBody.get()]);
+            }
+            IkGui.setItemTooltip(
+                    "What the sea or the lakes hold: clear ocean, a clear lake, a green lake's"
+                            + " phytoplankton or a muddy river's sediment.");
+        }
+    }
+
+    /**
      * The kept island's water controls: wind, the sea's current, and the loop's flow, applied as
      * they change.
      *
@@ -1354,6 +1419,9 @@ public class GraphicsDebug extends GuiWindow {
                                         .sections
                                         .getOverrideCount()));
             }
+        }
+        if (run.isWorldKept()) {
+            drawBenchmarkScene(run);
         }
         drawBenchmarkWater(run);
         IkGui.text(run.status());
