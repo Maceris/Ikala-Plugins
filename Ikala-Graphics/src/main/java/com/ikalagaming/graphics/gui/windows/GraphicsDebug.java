@@ -882,6 +882,12 @@ public class GraphicsDebug extends GuiWindow {
                 "Take ambient light from the skybox: reflections by roughness and diffuse light by"
                         + " direction, averaging the ambient light. Off, it is the same from every"
                         + " direction.");
+        if (IkGui.checkbox("Shadows through glass", settings.translucentShadows)) {
+            settings.translucentShadows = !settings.translucentShadows;
+        }
+        IkGui.setItemTooltip(
+                "See-through surfaces dim and tint the sun behind them, as the camera sees a white"
+                        + " light through them.");
         if (IkGui.checkbox("Sky light around cover", settings.environmentOcclusion)) {
             settings.environmentOcclusion = !settings.environmentOcclusion;
         }

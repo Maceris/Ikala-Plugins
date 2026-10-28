@@ -1751,6 +1751,27 @@ public class VulkanInstance {
         shaderMap.addShader(
                 RenderStage.Type.SHADOW_BAKED_CUTOUT, new ShaderVulkan(bakedCutoutModules, state));
 
+        // See-through meshes into the cascades' translucent maps, for shadows through glass
+        for (RenderStage.Type type :
+                new RenderStage.Type[] {
+                    RenderStage.Type.TRANSLUCENT_SHADOW, RenderStage.Type.TRANSLUCENT_SHADOW_BAKED
+                }) {
+            List<ShaderVulkan.ShaderModuleData> translucentModules = new ArrayList<>();
+            translucentModules.add(
+                    new ShaderVulkan.ShaderModuleData(
+                            type == RenderStage.Type.TRANSLUCENT_SHADOW
+                                    ? "shaders/shadow_cutout.vert"
+                                    : "shaders/shadow_baked_cutout.vert",
+                            ShaderVulkan.Type.VERTEX,
+                            ShaderVulkan.Location.BUNDLED));
+            translucentModules.add(
+                    new ShaderVulkan.ShaderModuleData(
+                            "shaders/translucent_shadow.frag",
+                            ShaderVulkan.Type.FRAGMENT,
+                            ShaderVulkan.Location.BUNDLED));
+            shaderMap.addShader(type, new ShaderVulkan(translucentModules, state));
+        }
+
         List<ShaderVulkan.ShaderModuleData> pointModules = new ArrayList<>();
         pointModules.add(
                 new ShaderVulkan.ShaderModuleData(

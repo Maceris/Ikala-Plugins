@@ -201,6 +201,15 @@ public class PerFrameData {
     public TextureInfoVulkan[] cascadeDynamicShadows;
 
     /**
+     * The cascades' translucent maps, for shadows through glass, see {@code
+     * translucent_shadow.glsl}: the moments of see-through surfaces' depths, and their absorbance.
+     * Drawn every frame, and shared between frames like the cascade maps.
+     */
+    public TextureInfoVulkan[] cascadeTranslucentMoments;
+
+    public TextureInfoVulkan[] cascadeTranslucentAbsorbance;
+
+    /**
      * A copy of a cached cascade's map, which the map is drawn back from shifted along when the
      * cascade moves across the light. Shared between frames and cascades, used one at a time.
      */
@@ -223,6 +232,12 @@ public class PerFrameData {
 
     /** Whether anything that moves casts shadows this frame: standard meshes or listed models. */
     public boolean dynamicShadowCasters;
+
+    /**
+     * Whether the scene has any see-through material, so the cascades' translucent maps are drawn
+     * and read, for shadows through glass.
+     */
+    public boolean translucentShadowCasters;
 
     /** Base color, normal, tangent, material, and depth. */
     public GBuffer gBuffer;

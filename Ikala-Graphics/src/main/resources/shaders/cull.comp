@@ -157,7 +157,8 @@ const uint LIST_SCENE_EARLY = 0;
 const uint LIST_SCENE_LATE = 1;
 const uint LIST_FIRST_CASCADE = 2;
 const uint LIST_TRANSLUCENT = 6;
-const uint LIST_COUNT = 7;
+const uint LIST_TRANSLUCENT_SHADOW = 7;
+const uint LIST_COUNT = 8;
 
 // The passes: the scene, each shadow cascade, then the sky map, which draws to the list after the
 // cascades'. The frusta buffer holds each pass's planes, then
@@ -317,10 +318,20 @@ void main()
         }
 
         // See-through meshes are drawn by the transparent stage after everything opaque, culled
-        // only against the finished pyramid, and cast no shadows
+        // only against the finished pyramid; for their shadows, they are listed once if any
+        // cascade sees them, by the first cascade's thread, against every cascade's whole frustum
         bool translucent = modelMesh.kind == KIND_BAKED_TRANSLUCENT
             || (modelMesh.kind == KIND_STANDARD && materialTransparency.translucent[material] != 0);
         if (translucent) {
+            if (phase == PHASE_EARLY && pass == 1) {
+                bool inCascade = false;
+                for (uint cascade = 1; cascade < PASS_SKY && !inCascade; ++cascade) {
+                    inCascade = inFrustum(cascade, center, extents);
+                }
+                if (inCascade) {
+                    draw(LIST_TRANSLUCENT_SHADOW, modelMesh.kind, modelMesh.slot, slot, material);
+                }
+            }
             if (phase == PHASE_LATE && pass == 0 && inView) {
                 if ((view.flags & FLAG_PYRAMID_VALID) != 0 && occluded(center, extents)) {
                     atomicAdd(counters.counters[COUNTER_OCCLUDED], 1u);

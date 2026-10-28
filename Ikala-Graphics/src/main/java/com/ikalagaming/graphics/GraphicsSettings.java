@@ -114,6 +114,12 @@ public class GraphicsSettings {
     public boolean volumeShadows = true;
 
     /**
+     * Whether see-through surfaces, like glass, cast colored shadows: the sun through them is
+     * dimmed and tinted as the camera sees a white light through them. Off, they cast none.
+     */
+    public boolean translucentShadows = true;
+
+    /**
      * Whether coarse volume bricks stand in for far sections' bricks, each covering several
      * sections with wider voxels where they are too small on screen to tell apart, so the brick
      * atlas reaches much further. Off, every section has its own brick, and the farthest go without

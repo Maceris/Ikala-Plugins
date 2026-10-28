@@ -102,7 +102,7 @@ public class InstanceDrawUpdate implements RenderStage {
 
     /**
      * The visible list of translucent meshes, culled in the late phase and drawn by the transparent
-     * stage. They are in no cascade's list, so they don't cast shadows.
+     * stage. They are in no cascade's list, but in {@link #LIST_TRANSLUCENT_SHADOW}.
      */
     public static final int LIST_TRANSLUCENT =
             LIST_FIRST_CASCADE + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT + 1;
@@ -115,8 +115,14 @@ public class InstanceDrawUpdate implements RenderStage {
      */
     public static final int LIST_SKY = LIST_TRANSLUCENT - 1;
 
+    /**
+     * The visible list of translucent meshes in any shadow cascade, culled in the early phase,
+     * which the shadow stage draws into each cascade's translucent maps for shadows through glass.
+     */
+    public static final int LIST_TRANSLUCENT_SHADOW = LIST_TRANSLUCENT + 1;
+
     /** How many visible lists there are, each with its own draw commands. */
-    public static final int LIST_COUNT = LIST_TRANSLUCENT + 1;
+    public static final int LIST_COUNT = LIST_TRANSLUCENT_SHADOW + 1;
 
     /** The counter of meshes the occlusion test hid, after one counter per list. */
     public static final int COUNTER_OCCLUDED = LIST_COUNT;
@@ -126,7 +132,8 @@ public class InstanceDrawUpdate implements RenderStage {
 
     /**
      * Write whether each material is translucent, by material index, for culling to route meshes
-     * into the translucent list. Written before culling records, so the buffer's address is final.
+     * into the translucent list, and note whether any is. Written before culling records, so the
+     * buffer's address is final.
      *
      * @param scene The scene.
      * @param state The Vulkan state.
@@ -141,11 +148,15 @@ public class InstanceDrawUpdate implements RenderStage {
         final IntBuffer translucent =
                 MemoryUtil.memIntBuffer(
                         frameData.materialTransparency.allocationInfo.pMappedData(), count);
+        boolean any = false;
         for (int i = 0; i < count; ++i) {
             final boolean isTranslucent =
                     cache.getMaterial(i).getTransparency() == Material.Transparency.TRANSLUCENT;
             translucent.put(i, isTranslucent ? 1 : 0);
+            any |= isTranslucent;
         }
+        frameData.translucentShadowCasters =
+                any && GraphicsManager.getSettings().translucentShadows;
     }
 
     /**

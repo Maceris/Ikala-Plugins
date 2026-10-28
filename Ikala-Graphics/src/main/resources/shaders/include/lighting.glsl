@@ -8,6 +8,7 @@
 
 #include "color.glsl"
 #include "light_inputs.glsl"
+#include "translucent_shadow.glsl"
 #ifdef ENVIRONMENT_SET
 #include "environment.glsl"
 #endif
@@ -323,6 +324,61 @@ float cascadeVisibility(vec3 renderPosition, vec3 renderNormal, int idx) {
     return visibility;
 }
 
+// What of the sun gets through the see-through surfaces in front of a point in one cascade, per
+// color, from its translucent maps, see translucent_shadow.glsl; below 0 outside the cascade
+vec3 cascadeTransmittance(vec3 renderPosition, vec3 renderNormal, int idx) {
+    CascadeShadow cascade = cascadeShadowSplits[idx];
+    vec3 offset = renderNormal * (cascade.texelSize * NORMAL_OFFSET_TEXELS);
+    vec4 shadowMapPosition = cascade.projViewMatrix * vec4(renderPosition + offset, 1);
+    vec3 ndc = shadowMapPosition.xyz / shadowMapPosition.w;
+    vec2 uv = ndc.xy * 0.5 + 0.5;
+    if (any(lessThan(uv, vec2(0))) || any(greaterThan(uv, vec2(1)))) {
+        return vec3(-1.0);
+    }
+    if (cascade.translucentMaps < 0 || ndc.z <= 0.0 || ndc.z >= 1.0) {
+        return vec3(1.0);
+    }
+    int absorbanceMap = cascade.translucentMaps >> 16;
+    vec4 absorbance = texture(bindlessTextures[nonuniformEXT(absorbanceMap)], uv);
+    // Nothing see-through on the way, so the moments needn't be read
+    if (absorbance.w <= TRANSLUCENT_MIN_ABSORBANCE) {
+        return vec3(1.0);
+    }
+    int momentMap = cascade.translucentMaps & 0xFFFF;
+    vec4 moments = texture(bindlessTextures[nonuniformEXT(momentMap)], uv) / absorbance.w;
+    return exp(-absorbance.rgb * translucentShareInFront(moments, ndc.z));
+}
+
+// What of the sun gets through the see-through surfaces in front of a point, per color, blended
+// between cascades as sunVisibility is. Past the shadow distance, all of it.
+vec3 sunTransmittance(vec3 viewPosition, vec3 renderPosition, vec3 renderNormal) {
+    float depth = -viewPosition.z;
+    if (depth >= -cascadeShadowSplits[NUM_CASCADES - 1].splitDistance) {
+        return vec3(1.0);
+    }
+    int idx = 0;
+    for (int i = 0; i < NUM_CASCADES - 1; i++) {
+        if (viewPosition.z < cascadeShadowSplits[i].splitDistance) {
+            idx = i + 1;
+        }
+    }
+    vec3 through = cascadeTransmittance(renderPosition, renderNormal, idx);
+    if (through.x < 0.0) {
+        return vec3(1.0);
+    }
+    float sliceStart = idx == 0 ? 0.0 : -cascadeShadowSplits[idx - 1].splitDistance;
+    float sliceEnd = -cascadeShadowSplits[idx].splitDistance;
+    float blendStart = sliceEnd - CASCADE_BLEND * (sliceEnd - sliceStart);
+    if (depth > blendStart) {
+        vec3 next = idx + 1 < NUM_CASCADES
+            ? cascadeTransmittance(renderPosition, renderNormal, idx + 1) : vec3(1.0);
+        if (next.x >= 0.0) {
+            through = mix(through, next, (depth - blendStart) / (sliceEnd - blendStart));
+        }
+    }
+    return through;
+}
+
 // How much of the sun reaches a point, from 0 in full shadow to 1. Past the shadow distance,
 // nothing is shadowed.
 float sunVisibility(vec3 viewPosition, vec3 renderPosition, vec3 renderNormal) {
@@ -450,6 +506,9 @@ vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 ren
     }
     vec3 color = calcDirLight(baseColor.xyz, material, directionalLight, viewPosition, normal, tangent, bitangent)
         * sunVisible;
+    if (sunVisible > 0.0) {
+        color *= sunTransmittance(viewPosition, renderPosition, renderNormal);
+    }
 
 #ifdef OCCUPANCY_SET
     vec3 renderGeometric = normalize((invViewMatrix * vec4(geometricNormal, 0)).xyz);

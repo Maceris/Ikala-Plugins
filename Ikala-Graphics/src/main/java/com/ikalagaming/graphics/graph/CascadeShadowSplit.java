@@ -39,6 +39,13 @@ public class CascadeShadowSplit {
     /** The width and height of a cascade's shadow map fitted to its slice each frame, in texels. */
     public static final int SHADOW_MAP_SIZE = 2048;
 
+    /**
+     * The width and height of each cascade's translucent maps, for shadows through glass, see
+     * {@code translucent_shadow.glsl}: half the shadow maps', as see-through surfaces' shadows are
+     * soft enough.
+     */
+    public static final int TRANSLUCENT_MAP_SIZE = SHADOW_MAP_SIZE / 2;
+
     /** The width of the shadow map in pixels. */
     public static final int SHADOW_MAP_WIDTH = SHADOW_MAP_SIZE;
 

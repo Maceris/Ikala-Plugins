@@ -61,6 +61,16 @@ public class ShadowRender implements RenderStage {
      */
     private static final float DEPTH_BIAS_SLOPE = 1.5f;
 
+    /** Draws see-through meshes into the cascades' translucent maps, for shadows through glass. */
+    private final TranslucentShadowPass translucent;
+
+    /**
+     * Whether each cascade's translucent maps hold what doesn't move as its map does, so a cached
+     * cascade that isn't drawn again keeps them too.
+     */
+    private final boolean[] translucentKept =
+            new boolean[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
+
     /** The shader for baked sections, in the baked vertex format. */
     @NonNull private final ShaderVulkan bakedShader;
 
@@ -176,6 +186,9 @@ public class ShadowRender implements RenderStage {
      * @param pointShader The shader for standard meshes in point light shadow faces.
      * @param pointBakedShader The shader for baked sections in point light shadow faces.
      * @param scrollShader The shader that shifts a cached cascade's map along.
+     * @param skinnedShader The shader for skinned instances.
+     * @param translucentShader The shader for standard see-through meshes' shadows.
+     * @param translucentBakedShader The shader for baked see-through meshes' shadows.
      */
     public ShadowRender(
             final @NonNull ShaderVulkan bakedShader,
@@ -188,7 +201,10 @@ public class ShadowRender implements RenderStage {
             final @NonNull ShaderVulkan pointShader,
             final @NonNull ShaderVulkan pointBakedShader,
             final @NonNull ShaderVulkan scrollShader,
-            final @NonNull ShaderVulkan skinnedShader) {
+            final @NonNull ShaderVulkan skinnedShader,
+            final @NonNull ShaderVulkan translucentShader,
+            final @NonNull ShaderVulkan translucentBakedShader) {
+        this.translucent = new TranslucentShadowPass(translucentShader, translucentBakedShader);
         this.skinnedShader = skinnedShader;
         this.skinnedPipeline = VK_NULL_HANDLE;
         this.bakedShader = bakedShader;
@@ -230,6 +246,7 @@ public class ShadowRender implements RenderStage {
         pointBakedPipeline = createPipeline(vulkanState, pointBakedShader, true, false, false);
         scrollPipeline = createScrollPipeline(vulkanState);
         skinnedPipeline = createSkinnedPipeline(vulkanState);
+        translucent.initialize(vulkanState, pipelineLayout);
     }
 
     @Override
@@ -260,6 +277,7 @@ public class ShadowRender implements RenderStage {
         scrollPipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, skinnedPipeline, null);
         skinnedPipeline = VK_NULL_HANDLE;
+        translucent.cleanup(vulkanState);
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);
         pipelineLayout = VK_NULL_HANDLE;
         vkDestroyDescriptorSetLayout(vulkanState.device.logical, descriptorSetLayout, null);
@@ -316,6 +334,24 @@ public class ShadowRender implements RenderStage {
                                 ShaderBindings.Shadow.PUSH_CONSTANT_PROJECTION_VIEW_MATRIX_OFFSET,
                                 pushConstants);
                 final int list = InstanceDrawUpdate.LIST_FIRST_CASCADE + i;
+                // See-through meshes, drawn whole when the cascade isn't cached, when it is drawn
+                // again, or when anything moves, as what moves isn't kept apart for them
+                if (!frameData.translucentShadowCasters) {
+                    translucentKept[i] = false;
+                } else if (!cascade.isCached()
+                        || cascade.getRedraw() != SunShadowCache.Redraw.NONE
+                        || frameData.dynamicShadowCasters
+                        || !translucentKept[i]) {
+                    translucent.render(
+                            commandBuffer,
+                            vulkanState,
+                            i,
+                            pipelineLayout,
+                            descriptorSets[vulkanState.frameIndex],
+                            pushConstants,
+                            stack);
+                    translucentKept[i] = true;
+                }
                 final TextureInfoVulkan map = frameData.cascadeShadows[i];
                 if (!cascade.isCached()) {
                     // Everything, drawn whole every frame; what was there is thrown away

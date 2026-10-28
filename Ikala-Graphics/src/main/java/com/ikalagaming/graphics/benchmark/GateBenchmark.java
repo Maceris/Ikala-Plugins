@@ -1382,6 +1382,12 @@ public final class GateBenchmark {
                 if (coarseBricks != null) {
                     GraphicsManager.getSettings().coarseBricks = Boolean.parseBoolean(coarseBricks);
                 }
+                final String translucentShadows =
+                        System.getProperty(PROPERTY + ".translucentShadows");
+                if (translucentShadows != null) {
+                    GraphicsManager.getSettings().translucentShadows =
+                            Boolean.parseBoolean(translucentShadows);
+                }
                 final String volumeShadows = System.getProperty(PROPERTY + ".volumeShadows");
                 if (volumeShadows != null) {
                     GraphicsManager.getSettings().volumeShadows =

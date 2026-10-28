@@ -47,6 +47,15 @@ public class PipelineManagerVulkan {
     public static final int DEPTH_FORMAT = VK_FORMAT_D32_SFLOAT;
 
     /**
+     * The format of the cascades' translucent maps of moments, four 32-bit floats, as the moments
+     * need their precision, see {@code translucent_shadow.glsl}.
+     */
+    public static final int TRANSLUCENT_MOMENTS_FORMAT = VK_FORMAT_R32G32B32A32_SFLOAT;
+
+    /** The format of their absorbance: red, green, blue and the average, as half floats. */
+    public static final int TRANSLUCENT_ABSORBANCE_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
+
+    /**
      * Format of the images we render the lit scene, filters, and GUI into. Not sRGB, since the
      * OpenGL backend doesn't convert to sRGB either and we want the same output.
      */
@@ -94,6 +103,11 @@ public class PipelineManagerVulkan {
      * between frames like the shadow maps.
      */
     private TextureInfoVulkan[] dynamicShadowMaps;
+
+    /** The cascades' translucent maps, see {@link PerFrameData#cascadeTranslucentMoments}. */
+    private TextureInfoVulkan[] translucentMoments;
+
+    private TextureInfoVulkan[] translucentAbsorbance;
 
     /** The copy cached cascades' maps are shifted along from. */
     private TextureInfoVulkan scrollCopy;
@@ -260,7 +274,9 @@ public class PipelineManagerVulkan {
                         shaders.getShader(RenderStage.Type.POINT_SHADOW),
                         shaders.getShader(RenderStage.Type.POINT_SHADOW_BAKED),
                         shaders.getShader(RenderStage.Type.SHADOW_SCROLL),
-                        shaders.getShader(RenderStage.Type.SHADOW_SKINNED));
+                        shaders.getShader(RenderStage.Type.SHADOW_SKINNED),
+                        shaders.getShader(RenderStage.Type.TRANSLUCENT_SHADOW),
+                        shaders.getShader(RenderStage.Type.TRANSLUCENT_SHADOW_BAKED));
         stageShadowRender.initialize(state);
         stageLightCull = new LightCull(shaders.getShader(RenderStage.Type.LIGHT_CULL));
         stageLightCull.initialize(state);
@@ -578,6 +594,13 @@ public class PipelineManagerVulkan {
                 all.add(dynamicShadowMaps[i]);
             }
         }
+        // Drawn whole every frame before they are read
+        translucentMoments = new TextureInfoVulkan[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
+        translucentAbsorbance = new TextureInfoVulkan[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
+        for (int i = 0; i < translucentMoments.length; i++) {
+            translucentMoments[i] = createTranslucentMap(state, TRANSLUCENT_MOMENTS_FORMAT);
+            translucentAbsorbance[i] = createTranslucentMap(state, TRANSLUCENT_ABSORBANCE_FORMAT);
+        }
         // Only ever copied into whole before it is read, so it isn't cleared
         scrollCopy = createShadowMap(state, SunShadowCache.STATIC_MAP_SIZE);
         skyMap = createShadowMap(state, SkyOcclusion.MAP_SIZE);
@@ -613,6 +636,28 @@ public class PipelineManagerVulkan {
                         VK_IMAGE_ASPECT_DEPTH_BIT,
                         VK_FILTER_LINEAR,
                         VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER);
+        state.bindlessTextures.register(state, map);
+        return map;
+    }
+
+    /**
+     * Create one of a cascade's translucent maps and give it a bindless slot.
+     *
+     * @param state The Vulkan state.
+     * @param format Its format.
+     * @return The map, in the undefined layout.
+     */
+    private TextureInfoVulkan createTranslucentMap(@NonNull VulkanState state, int format) {
+        final TextureInfoVulkan map =
+                createRenderTarget(
+                        state,
+                        CascadeShadowSplit.TRANSLUCENT_MAP_SIZE,
+                        CascadeShadowSplit.TRANSLUCENT_MAP_SIZE,
+                        format,
+                        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                        VK_IMAGE_ASPECT_COLOR_BIT,
+                        VK_FILTER_LINEAR,
+                        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
         state.bindlessTextures.register(state, map);
         return map;
     }
@@ -706,6 +751,15 @@ public class PipelineManagerVulkan {
             }
         }
         dynamicShadowMaps = null;
+        for (TextureInfoVulkan[] maps :
+                new TextureInfoVulkan[][] {translucentMoments, translucentAbsorbance}) {
+            for (TextureInfoVulkan map : maps) {
+                state.bindlessTextures.release(state, map);
+                map.destroy(state);
+            }
+        }
+        translucentMoments = null;
+        translucentAbsorbance = null;
         state.bindlessTextures.release(state, scrollCopy);
         scrollCopy.destroy(state);
         scrollCopy = null;
@@ -845,6 +899,8 @@ public class PipelineManagerVulkan {
             @NonNull VkExtent3D imageExtent) {
         data.cascadeShadows = shadowMaps;
         data.cascadeDynamicShadows = dynamicShadowMaps;
+        data.cascadeTranslucentMoments = translucentMoments;
+        data.cascadeTranslucentAbsorbance = translucentAbsorbance;
         data.cascadeScrollCopy = scrollCopy;
         data.skyMap = skyMap;
         data.pointAtlas = pointAtlas;
@@ -1054,6 +1110,8 @@ public class PipelineManagerVulkan {
         // Shared between frames, cleaned up separately
         data.cascadeShadows = null;
         data.cascadeDynamicShadows = null;
+        data.cascadeTranslucentMoments = null;
+        data.cascadeTranslucentAbsorbance = null;
         data.skyMap = null;
         data.pointAtlas = null;
         data.pointDynamicAtlas = null;

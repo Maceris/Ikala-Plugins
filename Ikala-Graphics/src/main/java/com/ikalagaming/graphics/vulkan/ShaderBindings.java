@@ -1114,11 +1114,18 @@ public class ShaderBindings {
             public static final int DYNAMIC_MAP_INDEX = TEXEL_SIZE + Float.BYTES;
 
             /**
+             * The bindless indices of the cascade's translucent maps, its moments in the low 16
+             * bits and its absorbance in the high, or -1 for none, see {@code
+             * translucent_shadow.glsl}.
+             */
+            public static final int TRANSLUCENT_MAPS = DYNAMIC_MAP_INDEX + Integer.BYTES;
+
+            /**
              * The distance between elements of an array of these structs. Array elements are padded
              * out to 16 bytes under std140 rules.
              */
             public static final int ARRAY_STRIDE =
-                    (int) SharedBuffer.align(DYNAMIC_MAP_INDEX + Integer.BYTES);
+                    (int) SharedBuffer.align(TRANSLUCENT_MAPS + Integer.BYTES);
 
             /** Private constructor so this class is not instantiated. */
             private CascadeShadow() {

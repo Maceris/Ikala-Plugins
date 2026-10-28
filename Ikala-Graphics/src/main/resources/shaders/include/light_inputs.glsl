@@ -52,6 +52,9 @@ struct CascadeShadow {
     // The bindless index of the cascade's map of what moves, at the same place as its shadow map,
     // or -1 for none, see SunShadowCache
     int dynamicMapIndex;
+    // The bindless indices of the cascade's translucent maps, see translucent_shadow.glsl: its
+    // moments in the low 16 bits and its absorbance in the high, or -1 for none
+    int translucentMaps;
 };
 
 layout(set = 0, binding = 0) uniform Uniforms {

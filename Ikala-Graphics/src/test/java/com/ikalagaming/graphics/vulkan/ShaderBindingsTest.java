@@ -33,6 +33,7 @@ class ShaderBindingsTest {
         // CascadeShadow {mat4 projViewMatrix; float splitDistance;}[3], each padded to 80 bytes
         assertEquals(240, ShaderBindings.Light.CASCADE_SHADOWS_OFFSET);
         assertEquals(68, ShaderBindings.Light.CascadeShadow.TEXEL_SIZE);
+        assertEquals(76, ShaderBindings.Light.CascadeShadow.TRANSLUCENT_MAPS);
         assertEquals(80, ShaderBindings.Light.CascadeShadow.ARRAY_STRIDE);
         // 8 ints for the texture indices
         assertEquals(480, ShaderBindings.Light.BASE_COLOR_SAMPLER_INDEX_OFFSET);

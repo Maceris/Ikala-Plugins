@@ -256,6 +256,29 @@ public class LightRender implements RenderStage {
         }
     }
 
+    /** The largest bindless index that packs into half of {@code CascadeShadow.translucentMaps}. */
+    private static final int PACKED_INDEX = (1 << Short.SIZE) - 1;
+
+    /**
+     * A cascade's translucent maps' bindless indices, packed for {@code CascadeShadow}: the moments
+     * in the low 16 bits and the absorbance in the high.
+     *
+     * @param frameData This frame's data.
+     * @param cascade Which cascade.
+     * @return The packed indices, or -1 for none.
+     */
+    private static int translucentMaps(@NonNull PerFrameData frameData, int cascade) {
+        if (frameData.cascadeTranslucentMoments == null || !frameData.translucentShadowCasters) {
+            return -1;
+        }
+        final int moments = frameData.cascadeTranslucentMoments[cascade].bindlessIndex;
+        final int absorbance = frameData.cascadeTranslucentAbsorbance[cascade].bindlessIndex;
+        if (moments < 0 || absorbance < 0 || moments > PACKED_INDEX || absorbance > PACKED_INDEX) {
+            return -1;
+        }
+        return moments | absorbance << Short.SIZE;
+    }
+
     /**
      * Write the uniforms for the current frame.
      *
@@ -436,6 +459,9 @@ public class LightRender implements RenderStage {
                                     && dynamicMap != null
                             ? dynamicMap.bindlessIndex
                             : -1);
+            uniformData.putInt(
+                    offset + ShaderBindings.Light.CascadeShadow.TRANSLUCENT_MAPS,
+                    translucentMaps(frameData, i));
         }
 
         TextureInfoVulkan[] gBuffer = frameData.gBuffer.textures();
