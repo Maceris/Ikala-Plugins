@@ -65,11 +65,12 @@ public class ShadowRender implements RenderStage {
     private final TranslucentShadowPass translucent;
 
     /**
-     * Whether each cascade's translucent maps hold what doesn't move as its map does, so a cached
-     * cascade that isn't drawn again keeps them too.
+     * The translucent map each cascade's see-through meshes were last drawn into, which holds what
+     * doesn't move as the cascade's map does, so a cached cascade that isn't drawn again keeps it;
+     * null for none.
      */
-    private final boolean[] translucentKept =
-            new boolean[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
+    private final TextureInfoVulkan[] translucentKept =
+            new TextureInfoVulkan[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
 
     /** The shader for baked sections, in the baked vertex format. */
     @NonNull private final ShaderVulkan bakedShader;
@@ -340,12 +341,13 @@ public class ShadowRender implements RenderStage {
                 final int list = InstanceDrawUpdate.LIST_FIRST_CASCADE + i;
                 // See-through meshes, drawn whole when the cascade isn't cached, when it is drawn
                 // again, or when anything moves, as what moves isn't kept apart for them
-                if (!frameData.translucentShadowCasters) {
-                    translucentKept[i] = false;
+                if (!frameData.translucentShadowCasters
+                        || frameData.cascadeTranslucentMoments == null) {
+                    translucentKept[i] = null;
                 } else if (!cascade.isCached()
                         || cascade.getRedraw() != SunShadowCache.Redraw.NONE
                         || frameData.dynamicShadowCasters
-                        || !translucentKept[i]) {
+                        || translucentKept[i] != frameData.cascadeTranslucentMoments[i]) {
                     translucent.render(
                             commandBuffer,
                             vulkanState,
@@ -354,7 +356,7 @@ public class ShadowRender implements RenderStage {
                             descriptorSets[vulkanState.frameIndex],
                             pushConstants,
                             stack);
-                    translucentKept[i] = true;
+                    translucentKept[i] = frameData.cascadeTranslucentMoments[i];
                 }
                 final TextureInfoVulkan map = frameData.cascadeShadows[i];
                 if (!cascade.isCached()) {

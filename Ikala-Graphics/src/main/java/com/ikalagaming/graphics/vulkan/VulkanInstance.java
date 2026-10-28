@@ -1919,6 +1919,8 @@ public class VulkanInstance {
         checkError(vkWaitForFences(state.device.logical, longOutput, true, Long.MAX_VALUE));
         // The GPU is done with this frame index, so nothing can be using these anymore
         state.runDeferredFrees(state.frameIndex);
+        // What only some scenes need, once a frame needed it
+        pipelineManager.createWhenNeeded(state);
 
         // Resizing or minimized windows wait until they have a swapchain that fits
         List<Presentation> acquired = new ArrayList<>(state.presentations.size());

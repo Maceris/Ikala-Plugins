@@ -13,6 +13,10 @@
 
 layout(location = 0) in vec2 inTextCoord;
 layout(location = 1) flat in uint inMaterialIdx;
+// A coverage volume shell's coverage and seed, which the cut out vertex shaders this shares pass
+// on; never a shell's here, see shadow_cutout.frag
+layout(location = 2) in float inShellAlpha;
+layout(location = 3) flat in uint inShellSeed;
 
 layout(std430, set = 0, binding = 1) readonly buffer Materials {
     Material materials[];
@@ -30,6 +34,10 @@ const float MAX_OPACITY = 0.999;
 
 void main()
 {
+    // Coverage volume shells are cut out shadows, never see-through ones
+    if (inShellAlpha >= 0.0 && inShellSeed != ~0u) {
+        discard;
+    }
     Material material = materials[inMaterialIdx];
     vec3 color;
     float alpha;

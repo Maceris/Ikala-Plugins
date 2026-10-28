@@ -595,22 +595,10 @@ public class PipelineManagerVulkan {
                 all.add(dynamicShadowMaps[i]);
             }
         }
-        // Drawn whole every frame before they are read
-        translucentMoments = new TextureInfoVulkan[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
-        translucentAbsorbance = new TextureInfoVulkan[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
-        for (int i = 0; i < translucentMoments.length; i++) {
-            translucentMoments[i] = createTranslucentMap(state, TRANSLUCENT_MOMENTS_FORMAT);
-            translucentAbsorbance[i] = createTranslucentMap(state, TRANSLUCENT_ABSORBANCE_FORMAT);
-        }
         // Only ever copied into whole before it is read, so it isn't cleared
         scrollCopy = createShadowMap(state, SunShadowCache.STATIC_MAP_SIZE);
         skyMap = createShadowMap(state, SkyOcclusion.MAP_SIZE);
         all.add(skyMap);
-        pointAtlas = createShadowMap(state, PointShadows.ATLAS_SIZE);
-        all.add(pointAtlas);
-        pointDynamicAtlas = createShadowMap(state, PointShadows.ATLAS_SIZE);
-        all.add(pointDynamicAtlas);
-        state.pointShadows.invalidateAll();
         state.sunShadows.invalidateAll();
         state.skyOcclusion.invalidateAll();
         clearShadowMaps(state, all.toArray(new TextureInfoVulkan[0]));
@@ -639,6 +627,48 @@ public class PipelineManagerVulkan {
                         VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER);
         state.bindlessTextures.register(state, map);
         return map;
+    }
+
+    /**
+     * Create what only some scenes need, the first frame after one needs it: the point light shadow
+     * atlases (128 MB) once a light has a shadow map, and the cascades' translucent maps (72 MB)
+     * once there is a see-through material. Until then the shadow and light stages go without. Call
+     * between frames, once the frame's fence is waited on.
+     *
+     * @param state The Vulkan state.
+     */
+    public void createWhenNeeded(@NonNull VulkanState state) {
+        if (pointAtlas == null && state.pointShadows.getMapCount() > 0) {
+            pointAtlas = createShadowMap(state, PointShadows.ATLAS_SIZE);
+            pointDynamicAtlas = createShadowMap(state, PointShadows.ATLAS_SIZE);
+            clearShadowMaps(state, new TextureInfoVulkan[] {pointAtlas, pointDynamicAtlas});
+            state.pointShadows.invalidateAll();
+            for (PerFrameData data : state.perFrameData) {
+                data.pointAtlas = pointAtlas;
+                data.pointDynamicAtlas = pointDynamicAtlas;
+            }
+            log.debug("Created the point light shadow atlases");
+        }
+        boolean translucent = false;
+        for (PerFrameData data : state.perFrameData) {
+            translucent |= data.translucentShadowCasters;
+        }
+        if (translucentMoments == null && translucent) {
+            // Drawn whole before they are read
+            final int cascades = CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT;
+            translucentMoments = new TextureInfoVulkan[cascades];
+            translucentAbsorbance = new TextureInfoVulkan[cascades];
+            for (int i = 0; i < cascades; i++) {
+                translucentMoments[i] = createTranslucentMap(state, TRANSLUCENT_MOMENTS_FORMAT);
+                translucentAbsorbance[i] =
+                        createTranslucentMap(state, TRANSLUCENT_ABSORBANCE_FORMAT);
+            }
+            for (PerFrameData data : state.perFrameData) {
+                data.cascadeTranslucentMoments = translucentMoments;
+                data.cascadeTranslucentAbsorbance = translucentAbsorbance;
+            }
+            log.debug("Created the translucent shadow maps");
+        }
     }
 
     /**
@@ -754,6 +784,9 @@ public class PipelineManagerVulkan {
         dynamicShadowMaps = null;
         for (TextureInfoVulkan[] maps :
                 new TextureInfoVulkan[][] {translucentMoments, translucentAbsorbance}) {
+            if (maps == null) {
+                continue;
+            }
             for (TextureInfoVulkan map : maps) {
                 state.bindlessTextures.release(state, map);
                 map.destroy(state);
@@ -768,8 +801,10 @@ public class PipelineManagerVulkan {
         skyMap.destroy(state);
         skyMap = null;
         for (TextureInfoVulkan atlas : new TextureInfoVulkan[] {pointAtlas, pointDynamicAtlas}) {
-            state.bindlessTextures.release(state, atlas);
-            atlas.destroy(state);
+            if (atlas != null) {
+                state.bindlessTextures.release(state, atlas);
+                atlas.destroy(state);
+            }
         }
         pointAtlas = null;
         pointDynamicAtlas = null;
