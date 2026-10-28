@@ -1,6 +1,8 @@
 package com.ikalagaming.graphics.benchmark;
 
+import static org.lwjgl.util.vma.Vma.vmaBuildStatsString;
 import static org.lwjgl.util.vma.Vma.vmaCalculateStatistics;
+import static org.lwjgl.util.vma.Vma.vmaFreeStatsString;
 
 import com.ikalagaming.graphics.EmitterHandle;
 import com.ikalagaming.graphics.Format;
@@ -47,6 +49,7 @@ import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.joml.Vector3f;
 import org.joml.Vector3fc;
+import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.util.vma.VmaTotalStatistics;
@@ -58,6 +61,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -102,7 +106,10 @@ public final class GateBenchmark {
     /** The most the GPU may take per frame to pass, in milliseconds: half a 60 Hz frame. */
     public static final double GPU_BUDGET_MS = 8;
 
-    /** How long the camera takes to turn once around, in seconds. */
+    /**
+     * How long the camera takes to turn once around, in seconds, unless the {@code .seconds}
+     * property says, for a longer walk through the world while measuring.
+     */
     public static final double TURN_SECONDS = 10;
 
     /** How many frames to let settle once everything is resident, before measuring. */
@@ -1118,6 +1125,17 @@ public final class GateBenchmark {
     }
 
     /**
+     * How long the measuring turn takes, in seconds: {@link #TURN_SECONDS}, or the {@code .seconds}
+     * option's, so a walk can go farther through the world while it is measured.
+     *
+     * @return The seconds.
+     */
+    private double measureSeconds() {
+        final String value = option("seconds");
+        return value == null ? TURN_SECONDS : Math.max(1, Double.parseDouble(value.trim()));
+    }
+
+    /**
      * One of the run's options: what its preset set, else the startup property of that name.
      *
      * @param key The option, the property's name after {@code ikala.benchmark.}.
@@ -1290,7 +1308,7 @@ public final class GateBenchmark {
                                             1,
                                             (System.nanoTime() - measureStart)
                                                     / 1e9
-                                                    / TURN_SECONDS));
+                                                    / measureSeconds()));
             case CHECKING ->
                     String.format(
                             "Checking for cracks: %d of %d",
@@ -1738,9 +1756,9 @@ public final class GateBenchmark {
             }
             case MEASURING -> {
                 final double seconds = (System.nanoTime() - measureStart) / 1e9;
-                placeCamera(scene, seconds / TURN_SECONDS, seconds);
+                placeCamera(scene, seconds / measureSeconds(), seconds);
                 logResidency(seconds);
-                if (seconds >= TURN_SECONDS) {
+                if (seconds >= measureSeconds()) {
                     renderer().getState().frameTimings.setListener(null);
                     if (gate && lodWorld != null && crackSpots == 0) {
                         startEdits(System.nanoTime());
@@ -2839,6 +2857,57 @@ public final class GateBenchmark {
         }
         frames.incrementAndGet();
         frame.forEach((name, ms) -> samples.computeIfAbsent(name, n -> new ArrayList<>()).add(ms));
+        logHitch(frame);
+    }
+
+    /** How long a frame may take before it counts as a hitch, in milliseconds: a 60 Hz frame. */
+    public static final double HITCH_MS = 1000.0 / 60;
+
+    /** How many of a hitch's slowest GPU stages are logged. */
+    private static final int HITCH_STAGES = 3;
+
+    /** The parts of a frame's timings that aren't GPU stages. */
+    private static final Set<String> NOT_STAGES =
+            Set.of(
+                    FrameTimings.CPU,
+                    FrameTimings.FRAME_INTERVAL,
+                    FrameTimings.WAIT,
+                    FrameTimings.BETWEEN_FRAMES,
+                    FrameTimings.GPU_TOTAL);
+
+    /**
+     * Log a measured frame that took longer than {@link #HITCH_MS}, from start to start or on the
+     * CPU, with when it was read back, to the millisecond, for matching against a GC log or a
+     * profile, and its slowest GPU stages. The timings are read back a frame or two late.
+     *
+     * @param frame The frame's timings, in milliseconds.
+     */
+    private void logHitch(@NonNull Map<String, Double> frame) {
+        final double interval = frame.getOrDefault(FrameTimings.FRAME_INTERVAL, 0.0);
+        final double cpu = frame.getOrDefault(FrameTimings.CPU, 0.0);
+        if (interval <= HITCH_MS && cpu <= HITCH_MS) {
+            return;
+        }
+        final StringBuilder stages = new StringBuilder();
+        frame.entrySet().stream()
+                .filter(entry -> !NOT_STAGES.contains(entry.getKey()))
+                .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
+                .limit(HITCH_STAGES)
+                .forEach(
+                        entry ->
+                                stages.append(' ')
+                                        .append(entry.getKey())
+                                        .append(' ')
+                                        .append(String.format("%.2f", entry.getValue())));
+        log.info(
+                "Gate benchmark hitch at {}: interval {} ms, CPU {} ms, wait {} ms, GPU {} ms;"
+                        + " slowest:{}",
+                LocalTime.now(),
+                String.format("%.1f", interval),
+                String.format("%.1f", cpu),
+                String.format("%.1f", frame.getOrDefault(FrameTimings.WAIT, 0.0)),
+                String.format("%.1f", frame.getOrDefault(FrameTimings.GPU_TOTAL, 0.0)),
+                stages);
     }
 
     /** The last whole second of measuring whose residency was logged. */
@@ -3264,6 +3333,18 @@ public final class GateBenchmark {
             vmaCalculateStatistics(state.vmaAllocator, totals);
             vmaBlocks = totals.total().statistics().blockBytes();
             vmaAllocations = totals.total().statistics().allocationBytes();
+            // Every allocation, as VMA's JSON, for finding where the memory goes
+            final String dump = option("gpuMemoryDump");
+            if (dump != null) {
+                final PointerBuffer text = stack.mallocPointer(1);
+                vmaBuildStatsString(state.vmaAllocator, text, true);
+                try {
+                    Files.writeString(Path.of(dump), MemoryUtil.memUTF8(text.get(0)));
+                } catch (IOException e) {
+                    log.warn("Couldn't write the GPU memory dump to {}", dump, e);
+                }
+                vmaFreeStatsString(state.vmaAllocator, MemoryUtil.memByteBufferNT1(text.get(0)));
+            }
         }
         // What is left on the heap once everything unreachable is gone
         System.gc();

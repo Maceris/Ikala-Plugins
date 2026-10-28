@@ -21,6 +21,7 @@ import org.lwjgl.vulkan.*;
 
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
+import java.util.Locale;
 
 /**
  * Where a window's frames go: its surface and swapchain, the swapchain images, and the semaphores
@@ -44,6 +45,9 @@ public class Presentation {
      * updates.
      */
     public static final long MILLIS_BETWEEN_SWAPCHAIN_REGENERATION_WHILE_RESIZING = 50;
+
+    /** The system property that picks the present mode, see {@link #presentMode}. */
+    public static final String PRESENT_MODE_PROPERTY = "ikala.vulkan.presentMode";
 
     /** Composite alpha modes we can live with, in order of preference. */
     private static final int[] COMPOSITE_ALPHA_PREFERENCES = {
@@ -341,7 +345,7 @@ public class Presentation {
                             .imageSharingMode(VK_SHARING_MODE_EXCLUSIVE)
                             .preTransform(capabilities.currentTransform())
                             .compositeAlpha(selectCompositeAlpha(capabilities))
-                            .presentMode(VK_PRESENT_MODE_FIFO_KHR)
+                            .presentMode(presentMode(state, stack))
                             .clipped(true)
                             .oldSwapchain(oldSwapchain);
 
@@ -464,5 +468,39 @@ public class Presentation {
         swapchainHandle = VK_NULL_HANDLE;
         vkDestroySurfaceKHR(state.instance, surfaceHandle, null);
         surfaceHandle = VK_NULL_HANDLE;
+    }
+
+    /**
+     * How frames are presented: FIFO, v-synced and available everywhere, unless {@code
+     * -Dikala.vulkan.presentMode=mailbox} or {@code immediate} asks for a mode without waiting for
+     * the display, for measuring how fast frames really go; FIFO if the surface doesn't offer it.
+     *
+     * @param state The Vulkan state.
+     * @param stack The stack to allocate on.
+     * @return The VkPresentModeKHR.
+     */
+    private int presentMode(@NonNull VulkanState state, @NonNull MemoryStack stack) {
+        final String wanted = System.getProperty(PRESENT_MODE_PROPERTY, "fifo");
+        final int mode =
+                switch (wanted.trim().toLowerCase(Locale.ROOT)) {
+                    case "mailbox" -> VK_PRESENT_MODE_MAILBOX_KHR;
+                    case "immediate" -> VK_PRESENT_MODE_IMMEDIATE_KHR;
+                    default -> VK_PRESENT_MODE_FIFO_KHR;
+                };
+        if (mode == VK_PRESENT_MODE_FIFO_KHR) {
+            return mode;
+        }
+        final VkPhysicalDevice physicalDevice = state.device.physical.physicalDevice;
+        final IntBuffer count = stack.mallocInt(1);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surfaceHandle, count, null);
+        final IntBuffer modes = stack.mallocInt(count.get(0));
+        vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surfaceHandle, count, modes);
+        for (int i = 0; i < modes.capacity(); ++i) {
+            if (modes.get(i) == mode) {
+                return mode;
+            }
+        }
+        log.warn("The surface doesn't offer the {} present mode; presenting v-synced", wanted);
+        return VK_PRESENT_MODE_FIFO_KHR;
     }
 }
