@@ -37,13 +37,19 @@ import java.nio.LongBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Draws the scene's water tiles over the lit scene and the sky, before the transparency passes, so
  * glass, particles and volume bricks in front of the water blend over it. The scene's color and
  * depth are copied first, for the shader to see what lies behind the surface through it; the water
  * writes its own depth, so what is under it stays under it. The surfaces are built on the CPU from
- * the tiles whenever they change, for each frame in flight; each frame the tiles' places relative
+ * the tiles whenever they change, on a thread of their own, the last tiles drawn until the new ones
+ * are built, and copied into each frame in flight's buffers; each frame the tiles' places relative
  * to the camera and their optics are written to a small list. See {@code water.frag}.
  *
  * <p>Water in wind has waves, see {@link WaveMath}: tiles whose bodies share a wind share a wave
@@ -253,8 +259,58 @@ public class WaterRender implements RenderStage {
     /** Each tile's optics, in step with {@link #tiles}. */
     private final List<WaterMath.Optics> optics = new ArrayList<>();
 
-    /** The version of the tiles last copied, -1 for none. */
+    /** The version of the tiles drawn, -1 for none. */
     private long version = -1;
+
+    /**
+     * The tiles' version last taken from the registry to build, -1 for none, which may be newer
+     * than {@link #version} while it builds.
+     */
+    private long seenVersion = -1;
+
+    /** A scratch list the registry's tiles are copied into. */
+    private final List<WaterTile> seenTiles = new ArrayList<>();
+
+    /** The drawn tiles' surfaces and sides, built once for every frame in flight. */
+    private WaterMesh.Mesh mesh;
+
+    /** What each one meter cell of the drawn tiles holds, for the wave grid. */
+    private Map<Long, float[]> cellData = Map.of();
+
+    /** The build of the newest tiles under way, or null. Render thread. */
+    private CompletableFuture<Built> building;
+
+    /**
+     * Builds the tiles' meshes and cell data off the render thread, so tiles coming and going, as
+     * in a world streamed around the camera, don't stall frames; made on first use.
+     */
+    private ExecutorService builder;
+
+    /**
+     * The tiles' climates: each tile's, -1 for still water, and the winds they come from.
+     *
+     * @param tileClimates Each tile's climate.
+     * @param winds The winds, by climate.
+     * @param overflowed Whether more winds were found than {@link #MAX_CLIMATES}.
+     */
+    private record Climates(
+            @NonNull List<Integer> tileClimates, @NonNull List<Wind> winds, boolean overflowed) {}
+
+    /**
+     * A version of the tiles, built and ready to draw.
+     *
+     * @param version The tiles' version.
+     * @param tiles The tiles.
+     * @param climates Their climates.
+     * @param mesh Their surfaces and sides.
+     * @param cells What each one meter cell they cover holds.
+     */
+    private record Built(
+            long version,
+            @NonNull List<WaterTile> tiles,
+            @NonNull Climates climates,
+            WaterMesh.@NonNull Mesh mesh,
+            @NonNull Map<Long, float[]> cells) {}
 
     /**
      * Set up the stage.
@@ -357,6 +413,12 @@ public class WaterRender implements RenderStage {
             }
         }
         Arrays.fill(vertexVersions, -1);
+        if (builder != null) {
+            builder.shutdownNow();
+            builder = null;
+        }
+        building = null;
+        seenVersion = version;
         vkDestroyPipeline(state.device.logical, pipeline, null);
         pipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(state.device.logical, gatePipeline, null);
@@ -480,14 +542,31 @@ public class WaterRender implements RenderStage {
         if (scene == null || renderConfig == null || !renderConfig.world()) {
             return false;
         }
-        final long now = scene.getWaterRegistry().snapshotIfChanged(version, tiles);
-        if (now != version) {
-            version = now;
-            optics.clear();
-            for (WaterTile tile : tiles) {
-                optics.add(WaterMath.optics(tile.body()));
+        final long now = scene.getWaterRegistry().snapshotIfChanged(seenVersion, seenTiles);
+        if (now != seenVersion && building == null) {
+            seenVersion = now;
+            final List<WaterTile> snapshot = List.copyOf(seenTiles);
+            if (builder == null) {
+                builder =
+                        Executors.newSingleThreadExecutor(
+                                runnable -> {
+                                    final Thread thread = new Thread(runnable, "Water mesh");
+                                    thread.setDaemon(true);
+                                    return thread;
+                                });
             }
-            findClimates();
+            building = CompletableFuture.supplyAsync(() -> build(now, snapshot), builder);
+        }
+        // The first tiles are waited for, so water shows from the first frame; later ones are
+        // swapped in once built, the last ones drawn meanwhile
+        if (building != null && (building.isDone() || mesh == null)) {
+            final CompletableFuture<Built> done = building;
+            building = null;
+            try {
+                apply(done.join());
+            } catch (CompletionException e) {
+                log.error("Building the water's surfaces failed", e.getCause());
+            }
         }
         if (tiles.isEmpty()) {
             return false;
@@ -525,7 +604,7 @@ public class WaterRender implements RenderStage {
                     frame,
                     camera,
                     version,
-                    () -> WaterMesh.waterCellData(tiles, tileClimates),
+                    () -> cellData,
                     disturbances,
                     climateBuffers[frame].deviceAddress,
                     paints,
@@ -822,15 +901,55 @@ public class WaterRender implements RenderStage {
             };
 
     /**
+     * Build a version of the tiles: their climates, surfaces and cell data. On the water mesh
+     * thread.
+     *
+     * @param version The tiles' version.
+     * @param list The tiles.
+     * @return The build.
+     */
+    private static Built build(long version, @NonNull List<WaterTile> list) {
+        final Climates found = findClimates(list);
+        return new Built(
+                version,
+                list,
+                found,
+                WaterMesh.build(list),
+                WaterMesh.waterCellData(list, found.tileClimates()));
+    }
+
+    /**
+     * Draw a built version of the tiles from now on. Render thread.
+     *
+     * @param built The build.
+     */
+    private void apply(@NonNull Built built) {
+        version = built.version();
+        tiles.clear();
+        tiles.addAll(built.tiles());
+        optics.clear();
+        for (WaterTile tile : tiles) {
+            optics.add(WaterMath.optics(tile.body()));
+        }
+        mesh = built.mesh();
+        cellData = built.cells();
+        useClimates(built.climates());
+    }
+
+    /**
      * Find the winds the tiles' waves come from, one climate each, and which each tile has. Still
      * water has none, and past {@link #MAX_CLIMATES} winds tiles are drawn still.
+     *
+     * @param list The tiles.
+     * @return The climates.
      */
-    private void findClimates() {
+    private static Climates findClimates(@NonNull List<WaterTile> list) {
         final List<Wind> found = new ArrayList<>();
-        tileClimates.clear();
-        for (WaterTile tile : tiles) {
+        final List<Integer> each = new ArrayList<>(list.size());
+        boolean overflowed = false;
+        for (WaterTile tile : list) {
             if (tile.body().windSpeed() <= 0) {
-                tileClimates.add(-1);
+                each.add(-1);
                 continue;
             }
             final Wind wind =
@@ -842,15 +961,29 @@ public class WaterRender implements RenderStage {
             if (index < 0 && found.size() < MAX_CLIMATES) {
                 found.add(wind);
                 index = found.size() - 1;
-            } else if (index < 0 && !climatesFullLogged) {
-                climatesFullLogged = true;
-                log.warn("More than {} winds over water; the rest is drawn still", MAX_CLIMATES);
+            } else if (index < 0) {
+                overflowed = true;
             }
-            tileClimates.add(index);
+            each.add(index);
         }
-        if (!found.equals(winds)) {
+        return new Climates(each, found, overflowed);
+    }
+
+    /**
+     * Use the drawn tiles' climates, making the winds' climates again if the winds changed.
+     *
+     * @param found The climates.
+     */
+    private void useClimates(@NonNull Climates found) {
+        if (found.overflowed() && !climatesFullLogged) {
+            climatesFullLogged = true;
+            log.warn("More than {} winds over water; the rest is drawn still", MAX_CLIMATES);
+        }
+        tileClimates.clear();
+        tileClimates.addAll(found.tileClimates());
+        if (!found.winds().equals(winds)) {
             winds.clear();
-            winds.addAll(found);
+            winds.addAll(found.winds());
             climates.clear();
             for (int i = 0; i < winds.size(); ++i) {
                 climates.add(Climate.of(winds.get(i), WAVE_SEED + i * (long) WaveMath.WAVES));
@@ -1154,14 +1287,14 @@ public class WaterRender implements RenderStage {
     }
 
     /**
-     * Build this frame's surface vertices from the tiles: two triangles for each cell that holds
-     * water, each corner at its height, relative to its tile's corner.
+     * Copy the drawn tiles' surfaces into this frame's buffers: two triangles for each cell that
+     * holds water, each corner at its height, relative to its tile's corner, built once for every
+     * frame in flight, see {@link #build}.
      *
      * @param state The Vulkan state.
      * @param frame The frame in flight.
      */
     private void writeVertices(@NonNull VulkanState state, int frame) {
-        final WaterMesh.Mesh mesh = WaterMesh.build(tiles);
         indexCounts[frame] = mesh.indexCount();
         surfaceIndexCounts[frame] = mesh.surfaceIndexCount();
         if (mesh.indexCount() == 0) {

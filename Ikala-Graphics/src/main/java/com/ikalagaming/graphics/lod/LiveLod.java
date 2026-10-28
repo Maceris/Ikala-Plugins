@@ -30,10 +30,16 @@ import java.util.function.Predicate;
  *
  * <p>A level 0 cell is built only once none of its sections has a bake on the way, as {@link
  * #expect} says, and they have stopped changing for a while, except that an edit to the observer's
- * own cell once it is built doesn't wait for the while. Parents are built once no level 0 cell is
- * left to build and no bake is on the way. While an area loads, its cells are built with all their
- * sections rather than with whichever came first, so they match what a later load of the same area
- * builds and are read from the cache then instead of built again.
+ * own cell once it is built doesn't wait for the while. A parent is built once no level 0 cell
+ * under it is left to build and no bake under it is on the way, so a world that keeps loading
+ * around a moving observer still gets its parents everywhere else. While an area loads, its cells
+ * are built with all their sections rather than with whichever came first, so they match what a
+ * later load of the same area builds and are read from the cache then instead of built again.
+ *
+ * <p>Cells farther than {@link #setKeepDistance the keep distance} from the observer are left in
+ * the queue rather than built, and hold nothing back, unless building them only takes them out: a
+ * world streamed around a moving observer changes cells behind it that would otherwise be built for
+ * nobody to see. They are built if the observer comes back.
  */
 @Slf4j
 public final class LiveLod implements AutoCloseable {
@@ -185,6 +191,12 @@ public final class LiveLod implements AutoCloseable {
 
     /** Where to build nearest to, in the world. */
     private volatile double[] near = new double[AXES];
+
+    /**
+     * How far from the observer cells are built, in the world; farther ones wait in the queue.
+     * Infinite unless set.
+     */
+    private volatile double keepDistance = Double.POSITIVE_INFINITY;
 
     /** The builder thread, or null if batches are built with {@link #step()}. */
     private Thread builder;
@@ -389,6 +401,29 @@ public final class LiveLod implements AutoCloseable {
         near = new double[] {x, y, z};
     }
 
+    /**
+     * Set how far from the observer cells are built, such as a little past the view distance:
+     * farther cells wait in the queue, except those that only need taking out. Safe from any
+     * thread.
+     *
+     * @param distance The distance in the world, infinite to build every cell.
+     */
+    public void setKeepDistance(double distance) {
+        keepDistance = distance;
+    }
+
+    /**
+     * Whether a level 0 cell is past the keep distance.
+     *
+     * @param key The cell.
+     * @param point Where the observer is.
+     * @param keep The keep distance.
+     * @return True if it is past it.
+     */
+    private boolean isFar(LodStore.@NonNull CellKey key, double @NonNull [] point, double keep) {
+        return keep < Double.POSITIVE_INFINITY && store.distanceTo(key, point) > keep;
+    }
+
     /** Start the builder thread. */
     public void start() {
         builder = new Thread(this::run, "LOD builder");
@@ -433,10 +468,14 @@ public final class LiveLod implements AutoCloseable {
             apply(change);
             heldStale = true;
         }
-        final Predicate<LodStore.CellKey> ready = readyCells();
-        // Parents wait for every section on the way, so they are built over all of them at once
-        final boolean parentsReady = expected.isEmpty();
-        if (!store.hasWork(ready, parentsReady) && coveredAsIs.isEmpty()) {
+        final double[] point = near;
+        final double keep = keepDistance;
+        final Set<LodStore.CellKey> waiting = waitingCells(point, keep);
+        final Predicate<LodStore.CellKey> ready = readyCells(waiting, point, keep);
+        // Parents wait for the cells under them that are built soon and the sections on the way
+        // there, so they are built over all of them at once
+        final Predicate<LodStore.CellKey> holds = key -> !isFar(key, point, keep);
+        if (!store.hasWork(ready, holds, waiting) && coveredAsIs.isEmpty()) {
             // Idle: a good time to count what the store holds
             if (heldStale) {
                 heldBytes = store.heldBytes();
@@ -449,9 +488,10 @@ public final class LiveLod implements AutoCloseable {
         final LodStore.Rebuilt rebuilt =
                 store.rebuild(
                         Math.max(CELLS_PER_BATCH, BATCHES_OF_WORKERS * store.getCellsAtOnce()),
-                        near,
+                        point,
                         ready,
-                        parentsReady);
+                        holds,
+                        waiting);
         rebuilt.built().forEach(lastChange::remove);
         rebuilt.removed().forEach(lastChange::remove);
         final Map<LodStore.SectionPos, Long> covered = new HashMap<>(coveredAsIs);
@@ -500,23 +540,40 @@ public final class LiveLod implements AutoCloseable {
     }
 
     /**
-     * Which dirty level 0 cells may be built now: those with no bake on the way whose sections have
-     * settled, or that are the observer's own cell and were built before, so an edit there isn't
-     * held back.
+     * The level 0 cells with a section on the way, within the keep distance.
      *
-     * @return The test.
+     * @param point Where the observer is.
+     * @param keep The keep distance.
+     * @return The cells.
      */
-    private Predicate<LodStore.CellKey> readyCells() {
+    private Set<LodStore.CellKey> waitingCells(double @NonNull [] point, double keep) {
         final Set<LodStore.CellKey> waiting = new HashSet<>();
         for (LodStore.SectionPos position : expected.keySet()) {
             waiting.add(store.cellOf(position));
         }
+        waiting.removeIf(key -> isFar(key, point, keep));
+        return waiting;
+    }
+
+    /**
+     * Which dirty level 0 cells may be built now: none with a section on the way, each once its
+     * sections have stopped changing for a while or it is the observer's own cell and built, and
+     * none past the keep distance unless building it only takes it out.
+     *
+     * @param waiting The cells with a section on the way.
+     * @param point Where the observer is.
+     * @param keep The keep distance.
+     * @return The test.
+     */
+    private Predicate<LodStore.CellKey> readyCells(
+            @NonNull Set<LodStore.CellKey> waiting, double @NonNull [] point, double keep) {
+        final Predicate<LodStore.CellKey> near =
+                key -> !isFar(key, point, keep) || store.isEmpty(key);
         final long settle = settleNanos;
         if (settle <= 0) {
-            return key -> !waiting.contains(key);
+            return key -> !waiting.contains(key) && near.test(key);
         }
         final long now = clock.getAsLong();
-        final double[] point = near;
         final LodStore.CellKey own =
                 store.cellOf(
                         new LodStore.SectionPos(
@@ -524,7 +581,7 @@ public final class LiveLod implements AutoCloseable {
                                 (int) Math.floor((point[1] - origin[1]) / sectionSize),
                                 (int) Math.floor((point[2] - origin[2]) / sectionSize)));
         return key -> {
-            if (waiting.contains(key)) {
+            if (waiting.contains(key) || !near.test(key)) {
                 return false;
             }
             final Long changed = lastChange.get(key);

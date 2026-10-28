@@ -222,9 +222,13 @@ class LiveLodTest {
         final List<LiveLod.Batch> early = kept.settle();
         for (LiveLod.Batch batch : early) {
             for (LiveLod.Piece piece : batch.added()) {
-                assertTrue(piece.key().level() == 0, "No parent before every cell is built");
-                assertFalse(piece.key().equals(kept.live.cellOf(position(late))));
-                assertFalse(piece.key().equals(kept.live.cellOf(position(failed))));
+                // Parents elsewhere may be built, but none over a cell still waiting
+                assertFalse(
+                        isAbove(piece.key(), kept.live.cellOf(position(late))),
+                        "No parent over a cell waiting for a bake: " + piece.key());
+                assertFalse(
+                        isAbove(piece.key(), kept.live.cellOf(position(failed))),
+                        "No parent over a cell waiting for a bake: " + piece.key());
             }
         }
         kept.live.abandon(position(failed), 1);
@@ -234,6 +238,22 @@ class LiveLodTest {
         assertEquals(1L, kept.covered.get(position(late)));
         assertTrue(kept.cells.containsKey(kept.live.cellOf(position(late))));
         assertTrue(kept.cells.keySet().stream().anyMatch(key -> key.level() > 0));
+    }
+
+    /**
+     * Whether a cell is a level 0 cell or one of the cells above it.
+     *
+     * @param key The cell.
+     * @param cell The level 0 cell.
+     * @return True if it is that cell or above it.
+     */
+    private static boolean isAbove(LodStore.CellKey key, LodStore.CellKey cell) {
+        for (LodStore.CellKey up = cell; up.level() <= key.level(); up = up.parent()) {
+            if (up.equals(key)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Taking sections out is covered once their cells are rebuilt, or at once if never in. */

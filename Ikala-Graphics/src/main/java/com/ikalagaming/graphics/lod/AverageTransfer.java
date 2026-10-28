@@ -5,6 +5,7 @@ import com.ikalagaming.util.IntArrayList;
 import lombok.NonNull;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -266,6 +267,42 @@ final class AverageTransfer {
      */
     private record Position(float x, float y, float z) {}
 
+    /** The materials a blend has weighed so far, in the order they were met. Scratch. */
+    private int[] blendMaterials = new int[INITIAL_BLEND_MATERIALS];
+
+    /** Each of {@link #blendMaterials}' weight so far. Scratch. */
+    private double[] blendWeights = new double[INITIAL_BLEND_MATERIALS];
+
+    /** How many materials a blend has weighed so far. Scratch. */
+    private int blendCount;
+
+    /** How many materials a blend has room for before its scratch grows. */
+    private static final int INITIAL_BLEND_MATERIALS = 8;
+
+    /**
+     * Add weight to a material in the blend under way: kept in arrays rather than a map of boxed
+     * values, since every corner of every averaged group blends, a large share of what building
+     * level of detail allocated.
+     *
+     * @param material The material.
+     * @param weight The weight to add.
+     */
+    private void weigh(int material, double weight) {
+        for (int i = 0; i < blendCount; ++i) {
+            if (blendMaterials[i] == material) {
+                blendWeights[i] += weight;
+                return;
+            }
+        }
+        if (blendCount == blendMaterials.length) {
+            blendMaterials = Arrays.copyOf(blendMaterials, blendCount * 2);
+            blendWeights = Arrays.copyOf(blendWeights, blendCount * 2);
+        }
+        blendMaterials[blendCount] = material;
+        blendWeights[blendCount] = weight;
+        ++blendCount;
+    }
+
     /**
      * What else a blend found, beside its values.
      *
@@ -290,7 +327,7 @@ final class AverageTransfer {
         final double[] sum = new double[MaterialAverages.VALUES];
         final double[] normalSum = new double[AXES];
         double total = 0;
-        final Map<Integer, Double> byMaterial = new HashMap<>();
+        blendCount = 0;
         int nearest = -1;
         double nearestDistance = Double.MAX_VALUE;
         if (near != null) {
@@ -322,7 +359,7 @@ final class AverageTransfer {
                     normalSum[axis] += weight * n[axis];
                 }
                 total += weight;
-                byMaterial.merge(materials.getInt(s), weight, Double::sum);
+                weigh(materials.getInt(s), weight);
             }
         }
         if (total > MIN_WEIGHT) {
@@ -339,10 +376,11 @@ final class AverageTransfer {
                     (float) Roughening.widen(out[MaterialAverages.ROUGHNESS], meanLength);
             int most = materials.getInt(0);
             double weighs = -1;
-            for (Map.Entry<Integer, Double> e : byMaterial.entrySet()) {
-                if (e.getValue() > weighs || e.getValue() == weighs && e.getKey() < most) {
-                    weighs = e.getValue();
-                    most = e.getKey();
+            for (int i = 0; i < blendCount; ++i) {
+                final double weight = blendWeights[i];
+                if (weight > weighs || weight == weighs && blendMaterials[i] < most) {
+                    weighs = weight;
+                    most = blendMaterials[i];
                 }
             }
             return new Blend(most, meanLength);

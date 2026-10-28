@@ -401,8 +401,10 @@ every feature in it, and two worst cases:
   wall with smoke behind it, and a glass dome on the sea floor; views of the shore, the fountain,
   the glass and water, the figure eight and under the sea.
 - *Hills*: hills with trees, huts with glass, lakes as water tiles and caves, under a hazy physical
-  sky; views from above, from the middle, over a lake and by the huts. *Hills, far* is the same out
-  to 512 m with level of detail.
+  sky; views from above, from the middle, over a lake and by the huts. *Hills, streaming* is the
+  same out to 512 m with level of detail, generated around the camera as it moves: sections and lake
+  tiles coming within the view distance are composed nearest first, and those 2 sections past it
+  removed, so the camera can fly anywhere and the world is built the way a game streams it.
 - *Caves*, and the worst cases *Glass* (transparency) and *Jumble* (culling and level of detail on
   real shapes).
 
@@ -425,6 +427,7 @@ These are Java system properties, given before `-jar`:
 | `-Dikala.benchmark.keep=true` | `false` | Keeps the world once the run finishes, so you can fly around it, and hides plugin menus that would cover it. Without this, the app closes when the run finishes. |
 | `-Dikala.benchmark.gate=true` | `false` | Runs the full gate after measuring: crack checks, timed edits and a reload from the cache. |
 | `-Dikala.benchmark.walk=<m/s>` | `0` | Walks the camera along x while it turns, at this speed, to measure streaming. |
+| `-Dikala.benchmark.stream=true` | `false` | Streams the world around the camera once the first one is drawn, as *Hills, streaming* does; with `.walk` and `.seconds` the camera flies past what was first laid out, and the log shows every 2 s how far behind composing and baking are. |
 | `-Dikala.benchmark.cracks=<views>` | `4` | With the gate, checks only the first this many views for cracks, 0 to skip them; each takes minutes at a large radius. |
 | `-Dikala.benchmark.editCracks=false` | `true` | With the gate, skips the crack check over the edits; the edits are still made and timed. A run that checks nothing reports "Cracks: not checked". |
 | `-Dikala.benchmark.coarseBricks=false` | `true` | Turns coarse volume bricks off, for comparing. |

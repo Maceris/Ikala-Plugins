@@ -1632,6 +1632,22 @@ public class SectionManager {
      * @param state The Vulkan state.
      * @param observer Where the scene is seen from.
      */
+    /**
+     * How far from the observer live worlds build their cells: the view distance and one level 0
+     * cell more, so cells at its edge are built, but not those a streamed world changes behind the
+     * observer.
+     *
+     * @return The distance, in the world, infinite without a scene.
+     */
+    private static double keepDistance() {
+        final var scene = GraphicsManager.getScene();
+        if (scene == null) {
+            return Double.POSITIVE_INFINITY;
+        }
+        return scene.getViewDistance()
+                + (double) Sections.SECTION_SIZE * LodStore.DEFAULT_CELL_SECTIONS;
+    }
+
     private void updateOverrides(@NonNull VulkanState state, @NonNull Observer observer) {
         final Vector3dc eye = observer.getPosition();
         lastEye = new Vector3d(eye);
@@ -1646,8 +1662,10 @@ public class SectionManager {
                 return;
             }
             final Map<String, Set<LodStore.SectionPos>> overrides = new HashMap<>();
+            final double keep = keepDistance();
             for (Map.Entry<String, Live> entry : live.entrySet()) {
                 entry.getValue().lod().setNear(eye.x(), eye.y(), eye.z());
+                entry.getValue().lod().setKeepDistance(keep);
                 overrides.put(entry.getKey(), new HashSet<>());
             }
             // Only sections that joined the waiting, or that the level of detail now shows newer,

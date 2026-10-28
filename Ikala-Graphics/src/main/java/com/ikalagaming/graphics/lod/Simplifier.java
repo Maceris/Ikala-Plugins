@@ -1026,7 +1026,10 @@ public final class Simplifier {
                         && locked[u]
                         && !sharesFace(keep, u)
                         && ((sharers.length > 0 && anyInBoth(sharers[keep], sharers[u]))
-                                || options.othersAlong().test(position(keep), position(u)))) {
+                                || options.othersAlong()
+                                        .test(
+                                                position(keep, keepScratch),
+                                                position(u, otherScratch)))) {
                     return true;
                 }
             }
@@ -1035,16 +1038,23 @@ public final class Simplifier {
     }
 
     /**
-     * A vertex's position.
+     * A vertex's position, into a scratch array: checking whether others run along an edge happens
+     * for every collapse considered, too often to allocate for.
      *
      * @param v The vertex.
-     * @return x, y, z, a new array.
+     * @param out Receives x, y, z.
+     * @return The array given.
      */
-    private double[] position(int v) {
-        final double[] out = new double[AXES];
+    private double[] position(int v, double @NonNull [] out) {
         load(v, out);
         return out;
     }
+
+    /** Scratch for the kept vertex's position, see {@link #position(int, double[])}. */
+    private final double[] keepScratch = new double[AXES];
+
+    /** Scratch for the other vertex's position. */
+    private final double[] otherScratch = new double[AXES];
 
     /**
      * Whether two sorted lists have a value in common.

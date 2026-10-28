@@ -73,10 +73,12 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 import java.util.SplittableRandom;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.Nullable;
@@ -397,7 +399,7 @@ public final class GateBenchmark {
     private final ReentrantLock sectionsLock = new ReentrantLock();
 
     /** The sections composed. */
-    private final List<SectionHandle> sections = new ArrayList<>();
+    private final Set<SectionHandle> sections = new LinkedHashSet<>();
 
     /** Each composed section by position, to rebake after a dig. Guarded by sectionsLock. */
     private final Map<LodStore.SectionPos, SectionHandle> sectionAt = new HashMap<>();
@@ -670,6 +672,39 @@ public final class GateBenchmark {
     /** The lakes' water tiles, laid out with the world, placed with its water. */
     private final List<WaterTile> lakeTiles = new ArrayList<>();
 
+    /**
+     * The corners of the lake tiles looked at when the world was laid out, with lake or not, as
+     * {@link WorldStream#tileKey} gives them.
+     */
+    private final Set<Long> lakeTileKeys = new HashSet<>();
+
+    /** The placed lake tiles, by their corners' {@link WorldStream#tileKey}. Render thread. */
+    private final Map<Long, PlacedWater> lakeWater = new HashMap<>();
+
+    /** The stream keeping the world composed around the camera, or null if it isn't streamed. */
+    @Nullable private WorldStream stream;
+
+    /** Changes the stream's worker makes to the run on the render thread, such as lake water. */
+    private final Queue<Runnable> streamTasks = new ConcurrentLinkedQueue<>();
+
+    /** Frames since the stream last checked which sections are drawn. Render thread. */
+    private int streamPollFrames;
+
+    /** When the stream was last logged, in nanoseconds, or 0. Render thread. */
+    private long streamLoggedAt;
+
+    /** The largest backlog the stream logged. Render thread. */
+    private int streamMostBacklog;
+
+    /** How many frames apart the stream checks which sections are drawn. */
+    private static final int STREAM_POLL_FRAMES = 4;
+
+    /** How often the stream is logged while measuring, in seconds. */
+    private static final double STREAM_LOG_SECONDS = 2;
+
+    /** How often the stream is logged once the run is done and kept, in seconds. */
+    private static final double STREAM_LOG_KEPT_SECONDS = 10;
+
     /** Where a lake is near the world's middle, x and z, or null for none. */
     private int[] lakeSpot;
 
@@ -907,6 +942,10 @@ public final class GateBenchmark {
     private static final Map<String, String> HAZY =
             Map.of("physicalSky", "true", "fog", "0.01,0.05,20", "haze", "true");
 
+    /** {@link #HAZY}, with the world streamed around the camera. */
+    private static final Map<String, String> HAZY_STREAMED =
+            Map.of("physicalSky", "true", "fog", "0.01,0.05,20", "haze", "true", "stream", "true");
+
     /** The ready-made runs, in the order menus show them. */
     public static final List<Preset> PRESETS =
             List.of(
@@ -947,13 +986,14 @@ public final class GateBenchmark {
                             HAZY,
                             List.of()),
                     new Preset(
-                            "hills-far",
-                            "Hills, far",
-                            "The hills out to 512 m with level of detail",
+                            "hills-stream",
+                            "Hills, streaming",
+                            "The hills out to 512 m with level of detail, generated around the"
+                                    + " camera as it moves: fly anywhere",
                             SyntheticTerrain.Recipe.TERRAIN,
                             32,
                             true,
-                            HAZY,
+                            HAZY_STREAMED,
                             List.of()),
                     new Preset(
                             "caves",
@@ -1677,6 +1717,9 @@ public final class GateBenchmark {
         if (fxTest != null && !released && !graphics.isClosed()) {
             fxTest.step(graphics.particles());
         }
+        if (!released) {
+            stepStream(scene);
+        }
         switch (phase) {
             case BAKING -> {
                 if (composedAt == 0) {
@@ -1743,6 +1786,7 @@ public final class GateBenchmark {
                                                 "%.1f MiB", cache.folderBytes() / BYTES_PER_MIB));
                     }
                     phase = Phase.SETTLING;
+                    startStream();
                 }
             }
             case SETTLING -> {
@@ -2122,81 +2166,42 @@ public final class GateBenchmark {
      */
     private void layOutLakes(@NonNull SyntheticTerrain world) {
         lakeTiles.clear();
+        lakeTileKeys.clear();
         lakeSpot = null;
         if (!world.isWaterTiles()) {
             return;
         }
-        final float surface = (float) SyntheticTerrain.LAKE_SURFACE;
         final int reach = radius * SyntheticTerrain.SECTION;
-        final int tiles = (2 * reach + OCEAN_CELLS - 1) / OCEAN_CELLS;
-        final int corners = OCEAN_CELLS + 1;
+        // On the grid of tile corners a streamed world adds to, see WorldStream
+        final int first = Math.floorDiv(-reach, OCEAN_CELLS);
+        final int last = Math.floorDiv(reach - 1, OCEAN_CELLS);
         // The tile near the middle with the most lake, to look at
         int most = 0;
         long lakeCells = 0;
-        final int[] cellBottoms = new int[OCEAN_CELLS * OCEAN_CELLS];
-        for (int tileZ = 0; tileZ < tiles; ++tileZ) {
-            for (int tileX = 0; tileX < tiles; ++tileX) {
-                final int startX = -reach + tileX * OCEAN_CELLS;
-                final int startZ = -reach + tileZ * OCEAN_CELLS;
-                final boolean[] mask = new boolean[OCEAN_CELLS * OCEAN_CELLS];
-                int count = 0;
-                long sumX = 0;
-                long sumZ = 0;
-                for (int z = 0; z < OCEAN_CELLS; ++z) {
-                    for (int x = 0; x < OCEAN_CELLS; ++x) {
-                        final int bottom = world.lakeBottom(startX + x, startZ + z);
-                        cellBottoms[z * OCEAN_CELLS + x] = bottom;
-                        if (bottom == SyntheticTerrain.NO_LAKE) {
-                            continue;
-                        }
-                        mask[z * OCEAN_CELLS + x] = true;
-                        ++count;
-                        sumX += startX + x;
-                        sumZ += startZ + z;
-                    }
-                }
-                if (count == 0) {
+        for (int tileZ = first; tileZ <= last; ++tileZ) {
+            for (int tileX = first; tileX <= last; ++tileX) {
+                final int startX = tileX * OCEAN_CELLS;
+                final int startZ = tileZ * OCEAN_CELLS;
+                lakeTileKeys.add(WorldStream.tileKey(startX, startZ));
+                final LakeTile lake = lakeTile(world, startX, startZ);
+                if (lake == null) {
                     continue;
                 }
                 final boolean near =
                         Math.abs(startX + OCEAN_CELLS / 2) <= LAKE_VIEW_REACH
                                 && Math.abs(startZ + OCEAN_CELLS / 2) <= LAKE_VIEW_REACH;
-                if (near && count > most) {
-                    most = count;
-                    lakeSpot = nearestLakeCell(mask, startX, startZ, sumX / count, sumZ / count);
+                if (near && lake.count() > most) {
+                    most = lake.count();
+                    lakeSpot =
+                            nearestLakeCell(
+                                    lake.mask(),
+                                    startX,
+                                    startZ,
+                                    lake.sumX() / lake.count(),
+                                    lake.sumZ() / lake.count());
                 }
-                final float[] heights = new float[corners * corners];
-                final float[] bottoms = new float[corners * corners];
-                Arrays.fill(heights, surface);
-                for (int z = 0; z < corners; ++z) {
-                    for (int x = 0; x < corners; ++x) {
-                        // The lowest of the lake cells touching the corner
-                        float bottom = surface;
-                        for (int cz = z - 1; cz <= z; ++cz) {
-                            for (int cx = x - 1; cx <= x; ++cx) {
-                                if (cx < 0 || cz < 0 || cx >= OCEAN_CELLS || cz >= OCEAN_CELLS) {
-                                    continue;
-                                }
-                                final int cell = cellBottoms[cz * OCEAN_CELLS + cx];
-                                if (cell != SyntheticTerrain.NO_LAKE) {
-                                    bottom = Math.min(bottom, cell);
-                                }
-                            }
-                        }
-                        bottoms[z * corners + x] = bottom;
-                    }
-                }
-                lakeCells += count;
-                lakeTiles.add(
-                        new WaterTile(
-                                new Vector3d(startX, 0, startZ),
-                                1,
-                                OCEAN_CELLS,
-                                OCEAN_CELLS,
-                                heights,
-                                bottoms,
-                                mask,
-                                WATER_BODY_NAMES.get(LAKE_BODY)));
+                lakeCells += lake.count();
+                lakeTiles.add(lake.tile());
             }
         }
         log.info(
@@ -2206,6 +2211,85 @@ public final class GateBenchmark {
                 lakeSpot == null ? "none" : lakeSpot[0] + "," + lakeSpot[1],
                 lakeSpot != null
                         && world.lakeBottom(lakeSpot[0], lakeSpot[1]) != SyntheticTerrain.NO_LAKE);
+    }
+
+    /**
+     * A lake water tile and what it covers.
+     *
+     * @param tile The tile.
+     * @param mask Which of its cells hold lake.
+     * @param count How many do.
+     * @param sumX Their x added up, for their middle.
+     * @param sumZ Their z added up.
+     */
+    private record LakeTile(
+            @NonNull WaterTile tile, boolean @NonNull [] mask, int count, long sumX, long sumZ) {}
+
+    /**
+     * The lake water tile with its corner at a place: each lake column's water from its bottom up
+     * to {@link SyntheticTerrain#LAKE_SURFACE}. On a worker.
+     *
+     * @param world The world.
+     * @param startX The tile's corner along x, in blocks.
+     * @param startZ Along z.
+     * @return The tile, or null if no lake is in it.
+     */
+    @Nullable private static LakeTile lakeTile(@NonNull SyntheticTerrain world, int startX, int startZ) {
+        final float surface = (float) SyntheticTerrain.LAKE_SURFACE;
+        final int corners = OCEAN_CELLS + 1;
+        final int[] cellBottoms = new int[OCEAN_CELLS * OCEAN_CELLS];
+        final boolean[] mask = new boolean[OCEAN_CELLS * OCEAN_CELLS];
+        int count = 0;
+        long sumX = 0;
+        long sumZ = 0;
+        for (int z = 0; z < OCEAN_CELLS; ++z) {
+            for (int x = 0; x < OCEAN_CELLS; ++x) {
+                final int bottom = world.lakeBottom(startX + x, startZ + z);
+                cellBottoms[z * OCEAN_CELLS + x] = bottom;
+                if (bottom == SyntheticTerrain.NO_LAKE) {
+                    continue;
+                }
+                mask[z * OCEAN_CELLS + x] = true;
+                ++count;
+                sumX += startX + x;
+                sumZ += startZ + z;
+            }
+        }
+        if (count == 0) {
+            return null;
+        }
+        final float[] heights = new float[corners * corners];
+        final float[] bottoms = new float[corners * corners];
+        Arrays.fill(heights, surface);
+        for (int z = 0; z < corners; ++z) {
+            for (int x = 0; x < corners; ++x) {
+                // The lowest of the lake cells touching the corner
+                float bottom = surface;
+                for (int cz = z - 1; cz <= z; ++cz) {
+                    for (int cx = x - 1; cx <= x; ++cx) {
+                        if (cx < 0 || cz < 0 || cx >= OCEAN_CELLS || cz >= OCEAN_CELLS) {
+                            continue;
+                        }
+                        final int cell = cellBottoms[cz * OCEAN_CELLS + cx];
+                        if (cell != SyntheticTerrain.NO_LAKE) {
+                            bottom = Math.min(bottom, cell);
+                        }
+                    }
+                }
+                bottoms[z * corners + x] = bottom;
+            }
+        }
+        final WaterTile tile =
+                new WaterTile(
+                        new Vector3d(startX, 0, startZ),
+                        1,
+                        OCEAN_CELLS,
+                        OCEAN_CELLS,
+                        heights,
+                        bottoms,
+                        mask,
+                        WATER_BODY_NAMES.get(LAKE_BODY));
+        return new LakeTile(tile, mask, count, sumX, sumZ);
     }
 
     /**
@@ -2240,9 +2324,17 @@ public final class GateBenchmark {
 
     /** Place the lakes the world was laid out with, under a light wind. */
     private void placeLakes() {
-        if (lakeTiles.isEmpty()) {
-            return;
+        for (WaterTile tile : lakeTiles) {
+            placeLakeTile(tile);
         }
+    }
+
+    /**
+     * Place a lake water tile under the lakes' light wind, unless the run has a water body already.
+     *
+     * @param tile The tile.
+     */
+    private void placeLakeTile(@NonNull WaterTile tile) {
         if (waterBody == null) {
             waterBody =
                     WATER_BODY_NAMES
@@ -2253,9 +2345,40 @@ public final class GateBenchmark {
                                     Float.POSITIVE_INFINITY);
             waterBodyName = LAKE_BODY;
         }
-        for (WaterTile tile : lakeTiles) {
-            placeWater(tile, LAKE_FETCH);
+        final int count = placedWater.size();
+        placeWater(tile, LAKE_FETCH);
+        if (placedWater.size() > count) {
+            lakeWater.put(lakeKey(tile), placedWater.getLast());
         }
+    }
+
+    /**
+     * Take away a placed lake water tile, if there is one at a corner.
+     *
+     * @param key The corner's {@link WorldStream#tileKey}.
+     */
+    private void removeLakeTile(long key) {
+        final PlacedWater placed = lakeWater.remove(key);
+        if (placed == null) {
+            return;
+        }
+        placedWater.remove(placed);
+        final WaterHandle handle = placed.handle()[0];
+        if (handle != null) {
+            testWater.remove(handle);
+            graphics.water().remove(handle);
+        }
+    }
+
+    /**
+     * A lake tile's key, from its corner.
+     *
+     * @param tile The tile.
+     * @return The key.
+     */
+    private static long lakeKey(@NonNull WaterTile tile) {
+        return WorldStream.tileKey(
+                (int) Math.floor(tile.origin().x()), (int) Math.floor(tile.origin().z()));
     }
 
     /**
@@ -3403,6 +3526,7 @@ public final class GateBenchmark {
         log.info("Gate benchmark section checks: {} last frame, {} queued", checks[0], checks[1]);
         logLevels();
         logMemory();
+        logStreamTotals();
         final var points = renderer().getState().pointShadows;
         if (points != null && points.getCastingLights() > 0) {
             log.info(
@@ -3647,12 +3771,12 @@ public final class GateBenchmark {
      * @param position The section.
      * @param placements The terrain's placements in it.
      */
-    private void compose(
+    @Nullable private SectionHandle compose(
             LodStore.@NonNull SectionPos position,
             SyntheticTerrain.@NonNull Placements placements) {
         final Composed placed = withTestMeshes(position, placements);
         if (placed.count() == 0) {
-            return;
+            return null;
         }
         final SectionHandle handle = request(position, placed).submit();
         sectionsLock.lock();
@@ -3662,7 +3786,179 @@ public final class GateBenchmark {
         } finally {
             sectionsLock.unlock();
         }
+        return handle;
     }
+
+    /**
+     * Remove the section composed at a position, if there is one. On the stream's worker.
+     *
+     * @param position The section.
+     * @return True if there was one.
+     */
+    private boolean removeSection(LodStore.@NonNull SectionPos position) {
+        final SectionHandle handle;
+        sectionsLock.lock();
+        try {
+            handle = sectionAt.remove(position);
+            if (handle != null) {
+                sections.remove(handle);
+            }
+        } finally {
+            sectionsLock.unlock();
+        }
+        if (handle != null) {
+            graphics.sections().remove(handle);
+        }
+        return handle != null;
+    }
+
+    /** What the stream changes in this run. */
+    private final class StreamTarget implements WorldStream.Target {
+        @Override
+        public boolean isComposed(LodStore.@NonNull SectionPos position) {
+            sectionsLock.lock();
+            try {
+                return sectionAt.containsKey(position);
+            } finally {
+                sectionsLock.unlock();
+            }
+        }
+
+        @Override
+        public SectionHandle compose(
+                LodStore.@NonNull SectionPos position,
+                SyntheticTerrain.@NonNull Placements placements) {
+            return GateBenchmark.this.compose(position, placements);
+        }
+
+        @Override
+        public boolean remove(LodStore.@NonNull SectionPos position) {
+            return removeSection(position);
+        }
+
+        @Override
+        public void addLakeTile(int startX, int startZ) {
+            final SyntheticTerrain world = terrain;
+            if (world == null || !world.isWaterTiles()) {
+                return;
+            }
+            final LakeTile lake = lakeTile(world, startX, startZ);
+            if (lake != null) {
+                streamTasks.add(() -> placeLakeTile(lake.tile()));
+            }
+        }
+
+        @Override
+        public void removeLakeTile(int startX, int startZ) {
+            final long key = WorldStream.tileKey(startX, startZ);
+            streamTasks.add(() -> GateBenchmark.this.removeLakeTile(key));
+        }
+    }
+
+    /**
+     * Start streaming the world around the camera, if the run's {@code .stream} option asks, once
+     * the world first laid out is drawn.
+     */
+    private void startStream() {
+        final SyntheticTerrain world = terrain;
+        if (!Boolean.parseBoolean(option("stream")) || world == null || stream != null) {
+            return;
+        }
+        final LodStore.SectionPos start =
+                new LodStore.SectionPos(
+                        0,
+                        Math.floorDiv((int) Math.floor(world.cameraY()), SyntheticTerrain.SECTION),
+                        0);
+        stream =
+                new WorldStream(
+                        world,
+                        new StreamTarget(),
+                        radius,
+                        start,
+                        OCEAN_CELLS,
+                        Set.copyOf(lakeTileKeys));
+        streamLoggedAt = System.nanoTime();
+        log.info("Gate benchmark streaming the world around the camera at radius {}", radius);
+    }
+
+    /**
+     * Keep the stream following the camera, apply its changes, and log how it keeps up. Render
+     * thread, every frame.
+     *
+     * @param scene The scene.
+     */
+    private void stepStream(@NonNull Scene scene) {
+        final WorldStream streaming = stream;
+        if (streaming == null) {
+            return;
+        }
+        Runnable task;
+        while ((task = streamTasks.poll()) != null) {
+            task.run();
+        }
+        final Vector3dc camera = scene.getCamera().getPosition();
+        streaming.follow(camera.x(), camera.y(), camera.z());
+        if (++streamPollFrames >= STREAM_POLL_FRAMES) {
+            streamPollFrames = 0;
+            streaming.poll(graphics.sections()::isResident, graphics.sections()::isValid);
+        }
+        final double every =
+                phase == Phase.MEASURING ? STREAM_LOG_SECONDS : STREAM_LOG_KEPT_SECONDS;
+        final long now = System.nanoTime();
+        if ((now - streamLoggedAt) / 1e9 < every) {
+            return;
+        }
+        streamLoggedAt = now;
+        final WorldStream.Stats stats = streaming.takeWindow();
+        streamMostBacklog = Math.max(streamMostBacklog, stats.backlog());
+        final var live = lodWorld == null ? null : graphics.lods().liveStats(lodWorld);
+        final Runtime runtime = Runtime.getRuntime();
+        log.info(
+                "Gate benchmark streaming at x {}: {} composed, {} empty, {} removed; backlog {}"
+                        + " cells, {} sections waiting to be drawn; drawn after {} ms (median), {} (95th), {}"
+                        + " (most) for {} sections; LOD {} stale cells, {} batches waiting;"
+                        + " heap {} MiB",
+                String.format("%.0f", camera.x()),
+                stats.composed(),
+                stats.empty(),
+                stats.removed(),
+                stats.backlog(),
+                stats.pending(),
+                String.format("%.0f", WorldStream.percentile(stats.latencies(), MEDIAN)),
+                String.format("%.0f", WorldStream.percentile(stats.latencies(), PERCENTILE_95)),
+                String.format("%.0f", WorldStream.percentile(stats.latencies(), 1)),
+                stats.latencies().length,
+                live == null ? 0 : live.staleCells(),
+                live == null ? 0 : live.pendingBatches(),
+                (runtime.totalMemory() - runtime.freeMemory()) / (long) BYTES_PER_MIB);
+    }
+
+    /** Log what the stream did over the whole run. Render thread. */
+    private void logStreamTotals() {
+        final WorldStream streaming = stream;
+        if (streaming == null) {
+            return;
+        }
+        final WorldStream.Stats stats = streaming.totals();
+        log.info(
+                "Gate benchmark streaming totals: {} sections composed, {} empty, {} removed; most"
+                        + " backlog {} cells; drawn after {} ms (median), {} (95th), {} (most) for {}"
+                        + " sections",
+                stats.composed(),
+                stats.empty(),
+                stats.removed(),
+                streamMostBacklog,
+                String.format("%.0f", WorldStream.percentile(stats.latencies(), MEDIAN)),
+                String.format("%.0f", WorldStream.percentile(stats.latencies(), PERCENTILE_95)),
+                String.format("%.0f", WorldStream.percentile(stats.latencies(), 1)),
+                stats.latencies().length);
+    }
+
+    /** The median, as a fraction. */
+    private static final double MEDIAN = 0.5;
+
+    /** The 95th percentile, as a fraction. */
+    private static final double PERCENTILE_95 = 0.95;
 
     /**
      * A section's request to compose or bake again.
@@ -3967,6 +4263,13 @@ public final class GateBenchmark {
             return;
         }
         released = true;
+        if (stream != null) {
+            // Before the sections go, so the worker doesn't add more
+            stream.stop();
+            stream = null;
+        }
+        streamTasks.clear();
+        lakeWater.clear();
         final Scene scene = GraphicsManager.getScene();
         if (scene != null && previousSun != null) {
             scene.getSceneLights().setDirLight(previousSun);

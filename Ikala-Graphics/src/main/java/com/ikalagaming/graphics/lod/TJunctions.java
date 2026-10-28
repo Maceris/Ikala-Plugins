@@ -157,37 +157,33 @@ public final class TJunctions {
      * @return Where it lies, or null if it has no length.
      */
     static Placed place(double @NonNull [] a, double @NonNull [] b) {
-        final double[] d = new double[AXES];
-        double length = 0;
-        for (int axis = 0; axis < AXES; ++axis) {
-            d[axis] = b[axis] - a[axis];
-            length += d[axis] * d[axis];
-        }
-        length = Math.sqrt(length);
+        // In locals rather than arrays: edges are placed for every collapse a simplifier checks
+        double dx = b[0] - a[0];
+        double dy = b[1] - a[1];
+        double dz = b[2] - a[2];
+        final double length = Math.sqrt(dx * dx + dy * dy + dz * dz);
         if (length == 0) {
             return null;
         }
-        int largest = 0;
-        for (int axis = 1; axis < AXES; ++axis) {
-            if (Math.abs(d[axis]) > Math.abs(d[largest])) {
-                largest = axis;
-            }
-        }
-        final boolean forward = d[largest] > 0;
-        final double sign = forward ? 1 : -1;
-        for (int axis = 0; axis < AXES; ++axis) {
-            d[axis] *= sign / length;
-        }
-        final double ta = Geometry.dot(a, d);
-        final double tb = Geometry.dot(b, d);
-        final long[] point = new long[AXES];
-        final long[] direction = new long[AXES];
-        for (int axis = 0; axis < AXES; ++axis) {
-            point[axis] = Math.round((a[axis] - ta * d[axis]) / POINT_STEP);
-            direction[axis] = Math.round(d[axis] / DIRECTION_STEP);
-        }
+        final double largest =
+                Math.abs(dx) >= Math.abs(dy) && Math.abs(dx) >= Math.abs(dz)
+                        ? dx
+                        : Math.abs(dy) >= Math.abs(dz) ? dy : dz;
+        final boolean forward = largest > 0;
+        final double scale = (forward ? 1 : -1) / length;
+        dx *= scale;
+        dy *= scale;
+        dz *= scale;
+        final double ta = a[0] * dx + a[1] * dy + a[2] * dz;
+        final double tb = b[0] * dx + b[1] * dy + b[2] * dz;
         return new Placed(
-                new Line(direction[0], direction[1], direction[2], point[0], point[1], point[2]),
+                new Line(
+                        Math.round(dx / DIRECTION_STEP),
+                        Math.round(dy / DIRECTION_STEP),
+                        Math.round(dz / DIRECTION_STEP),
+                        Math.round((a[0] - ta * dx) / POINT_STEP),
+                        Math.round((a[1] - ta * dy) / POINT_STEP),
+                        Math.round((a[2] - ta * dz) / POINT_STEP)),
                 Math.min(ta, tb),
                 Math.max(ta, tb),
                 forward);

@@ -297,8 +297,15 @@ public final class LodStore {
     /** Level 0 cells whose sections changed since they were built. */
     private final SortedSet<CellKey> dirty = new TreeSet<>();
 
-    /** Level 0 cells rebuilt or removed since their parents were last built. */
+    /**
+     * Cells rebuilt or removed since their parents were last built: level 0 cells, and higher ones
+     * whose own parents had to wait, see {@link #rebuild(int, double[], Predicate, Predicate,
+     * Collection)}.
+     */
     private final SortedSet<CellKey> unparented = new TreeSet<>();
+
+    /** How many sections each level 0 cell holds, for cells holding any. */
+    private final Map<CellKey, Integer> sectionCounts = new HashMap<>();
 
     /**
      * What one rebuild did.
@@ -427,8 +434,11 @@ public final class LodStore {
      * @param leaves Its mesh, whose origin is the section's corner.
      */
     public void put(@NonNull SectionPos position, @NonNull LodMesh leaves) {
-        sections.put(position, leaves);
-        dirty.add(cellOf(position));
+        final CellKey cell = cellOf(position);
+        if (sections.put(position, leaves) == null) {
+            sectionCounts.merge(cell, 1, Integer::sum);
+        }
+        dirty.add(cell);
     }
 
     /**
@@ -441,8 +451,47 @@ public final class LodStore {
         if (sections.remove(position) == null) {
             return false;
         }
-        dirty.add(cellOf(position));
+        final CellKey cell = cellOf(position);
+        sectionCounts.computeIfPresent(cell, (key, count) -> count > 1 ? count - 1 : null);
+        dirty.add(cell);
         return true;
+    }
+
+    /**
+     * Whether a level 0 cell holds no sections, so building it only takes it out.
+     *
+     * @param key The cell.
+     * @return True if it holds none.
+     */
+    public boolean isEmpty(@NonNull CellKey key) {
+        return !sectionCounts.containsKey(key);
+    }
+
+    /**
+     * The level 0 cells whose sections changed since they were built.
+     *
+     * @return The cells, a view.
+     */
+    public Set<CellKey> dirtyCells() {
+        return Collections.unmodifiableSet(dirty);
+    }
+
+    /**
+     * How far a point is from a cell, to its nearest point.
+     *
+     * @param key The cell, at any level.
+     * @param point The point, in the world.
+     * @return The distance, 0 inside it.
+     */
+    public double distanceTo(@NonNull CellKey key, double @NonNull [] point) {
+        final double[][] box = box(key);
+        double sum = 0;
+        for (int axis = 0; axis < AXES; ++axis) {
+            final double p = point[axis] - origin[axis];
+            final double d = Math.max(0, Math.max(box[0][axis] - p, p - box[1][axis]));
+            sum += d * d;
+        }
+        return Math.sqrt(sum);
     }
 
     /**
@@ -473,6 +522,70 @@ public final class LodStore {
         }
         return false;
     }
+
+    /**
+     * Whether a rebuild has anything it may do now: a dirty level 0 cell that is ready, or a parent
+     * to build that nothing holds back, see {@link #rebuild(int, double[], Predicate, Predicate,
+     * Collection)}.
+     *
+     * @param ready Which cells may be built now.
+     * @param holds Which dirty level 0 cells hold back the cells above them.
+     * @param waiting Level 0 cells that also hold back the cells above them, such as cells with
+     *     sections on the way.
+     * @return True if a rebuild would build or take out a cell.
+     */
+    public boolean hasWork(
+            @NonNull Predicate<CellKey> ready,
+            @NonNull Predicate<CellKey> holds,
+            @NonNull Collection<CellKey> waiting) {
+        for (CellKey key : dirty) {
+            if (ready.test(key)) {
+                return true;
+            }
+        }
+        if (unparented.isEmpty()) {
+            return false;
+        }
+        final Set<CellKey> held = heldBack(holds, waiting);
+        for (CellKey key : unparented) {
+            if (!held.contains(key.parent())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The cells above the level 0 cells that hold them back: dirty cells that hold, and the waiting
+     * ones.
+     *
+     * @param holds Which dirty level 0 cells hold back the cells above them.
+     * @param waiting Level 0 cells that also hold back the cells above them.
+     * @return Every cell above them.
+     */
+    private Set<CellKey> heldBack(
+            @NonNull Predicate<CellKey> holds, @NonNull Collection<CellKey> waiting) {
+        final Set<CellKey> held = new HashSet<>();
+        final List<CellKey> from = new ArrayList<>(waiting);
+        for (CellKey key : dirty) {
+            if (holds.test(key)) {
+                from.add(key);
+            }
+        }
+        for (CellKey key : from) {
+            // Every level a rebuild may build, not only those built so far, as on a first load
+            for (CellKey up = key.parent(); up.level() <= MAX_LEVELS; up = up.parent()) {
+                if (!held.add(up)) {
+                    // Everything above was added from another cell
+                    break;
+                }
+            }
+        }
+        return held;
+    }
+
+    /** More levels than a store ever builds: cell coordinates are ints, halved at each level. */
+    private static final int MAX_LEVELS = Integer.SIZE;
 
     /**
      * How many cells are built.
@@ -536,6 +649,54 @@ public final class LodStore {
             double @NonNull [] near,
             @NonNull Predicate<CellKey> ready,
             boolean parentsReady) {
+        return rebuild(maxCells, near, ready, parentsReady ? key -> true : null, List.of(), true);
+    }
+
+    /**
+     * Build up to some of the dirty level 0 cells that are ready, nearest a point first, then the
+     * parents above cells rebuilt or removed that nothing holds back: a parent waits while a level
+     * 0 cell under it is dirty and holds, or waiting, so it is built once over all of them rather
+     * than again for each. Parents elsewhere go ahead, so a world that keeps changing in one place,
+     * such as one streamed around a moving camera, still has its parents built everywhere else.
+     * Cells that aren't ready stay dirty.
+     *
+     * @param maxCells The most level 0 cells to build.
+     * @param near The point to build nearest to, in the world.
+     * @param ready Which dirty level 0 cells may be built now.
+     * @param holds Which dirty level 0 cells hold back the cells above them: those that will be
+     *     built soon, not those left for later, such as far ones.
+     * @param waiting Level 0 cells that also hold back the cells above them, such as cells with
+     *     sections on the way.
+     * @return What was built and taken out, and which cells are stale.
+     */
+    public Rebuilt rebuild(
+            int maxCells,
+            double @NonNull [] near,
+            @NonNull Predicate<CellKey> ready,
+            @NonNull Predicate<CellKey> holds,
+            @NonNull Collection<CellKey> waiting) {
+        return rebuild(maxCells, near, ready, holds, waiting, false);
+    }
+
+    /**
+     * See {@link #rebuild(int, double[], Predicate, Predicate, Collection)}.
+     *
+     * @param maxCells The most level 0 cells to build.
+     * @param near The point to build nearest to, in the world.
+     * @param ready Which dirty level 0 cells may be built now.
+     * @param holds Which dirty level 0 cells hold back the cells above them, or null to build no
+     *     parents.
+     * @param waiting Level 0 cells that also hold back the cells above them.
+     * @param wholeLevels Whether parents wait until no level 0 cell is dirty, as they always did.
+     * @return What was built and taken out, and which cells are stale.
+     */
+    private Rebuilt rebuild(
+            int maxCells,
+            double @NonNull [] near,
+            @NonNull Predicate<CellKey> ready,
+            Predicate<CellKey> holds,
+            @NonNull Collection<CellKey> waiting,
+            boolean wholeLevels) {
         final List<CellKey> built = new ArrayList<>();
         final List<CellKey> removed = new ArrayList<>();
         final List<CellKey> order = new ArrayList<>();
@@ -552,6 +713,7 @@ public final class LodStore {
             final List<SectionPos> positions = new ArrayList<>();
             final List<LodMesh> inside = sectionsIn(key, positions);
             if (inside.isEmpty()) {
+                sectionCounts.remove(key);
                 if (cells.remove(key) != null) {
                     keys.remove(key);
                     unparented.add(key);
@@ -572,9 +734,8 @@ public final class LodStore {
             unparented.add(job.key());
             built.add(job.key());
         }
-        if (dirty.isEmpty() && parentsReady && !unparented.isEmpty()) {
-            buildParents(built, removed);
-            unparented.clear();
+        if (holds != null && !unparented.isEmpty() && (!wholeLevels || dirty.isEmpty())) {
+            buildParents(built, removed, heldBack(holds, waiting));
         }
         final SortedSet<CellKey> stale = new TreeSet<>();
         for (CellKey key : unparented) {
@@ -608,18 +769,29 @@ public final class LodStore {
      *
      * @param built Receives the cells built.
      * @param removed Receives the cells taken out.
+     * @param held Cells that wait: they aren't built, and the cells changed under them stay
+     *     unparented.
      */
-    private void buildParents(@NonNull List<CellKey> built, @NonNull List<CellKey> removed) {
+    private void buildParents(
+            @NonNull List<CellKey> built,
+            @NonNull List<CellKey> removed,
+            @NonNull Set<CellKey> held) {
         final SortedSet<CellKey> changed = new TreeSet<>(unparented);
+        final SortedSet<CellKey> waiting = new TreeSet<>();
         for (int level = 0; ; ++level) {
             final List<CellKey> atLevel = keysAt(level);
+            if (atLevel.isEmpty() && level > 0) {
+                // Every parent of the level below waits: the cells above wait with them
+                break;
+            }
             if (atLevel.size() <= 1) {
                 // This is the root, or there is nothing: no cell above it is needed any more
                 final int root = atLevel.isEmpty() ? -1 : level;
                 final Iterator<CellKey> it = cells.keySet().iterator();
                 while (it.hasNext()) {
                     final CellKey key = it.next();
-                    if (key.level() > root) {
+                    // A held cell above only waits for the cells under it to come
+                    if (key.level() > root && !held.contains(key)) {
                         it.remove();
                         keys.remove(key);
                         removed.add(key);
@@ -633,7 +805,12 @@ public final class LodStore {
             }
             final SortedSet<CellKey> nextChanged = new TreeSet<>();
             for (CellKey key : changed) {
-                if (key.level() == level) {
+                if (key.level() != level) {
+                    continue;
+                }
+                if (held.contains(key.parent())) {
+                    waiting.add(key);
+                } else {
                     nextChanged.add(key.parent());
                 }
             }
@@ -648,7 +825,8 @@ public final class LodStore {
             }
             final List<ParentJob> jobs = new ArrayList<>();
             for (CellKey parent : parents) {
-                if (cells.containsKey(parent) && !nextChanged.contains(parent)) {
+                if (held.contains(parent)
+                        || (cells.containsKey(parent) && !nextChanged.contains(parent))) {
                     continue;
                 }
                 jobs.add(parentJob(parent));
@@ -662,6 +840,8 @@ public final class LodStore {
                 built.add(parent);
             }
         }
+        unparented.clear();
+        unparented.addAll(waiting);
     }
 
     /**

@@ -433,15 +433,33 @@ public final class WaterMesh {
     }
 
     /**
-     * Pack two world cell indices into a key.
+     * Pack two world cell indices into a key, its bits mixed: a packed pair's own hash, the two
+     * halves XORed, is the same along every diagonal, which turned the maps' buckets into trees and
+     * a streamed world's rebuilds into hundreds of milliseconds. The mix is the MurmurHash3
+     * finalizer, which never maps two values to one, so keys stay unique.
      *
      * @param x The index along x.
      * @param z The index along z.
      * @return The key.
      */
     private static long key(long x, long z) {
-        return (x << KEY_BITS) | (z & KEY_MASK);
+        long h = (x << KEY_BITS) | (z & KEY_MASK);
+        h ^= h >>> MIX_SHIFT;
+        h *= MIX_A;
+        h ^= h >>> MIX_SHIFT;
+        h *= MIX_B;
+        h ^= h >>> MIX_SHIFT;
+        return h;
     }
+
+    /** The first constant of the MurmurHash3 finalizer. */
+    private static final long MIX_A = 0xff51afd7ed558ccdL;
+
+    /** The second constant of the MurmurHash3 finalizer. */
+    private static final long MIX_B = 0xc4ceb9fe1a85ec53L;
+
+    /** The shift of the MurmurHash3 finalizer. */
+    private static final int MIX_SHIFT = 33;
 
     /**
      * Add a vertex.
