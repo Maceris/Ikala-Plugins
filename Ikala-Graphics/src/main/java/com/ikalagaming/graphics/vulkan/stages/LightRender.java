@@ -503,6 +503,14 @@ public class LightRender implements RenderStage {
                 GraphicsManager.getSettings().environmentOcclusion ? 1 : 0);
         uniformData.putInt(
                 ShaderBindings.Light.WATER_GATE_OFFSET, frameData.waterGate.bindlessIndex);
+        // Brought up to date by the particles' stage at the frame's start, else here
+        long waterMap = 0;
+        if (vulkanState.waterVolume != null) {
+            vulkanState.waterVolume.update(
+                    vulkanState, scene.getWaterRegistry(), scene.getCamera().getPosition());
+            waterMap = vulkanState.waterVolume.mapAddress();
+        }
+        uniformData.putLong(ShaderBindings.Light.WATER_MAP_OFFSET, waterMap);
         for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
             uniformData.putInt(
                     ShaderBindings.Light.SHADOW_MAP_0_INDEX_OFFSET + i * Integer.BYTES,

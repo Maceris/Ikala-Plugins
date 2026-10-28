@@ -61,9 +61,6 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Me
 // Which way water scatters light: strongly onward, its Henyey-Greenstein g for the 1.8% Petzold's
 // particles send back
 const float WATER_ANISOTROPY = 0.92;
-// The average cosine of the light coming down through water, which sets how fast it fades with
-// depth, (a + b_b) / that (Kirk)
-const float WATER_DOWNWELLING_COSINE = 0.8;
 // The share of the sky's light a calm surface reflects, averaged over the sky
 const float WATER_SKY_REFLECTANCE = 0.066;
 

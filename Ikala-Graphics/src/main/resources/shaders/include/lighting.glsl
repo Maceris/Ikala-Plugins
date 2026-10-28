@@ -9,6 +9,8 @@
 #include "color.glsl"
 #include "light_inputs.glsl"
 #include "translucent_shadow.glsl"
+#include "water_map.glsl"
+#include "water_optics.glsl"
 #ifdef ENVIRONMENT_SET
 #include "environment.glsl"
 #endif
@@ -379,6 +381,42 @@ vec3 sunTransmittance(vec3 viewPosition, vec3 renderPosition, vec3 renderNormal)
     return through;
 }
 
+// How far below its surface a point under water may lie under the bottom the map gives, in meters,
+// since a cell's bottom is the lowest of its corners
+const float WATER_BOTTOM_SLACK = 0.25;
+
+// What of the sun (rgb of the first) and of the sky (rgb of the second) the water above a point
+// lets down to it, 1 for a point out of the water or past the water map: the sun's beam fades by the
+// water's extinction along its refracted way down, and the sky's diffuse light as it does through
+// the water column, (a + b_b) / WATER_DOWNWELLING_COSINE per meter, as the fog volume's water does.
+// So anything under water is lit through it, seen from above or from below; the water's surface
+// then only takes off what lies between it and the eye. Lights under water are left as they are.
+void waterAbove(vec3 renderPosition, out vec3 sunThrough, out vec3 skyThrough) {
+    sunThrough = vec3(1.0);
+    skyThrough = vec3(1.0);
+    if (all(equal(waterMapAddress, uvec2(0)))) {
+        return;
+    }
+    WaterMap map = WaterMap(waterMapAddress);
+    ivec2 cell = ivec2(floor(renderPosition.xz - map.cornerCamera.xy));
+    if (any(lessThan(cell, ivec2(0))) || any(greaterThanEqual(cell, ivec2(map.size)))) {
+        return;
+    }
+    vec4 water = map.cells[cell.y * map.size + cell.x];
+    float height = renderPosition.y + map.cornerCamera.z;
+    if (water.w <= 0.0 || height >= water.x || height <= water.y - WATER_BOTTOM_SLACK) {
+        return;
+    }
+    float depth = water.x - height;
+    WaterBodyOptics body = map.bodies[int(water.z)];
+    vec3 extinction = body.absorption.rgb + body.scattering.rgb;
+    vec3 toSun = normalize(mat3(invViewMatrix) * -directionalLight.direction);
+    float muSun = waterRefractedCosine(max(toSun.y, 0.0));
+    sunThrough = exp(-extinction * depth / max(muSun, 1e-3));
+    skyThrough = exp(-(body.absorption.rgb + body.backscattering.rgb) / WATER_DOWNWELLING_COSINE
+        * depth);
+}
+
 // How much of the sun reaches a point, from 0 in full shadow to 1. Past the shadow distance,
 // nothing is shadowed.
 float sunVisibility(vec3 viewPosition, vec3 renderPosition, vec3 renderNormal) {
@@ -509,6 +547,10 @@ vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 ren
     if (sunVisible > 0.0) {
         color *= sunTransmittance(viewPosition, renderPosition, renderNormal);
     }
+    vec3 sunUnderWater;
+    vec3 skyUnderWater;
+    waterAbove(renderPosition, sunUnderWater, skyUnderWater);
+    color *= sunUnderWater;
 
 #ifdef OCCUPANCY_SET
     vec3 renderGeometric = normalize((invViewMatrix * vec4(geometricNormal, 0)).xyz);
@@ -621,7 +663,7 @@ vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 ren
             * ambientReflectance(sRGBToLinear(baseColor.rgb), material, nDotV);
     }
     // Light the surface gives off isn't shadowed or occluded
-    vec3 finalColor = ambient + color + material.emissive;
+    vec3 finalColor = ambient * skyUnderWater + color + material.emissive;
 
     return finalColor;
 }

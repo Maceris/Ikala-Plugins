@@ -8,6 +8,10 @@
 const float WATER_INDEX = 1.333;
 const float WATER_NORMAL_REFLECTANCE = 0.0203;
 
+// The average cosine of the light coming down through water, which sets how fast the diffuse light
+// fades with depth, (a + b_b) / this per meter
+const float WATER_DOWNWELLING_COSINE = 0.8;
+
 // The light a surface reflects at an angle, Schlick's approximation, see WaterMath.fresnel
 float waterFresnel(float cosine) {
     float m = 1.0 - clamp(cosine, 0.0, 1.0);

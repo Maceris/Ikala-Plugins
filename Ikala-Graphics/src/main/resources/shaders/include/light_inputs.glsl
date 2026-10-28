@@ -119,6 +119,8 @@ layout(set = 0, binding = 0) uniform Uniforms {
     int environmentOcclusion;
     // The water gate's bindless index, see waterGate
     int waterGateIndex;
+    // The water around the camera, see WaterVolume and water_map.glsl, or 0 for none
+    uvec2 waterMapAddress;
 };
 
 // One point light shadow cube map: each face's matrix from render space, where it is drawn from in

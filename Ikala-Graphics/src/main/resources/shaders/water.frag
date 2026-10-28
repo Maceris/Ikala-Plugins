@@ -1,4 +1,5 @@
 #version 460
+#extension GL_EXT_buffer_reference_uvec2 : require
 #extension GL_EXT_nonuniform_qualifier : enable
 #extension GL_GOOGLE_include_directive : require
 #extension GL_EXT_buffer_reference : require
@@ -105,9 +106,6 @@ const float REFRACTION_SHIFT = 0.25;
 const float REFRACTION_MAX_DEPTH = 2.0;
 // How far off the sky is taken to be, seen through a side, in meters
 const float SIDE_SKY_DISTANCE = 1e4;
-// The average cosine of the light coming down through water, which sets how fast it fades with
-// depth, as the fog volume has it
-const float WATER_DOWNWELLING_COSINE = 0.8;
 
 // A number from 0 to 1, advancing a seed (Jarzynski and Olano's PCG hash)
 float waterRandom(inout uint seed) {
@@ -512,8 +510,9 @@ void main() {
         distance = min(across, sideWater);
         down = 0.0;
     }
-    // Lit through the water above it, and seen through the water in front of it
-    bottom *= exp(-extinction * (down + distance));
+    // Seen through the water in front of it; the light stage already lit it through the water
+    // above it, see waterAbove in lighting.glsl
+    bottom *= exp(-extinction * distance);
 
     // The light coming down into the water, from the sun and the sky, on a level surface
     vec3 downwelling = sun * (1.0 - waterFresnel(cosSunDown)) * max(cosSunDown, 0.0)
