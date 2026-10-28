@@ -198,6 +198,7 @@ public class MainMenu {
             instances.setMaterial(ball, 0, customMaterial);
             demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
+        demo.nameRow(zPos, "Anisotropy 0 to 1");
         zPos += 1;
 
         for (int i = 0; i <= 10; ++i) {
@@ -212,6 +213,7 @@ public class MainMenu {
             instances.setMaterial(ball, 0, customMaterial);
             demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
+        demo.nameRow(zPos, "Clearcoat 0 to 1");
         zPos += 1;
 
         for (int i = 0; i <= 10; ++i) {
@@ -227,6 +229,7 @@ public class MainMenu {
             instances.setMaterial(ball, 0, customMaterial);
             demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
+        demo.nameRow(zPos, "Clearcoat gloss 0 to 1");
         zPos += 1;
 
         for (int i = 0; i <= 10; ++i) {
@@ -241,6 +244,7 @@ public class MainMenu {
             instances.setMaterial(ball, 0, customMaterial);
             demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
+        demo.nameRow(zPos, "Metallic 0 to 1");
         zPos += 1;
 
         for (int i = 0; i <= 10; ++i) {
@@ -255,6 +259,7 @@ public class MainMenu {
             instances.setMaterial(ball, 0, customMaterial);
             demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
+        demo.nameRow(zPos, "Roughness 0 to 1");
         zPos += 1;
 
         for (int i = 0; i <= 10; ++i) {
@@ -270,6 +275,7 @@ public class MainMenu {
             instances.setMaterial(ball, 0, customMaterial);
             demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
+        demo.nameRow(zPos, "Sheen 0 to 1");
         zPos += 1;
 
         for (int i = 0; i <= 10; ++i) {
@@ -285,6 +291,7 @@ public class MainMenu {
             instances.setMaterial(ball, 0, customMaterial);
             demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
+        demo.nameRow(zPos, "Sheen tint 0 to 1");
         zPos += 1;
 
         for (int i = 0; i <= 10; ++i) {
@@ -300,6 +307,7 @@ public class MainMenu {
             instances.setMaterial(ball, 0, customMaterial);
             demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
+        demo.nameRow(zPos, "Specular 0 to 1");
         zPos += 1;
 
         for (int i = 0; i <= 10; ++i) {
@@ -315,6 +323,7 @@ public class MainMenu {
             instances.setMaterial(ball, 0, customMaterial);
             demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
+        demo.nameRow(zPos, "Specular tint 0 to 1");
         zPos += 1;
 
         for (int i = 0; i <= 10; ++i) {
@@ -329,6 +338,7 @@ public class MainMenu {
             instances.setMaterial(ball, 0, customMaterial);
             demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
+        demo.nameRow(zPos, "White");
 
         // Behind the first row, where the camera sees them: fully metallic, from a mirror to fully
         // rough, to check the specular lobes and Fresnel
@@ -349,6 +359,7 @@ public class MainMenu {
             instances.setMaterial(ball, 0, customMaterial);
             demo.add(new Vector3d(i, 0, BEHIND_FIRST_ROW), customMaterial, ball);
         }
+        demo.nameRow(BEHIND_FIRST_ROW, "Metal, roughness 0 to 1");
 
         // Translucent, from nearly clear to opaque
         for (int i = 0; i <= 10; ++i) {
@@ -368,6 +379,7 @@ public class MainMenu {
             instances.setMaterial(ball, 0, customMaterial);
             demo.add(new Vector3d(i, 0, BEHIND_FIRST_ROW - 1), customMaterial, ball);
         }
+        demo.nameRow(BEHIND_FIRST_ROW - 1, "Translucent, opacity 1/11 to 1");
 
         scene.getSceneLights()
                 .setDirLight(

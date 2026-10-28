@@ -184,7 +184,7 @@ class UIDrawFailureTest {
                     public void updateValues(@NonNull Scene scene) {}
                 });
         for (int i = 0; i < 3; ++i) {
-            windows.drawGui(1280, 720);
+            windows.drawGui(1280, 720, () -> {});
         }
         assertFalse(bad.isVisible());
         assertTrue(good.isVisible());

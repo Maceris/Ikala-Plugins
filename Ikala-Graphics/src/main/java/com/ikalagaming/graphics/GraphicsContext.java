@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics;
 
+import com.ikalagaming.graphics.scene.debug.DebugLabel;
 import com.ikalagaming.graphics.scene.debug.DebugShape;
 import com.ikalagaming.plugins.Plugin;
 
@@ -253,6 +254,17 @@ public final class GraphicsContext {
     void collectDebugShapes(@NonNull Consumer<DebugShape> consumer) {
         if (!closed) {
             debug.collect(consumer);
+        }
+    }
+
+    /**
+     * Hand every debug label this context wants drawn this frame to a consumer. Render thread only.
+     *
+     * @param consumer Receives each label.
+     */
+    void collectDebugLabels(@NonNull Consumer<DebugLabel> consumer) {
+        if (!closed) {
+            debug.collectLabels(consumer);
         }
     }
 

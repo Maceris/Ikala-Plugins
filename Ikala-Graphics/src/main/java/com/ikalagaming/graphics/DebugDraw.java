@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics;
 
+import com.ikalagaming.graphics.scene.debug.DebugLabel;
 import com.ikalagaming.graphics.scene.debug.DebugShape;
 
 import lombok.NonNull;
@@ -13,12 +14,14 @@ import java.util.function.Consumer;
 import javax.annotation.Nullable;
 
 /**
- * Draws wireframe shapes into the scene for one plugin, for debugging. Shapes only show when the
- * debug stage is in the pipeline, see {@link RenderConfig}.
+ * Draws wireframe shapes and labels into the scene for one plugin, for debugging. Shapes and labels
+ * only show when the debug stage is in the pipeline, see {@link RenderConfig}; labels are drawn by
+ * the GUI, so only while it is drawn too.
  *
- * <p>Immediate shapes from {@link #draw(DebugShape)} show for one frame, so call it every tick for
- * something that should stay visible. Persistent shapes from {@link #add(DebugShape)} stay until
- * removed, or until the plugin unloads. Everything here is safe from any thread.
+ * <p>Immediate shapes from {@link #draw(DebugShape)} and labels from {@link #label(DebugLabel)}
+ * show for one frame, so call them every tick for something that should stay visible. Persistent
+ * ones from {@link #add(DebugShape)} and {@link #addLabel(DebugLabel)} stay until removed, or until
+ * the plugin unloads. Everything here is safe from any thread.
  *
  * @see GraphicsContext#debug()
  */
@@ -32,6 +35,12 @@ public final class DebugDraw {
 
     /** Shapes to draw every frame until removed, by handle ID. */
     private final Map<Long, DebugShape> persistent = new ConcurrentHashMap<>();
+
+    /** Labels to draw in the next frame only. */
+    private final Queue<DebugLabel> immediateLabels = new ConcurrentLinkedQueue<>();
+
+    /** Labels to draw every frame until removed, by handle ID, which shapes' IDs never share. */
+    private final Map<Long, DebugLabel> persistentLabels = new ConcurrentHashMap<>();
 
     /** The context these shapes belong to. */
     private final GraphicsContext context;
@@ -69,29 +78,54 @@ public final class DebugDraw {
     }
 
     /**
-     * Stop drawing a persistent shape. Does nothing if the handle is null, was already removed, or
-     * belongs to another plugin.
+     * Draw a label in the next frame only.
      *
-     * @param handle The shape's handle.
+     * @param label The label.
+     */
+    public void label(@NonNull DebugLabel label) {
+        context.checkOpen();
+        immediateLabels.add(label);
+    }
+
+    /**
+     * Draw a label every frame until it is removed.
+     *
+     * @param label The label.
+     * @return The handle for removing it, with {@link #remove(DebugShapeHandle)}.
+     */
+    public DebugShapeHandle addLabel(@NonNull DebugLabel label) {
+        context.checkOpen();
+        final long id = NEXT_ID.incrementAndGet();
+        persistentLabels.put(id, label);
+        return new DebugShapeHandle(id);
+    }
+
+    /**
+     * Stop drawing a persistent shape or label. Does nothing if the handle is null, was already
+     * removed, or belongs to another plugin.
+     *
+     * @param handle The shape's or label's handle.
      */
     public void remove(@Nullable DebugShapeHandle handle) {
         if (handle != null) {
             persistent.remove(handle.id());
+            persistentLabels.remove(handle.id());
         }
     }
 
-    /** Stop drawing every persistent shape this plugin added. */
+    /** Stop drawing every persistent shape and label this plugin added. */
     public void clear() {
         persistent.clear();
+        persistentLabels.clear();
     }
 
     /**
-     * Count the persistent shapes.
+     * Count the persistent shapes and labels.
      *
-     * @return The number of persistent shapes.
+     * @return The number of persistent shapes and labels.
      */
     public int persistentCount() {
-        return persistent.size();
+        return persistent.size() + persistentLabels.size();
     }
 
     /**
@@ -108,9 +142,25 @@ public final class DebugDraw {
         persistent.values().forEach(consumer);
     }
 
+    /**
+     * Hand every label to draw this frame to a consumer: the queued immediate labels, which are
+     * removed, and the persistent labels. Render thread only.
+     *
+     * @param consumer Receives each label.
+     */
+    void collectLabels(@NonNull Consumer<DebugLabel> consumer) {
+        DebugLabel label;
+        while ((label = immediateLabels.poll()) != null) {
+            consumer.accept(label);
+        }
+        persistentLabels.values().forEach(consumer);
+    }
+
     /** Drop everything, because the plugin unloaded. */
     void release() {
         immediate.clear();
         persistent.clear();
+        immediateLabels.clear();
+        persistentLabels.clear();
     }
 }

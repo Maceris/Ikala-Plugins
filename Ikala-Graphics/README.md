@@ -19,7 +19,7 @@ reloaded plugin starts clean. Each part of the API is a method on the context:
 | `lights()`    | Point and spot lights with color, intensity, range, cone and whether they cast shadows.                        |
 | `sections()`  | Terrain: many placements of bakeable meshes per 16^3 section, baked into a few compact meshes.                 |
 | `lods()`      | Level of detail worlds, from a prebuilt DAG (`add`) or built live from the plugin's sections (`fromSections`). |
-| `debug()`     | Debug shapes (lines, arrows, boxes, spheres, text), for one frame or kept until removed.                       |
+| `debug()`     | Debug shapes (lines, arrows, boxes, spheres) and labels, for one frame or kept until removed.                  |
 | `ui()`        | The retained mode UI: surfaces, themes, YAML specs, scripts and tools.                                         |
 
 World positions are doubles on the CPU and relative to the camera on the GPU, so worlds can be
@@ -156,6 +156,10 @@ already run this way.
   ```
 - **Debug views:** the Graphics Debug window shows frame timings, lights, LOD colorings, volume
   sources, G-buffer views and benchmark controls.
+- **Debug labels:** `graphics.debug().label(new DebugLabel(point, text))` pins text to a point in
+  the world for a frame, and `addLabel()` keeps it until removed. Labels are drawn by the GUI over
+  the scene, centered where the point shows, the same size at any distance and never hidden, while
+  the debug stage is in the pipeline. The sphere demo names its rows with them.
 
 ## Rendering techniques
 

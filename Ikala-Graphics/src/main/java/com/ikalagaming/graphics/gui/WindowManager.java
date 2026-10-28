@@ -181,8 +181,9 @@ public class WindowManager {
      *
      * @param width The width of the window, in pixels.
      * @param height The width of the height, in pixels.
+     * @param overlay Draws over everything last, as labels over the scene.
      */
-    public void drawGui(final int width, final int height) {
+    public void drawGui(final int width, final int height, @NonNull Runnable overlay) {
         IkGui.newFrame();
 
         // A plugin's window or toolbar whose drawing throws stops being drawn, rather than taking
@@ -218,6 +219,7 @@ public class WindowManager {
         if (isVisible(IkGuiDemo.WINDOW_NAME)) {
             IkGui.showDemoWindow();
         }
+        overlay.run();
         IkGui.render();
     }
 

@@ -25,6 +25,7 @@ import com.ikalagaming.graphics.lod.LodDagCache;
 import com.ikalagaming.graphics.lod.LodMesh;
 import com.ikalagaming.graphics.lod.MaterialAverages;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.scene.debug.DebugLabel;
 import com.ikalagaming.graphics.vulkan.FrameTimings;
 import com.ikalagaming.graphics.vulkan.LodRenderer;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
@@ -92,6 +93,11 @@ final class SphereDemoLod {
     /** How often the frame time is logged. */
     private static final long LOG_INTERVAL_NANOS = 5_000_000_000L;
 
+    /** Where each row's name is, before its first ball along x, and above the ground. */
+    private static final double LABEL_X = -1;
+
+    private static final double LABEL_Y = 0.3;
+
     /** One ball, drawn either way. */
     private static final class Ball {
         /** Where it is. */
@@ -146,6 +152,15 @@ final class SphereDemoLod {
     /** Rows of copies. */
     private final int[] rows = {0};
 
+    /** What each row of the demo's balls shows, by where it is. */
+    private final List<DebugLabel> rowNames = new ArrayList<>();
+
+    /** Whether the rows are named, which draws debug shapes. */
+    private final IkBoolean showNames = new IkBoolean(true);
+
+    /** Whether debug shapes are drawn for the names now. Render thread. */
+    private boolean namesShown;
+
     /** The error threshold. */
     private final float[] threshold = {
         Float.parseFloat(System.getProperty(ERROR_PROPERTY, String.valueOf(DEFAULT_THRESHOLD)))
@@ -199,6 +214,16 @@ final class SphereDemoLod {
         final Ball kept = new Ball(position, material);
         kept.plain = plain;
         balls.add(kept);
+    }
+
+    /**
+     * Name a row of the demo's balls, shown before its first ball while names are on.
+     *
+     * @param z Where the row is along z.
+     * @param name What it shows, as how the balls change along it.
+     */
+    void nameRow(double z, @NonNull String name) {
+        rowNames.add(new DebugLabel(new Vector3d(LABEL_X, LABEL_Y, z), name));
     }
 
     /**
@@ -341,6 +366,7 @@ final class SphereDemoLod {
 
     /** Draw every ball the way the switch says, once the model is there. Render thread. */
     private void update() {
+        nameRows();
         final boolean wanted = useLod.get();
         if (wanted && model == null) {
             if (!building) {
@@ -385,6 +411,10 @@ final class SphereDemoLod {
             return;
         }
         closed = true;
+        if (namesShown) {
+            GraphicsManager.swapPipeline(GraphicsManager.getPipelineConfig().withDebug(false));
+            namesShown = false;
+        }
         balls.forEach(this::hide);
         copies.forEach(this::hide);
         if (model != null) {
@@ -413,6 +443,21 @@ final class SphereDemoLod {
         return triangles * (balls.size() + copies.size());
     }
 
+    /**
+     * Label the rows this frame while names are on, drawing debug shapes only while they are.
+     * Render thread.
+     */
+    private void nameRows() {
+        final boolean wanted = showNames.get();
+        if (wanted != namesShown) {
+            namesShown = wanted;
+            GraphicsManager.swapPipeline(GraphicsManager.getPipelineConfig().withDebug(wanted));
+        }
+        if (wanted) {
+            rowNames.forEach(graphics.debug()::label);
+        }
+    }
+
     /** The demo's window. */
     private final class DemoWindow extends GuiWindow {
         /** Set up the window. */
@@ -427,6 +472,7 @@ final class SphereDemoLod {
             IkGui.begin(title, windowOpen, windowFlags);
             final boolean leave = IkGui.button("Back to the menu") || !windowOpen.get();
             IkGui.checkbox("Level of detail", useLod);
+            IkGui.checkbox("Row names", showNames);
             if (IkGui.sliderInt("Rows of copies", rows, 0, MAX_ROWS)) {
                 scatter();
             }

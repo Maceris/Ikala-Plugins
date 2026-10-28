@@ -14,6 +14,7 @@ import com.ikalagaming.graphics.gui.enums.MouseButton;
 import com.ikalagaming.graphics.gui.flags.ConfigFlags;
 import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.scene.debug.DebugLabel;
 import com.ikalagaming.graphics.scene.debug.DebugShape;
 import com.ikalagaming.graphics.ui.UiManager;
 import com.ikalagaming.graphics.vulkan.DeletionQueue;
@@ -430,6 +431,15 @@ public class GraphicsManager {
     }
 
     /**
+     * Hand every plugin's debug labels for this frame to a consumer. Render thread only.
+     *
+     * @param consumer Receives each label.
+     */
+    public static void collectDebugLabels(@NonNull Consumer<DebugLabel> consumer) {
+        contexts.values().forEach(context -> context.collectDebugLabels(consumer));
+    }
+
+    /**
      * Find the currently loaded instance of a plugin.
      *
      * @param pluginName The plugin name.
@@ -458,7 +468,10 @@ public class GraphicsManager {
         Map<Window, DrawData> gui = Map.of();
         if (renderInstance.getPipelineConfig().gui()) {
             final IkIO io = IkGui.getIO();
-            windowManager.drawGui((int) io.displaySize.x, (int) io.displaySize.y);
+            windowManager.drawGui(
+                    (int) io.displaySize.x,
+                    (int) io.displaySize.y,
+                    () -> DebugLabelOverlay.draw(scene, sceneWindow, mainWindow));
             // Creates, moves and closes the windows of IkGui viewports
             IkGui.updatePlatformWindows();
             gui = guiDrawData();
