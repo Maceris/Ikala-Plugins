@@ -52,13 +52,15 @@ final class CharacterLook {
      * @param variant Which variant of the body plan, or -1 for none.
      * @param colors Each palette channel's color code, for the channels colored.
      * @param fx The effects the design wears.
+     * @param style The way it moves, or null for the plan's own.
      */
     record Snapshot(
             int[] choices,
             Map<Id, float[]> values,
             int variant,
             Map<String, Integer> colors,
-            List<FxUse> fx) {}
+            List<FxUse> fx,
+            Id style) {}
 
     /** The slots. */
     private final PartSlots slots;
@@ -89,6 +91,9 @@ final class CharacterLook {
 
     /** The effects the design wears, on top of its parts' own. */
     private final List<FxUse> fx = new ArrayList<>();
+
+    /** The way it moves, or null for the plan's own. */
+    private Id style;
 
     /** Earlier looks, the latest first. */
     private final Deque<Snapshot> history = new ArrayDeque<>();
@@ -184,12 +189,14 @@ final class CharacterLook {
      * @param startValues Slider values by ID; sliders left out start where the variant says.
      * @param startColors Color codes by palette channel.
      * @param startFx The effects the design wears.
+     * @param startStyle The way it moves, or null for the plan's own.
      */
     void start(
             int variantIndex,
             @NonNull Map<Id, float[]> startValues,
             @NonNull Map<String, Integer> startColors,
-            @NonNull List<FxUse> startFx) {
+            @NonNull List<FxUse> startFx,
+            Id startStyle) {
         if (!variants.isEmpty()) {
             variant = variantIndex < 0 ? 0 : variantIndex;
             startSliders();
@@ -205,6 +212,7 @@ final class CharacterLook {
         colors.putAll(startColors);
         fx.clear();
         fx.addAll(startFx);
+        style = startStyle;
         history.clear();
         ++version;
     }
@@ -358,6 +366,29 @@ final class CharacterLook {
         } else {
             fx.set(index, use);
         }
+        ++version;
+    }
+
+    /**
+     * The way it moves.
+     *
+     * @return The style, or null for the plan's own.
+     */
+    Id style() {
+        return style;
+    }
+
+    /**
+     * Change the way it moves, remembering the look before to undo.
+     *
+     * @param newStyle The style, or null for the plan's own.
+     */
+    void setStyle(Id newStyle) {
+        if (Objects.equals(style, newStyle)) {
+            return;
+        }
+        remember();
+        style = newStyle;
         ++version;
     }
 
@@ -573,7 +604,12 @@ final class CharacterLook {
         Map<Id, float[]> copied = new LinkedHashMap<>();
         values.forEach((id, value) -> copied.put(id, value.clone()));
         return new Snapshot(
-                choices.clone(), copied, variant, new LinkedHashMap<>(colors), List.copyOf(fx));
+                choices.clone(),
+                copied,
+                variant,
+                new LinkedHashMap<>(colors),
+                List.copyOf(fx),
+                style);
     }
 
     /** Remember the look now, to undo the next change. */
@@ -619,6 +655,7 @@ final class CharacterLook {
         colors.putAll(last.colors());
         fx.clear();
         fx.addAll(last.fx());
+        style = last.style();
         ++version;
         return true;
     }

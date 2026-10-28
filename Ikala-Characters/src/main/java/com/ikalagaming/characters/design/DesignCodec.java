@@ -4,6 +4,7 @@ import com.ikalagaming.characters.data.Color;
 import com.ikalagaming.characters.data.ColorCode;
 import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.data.Vec3;
+import com.ikalagaming.characters.definition.AnimStyle;
 import com.ikalagaming.characters.definition.BodyPlan;
 import com.ikalagaming.characters.definition.Definition;
 import com.ikalagaming.characters.definition.Design;
@@ -21,6 +22,7 @@ import lombok.NonNull;
 import java.io.ByteArrayOutputStream;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -40,7 +42,7 @@ import java.util.Map;
  *
  * <pre>
  * format (byte)
- * plan (numeric ID)   variant (index in the plan)
+ * plan (numeric ID)   variant (index in the plan)   style (0 for none, else numeric ID + 1)
  * parts:   count, then (place index: slots then layers in plan order, part numeric ID) each
  * sliders: count, then (slider numeric ID, value count byte, values as signed bytes) each
  * colors:  count, then (channel index: standard channels then the plan's own, code as 2 bytes)
@@ -51,6 +53,7 @@ import java.util.Map;
  *          color (0 for none, else channel index + 1)
  *          offset (3 signed bytes of centimeters)
  *          scale, rate, intensity (unsigned bytes of 1/{@value #FACTOR_STEPS})
+ *          when (length byte, 0 for always, then ASCII)
  * </pre>
  *
  * Encoding is lossy where the steps are coarse: slider values go to steps of 1/{@value #STEPS},
@@ -109,6 +112,11 @@ public final class DesignCodec {
             throw new IllegalArgumentException("The plan has no variant " + design.variant());
         }
         writeVarint(out, variant);
+        writeVarint(
+                out,
+                design.style() == null
+                        ? 0
+                        : numeric(registry, Kind.ANIM_STYLE, design.style()) + 1);
 
         List<String> places = places(plan);
         writeVarint(out, design.parts().size() + design.layers().size());
@@ -155,6 +163,7 @@ public final class DesignCodec {
             out.write(factorStep(use.scale()));
             out.write(factorStep(use.rate()));
             out.write(factorStep(use.intensity()));
+            writeWhen(out, use.when());
         }
         return out.toByteArray();
     }
@@ -179,6 +188,8 @@ public final class DesignCodec {
             }
             BodyPlan plan = definition(registry, BodyPlan.class, readVarint(in));
             BodyPlan.Variant variant = element(plan.variants(), readVarint(in), "variant");
+            int style = readVarint(in);
+            Id styleId = style == 0 ? null : definition(registry, AnimStyle.class, style - 1).id();
 
             List<String> places = places(plan);
             Map<String, Id> parts = new LinkedHashMap<>();
@@ -238,6 +249,7 @@ public final class DesignCodec {
                 float scale = (in.get() & 0xFF) / FACTOR_STEPS;
                 float rate = (in.get() & 0xFF) / FACTOR_STEPS;
                 float intensity = (in.get() & 0xFF) / FACTOR_STEPS;
+                String when = readWhen(in);
                 fx.add(
                         new FxUse(
                                 effect,
@@ -247,13 +259,23 @@ public final class DesignCodec {
                                 channel,
                                 scale,
                                 rate,
-                                intensity));
+                                intensity,
+                                when));
             }
             if (in.hasRemaining()) {
                 throw new IllegalArgumentException("Extra bytes after the design");
             }
             return new Design(
-                    id, plan.id(), variant.id(), sliders, parts, layers, paletteId, colors, fx);
+                    id,
+                    plan.id(),
+                    variant.id(),
+                    styleId,
+                    sliders,
+                    parts,
+                    layers,
+                    paletteId,
+                    colors,
+                    fx);
         } catch (BufferUnderflowException e) {
             throw new IllegalArgumentException("The design is cut short", e);
         }
@@ -458,6 +480,44 @@ public final class DesignCodec {
             throw new IllegalArgumentException("No " + what + " numbered " + index);
         }
         return list.get(index);
+    }
+
+    /**
+     * Write when an effect shows: 0 for always, else its length and its ASCII letters.
+     *
+     * @param out Where to write.
+     * @param when When it shows.
+     */
+    private static void writeWhen(ByteArrayOutputStream out, String when) {
+        if (FxUse.ALWAYS.equals(when)) {
+            out.write(0);
+            return;
+        }
+        byte[] letters = when.getBytes(StandardCharsets.US_ASCII);
+        if (letters.length == 0 || letters.length > FxUse.MAX_WHEN_LENGTH) {
+            throw new IllegalArgumentException("An effect's when is too long: " + when);
+        }
+        out.write(letters.length);
+        out.writeBytes(letters);
+    }
+
+    /**
+     * Read when an effect shows.
+     *
+     * @param in Where to read.
+     * @return When it shows.
+     */
+    private static String readWhen(ByteBuffer in) {
+        int length = in.get() & 0xFF;
+        if (length == 0) {
+            return FxUse.ALWAYS;
+        }
+        if (length > FxUse.MAX_WHEN_LENGTH) {
+            throw new IllegalArgumentException("An effect's when is too long");
+        }
+        byte[] letters = new byte[length];
+        in.get(letters);
+        return new String(letters, StandardCharsets.US_ASCII);
     }
 
     /**

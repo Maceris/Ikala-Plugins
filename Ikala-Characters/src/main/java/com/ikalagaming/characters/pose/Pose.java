@@ -58,6 +58,56 @@ public final class Pose {
     }
 
     /**
+     * Copy another pose of the same skeleton.
+     *
+     * @param other The pose.
+     */
+    public void set(@NonNull Pose other) {
+        System.arraycopy(other.rotations, 0, rotations, 0, rotations.length);
+        System.arraycopy(other.translations, 0, translations, 0, translations.length);
+    }
+
+    /**
+     * Blend toward another pose of the same skeleton: rotations by normalized lerp along the
+     * shorter arc, translations by lerp.
+     *
+     * @param other The pose to blend toward.
+     * @param weight How far, 0 for this pose and 1 for the other.
+     * @param bones Which bones to blend, or null for all of them.
+     */
+    public void blend(@NonNull Pose other, float weight, boolean[] bones) {
+        if (weight <= 0) {
+            return;
+        }
+        float keep = 1 - weight;
+        for (int b = 0; b < skeleton.size(); ++b) {
+            if (bones != null && !bones[b]) {
+                continue;
+            }
+            int r = b * 4;
+            float dot =
+                    rotations[r] * other.rotations[r]
+                            + rotations[r + 1] * other.rotations[r + 1]
+                            + rotations[r + 2] * other.rotations[r + 2]
+                            + rotations[r + 3] * other.rotations[r + 3];
+            float toward = dot < 0 ? -weight : weight;
+            float x = rotations[r] * keep + other.rotations[r] * toward;
+            float y = rotations[r + 1] * keep + other.rotations[r + 1] * toward;
+            float z = rotations[r + 2] * keep + other.rotations[r + 2] * toward;
+            float w = rotations[r + 3] * keep + other.rotations[r + 3] * toward;
+            float length = (float) Math.sqrt(x * x + y * y + z * z + w * w);
+            if (length > 0) {
+                setRotation(b, x / length, y / length, z / length, w / length);
+            }
+            int t = b * 3;
+            for (int i = 0; i < 3; ++i) {
+                translations[t + i] =
+                        translations[t + i] * keep + other.translations[t + i] * weight;
+            }
+        }
+    }
+
+    /**
      * Set a bone's local rotation.
      *
      * @param bone The bone's index.

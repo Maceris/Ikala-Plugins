@@ -1,0 +1,14 @@
+// A test style: a slow shamble, and lurching attacks picked at random
+[
+  {
+    "id": "ikala:style/zombie",
+    "plan": "ikala:biped",
+    "actions": {
+      "move": { "clips": [ { "clip": "test.glb#shamble", "speed": 0.8 } ] },
+      "attack.melee": {
+        "clips": [ { "clip": "test.glb#lurch", "loop": false, "weight": 2 }, { "clip": "test.glb#lurch_2", "loop": false } ]
+      }
+    },
+    "tags": ["monster"]
+  }
+]

@@ -1,5 +1,7 @@
 package com.ikalagaming.characters.view;
 
+import com.ikalagaming.characters.anim.Animator;
+import com.ikalagaming.characters.definition.FxUse;
 import com.ikalagaming.characters.gltf.ImportedCharacter;
 import com.ikalagaming.characters.pose.Clip;
 import com.ikalagaming.characters.pose.Pose;
@@ -95,8 +97,14 @@ public final class ShownCharacter implements AutoCloseable {
     /** The materials added to the scene's cache. */
     private final List<Material> materials = new ArrayList<>();
 
+    /** How fast a character moves before effects shown while moving show, in m/s. */
+    private static final float MOVING_SPEED = 0.1f;
+
     /** The clip playing, or null to stand at rest. */
     private volatile Clip clip;
+
+    /** Plays its actions instead of the clip, or null to play the clip. */
+    private volatile Animator animator;
 
     /** The proportions it is posed with. */
     private volatile Proportions proportions;
@@ -344,6 +352,25 @@ public final class ShownCharacter implements AutoCloseable {
     }
 
     /**
+     * Play actions through an animator instead of a single clip.
+     *
+     * @param newAnimator The animator, for this character's skeleton, or null to go back to the
+     *     clip.
+     */
+    public void setAnimator(Animator newAnimator) {
+        if (newAnimator != null) {
+            newAnimator.setListener(
+                    event -> {
+                        CharacterFx effects = fx;
+                        if (effects != null) {
+                            effects.event(event);
+                        }
+                    });
+        }
+        animator = newAnimator;
+    }
+
+    /**
      * Stop or start the clip's time, keeping where it is.
      *
      * @param play Whether time moves on.
@@ -417,18 +444,24 @@ public final class ShownCharacter implements AutoCloseable {
         public void run() {
             try {
                 long now = System.nanoTime();
+                float passed = playing ? (now - last) / 1e9f : 0;
                 if (restart) {
                     restart = false;
                     time = 0;
-                } else if (playing) {
-                    time += (now - last) / 1e9f;
+                } else {
+                    time += passed;
                 }
                 last = now;
                 final Clip playingClip = clip;
+                final Animator actions = animator;
                 final Proportions current = proportions;
-                pose.reset();
-                if (playingClip != null) {
-                    playingClip.sample(time, pose);
+                if (actions != null) {
+                    actions.update(passed, pose);
+                } else {
+                    pose.reset();
+                    if (playingClip != null) {
+                        playingClip.sample(time, pose);
+                    }
                 }
                 solver.solve(pose, current);
                 solver.writePalette(current, palette, 0);
@@ -444,6 +477,9 @@ public final class ShownCharacter implements AutoCloseable {
                 skins.setPose(instance, palette, 0, min, max);
                 final CharacterFx effects = fx;
                 if (effects != null) {
+                    if (actions != null) {
+                        effects.setState(FxUse.MOVING, actions.speed() > MOVING_SPEED);
+                    }
                     effects.update(solver, position, facing);
                 }
             } catch (RuntimeException e) {

@@ -32,6 +32,11 @@
           "type": "string",
           "description": "The plan's variant, like \"female\"."
         },
+        "style": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "The way it moves, like \"ikala:style/zombie\". Left out, it moves the plan's way."
+        },
         "sliders": {
           "type": "object",
           "additionalProperties": {
@@ -143,6 +148,11 @@
           "type": "number",
           "description": "How brightly it glows, times the effect's, 0 to 4.",
           "default": 1
+        },
+        "when": {
+          "type": "string",
+          "description": "When it shows: \"always\", \"moving\", \"combat\", or a toggle that gameplay or the player controls, like \"wings\". Lowercase words joined by dots, up to 32 letters.",
+          "default": "always"
         }
       },
       "required": [

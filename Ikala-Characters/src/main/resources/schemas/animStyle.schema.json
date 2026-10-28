@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ikala character animStyle",
+  "description": "A way of moving that overrides some of a plan's actions, like a zombie's shamble or a weapon's stance. Actions it leaves out come from the plan's animation sets.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/AnimStyle"
+    },
+    {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AnimStyle"
+      }
+    }
+  ],
+  "$defs": {
+    "Action": {
+      "type": "object",
+      "description": "What an action plays.",
+      "properties": {
+        "clips": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ClipUse"
+          },
+          "description": "Its clips: one, several picked from at random by weight, or several with speeds, blended by how fast the character moves."
+        },
+        "mask": {
+          "type": "string",
+          "description": "The plan's bone group it plays on, like \"upperBody\", so the legs keep walking. Left out, it plays on the whole body."
+        },
+        "fade": {
+          "type": "number",
+          "description": "How long it takes to blend in, in seconds.",
+          "default": 0.2
+        }
+      },
+      "required": [
+        "clips"
+      ],
+      "additionalProperties": false
+    },
+    "AnimStyle": {
+      "type": "object",
+      "description": "A way of moving that overrides some of a plan's actions, like a zombie's shamble or a weapon's stance. Actions it leaves out come from the plan's animation sets.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "This style's ID, like \"ikala:style/zombie\"."
+        },
+        "plan": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "The body plan it is for."
+        },
+        "actions": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Action"
+          },
+          "description": "The actions it overrides, like {\"move\": {...}}."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Tags that editors filter by, like \"weapon\"."
+        },
+        "extends": {
+          "type": "string",
+          "description": "The ID of a definition of the same kind to start from. Fields written here replace the parent's, and objects merge field by field."
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "extends"
+          ]
+        },
+        {
+          "required": [
+            "id",
+            "plan",
+            "actions"
+          ]
+        }
+      ]
+    },
+    "ClipUse": {
+      "type": "object",
+      "description": "One clip an action plays.",
+      "properties": {
+        "clip": {
+          "type": "string",
+          "description": "The clip, as its file and its name in that file, like \"rpg_human/rpg_male.glb#run\", relative to its namespace's content folder."
+        },
+        "speed": {
+          "type": "number",
+          "description": "How fast it moves the character, in meters per second, for actions blended by speed."
+        },
+        "rate": {
+          "type": "number",
+          "description": "How fast it plays, times its authored speed.",
+          "default": 1
+        },
+        "loop": {
+          "type": "boolean",
+          "description": "Whether it repeats. Left out, the file decides."
+        },
+        "weight": {
+          "type": "number",
+          "description": "How likely it is picked among the action's clips.",
+          "default": 1
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Event"
+          },
+          "description": "Timed events it fires, like footsteps and hits."
+        }
+      },
+      "required": [
+        "clip"
+      ],
+      "additionalProperties": false
+    },
+    "Event": {
+      "type": "object",
+      "description": "Something that happens at a moment of a clip.",
+      "properties": {
+        "at": {
+          "type": "number",
+          "description": "When, in seconds from the clip's start."
+        },
+        "event": {
+          "type": "string",
+          "description": "What, like \"foot.L.down\", \"hit\", or \"fx:\" and an effect ID to burst it."
+        },
+        "bone": {
+          "type": "string",
+          "description": "The bone an fx: event bursts its effect at, like \"foot.L\". Left out, the root."
+        }
+      },
+      "required": [
+        "at",
+        "event"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

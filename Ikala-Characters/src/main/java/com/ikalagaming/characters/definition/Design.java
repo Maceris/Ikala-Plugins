@@ -30,6 +30,7 @@ import java.util.function.Function;
  * @param id This design's ID.
  * @param plan The body plan.
  * @param variant The plan's variant.
+ * @param style The way it moves, or null for the plan's own.
  * @param sliders Slider values by slider ID: one value, or three for sliders with width, height and
  *     depth.
  * @param parts Body parts by the slot they are listed under.
@@ -47,6 +48,9 @@ public record Design(
         @Doc("This design's ID, like \"ikala:design/test_knight\".") Id id,
         @Doc("The body plan.") Id plan,
         @Doc("The plan's variant, like \"female\".") String variant,
+        @Doc("The way it moves, like \"ikala:style/zombie\". Left out, it moves the plan's way.")
+                @Optional
+                Id style,
         @Doc(
                         "Slider values by slider ID: one value, or three for sliders with width,"
                                 + " height and depth. Sliders left out are where the variant"
@@ -72,6 +76,9 @@ public record Design(
 
     /** The field for the variant. */
     public static final String FIELD_VARIANT = "variant";
+
+    /** The field for the style. */
+    public static final String FIELD_STYLE = "style";
 
     /** The field for the slider values. */
     public static final String FIELD_SLIDERS = "sliders";
@@ -193,8 +200,15 @@ public record Design(
         if (palette != null) {
             lookup.find(Palette.class, palette, JsonPath.at(FIELD_PALETTE));
         }
+        AnimStyle way =
+                style == null
+                        ? null
+                        : lookup.find(AnimStyle.class, style, JsonPath.at(FIELD_STYLE));
         if (body == null) {
             return;
+        }
+        if (way != null && !way.plan().equals(plan)) {
+            report.error(JsonPath.at(FIELD_STYLE), style + " is for " + way.plan());
         }
         BodyPlan.Variant chosen = body.variant(variant);
         if (chosen == null) {

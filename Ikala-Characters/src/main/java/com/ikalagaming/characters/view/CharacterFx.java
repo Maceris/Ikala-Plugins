@@ -2,6 +2,7 @@ package com.ikalagaming.characters.view;
 
 import com.ikalagaming.characters.data.Color;
 import com.ikalagaming.characters.data.Vec3;
+import com.ikalagaming.characters.definition.AnimationSet;
 import com.ikalagaming.characters.definition.BodyPlan;
 import com.ikalagaming.characters.definition.Fx;
 import com.ikalagaming.characters.definition.FxUse;
@@ -25,8 +26,11 @@ import org.joml.Vector4fc;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -36,8 +40,9 @@ import java.util.concurrent.locks.ReentrantLock;
  * loaded effect, so the graphics plugin only sees plain values. When the effect's file is reloaded,
  * the copy is made again.
  *
- * <p>For now emitters only move: particles already spawned stay where they are in the world, so a
- * moving character trails them.
+ * <p>An effect shows when its {@link FxUse#when} state holds, like {@value FxUse#MOVING}; others
+ * are stopped until it does. Animation events named {@code fx:} and an effect ID burst that effect
+ * once at the event's bone, from an emitter per effect that spawns nothing on its own.
  *
  * <p>{@link #update} runs on the thread that poses the character; everything is safe from any
  * thread.
@@ -90,8 +95,32 @@ public final class CharacterFx implements AutoCloseable {
         }
     }
 
+    /**
+     * How many particles an event bursts from an effect with no burst of its own, per particle a
+     * second it spawns.
+     */
+    private static final float EVENT_BURST_SECONDS = 0.2f;
+
     /** The particles API. */
     private final Particles particles;
+
+    /** The loaded definitions, for events' effects. */
+    private final CharacterRegistry registry;
+
+    /** Loads events' effects. */
+    private final FxEffects effects;
+
+    /** The character's skeleton, for events' bones. */
+    private final Skeleton skeleton;
+
+    /** The states that hold, like moving or a toggle. */
+    private final Set<String> states = new HashSet<>();
+
+    /** Events waiting for the next update, which knows where the bones are. */
+    private final List<AnimationSet.Event> events = new ArrayList<>();
+
+    /** An emitter per effect that events burst, spawning nothing on its own. */
+    private final Map<EffectHandle, EmitterHandle> bursters = new HashMap<>();
 
     /** The placed effects. */
     private final List<Placed> placed = new ArrayList<>();
@@ -129,6 +158,9 @@ public final class CharacterFx implements AutoCloseable {
             @NonNull CharacterRegistry registry,
             @NonNull FxEffects effects) {
         particles = effects.particles();
+        this.registry = registry;
+        this.effects = effects;
+        this.skeleton = skeleton;
         for (FxUse use : uses) {
             Fx fx = registry.get(Fx.class, use.fx());
             if (fx == null) {
@@ -164,8 +196,47 @@ public final class CharacterFx implements AutoCloseable {
     }
 
     /**
-     * Move every emitter to its bone, spawning those not yet spawned, and make the copies of
-     * effects whose files were reloaded again.
+     * Turn a state on or off, which shows or hides the effects shown in it.
+     *
+     * @param state The state, like {@value FxUse#MOVING} or a toggle.
+     * @param holds Whether it holds.
+     */
+    public void setState(@NonNull String state, boolean holds) {
+        lock.lock();
+        try {
+            if (holds) {
+                states.add(state);
+            } else {
+                states.remove(state);
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Burst an animation event's effect at the next update, if it is an {@code fx:} event.
+     *
+     * @param event The event.
+     */
+    public void event(@NonNull AnimationSet.Event event) {
+        if (!event.event().startsWith(AnimationSet.Event.FX_PREFIX)) {
+            return;
+        }
+        lock.lock();
+        try {
+            if (!closed) {
+                events.add(event);
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Move every emitter to its bone, spawning those not yet spawned and stopping those whose state
+     * doesn't hold, make the copies of effects whose files were reloaded again, and burst events'
+     * effects.
      *
      * @param solver The solver, holding the character's latest pose.
      * @param position Where the character's root stands.
@@ -180,6 +251,14 @@ public final class CharacterFx implements AutoCloseable {
             }
             for (Placed effect : placed) {
                 if (effect.failed) {
+                    continue;
+                }
+                if (!effect.use.shownIn(states)) {
+                    if (effect.emitter != null) {
+                        particles.stop(effect.emitter);
+                        effect.emitter = null;
+                        effect.applied = null;
+                    }
                     continue;
                 }
                 ParticleEffect base = particles.effectOf(effect.effect);
@@ -201,9 +280,55 @@ public final class CharacterFx implements AutoCloseable {
                 }
                 particles.move(effect.emitter, world);
             }
+            for (AnimationSet.Event event : events) {
+                burst(event, solver, position, facing);
+            }
+            events.clear();
         } finally {
             lock.unlock();
         }
+    }
+
+    /**
+     * Burst an event's effect at its bone.
+     *
+     * @param event The event.
+     * @param solver The solver, holding the latest pose.
+     * @param position Where the character's root stands.
+     * @param facing Which way the character faces.
+     */
+    private void burst(
+            AnimationSet.Event event, PoseSolver solver, Vector3dc position, Quaternionfc facing) {
+        Fx fx;
+        try {
+            fx = registry.get(Fx.class, event.effect());
+        } catch (IllegalArgumentException e) {
+            return;
+        }
+        EffectHandle effect = fx == null ? null : effects.effect(fx, registry);
+        ParticleEffect base = particles.effectOf(effect);
+        if (base == null) {
+            return;
+        }
+        int bone = event.bone() == null ? 0 : Math.max(0, skeleton.index(event.bone()));
+        solver.model(bone).getTranslation(local);
+        facing.transform(local);
+        world.set(position).add(local.x, local.y, local.z);
+        EmitterHandle emitter = bursters.get(effect);
+        if (emitter == null || !particles.isValid(emitter)) {
+            emitter = particles.spawn(base.toBuilder().rate(0).burst(0).build(), world);
+            if (emitter == null) {
+                return;
+            }
+            bursters.put(effect, emitter);
+        } else {
+            particles.teleport(emitter, world);
+        }
+        int count =
+                base.getBurst() > 0
+                        ? base.getBurst()
+                        : Math.max(1, Math.round(base.getRate() * EVENT_BURST_SECONDS));
+        particles.burst(emitter, count);
     }
 
     /**
@@ -353,6 +478,9 @@ public final class CharacterFx implements AutoCloseable {
             }
             closed = true;
             placed.forEach(effect -> particles.stop(effect.emitter));
+            bursters.values().forEach(particles::stop);
+            bursters.clear();
+            events.clear();
         } finally {
             lock.unlock();
         }

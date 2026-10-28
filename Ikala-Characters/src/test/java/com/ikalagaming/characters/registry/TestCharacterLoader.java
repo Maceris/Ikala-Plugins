@@ -2,6 +2,8 @@ package com.ikalagaming.characters.registry;
 
 import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.data.Problem;
+import com.ikalagaming.characters.definition.AnimStyle;
+import com.ikalagaming.characters.definition.AnimationSet;
 import com.ikalagaming.characters.definition.BodyPlan;
 import com.ikalagaming.characters.definition.Kind;
 import com.ikalagaming.characters.definition.Part;
@@ -260,5 +262,51 @@ class TestCharacterLoader {
                         .get(
                                 com.ikalagaming.characters.definition.Palette.class,
                                 Id.parse("ikala:palette/odd")));
+    }
+
+    /** Animation sets and styles are checked against their plan, and repeats are warned about. */
+    @Test
+    void testAnimationProblems() throws Exception {
+        Path root = copy();
+        write(
+                root.resolve("animationSet/broken.json"),
+                """
+                {
+                  "id": "ikala:anim/broken",
+                  "plan": "ikala:biped",
+                  "actions": {
+                    "idle": { "clips": [ { "clip": "test.glb#idle_2" } ] },
+                    "Attack": { "clips": [ { "clip": "test.glb" } ], "mask": "legs" },
+                    "hit": {
+                      "clips": [ { "clip": "a.glb#b", "rate": 0, "events": [
+                        { "at": -1, "event": "fx:ikala:fx/missing" }, { "at": 0, "event": "fx:nope" } ] } ]
+                    }
+                  },
+                  "variants": { "tall": {} }
+                }
+                """);
+        CharacterLoader.Result result =
+                CharacterLoader.load(List.of(new ContentSource("ikala", root)));
+        String problems = text(result);
+        Assertions.assertTrue(problems.contains("ikala:anim/biped comes first"), problems);
+        Assertions.assertTrue(problems.contains("lowercase words joined by dots"), problems);
+        Assertions.assertTrue(problems.contains("A clip is its file"), problems);
+        Assertions.assertTrue(problems.contains("no bone group 'legs'"), problems);
+        Assertions.assertTrue(problems.contains("A rate is above 0"), problems);
+        Assertions.assertTrue(problems.contains("can't come before 0"), problems);
+        Assertions.assertTrue(problems.contains("ikala:fx/missing"), problems);
+        Assertions.assertTrue(problems.contains("fx: events name an effect ID"), problems);
+        Assertions.assertTrue(problems.contains("no variant 'tall'"), problems);
+
+        CharacterRegistry registry =
+                CharacterLoader.load(List.of(new ContentSource("ikala", content()))).registry();
+        AnimationSet biped = registry.get(AnimationSet.class, Id.parse("ikala:anim/biped"));
+        Assertions.assertTrue(biped.actions().get("move").blendsBySpeed());
+        Assertions.assertEquals("test.glb", biped.actions().get("idle").clips().get(0).file());
+        Assertions.assertEquals("idle", biped.actions().get("idle").clips().get(0).name());
+        Assertions.assertEquals(
+                Id.parse("ikala:fx/sparks"),
+                biped.actions().get("attack.melee").clips().get(0).events().get(1).effect());
+        Assertions.assertNotNull(registry.get(AnimStyle.class, Id.parse("ikala:style/zombie")));
     }
 }

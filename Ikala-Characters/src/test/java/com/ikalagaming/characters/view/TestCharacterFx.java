@@ -44,7 +44,15 @@ class TestCharacterFx {
      */
     private static FxUse use(String color, float scale, float rate, float intensity) {
         return new FxUse(
-                Id.parse("ikala:fx/sparks"), "hand.L", null, null, color, scale, rate, intensity);
+                Id.parse("ikala:fx/sparks"),
+                "hand.L",
+                null,
+                null,
+                color,
+                scale,
+                rate,
+                intensity,
+                FxUse.ALWAYS);
     }
 
     /** Scale, rate and intensity multiply the effect's own values. */

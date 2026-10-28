@@ -7,8 +7,10 @@ asset editor's test content (see tools/blender). This reads their meshes and wri
     part/rpg_human.json   the RPG body, heads, hands and feet as body parts, and hair, armor,
                           boots, gloves and helmets as layers, male and female meshes together
     design/test.json      a mannequin, an RPG man with a hand flame and an RPG woman with an aura
-    effects/*.effect.yml  graphics particle effects: a flame, motes, sparks and embers
+    effects/*.effect.yml  graphics particle effects: a flame, motes, sparks, embers and dust
     fx/test.json          an effect definition for each
+    animationSet/test.json the biped's actions, from the RPG clips and the mannequin's walk
+    animStyle/test.json   a style per RPG weapon, overriding combat idles, attacks and casts
 
 all in the "test" namespace. Load them in the editor by listing the folder in Ikala-Characters'
 config, as test=<folder>. Mesh paths are relative to the folder, as file.glb#mesh name.
@@ -192,10 +194,25 @@ color:
 emissive: 3
 lit: false
 """,
+    "dust": """rate: 20
+burst: 6
+lifetime: [0.4, 0.8]
+speed: [0.3, 0.8]
+direction: [0, 1, 0]
+spread: 80
+spawnRadius: 0.05
+acceleration: [0, -0.5, 0]
+drag: 2
+size: [0.06, 0.15]
+color:
+  start: [0.55, 0.5, 0.45, 0.5]
+  end: [0.55, 0.5, 0.45, 0]
+""",
 }
 
 # Effect definitions' tags, by effect
-EFFECT_TAGS = {"flame": ["hand"], "motes": ["aura"], "sparks": ["part"], "embers": ["aura"]}
+EFFECT_TAGS = {"flame": ["hand"], "motes": ["aura"], "sparks": ["part"], "embers": ["aura"],
+               "dust": ["event"]}
 
 
 def fx_definitions():
@@ -243,6 +260,7 @@ def designs():
             "id": f"{NAMESPACE}:design/rpg_male",
             "plan": PLAN,
             "variant": "male",
+            "style": f"{NAMESPACE}:style/weapon/two_handed_melee",
             "parts": rpg,
             "layers": {"hair": f"{NAMESPACE}:part/rpg/hair_1"},
             "fx": [{"fx": f"{NAMESPACE}:fx/flame", "bone": "hand.R", "offset": [0, 0.08, 0]}],
@@ -256,6 +274,106 @@ def designs():
             "fx": [{"fx": f"{NAMESPACE}:fx/motes", "socket": "aura_center", "color": "primary"}],
         },
     ]
+
+
+RPG_CLIPS = RPG_FILES["male"]
+
+
+def clip(name, file=RPG_CLIPS, **settings):
+    """A clip use: a clip in a file, with any settings like loop or speed."""
+    return {"clip": f"{file}#{name}", **settings}
+
+
+def action(*clips, **settings):
+    """An action playing some clips, with any settings like mask or fade."""
+    return {"clips": list(clips), **settings}
+
+
+def once(*names):
+    """An action that plays one of some RPG clips once, picked at random."""
+    return action(*(clip(name, loop=False) for name in names))
+
+
+def footsteps(left, right):
+    """Footstep events at two times, each with a puff of dust at its foot."""
+    dust = f"fx:{NAMESPACE}:fx/dust"
+    return [
+        {"at": left, "event": "foot.L.down"}, {"at": left, "event": dust, "bone": "foot.L"},
+        {"at": right, "event": "foot.R.down"}, {"at": right, "event": dust, "bone": "foot.R"},
+    ]
+
+
+def animation_sets():
+    """The biped's actions: the RPG clips, which retarget onto the biped, and the mannequin's walk.
+
+    The RPG clips play in place, so the speeds are guesses at how fast they look like moving."""
+    return [{
+        "id": f"{NAMESPACE}:anim/biped",
+        "plan": PLAN,
+        "actions": {
+            "idle": action(clip("idle")),
+            "idle.combat": action(clip("idle_combat_unarmed")),
+            "move": action(
+                clip("walk", MANNEQUIN, speed=1.4, events=footsteps(0.0, 0.5)),
+                clip("run", speed=4.5)),
+            "jump": once("jump"),
+            "death": once("death"),
+            "cast": once("cast_unarmed_magic", "cast_unarmed_magic_2"),
+            "channel": action(clip("channel_unarmed_magic")),
+            "cast.buff": once("power_up", "power_up_2", "power_up_3"),
+            "use.potion": action(clip("drink_potion", loop=False), mask="upperBody"),
+            "gather": action(clip("gathering")),
+            "emote.pray": once("pray"),
+        },
+    }]
+
+
+# Weapon styles: the RPG clip suffix, and which actions its clips play
+RPG_WEAPONS = {
+    "main_hand_melee": ["idle.combat", "attack.melee", "channel"],
+    "dual_wield_melee": ["idle.combat", "attack.melee", "channel"],
+    "two_handed_melee": ["idle.combat", "attack.melee", "channel"],
+    "two_handed_staff": ["idle.combat", "cast", "channel"],
+    "main_hand_wand": ["idle.combat", "cast", "channel"],
+    "two_handed_bow": ["idle.combat", "attack.ranged", "channel"],
+    "two_handed_crossbow": ["idle.combat", "attack.ranged", "channel"],
+    "off_hand_shield": ["block"],
+}
+
+
+def anim_styles(root):
+    """A style per RPG weapon, from the clips named after it, like cast_two_handed_bow_2."""
+    names = read_clips(root / RPG_CLIPS)
+    styles = []
+    for weapon, actions in RPG_WEAPONS.items():
+        found = {
+            "idle.combat": [n for n in names if n == f"idle_combat_{weapon}"],
+            "channel": [n for n in names if n == f"channel_{weapon}"],
+        }
+        casts = [n for n in names if re.fullmatch(f"cast_{weapon}(_[0-9]+)?", n)]
+        overrides = {}
+        for name in actions:
+            if name in found:
+                if found[name]:
+                    overrides[name] = action(clip(found[name][0]))
+            elif casts:
+                # Attacks, casts and blocks are all the RPG's cast clips for that weapon
+                overrides[name] = once(*casts)
+        styles.append({
+            "id": f"{NAMESPACE}:style/weapon/{weapon}",
+            "plan": PLAN,
+            "actions": overrides,
+            "tags": ["weapon"],
+        })
+    return styles
+
+
+def read_clips(path):
+    """The clip names in a .glb."""
+    data = path.read_bytes()
+    length = struct.unpack_from("<I", data, 12)[0]
+    gltf = json.loads(data[20:20 + length])
+    return [animation["name"] for animation in gltf.get("animations", [])]
 
 
 def write(path, value, comment):
@@ -275,6 +393,8 @@ def main():
     write(root / "design" / "test.json", designs(), "Designs made of the test parts")
     write(root / "fx" / "test.json", fx_definitions(), "Effects for the test characters")
     write_effects(root)
+    write(root / "animationSet" / "test.json", animation_sets(), "The biped's actions")
+    write(root / "animStyle" / "test.json", anim_styles(root), "A style per RPG weapon")
 
 
 if __name__ == "__main__":

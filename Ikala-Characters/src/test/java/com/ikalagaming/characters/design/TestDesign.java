@@ -77,6 +77,7 @@ class TestDesign {
                 Id.parse("ikala:design/test"),
                 Id.parse("ikala:biped"),
                 "male",
+                null,
                 sliders,
                 parts,
                 layers,
@@ -96,6 +97,7 @@ class TestDesign {
                 Id.parse("ikala:design/test"),
                 Id.parse("ikala:biped"),
                 "male",
+                null,
                 Map.of(),
                 Map.of(),
                 Map.of(),
@@ -115,7 +117,7 @@ class TestDesign {
      * @return The effect.
      */
     private static FxUse sparks(String bone, String socket, String color, float scale, float rate) {
-        return new FxUse(SPARKS, bone, socket, null, color, scale, rate, 1);
+        return new FxUse(SPARKS, bone, socket, null, color, scale, rate, 1, FxUse.ALWAYS);
     }
 
     /**
@@ -184,6 +186,25 @@ class TestDesign {
                         .contains("no palette channel 'fur'"));
     }
 
+    /** A style must exist and be for the design's plan. */
+    @Test
+    void testStyleProblems() {
+        Design knight = registry.get(Design.class, KNIGHT);
+        Design missing =
+                new Design(
+                        knight.id(),
+                        knight.plan(),
+                        knight.variant(),
+                        Id.parse("ikala:style/missing"),
+                        knight.sliders(),
+                        knight.parts(),
+                        knight.layers(),
+                        knight.palette(),
+                        knight.colors(),
+                        knight.fx());
+        Assertions.assertTrue(problems(missing).contains("ikala:style/missing"));
+    }
+
     /** Effects are checked against the plan, its rig and the effect limits. */
     @Test
     void testFxProblems() {
@@ -219,7 +240,8 @@ class TestDesign {
                                                 null,
                                                 1,
                                                 1,
-                                                1)))
+                                                1,
+                                                FxUse.ALWAYS)))
                         .contains("ikala:fx/missing"));
         Assertions.assertTrue(
                 problems(
@@ -232,8 +254,14 @@ class TestDesign {
                                                 null,
                                                 1,
                                                 1,
-                                                1)))
+                                                1,
+                                                FxUse.ALWAYS)))
                         .contains("Offsets go up to"));
+        Assertions.assertTrue(
+                problems(wearing(sparks("hand.L", null, null, 1, 1).withWhen("Wings!")))
+                        .contains("When is lowercase"));
+        Assertions.assertEquals(
+                "", problems(wearing(sparks("hand.L", null, null, 1, 1).withWhen("wings.flap"))));
         FxUse[] many = new FxUse[Design.MAX_FX + 1];
         java.util.Arrays.fill(many, sparks("hand.L", null, null, 1, 1));
         Assertions.assertTrue(problems(wearing(many)).contains("up to " + Design.MAX_FX));
@@ -249,6 +277,7 @@ class TestDesign {
 
         Assertions.assertEquals(knight.plan(), back.plan());
         Assertions.assertEquals(knight.variant(), back.variant());
+        Assertions.assertEquals(Id.parse("ikala:style/zombie"), back.style());
         Assertions.assertEquals(knight.parts(), back.parts());
         Assertions.assertEquals(knight.layers(), back.layers());
         Assertions.assertEquals(knight.palette(), back.palette());

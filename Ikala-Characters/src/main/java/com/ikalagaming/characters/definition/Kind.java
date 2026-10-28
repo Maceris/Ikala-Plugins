@@ -28,6 +28,10 @@ public enum Kind {
     RIG_MAP(RigMap.class),
     /** Effects characters wear, which name graphics particle effects. */
     FX(Fx.class),
+    /** The clips a plan plays for each action. */
+    ANIMATION_SET(AnimationSet.class),
+    /** Ways of moving that override some actions. */
+    ANIM_STYLE(AnimStyle.class),
     /** Saved characters. */
     DESIGN(Design.class);
 

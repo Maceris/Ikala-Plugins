@@ -1,0 +1,33 @@
+// Test animation sets for the biped: a base set, and one that adds an action and repeats one
+[
+  {
+    "id": "ikala:anim/biped",
+    "plan": "ikala:biped",
+    "actions": {
+      "idle": { "clips": [ { "clip": "test.glb#idle" } ] },
+      "move": {
+        "clips": [
+          { "clip": "test.glb#walk", "speed": 1.4,
+            "events": [ { "at": 0.1, "event": "foot.L.down" }, { "at": 0.6, "event": "foot.R.down" } ] },
+          { "clip": "test.glb#run", "speed": 4.5 }
+        ]
+      },
+      "attack.melee": {
+        "clips": [ { "clip": "test.glb#slash", "loop": false,
+                     "events": [ { "at": 0.3, "event": "hit" }, { "at": 0.3, "event": "fx:ikala:fx/sparks" } ] } ],
+        "mask": "upperBody", "fade": 0.1
+      },
+      "death": { "clips": [ { "clip": "test.glb#death", "loop": false } ] }
+    },
+    "variants": {
+      "female": { "idle": { "clips": [ { "clip": "test.glb#idle_female" } ] } }
+    }
+  },
+  {
+    "id": "ikala:anim/biped_emotes",
+    "plan": "ikala:biped",
+    "actions": {
+      "emote.wave": { "clips": [ { "clip": "test.glb#wave", "loop": false } ], "mask": "arm.L" }
+    }
+  }
+]

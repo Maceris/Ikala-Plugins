@@ -6,6 +6,7 @@ import com.ikalagaming.characters.data.DataFormat;
 import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.data.Problem;
 import com.ikalagaming.characters.data.Range;
+import com.ikalagaming.characters.definition.AnimStyle;
 import com.ikalagaming.characters.definition.BodyPlan;
 import com.ikalagaming.characters.definition.Design;
 import com.ikalagaming.characters.definition.Fx;
@@ -112,6 +113,9 @@ public final class CharacterEditor {
 
     /** The slider panel's spec, in the plugin's jar. */
     static final String SLIDERS_SPEC = "/ui/character-editor/sliders.yml";
+
+    /** What the style dropdown calls having no style. */
+    static final String PLAN_STYLE = "the plan's own";
 
     /** The clip bar's spec, in the plugin's jar. */
     static final String CLIPS_SPEC = "/ui/character-editor/clips.yml";
@@ -474,6 +478,18 @@ public final class CharacterEditor {
     /** What the shown effects were built from, to tell when to build them again. */
     private List<Object> shownFx = List.of();
 
+    /** The effects on the shown character, from the parts and the design. */
+    private List<FxUse> shownUses = List.of();
+
+    /** The shown character's effects, or null. */
+    private CharacterFx shownEffects;
+
+    /** The shown character's animation and the Motion tab. */
+    private final CharacterMotion motion = new CharacterMotion();
+
+    /** The style the animation was last built for. */
+    private Id motionStyle;
+
     /** The character shown, or null while loading or if it failed. */
     private ShownCharacter shown;
 
@@ -627,8 +643,8 @@ public final class CharacterEditor {
                                                                 SLIDER_CONTEXT)))
                         .handler(CLEAR, () -> changeLook(CharacterLook::clear))
                         .handler(RESET_SLIDERS, () -> changeLook(CharacterLook::resetSliders))
-                        .handler(PREVIOUS_CLIP, () -> playClip(clipIndex - 1))
-                        .handler(NEXT_CLIP, () -> playClip(clipIndex + 1))
+                        .handler(PREVIOUS_CLIP, () -> stepClip(-1))
+                        .handler(NEXT_CLIP, () -> stepClip(1))
                         .handler(TOGGLE_PLAY, this::togglePlay)
                         .value(CHARACTER_NAME, characterName)
                         .value(SLIDERS_TITLE, slidersTitle)
@@ -722,7 +738,8 @@ public final class CharacterEditor {
                 plan.variants().indexOf(plan.variant(design.variant())),
                 sliderValues(design),
                 colorCodes(design),
-                design.fx());
+                design.fx(),
+                design.style());
         beforeEditVersion = -1;
         editing = false;
         lastWorn = look.worn(CharacterLook.NO_PREVIEW, 0);
@@ -752,6 +769,25 @@ public final class CharacterEditor {
         frameOpenCategory();
         ImportedCharacter.ClipData initial = CharacterPreview.pickClip(character, null);
         playClip(initial == null ? -1 : character.clips().indexOf(initial));
+        buildMotion(design.variant());
+    }
+
+    /**
+     * Build the shown character's animation for its variant and the look's style.
+     *
+     * @param variant The variant.
+     */
+    private void buildMotion(String variant) {
+        motionStyle = look.style();
+        motion.setStanding(bodyTab);
+        motion.build(
+                registry.get(),
+                plan,
+                variant,
+                motionStyle,
+                current.reference(),
+                shown,
+                task -> graphics.ui().post(task));
     }
 
     /**
@@ -841,6 +877,7 @@ public final class CharacterEditor {
                 id,
                 plan.id(),
                 variant,
+                look.style(),
                 sliders,
                 parts,
                 layers,
@@ -1346,9 +1383,14 @@ public final class CharacterEditor {
                 drawEffects();
                 IkGui.endTabItem();
             }
+            if (IkGui.beginTabItem("Motion")) {
+                drawMotion();
+                IkGui.endTabItem();
+            }
             IkGui.endTabBar();
         }
         showFx();
+        tickMotion();
         if (editing && !IkGui.isAnyItemActive()) {
             editing = false;
         }
@@ -1416,7 +1458,16 @@ public final class CharacterEditor {
             changeLook(
                     changed ->
                             changed.addFx(
-                                    new FxUse(all.get(0).id(), bone, socket, null, null, 1, 1, 1)));
+                                    new FxUse(
+                                            all.get(0).id(),
+                                            bone,
+                                            socket,
+                                            null,
+                                            null,
+                                            1,
+                                            1,
+                                            1,
+                                            FxUse.ALWAYS)));
         }
         if (uses.size() >= Design.MAX_FX) {
             IkGui.textDisabled("A design wears up to " + Design.MAX_FX + " effects");
@@ -1473,6 +1524,16 @@ public final class CharacterEditor {
             }
             IkGui.endCombo();
         }
+        if (IkGui.beginCombo("When##when", use.when())) {
+            List<String> whens = new ArrayList<>(List.of(FxUse.ALWAYS, FxUse.MOVING));
+            whens.addAll(CharacterMotion.toggles(shownUses));
+            for (String when : whens) {
+                if (IkGui.selectable(when + "##when-" + when, when.equals(use.when()))) {
+                    changeLook(changed -> changed.setFx(index, use.withWhen(when)));
+                }
+            }
+            IkGui.endCombo();
+        }
         float[] scale = {use.scale()};
         float[] rate = {use.rate()};
         float[] intensity = {use.intensity()};
@@ -1492,7 +1553,8 @@ public final class CharacterEditor {
                             use.color(),
                             Math.max(MIN_FX_SCALE, DesignCodec.snapFactor(scale[0])),
                             DesignCodec.snapFactor(rate[0]),
-                            DesignCodec.snapFactor(intensity[0])));
+                            DesignCodec.snapFactor(intensity[0]),
+                            use.when()));
         }
         if (IkGui.button("Remove")) {
             changeLook(changed2 -> changed2.setFx(index, null));
@@ -1515,7 +1577,8 @@ public final class CharacterEditor {
                 use.color(),
                 use.scale(),
                 use.rate(),
-                use.intensity());
+                use.intensity(),
+                use.when());
     }
 
     /**
@@ -1535,7 +1598,8 @@ public final class CharacterEditor {
                 use.color(),
                 use.scale(),
                 use.rate(),
-                use.intensity());
+                use.intensity(),
+                use.when());
     }
 
     /**
@@ -1554,7 +1618,8 @@ public final class CharacterEditor {
                 channel,
                 use.scale(),
                 use.rate(),
-                use.intensity());
+                use.intensity(),
+                use.when());
     }
 
     /**
@@ -1591,7 +1656,8 @@ public final class CharacterEditor {
             return;
         }
         shownFx = key;
-        shown.setFx(
+        shownUses = uses;
+        shownEffects =
                 uses.isEmpty()
                         ? null
                         : new CharacterFx(
@@ -1601,7 +1667,9 @@ public final class CharacterEditor {
                                 shown.getSkeleton(),
                                 colors,
                                 registry.get(),
-                                fxEffects));
+                                fxEffects);
+        motion.applyStates(shownEffects, uses);
+        shown.setFx(shownEffects);
     }
 
     /**
@@ -1803,6 +1871,10 @@ public final class CharacterEditor {
         if (shown == null) {
             return;
         }
+        motion.setStanding(bodyTab);
+        if (motion.active()) {
+            return;
+        }
         List<ImportedCharacter.ClipData> clips = shown.getCharacter().clips();
         if (clips.isEmpty()) {
             clipIndex = -1;
@@ -1818,6 +1890,64 @@ public final class CharacterEditor {
         shown.setPlaying(playing);
         clipName.set(bodyTab ? clip.name() + " (plays on the Costume tab)" : clip.name());
         clipPosition.set((clipIndex + 1) + " / " + clips.size());
+    }
+
+    /**
+     * Step through the actions, or the file's clips if the plan has no actions.
+     *
+     * @param step How far, like -1 for the one before.
+     */
+    private void stepClip(int step) {
+        if (motion.active()) {
+            motion.cycle(step);
+        } else {
+            playClip(clipIndex + step);
+        }
+    }
+
+    /** Draw the Motion tab: the style, then the movement, actions and effect states. */
+    private void drawMotion() {
+        List<AnimStyle> styles =
+                registry.get().all(AnimStyle.class).stream()
+                        .filter(style -> style.plan().equals(plan.id()))
+                        .toList();
+        Id chosen = look.style();
+        String preview = chosen == null ? PLAN_STYLE : Prepared.label(chosen);
+        if (IkGui.beginCombo("Style##style", preview)) {
+            if (IkGui.selectable(PLAN_STYLE + "##own-style", chosen == null)) {
+                changeLook(changed -> changed.setStyle(null));
+            }
+            for (AnimStyle style : styles) {
+                if (IkGui.selectable(
+                        Prepared.label(style.id()) + "##" + style.id(),
+                        style.id().equals(chosen))) {
+                    changeLook(changed -> changed.setStyle(style.id()));
+                }
+            }
+            IkGui.endCombo();
+        }
+        motion.draw(shownEffects, shownUses);
+    }
+
+    /** Rebuild the animation when the style changed, repeat actions, and fill the clip bar. */
+    private void tickMotion() {
+        if (shown == null) {
+            return;
+        }
+        if (!Objects.equals(motionStyle, look.style())) {
+            buildMotion(look.variants().get(look.variant()).id());
+        }
+        motion.tick();
+        if (motion.active()) {
+            String text = motion.barText();
+            if (!text.equals(clipName.get())) {
+                clipName.set(text);
+            }
+            String position = motion.positionText();
+            if (!position.equals(clipPosition.get())) {
+                clipPosition.set(position);
+            }
+        }
     }
 
     /** Pause or play the clip. */
@@ -1870,6 +2000,9 @@ public final class CharacterEditor {
             shown.close();
             shown = null;
         }
+        motion.detach();
+        shownEffects = null;
+        shownUses = List.of();
         look = null;
         prepared = null;
         readFiles.clear();

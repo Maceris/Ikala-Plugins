@@ -27,6 +27,8 @@ import java.util.function.BiFunction;
  * @param scale Its size and speed, times the effect's.
  * @param rate How many particles it spawns, times the effect's.
  * @param intensity How brightly it glows, times the effect's.
+ * @param when When it shows: {@value #ALWAYS}, {@value #MOVING}, {@value #COMBAT}, or a toggle
+ *     gameplay or the player controls.
  * @author Ches Burks
  */
 @Doc("An effect placed on a character: which effect, the bone or socket it follows, and tuning.")
@@ -49,7 +51,13 @@ public record FxUse(
         @Doc("Its size and speed, times the effect's, above 0 and up to 4.") @Default("1")
                 float scale,
         @Doc("How many particles it spawns, times the effect's, 0 to 4.") @Default("1") float rate,
-        @Doc("How brightly it glows, times the effect's, 0 to 4.") @Default("1") float intensity) {
+        @Doc("How brightly it glows, times the effect's, 0 to 4.") @Default("1") float intensity,
+        @Doc(
+                        "When it shows: \"always\", \"moving\", \"combat\", or a toggle that"
+                                + " gameplay or the player controls, like \"wings\". Lowercase"
+                                + " words joined by dots, up to 32 letters.")
+                @Default("\"always\"")
+                String when) {
 
     /** The field for the effect. */
     public static final String FIELD_FX = "fx";
@@ -75,11 +83,46 @@ public record FxUse(
     /** The field for the intensity. */
     public static final String FIELD_INTENSITY = "intensity";
 
+    /** The field for when it shows. */
+    public static final String FIELD_WHEN = "when";
+
+    /** Shown all the time. */
+    public static final String ALWAYS = "always";
+
+    /** Shown while the character moves. */
+    public static final String MOVING = "moving";
+
+    /** Shown while the character fights. */
+    public static final String COMBAT = "combat";
+
+    /** The longest a toggle's name is, so designs stay small. */
+    public static final int MAX_WHEN_LENGTH = 32;
+
     /** The furthest an offset goes along each axis, in meters, so it fits a signed byte of cm. */
     public static final float MAX_OFFSET = 1.27f;
 
     /** The values the rate and intensity take. */
     public static final Range FACTORS = new Range(0, 4);
+
+    /**
+     * Whether it shows while some states hold.
+     *
+     * @param states The states that hold, like {@value #MOVING} or a toggle.
+     * @return True if it is always shown or its state holds.
+     */
+    public boolean shownIn(@NonNull java.util.Set<String> states) {
+        return ALWAYS.equals(when) || states.contains(when);
+    }
+
+    /**
+     * The same use shown at another time.
+     *
+     * @param newWhen When it shows.
+     * @return The changed use.
+     */
+    public FxUse withWhen(@NonNull String newWhen) {
+        return new FxUse(fx, bone, socket, offset, color, scale, rate, intensity, newWhen);
+    }
 
     /**
      * Its offset, zero if it has none.
@@ -138,6 +181,13 @@ public record FxUse(
         }
         if (!FACTORS.contains(intensity)) {
             report.error(JsonPath.field(path, FIELD_INTENSITY), "The intensity is 0 to 4");
+        }
+        if (when.length() > MAX_WHEN_LENGTH || !AnimationSet.ACTION_ID.matcher(when).matches()) {
+            report.error(
+                    JsonPath.field(path, FIELD_WHEN),
+                    "When is lowercase words joined by dots, up to "
+                            + MAX_WHEN_LENGTH
+                            + " letters, like moving or wings");
         }
     }
 }
