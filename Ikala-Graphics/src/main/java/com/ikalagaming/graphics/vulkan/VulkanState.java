@@ -119,6 +119,9 @@ public class VulkanState {
     /** The GPU's particles, kept across frames, see {@link ParticlePool}. */
     public ParticlePool particlePool = null;
 
+    /** Where the water is around the camera, see {@link WaterVolume}. */
+    public WaterVolume waterVolume = null;
+
     /** For submitting work outside the frame, like texture uploads. */
     public ImmediateCommands immediateCommands = null;
 

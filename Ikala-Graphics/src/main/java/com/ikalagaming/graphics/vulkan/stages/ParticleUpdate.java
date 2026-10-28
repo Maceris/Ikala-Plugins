@@ -11,6 +11,7 @@ import com.ikalagaming.graphics.scene.ParticleClock;
 import com.ikalagaming.graphics.scene.ParticleEffect;
 import com.ikalagaming.graphics.scene.ParticleEffectLoader;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.scene.WaterEffects;
 import com.ikalagaming.graphics.vulkan.ParticleMath;
 import com.ikalagaming.graphics.vulkan.ParticlePool;
 import com.ikalagaming.graphics.vulkan.RenderStage;
@@ -41,11 +42,12 @@ import java.util.List;
  * the simulation's dispatch from last frame's alive count; the simulation moves each alive
  * particle, freeing the dead and listing the rest; the emission takes free particles for each
  * emitter's spawns and lists them too; and the control pass sets up the billboards' draw. Between
- * the simulation and the emission, the splash pass spawns splashes where particles hit the world.
- * Linked emitters' particles look up a links table, written each frame with the sky occlusion map
- * as it was last drawn, for spawn boxes, weather around the camera and splashes. Clearing frees
- * every particle first, and when the pool's anchor steps the simulation moves every particle by the
- * step.
+ * the simulation and the emission, the splash pass spawns splashes where particles hit the world,
+ * and the water's spray and splashes where its last step recorded them. Linked emitters' particles
+ * look up a links table, written each frame with the sky occlusion map as it was last drawn and the
+ * water map, for spawn boxes, weather around the camera and splashes; the water's own links follow
+ * the emitters'. Clearing frees every particle first, and when the pool's anchor steps the
+ * simulation moves every particle by the step.
  */
 @Slf4j
 public class ParticleUpdate implements RenderStage {
@@ -88,6 +90,9 @@ public class ParticleUpdate implements RenderStage {
 
     /** Whether this frame's links have splashes, so the splash pass runs. */
     private boolean splashes;
+
+    /** How far the water's hits are from the anchor, see {@link ParticlePool#takeWaterHits}. */
+    private final Vector3d waterOffset = new Vector3d();
 
     /** The camera's position this frame, which emitters around the camera follow. */
     private final Vector3d cameraPosition = new Vector3d();
@@ -214,12 +219,16 @@ public class ParticleUpdate implements RenderStage {
         pool.follow(scene.getCamera().getPosition(), shift);
         ++frames;
         cameraPosition.set(scene.getCamera().getPosition());
-        writeLinks(state, pool);
+        if (state.waterVolume != null) {
+            state.waterVolume.update(state, scene.getWaterRegistry(), cameraPosition);
+        }
+        writeLinks(state, pool, scene.getWaterRegistry().getEffects());
+        splashes |= pool.takeWaterHits(waterOffset);
 
         final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            // After last frame's billboards read the particles and the draw's arguments, and after
-            // the sky occlusion map was last drawn
+            // After last frame's billboards read the particles and the draw's arguments, after the
+            // sky occlusion map was last drawn, and after the water's step recorded its hits
             barrier(
                     commandBuffer,
                     VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
@@ -228,6 +237,7 @@ public class ParticleUpdate implements RenderStage {
                             | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
                             | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
                     VK_ACCESS_2_SHADER_STORAGE_READ_BIT
+                            | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
                             | VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT
                             | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
                     VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -412,8 +422,18 @@ public class ParticleUpdate implements RenderStage {
                     ShaderBindings.Particles.SPLASH_POOL_OFFSET + i * Long.BYTES, addresses[i]);
         }
         constants.putInt(ShaderBindings.Particles.SPLASH_NEXT_OFFSET, next);
+        constants.putLong(
+                ShaderBindings.Particles.SPLASH_WATER_HITS_OFFSET,
+                pool.getWaterHits().deviceAddress);
+        putVector(
+                constants,
+                ShaderBindings.Particles.SPLASH_WATER_OFFSET_OFFSET,
+                (float) waterOffset.x,
+                (float) waterOffset.y,
+                (float) waterOffset.z);
         vkCmdPushConstants(commandBuffer, splashLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
-        vkCmdDispatch(commandBuffer, groups(ParticleMath.MAX_HITS), 1, 1);
+        vkCmdDispatch(
+                commandBuffer, groups(ParticleMath.MAX_HITS + ParticleMath.MAX_WATER_HITS), 1, 1);
     }
 
     /**
@@ -511,12 +531,15 @@ public class ParticleUpdate implements RenderStage {
 
     /**
      * Write this frame's links table: the sky occlusion map as it was last drawn, seen from the
-     * anchor, and each linked emitter's box and splash; links no emitter holds are left empty.
+     * anchor, the water map, each linked emitter's box and splash, and the water's own links; links
+     * no emitter holds are left empty.
      *
      * @param state The Vulkan state.
      * @param pool The pool, its anchor already moved for this frame.
+     * @param water The particles the water throws up.
      */
-    private void writeLinks(@NonNull VulkanState state, @NonNull ParticlePool pool) {
+    private void writeLinks(
+            @NonNull VulkanState state, @NonNull ParticlePool pool, @NonNull WaterEffects water) {
         SharedBuffer buffer = linkBuffers[state.frameIndex];
         if (buffer == null) {
             buffer =
@@ -536,9 +559,41 @@ public class ParticleUpdate implements RenderStage {
         MemoryUtil.memPutFloat(
                 address + ParticleMath.LINKS_SKY_DEPTH, state.skyOcclusion.lastDepthRange());
         MemoryUtil.memPutInt(address + ParticleMath.LINKS_SEED, frames * SEED_STEP);
+        final long waterMap = state.waterVolume == null ? 0 : state.waterVolume.mapAddress();
+        MemoryUtil.memPutLong(address + ParticleMath.LINKS_WATER_MAP, waterMap);
+        if (waterMap != 0) {
+            putVector(
+                    address + ParticleMath.LINKS_WATER_CORNER,
+                    (float) (state.waterVolume.getCornerX() - pool.getAnchor().x()),
+                    (float) (state.waterVolume.getCornerZ() - pool.getAnchor().z()),
+                    (float) pool.getAnchor().y());
+        }
         splashes = false;
         final Vector3d position = new Vector3d();
         final Vector3d origin = new Vector3d();
+        final ParticleEffect[] waterLinks = {
+            water.spray(), water.mist(), water.splash(), water.drop()
+        };
+        for (int i = 0; i < waterLinks.length; ++i) {
+            final ParticleEffect effect = waterLinks[i];
+            if (effect == null || effect.getBurst() <= 0) {
+                continue;
+            }
+            final long at =
+                    address
+                            + ParticleMath.LINKS_HEADER
+                            + (long) (ParticleMath.WATER_LINK_SPRAY - 1 + i)
+                                    * ParticleMath.LINK_SIZE;
+            MemoryUtil.memPutInt(
+                    at + ParticleMath.LINK_SPLASH_COUNT,
+                    Math.min(effect.getBurst(), ParticleMath.MAX_SPLASH_COUNT));
+            putEmitter(at + ParticleMath.LINK_SPLASH, effect, origin, 0, 0, 0, 0);
+            // The simulation records drops into the water this frame for the splash pass
+            if (ParticleMath.WATER_LINK_SPRAY + i == ParticleMath.WATER_LINK_DROP
+                    && waterMap != 0) {
+                splashes = true;
+            }
+        }
         for (EmitterRegistry.Spawn spawn : spawns) {
             if (spawn.link() == 0) {
                 continue;
@@ -688,6 +743,21 @@ public class ParticleUpdate implements RenderStage {
         MemoryUtil.memPutFloat(at, x);
         MemoryUtil.memPutFloat(at + Float.BYTES, y);
         MemoryUtil.memPutFloat(at + 2 * Float.BYTES, z);
+    }
+
+    /**
+     * Write three floats into a buffer.
+     *
+     * @param buffer The buffer.
+     * @param at Where in it.
+     * @param x The first.
+     * @param y The second.
+     * @param z The third.
+     */
+    private static void putVector(@NonNull ByteBuffer buffer, int at, float x, float y, float z) {
+        buffer.putFloat(at, x);
+        buffer.putFloat(at + Float.BYTES, y);
+        buffer.putFloat(at + 2 * Float.BYTES, z);
     }
 
     /**

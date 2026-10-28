@@ -140,7 +140,11 @@ already run this way.
   water, optionally the bottom's height, and a `WaterBody`, what the water holds: chlorophyll,
   dissolved organic matter and sediment, which set its color and clarity. Game water of blocks,
   levels and slopes is just heights. `add()` returns a `WaterHandle` to `update()` or `remove()`
-  it; a plugin's tiles are removed when it unloads.
+  it; a plugin's tiles are removed when it unloads. A tile can flow (`withFlows`, a speed along x
+  and z at each corner), and a `WaterBody` carries its wind (`withWind(speed, direction, fetch)`).
+  `disturb(position, radius, strength)` starts ripples, as a stone dropped in does, and
+  `paintWaves(position, radius, direction, strength)` sets the wind's waves over a patch by hand for
+  a frame, so painting along a path every frame sends waves along it.
 
   ```java
   WaterHandle pond = graphics.water().add(
@@ -297,19 +301,34 @@ What the renderer does and the work it builds on.
   Water Surface Wavelets (Jeschke et al. 2018). Vertices rise and fall with the waves of 4 m and
   longer; normals come from the profile layer whose shortest waves a pixel can still show, and the
   slopes of the waves left out become roughness (Bruneton, Neyret and Holzschuch 2010), so far water
-  doesn't shimmer. `WaveMath` has the math in Java, with tests.
+  doesn't shimmer. Each tile's fetch is limited by its own size, so a pool gets a pool's waves.
+  `WaveMath` has the math in Java, with tests.
+- Choppy crests: the vertices also move sideways with the waves (Tessendorf 2001), and the normals
+  follow through the inverse Jacobian. Whitecaps cover the share Monahan's measurements give for
+  the wind (2.95e-6 U^3.52), drawn per pixel where the Jacobian folds; foam left by breaking crests
+  lasts a few seconds in the grid below, carried by the current, as in War Thunder's ocean
+  (Tcheblokov 2015).
 - A wave amplitude grid around the camera (128 m at 1 m, 16 directions) carries how strong the
-  wind's waves are going each way, blocked and reflected by shores and built back by the wind
-  behind them, and the ripples disturbances start (`graphics.water().disturb(position, radius,
-  strength)`), which leave as rings, reflect and die away, after Water Surface Wavelets.
-  `WaveletMath` has the math in Java, with tests.
-- Waves calm in shallow water and over the last two cells before land or a step to another level,
-  and the surface has sides where the water ends: down to the bottom, or to lower water, so banks,
-  steps and the tops of waterfalls close up (`WaterMesh`, with tests).
+  wind's waves are going each way, after Water Surface Wavelets: blocked and reflected by shores,
+  built back by the wind behind them, slowed to sqrt(g h) in shallow water and carried along by the
+  water's flow, as in the 2023 extension to flowing water. Swell keeps going past the wind that made
+  it. The ripples disturbances start leave as rings, reflect and die away. `WaveletMath` has the
+  math in Java, with tests.
+- Waves calm in shallow water and over the last two cells before land or a step to another level.
+  Where the water ends, its sides go down to the bottom, or to lower water, as solid volumes seen
+  through and refracting, with streaks of foam where it falls; the water it falls into churns into
+  foam and ripples (`WaterMesh`, with tests).
+- Under water, the view up shows Snell's window, with total internal reflection of the water's own
+  glow past it, and the fog volume fills with the water's medium per color, so things fade toward
+  the water's color with distance. Glass, particles and fog behind the water are drawn before it
+  and seen through it; those in front, after it.
+- Spray and splashes through the particles: the wave grid's step records where crests break, where
+  falling water lands and where the water is disturbed, and the next frame's splash pass throws up
+  the water's effects there: spray, mist and droplets (`WaterEffects`, which
+  `graphics.water().setEffects()` replaces). Particles that collide stop at the water's surface, and
+  rain splashes there.
 
-**Planned**: waves that travel, reflect and follow depth and flow, and underwater views (see the
-design doc); stochastic lightcuts for
-light visibility (Yuksel 2019).
+**Planned**: stochastic lightcuts for light visibility (Yuksel 2019).
 
 ## Graphics Manager
 
@@ -377,6 +396,13 @@ These are Java system properties, given before `-jar`:
 | `-Dikala.benchmark.weather=<rain or snow>` | not set | Makes it rain or snow around the camera, stopped by roofs and the ground. |
 | `-Dikala.benchmark.waterBody=<ocean, green or muddy>` | `ocean` | What the `ISLAND` recipe's sea holds: clear ocean, a green lake's phytoplankton, or a muddy river's sediment, each with its own wind. |
 | `-Dikala.benchmark.wind=<m/s>[,<degrees>[,<fetch>]]` | the body's | The `ISLAND` recipe's sea's wind: its speed 10 m up, the way it blows in degrees from +x toward +z, and how far it has blown over the water in meters (the open sea if not given). 0 for still water. |
+| `-Dikala.benchmark.current=<m/s>[,<degrees>]` | not set | Makes the `ISLAND` recipe's sea flow this fast, the way given in degrees from +x toward +z. |
+| `-Dikala.benchmark.loop=<circle or infinity>` | not set | Makes the sea off the `ISLAND` recipe's island flow round a circle or a figure eight, to watch waves and ripples carried round bends. |
+| `-Dikala.benchmark.loopSpeed=<m/s>` | `1` | How fast the loop flows in its middle; it slows to nothing at its edges, and a negative speed runs it the other way round. |
+| `-Dikala.benchmark.loopWaves=<share>` | `0` | Paints waves going along the loop every frame, as tall as this share of the wind's own; 0 for none. |
+| `-Dikala.benchmark.fountain=true` | `false` | Adds stepped stone pools to the `ISLAND` recipe's island, water falling off every side of each into the next. |
+| `-Dikala.benchmark.glassTest=true` | `false` | Adds a glass wall to the `ISLAND` recipe's island in front of the fountain, a column of smoke behind it and a glass dome on the sea floor, for glass, smoke and water seen through one another. |
+| `-Dikala.benchmark.view=<x>,<y>,<z>,<pitch>,<yaw>` | not set | Places the camera there once the world is loaded, its pitch and yaw in radians. |
 | `-Dikala.benchmark.ripples=<x>,<z>,<radius>,<strength>,<seconds>` | not set | Disturbs the water at x, z every so many seconds, its ripples starting that high in meters over that radius, to watch them spread and reflect off shores. |
 | `-Dikala.benchmark.water=<x>,<y>,<z>` | not set | Places test water tiles with a corner there, on the ground at y: a 3 by 3 grid of 6 m tiles 12 m apart (between the `HUTS` recipe's huts at 9,1,9), clear ocean, green and muddy water along z, 0.5, 2 and 6 m deep along x. |
 | `-Dikala.vulkan.validation=false` | `true` | Not a benchmark option: runs without the Vulkan validation layers. Their checks can cost milliseconds of CPU a frame, so time the CPU without them, and keep them for correctness runs. |
@@ -407,3 +433,5 @@ working directory. Each entry has:
 - **Benchmark** picks the recipe, radius and number of lights, and has Run and Stop buttons.
   - *Keep world* leaves the finished world in place, and *Remove world* takes it away.
   - *Hide plugin UI* hides plugin menus so the scene behind them can be seen.
+  - On the `ISLAND` recipe, *Flowing path* picks a loop for the sea, and while a run is going, the
+    *Water* sliders change the wind, the sea's current, and the loop's flow and painted waves.

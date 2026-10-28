@@ -27,6 +27,7 @@
 #include "atmosphere.glsl"
 #include "fog.glsl"
 #include "water_optics.glsl"
+#include "water_map.glsl"
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
@@ -56,24 +57,6 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Me
     MediumVolume media[];
 };
 
-// One water body's absorption, scattering and backscattering at red, green and blue, per meter
-struct WaterBodyOptics {
-    vec4 absorption;
-    vec4 scattering;
-    vec4 backscattering;
-};
-
-// The water around the camera, see WaterVolume: its corner in world cells, its size in cells and
-// how many bodies; its corner relative to the camera and the camera's height; the bodies; then each
-// cell's surface and bottom heights, its body, and 1 if it holds water
-layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer WaterMap {
-    ivec2 corner;
-    int size;
-    int bodyCount;
-    vec4 cornerCamera;
-    WaterBodyOptics bodies[16];
-    vec4 cells[];
-};
 
 // Which way water scatters light: strongly onward, its Henyey-Greenstein g for the 1.8% Petzold's
 // particles send back

@@ -86,6 +86,15 @@ public final class ParticleMath {
     /** The most hits recorded in a frame for splashes; past it, hits spawn nothing. */
     public static final int MAX_HITS = 4096;
 
+    /**
+     * Where the control buffer keeps how many hits the water recorded last frame, for spray and
+     * splashes, see {@code water_wavelets.comp}; emptied once this frame's splash pass read them.
+     */
+    public static final int CONTROL_WATER_HITS = CONTROL_HITS + Integer.BYTES;
+
+    /** The most hits the water records in a frame; past it, they spawn nothing. */
+    public static final int MAX_WATER_HITS = 2048;
+
     /** The size of a recorded hit: where, relative to the anchor, and the emitter's link. */
     public static final int HIT_SIZE = 4 * Integer.BYTES;
 
@@ -107,8 +116,20 @@ public final class ParticleMath {
     /** Where in it this frame's random seed for splashes is. */
     public static final int LINKS_SEED = 72;
 
+    /**
+     * Where in it the water map's address is, see {@link WaterVolume}, or 0 for none: particles
+     * that collide stop at the water's surface.
+     */
+    public static final int LINKS_WATER_MAP = 80;
+
+    /**
+     * Where in it the water map's corner is relative to the anchor, x and z, in meters, then the
+     * anchor's height to take off its heights.
+     */
+    public static final int LINKS_WATER_CORNER = 96;
+
     /** The size of its header, before the links. */
-    public static final int LINKS_HEADER = 80;
+    public static final int LINKS_HEADER = 112;
 
     /**
      * Where in one link its spawn box's middle is, relative to the anchor, then 1 if it follows the
@@ -137,8 +158,32 @@ public final class ParticleMath {
     /** The most emitters linked at once: every link but 0, which is none. */
     public static final int MAX_LINKS = BEHAVIOR_LINK_MASK;
 
+    /**
+     * The water's own links, after the emitters', which only hits carry, never particles: spray off
+     * breaking crests, see {@link com.ikalagaming.graphics.scene.WaterEffects}.
+     */
+    public static final int WATER_LINK_SPRAY = MAX_LINKS + 1;
+
+    /** Mist where falling water lands. */
+    public static final int WATER_LINK_MIST = MAX_LINKS + 2;
+
+    /** Droplets thrown up where falling water lands, and where the water is disturbed. */
+    public static final int WATER_LINK_SPLASH = MAX_LINKS + 3;
+
+    /** Droplets thrown up where a falling particle, like a raindrop, lands in the water. */
+    public static final int WATER_LINK_DROP = MAX_LINKS + 4;
+
+    /** How many links the water has. */
+    public static final int WATER_LINKS = 4;
+
     /** The size of the links table. */
-    public static final int LINKS_SIZE = LINKS_HEADER + MAX_LINKS * LINK_SIZE;
+    public static final int LINKS_SIZE = LINKS_HEADER + (MAX_LINKS + WATER_LINKS) * LINK_SIZE;
+
+    /**
+     * How fast a particle of a linked emitter must go down into the water to splash there, in
+     * meters a second: a raindrop does, a snowflake doesn't.
+     */
+    public static final float WATER_DROP_SPEED = 2;
 
     /**
      * How far below the highest thing over it a particle around the camera must be to count as

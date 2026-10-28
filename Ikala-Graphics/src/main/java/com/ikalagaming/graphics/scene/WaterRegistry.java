@@ -74,6 +74,11 @@ public class WaterRegistry {
     /** How many tiles there are. */
     private int count;
 
+    /** The particles the water throws up, and who set them, null for the water's own. */
+    private WaterEffects effects = WaterEffects.DEFAULT;
+
+    private @Nullable String effectsOwner;
+
     /** Bumped on every change. */
     private long version;
 
@@ -161,6 +166,10 @@ public class WaterRegistry {
     public int removeAllOwnedBy(@NonNull String owner) {
         lock.lock();
         try {
+            if (owner.equals(effectsOwner)) {
+                effects = WaterEffects.DEFAULT;
+                effectsOwner = null;
+            }
             int removed = 0;
             for (int slot = 0; slot < owners.size(); ++slot) {
                 if (owner.equals(owners.get(slot))) {
@@ -292,6 +301,37 @@ public class WaterRegistry {
             while (into.size() < most && !disturbances.isEmpty()) {
                 into.add(disturbances.removeFirst());
             }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Set the particles the water throws up, for the whole scene, until the owner sets others or
+     * goes, when the water's own come back.
+     *
+     * @param owner Who sets them.
+     * @param effectsNow The effects, or null for the water's own.
+     */
+    public void setEffects(@NonNull String owner, @Nullable WaterEffects effectsNow) {
+        lock.lock();
+        try {
+            effects = effectsNow == null ? WaterEffects.DEFAULT : effectsNow;
+            effectsOwner = effectsNow == null ? null : owner;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * The particles the water throws up.
+     *
+     * @return The effects.
+     */
+    public WaterEffects getEffects() {
+        lock.lock();
+        try {
+            return effects;
         } finally {
             lock.unlock();
         }

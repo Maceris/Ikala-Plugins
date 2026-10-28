@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.scene.WaterEffects;
 import com.ikalagaming.graphics.scene.WaterRegistry;
 import com.ikalagaming.graphics.scene.WaterTile;
 
@@ -127,6 +128,21 @@ public final class Water {
             registry.paint(
                     new WaterRegistry.WavePaint(
                             new Vector3d(position), radius, direction, strength));
+        }
+    }
+
+    /**
+     * Set the particles the water throws up, for the whole scene: spray off breaking crests, mist
+     * and droplets where falling water lands or the water is disturbed, and droplets where rain and
+     * the like land in it. They stay until this plugin sets others or unloads, when the water's
+     * own, {@link WaterEffects#DEFAULT}, come back.
+     *
+     * @param effects The effects, {@link WaterEffects#NONE} for none, or null for the water's own.
+     */
+    public void setEffects(@Nullable WaterEffects effects) {
+        final WaterRegistry registry = registryOrNull();
+        if (registry != null) {
+            registry.setEffects(owner(), effects);
         }
     }
 

@@ -198,9 +198,6 @@ public class FogRender {
     private final long start = System.nanoTime();
 
     /** Each frame in flight's medium volumes, or null before its first. */
-    /** Where the water is around the camera, for the volume to fill with its medium. */
-    private final WaterVolume waterVolume = new WaterVolume();
-
     private final SharedBuffer[] mediaBuffers =
             new SharedBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
 
@@ -322,7 +319,6 @@ public class FogRender {
      * @param state The Vulkan state.
      */
     public void cleanup(@NonNull VulkanState state) {
-        waterVolume.cleanup(state);
         for (int i = 0; i < mediaBuffers.length; ++i) {
             if (mediaBuffers[i] != null) {
                 SharedBuffer.free(mediaBuffers[i], state);
@@ -444,7 +440,7 @@ public class FogRender {
                             camera,
                             viewDistance,
                             particles,
-                            waterVolume.update(state, scene.getWaterRegistry(), camera)));
+                            waterAddress(state, scene, camera)));
             vkCmdPushConstants(commandBuffer, injectLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, inject);
             vkCmdDispatch(commandBuffer, groupsX, groupsY, VoxelOitMath.SLICES);
 
@@ -492,6 +488,23 @@ public class FogRender {
         previousWidth = width;
         previousHeight = height;
         previousViewDistance = viewDistance;
+    }
+
+    /**
+     * The water map for the volume to fill with the water's medium, see {@link WaterVolume}.
+     *
+     * @param state The Vulkan state.
+     * @param scene The scene, for its water.
+     * @param camera The camera's position, in the world.
+     * @return Its address, or 0 with the camera out of the water.
+     */
+    private static long waterAddress(
+            @NonNull VulkanState state, @NonNull Scene scene, @NonNull Vector3d camera) {
+        if (state.waterVolume == null) {
+            return 0;
+        }
+        state.waterVolume.update(state, scene.getWaterRegistry(), camera);
+        return state.waterVolume.fogAddress();
     }
 
     /**

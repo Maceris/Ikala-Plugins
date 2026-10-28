@@ -577,9 +577,21 @@ public class ShaderBindings {
         public static final int WAVELETS_CORNER_RENDER_OFFSET =
                 WAVELETS_PROFILES_OFFSET + Long.BYTES;
 
-        /** The size of the step's push constants. */
-        public static final int WAVELETS_CONSTANTS_SIZE =
+        /** The camera's height, which the hits are kept relative to. */
+        public static final int WAVELETS_CAMERA_HEIGHT_OFFSET =
                 WAVELETS_CORNER_RENDER_OFFSET + 2 * Float.BYTES;
+
+        /** This step's random seed, for where spray and splashes start. */
+        public static final int WAVELETS_SEED_OFFSET = WAVELETS_CAMERA_HEIGHT_OFFSET + Float.BYTES;
+
+        /** The water's hits, for spray and splashes, see {@code ParticleMath.MAX_WATER_HITS}. */
+        public static final int WAVELETS_HITS_OFFSET = WAVELETS_SEED_OFFSET + Integer.BYTES;
+
+        /** How many it holds, in the particles' control buffer; 0 for no particles. */
+        public static final int WAVELETS_HIT_COUNT_OFFSET = WAVELETS_HITS_OFFSET + Long.BYTES;
+
+        /** The size of the step's push constants. */
+        public static final int WAVELETS_CONSTANTS_SIZE = WAVELETS_HIT_COUNT_OFFSET + Long.BYTES;
 
         /** Where in a wave climate each direction's amplitude is, 16 floats. */
         public static final int CLIMATE_AMPLITUDES = 0;
@@ -1823,8 +1835,18 @@ public class ShaderBindings {
         /** Which alive list it adds to. */
         public static final int SPLASH_NEXT_OFFSET = 6 * Long.BYTES;
 
+        /** The water's hits, from its last step, see {@code water_wavelets.comp}. */
+        public static final int SPLASH_WATER_HITS_OFFSET = SPLASH_NEXT_OFFSET + 2 * Integer.BYTES;
+
+        /**
+         * How far the water's hits are from the anchor: they are kept relative to the camera as it
+         * was at the water's step.
+         */
+        public static final int SPLASH_WATER_OFFSET_OFFSET = SPLASH_WATER_HITS_OFFSET + Long.BYTES;
+
         /** The size of the splashes' push constants. */
-        public static final int SPLASH_CONSTANTS_SIZE = SPLASH_NEXT_OFFSET + Integer.BYTES;
+        public static final int SPLASH_CONSTANTS_SIZE =
+                SPLASH_WATER_OFFSET_OFFSET + 3 * Float.BYTES;
 
         /** The billboards: the pool's address, then the alive list drawn. */
         public static final int DRAW_POOL_OFFSET = 0;

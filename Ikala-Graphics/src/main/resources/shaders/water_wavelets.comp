@@ -1,6 +1,7 @@
 #version 460
 #extension GL_GOOGLE_include_directive : require
 #extension GL_EXT_buffer_reference : require
+#extension GL_EXT_buffer_reference_uvec2 : require
 
 // Steps the wave amplitude grid around the camera, see WaveletMath and WaterRender: one thread per
 // cell, for each band and direction: the amplitude upstream along the direction, at the band's
@@ -9,7 +10,9 @@
 // one, here; then a little spread into the neighboring directions; the wind building its waves back
 // toward 1 and ripples dying away; and the disturbances' ripples, leaving each as a ring. Land
 // holds no waves. Cells are kept by world cell, wrapping around the grid, so the grid scrolls with
-// the camera without moving anything.
+// the camera without moving anything. Where crests break, water falls in and the water is
+// disturbed, it records hits for the particles' next splash pass to throw up spray, mist and
+// droplets, see ParticleUpdate.
 
 #include "water.glsl"
 
@@ -18,7 +21,8 @@ layout(local_size_x = 8, local_size_y = 8) in;
 // Each cell's water, by world cell wrapping around the grid: 0 for land, else its wind climate plus
 // WAVE_MASK_CLIMATE_BASE, -1 for none; how fast it flows along x and z, in meters a second; and how
 // deep it is, in meters
-// ... then, in the second vec4's x, how far water falls onto it from a higher neighbor, in meters
+// ... then, in the second vec4, how far water falls onto it from a higher neighbor, in meters, and
+// its surface's height at rest, in the world
 struct WaveMaskCell {
     vec4 cell;
     vec4 more;
@@ -33,6 +37,44 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Wa
 // churns the water it lands in into a patch of foam and sends ripples off it
 const float WAVE_PLUNGE_FOAM = 2.0;
 const float WAVE_PLUNGE_RIPPLE = 0.004;
+
+// How many hits for the particles a cell records a second: spray where its crests all break, and
+// mist and droplets where water falls in, per square root meter of the fall. Each hit throws up its
+// effect's burst, see WaterEffects.
+const float WAVE_SPRAY_RATE = 12.0;
+const float WAVE_PLUNGE_MIST_RATE = 1.5;
+const float WAVE_PLUNGE_SPLASH_RATE = 3.0;
+
+// How many droplet hits a disturbance records, per meter of its ripples' height and meter of its
+// radius, and the most: a footstep throws up a hit's worth, a boulder falling in a few dozen
+const float WAVE_DISTURBANCE_SPLASHES = 100.0;
+const uint WAVE_MOST_DISTURBANCE_SPLASHES = 32;
+
+// The most hits a cell records in a step, so a long step doesn't flood the list
+const uint WAVE_MOST_CELL_HITS = 4;
+
+// The particles' water links, see particles.glsl
+const uint WATER_LINK_SPRAY = 16;
+const uint WATER_LINK_MIST = 17;
+const uint WATER_LINK_SPLASH = 18;
+
+// The most hits the water records in a step, ParticleMath.MAX_WATER_HITS
+const uint MAX_WATER_HITS = 2048;
+
+// A hit for the particles' splash pass: where, relative to the camera, and which water link
+struct WaterHit {
+    vec3 position;
+    uint link;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) writeonly buffer WaterHitList {
+    WaterHit hits[];
+};
+
+// How many hits the list holds, in the particles' control buffer
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer WaterHitCount {
+    uint count;
+};
 
 // Gravity, in meters a second squared: in shallow water waves go at sqrt(g h)
 const float GRAVITY = 9.81;
@@ -80,7 +122,48 @@ layout(push_constant) uniform Constants {
     WaveProfileList profiles;
     // The grid's corner relative to the camera, in meters, where the profiles are worked out from
     vec2 cornerRender;
+    // The camera's height, which hits are kept relative to, and this step's random seed
+    float cameraHeight;
+    uint seed;
+    // Where hits go, and their count; 0 for no particles
+    uvec2 hitListAddress;
+    uvec2 hitCountAddress;
 };
+
+// A well mixed 32-bit hash (Jarzynski and Olano's PCG hash, JCGT 2020), as particles.glsl's
+uint waveHash(uint value) {
+    uint state = value * 747796405u + 2891336453u;
+    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+
+// A number from 0 to 1 from a hash, advancing it
+float waveRandom(inout uint state) {
+    state = waveHash(state);
+    return float(state >> 8) / 16777216.0;
+}
+
+// Record a hit for the particles, relative to the camera
+void recordHit(vec3 position, uint link) {
+    uint at = atomicAdd(WaterHitCount(hitCountAddress).count, 1u);
+    if (at < MAX_WATER_HITS) {
+        WaterHitList(hitListAddress).hits[at] = WaterHit(position, link);
+    }
+}
+
+// Record as many hits as a rate gives over the step, on average, at random over a cell at a height
+// relative to the camera
+void recordHits(float perSecond, uint link, vec2 corner, float height, inout uint state) {
+    float expected = perSecond * seconds;
+    uint count = uint(expected);
+    if (waveRandom(state) < fract(expected)) {
+        ++count;
+    }
+    for (uint i = 0; i < min(count, WAVE_MOST_CELL_HITS); ++i) {
+        vec2 at = corner + vec2(waveRandom(state), waveRandom(state)) * WAVE_CELL_SIZE;
+        recordHit(vec3(at.x, height, at.y), link);
+    }
+}
 
 // This cell's climate's share of the wind's waves in each direction, what the wind builds them back
 // toward and open water holds; none without wind
@@ -183,6 +266,10 @@ void main() {
     vec2 middle = vec2(cell) + 0.5;
     vec4 here = mask.cells[slot].cell;
     float plunge = mask.cells[slot].more.x;
+    bool hits = any(notEqual(hitCountAddress, uvec2(0)));
+    uint state = waveHash(seed ^ waveHash(uint(slot)));
+    vec2 cellCorner = cornerRender + vec2(local) * WAVE_CELL_SIZE;
+    float rest = mask.cells[slot].more.y - cameraHeight;
     int climate = int(here.x + 0.5) - WAVE_MASK_CLIMATE_BASE;
     float peak = climate >= 0 ? climates.climates[climate].peak.x : 0.0;
     for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
@@ -281,6 +368,8 @@ void main() {
         int depthLevel = min(int(floor(waveDepthLevel(max(here.w, 0.0)) + 0.5)), WAVE_DEPTHS - 1);
         int level = climates.climates[climate].levels[depthLevel];
         vec3 sums = vec3(0.0);
+        // The long waves' height at the cell's middle, where spray leaves the crests
+        float crestHeight = 0.0;
         for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
             float amplitude = peak * windValues[b];
             if (amplitude <= WAVE_FAINTEST) {
@@ -288,9 +377,10 @@ void main() {
             }
             vec2 direction = waveDirection(b);
             float along = dot(render, direction) + climates.climates[climate].offsets[b];
-            float crest = waveProfile(profiles, climate, level, b, WAVE_LAST_LAYER, along).w;
-            sums += amplitude * crest * vec3(direction.x * direction.x,
+            vec4 profile = waveProfile(profiles, climate, level, b, WAVE_LAST_LAYER, along);
+            sums += amplitude * profile.w * vec3(direction.x * direction.x,
                 direction.y * direction.y, direction.x * direction.y);
+            crestHeight += amplitude * profile.x;
         }
         float squeeze = determinant(waveJacobian(sums));
         float threshold = 1.0 - sqrt(extra.w / max(extra.z, 1e-12)) * (1.0 - extra.y);
@@ -299,9 +389,39 @@ void main() {
         float breaking = waveNormalCdf((threshold - squeeze) / edge);
         foam += breaking * (1.0 - WAVE_ACTIVE_WHITECAP_SHARE) / WAVE_ACTIVE_WHITECAP_SHARE
             * seconds / WAVE_FOAM_LIFETIME;
+        if (hits && breaking > 0.0) {
+            // Torn off the top of the breaking crest
+            recordHits(breaking * WAVE_SPRAY_RATE, WATER_LINK_SPRAY, cellCorner,
+                rest + crestHeight, state);
+        }
     }
     if (plunge > 0.0) {
         foam += WAVE_PLUNGE_FOAM * seconds;
+        if (hits) {
+            float fall = sqrt(plunge);
+            recordHits(fall * WAVE_PLUNGE_MIST_RATE, WATER_LINK_MIST, cellCorner, rest, state);
+            recordHits(fall * WAVE_PLUNGE_SPLASH_RATE, WATER_LINK_SPLASH, cellCorner, rest, state);
+        }
+    }
+    if (hits) {
+        // Droplets thrown up where something disturbs the water, recorded by the cell holding
+        // the disturbance's middle, spread over its patch
+        for (int d = 0; d < disturbanceCount; ++d) {
+            vec4 disturbance = disturbanceList.disturbances[d];
+            if (any(notEqual(ivec2(floor(disturbance.xy)), local))) {
+                continue;
+            }
+            uint count = min(uint(disturbance.w * disturbance.z * WAVE_CELL_SIZE
+                * WAVE_DISTURBANCE_SPLASHES + 0.5), WAVE_MOST_DISTURBANCE_SPLASHES);
+            count = max(count, 1u);
+            vec2 center = cornerRender + disturbance.xy * WAVE_CELL_SIZE;
+            for (uint i = 0; i < count; ++i) {
+                float angle = 6.28318530718 * waveRandom(state);
+                float reach = disturbance.z * WAVE_CELL_SIZE * sqrt(waveRandom(state));
+                vec2 at = center + reach * vec2(cos(angle), sin(angle));
+                recordHit(vec3(at.x, rest, at.y), WATER_LINK_SPLASH);
+            }
+        }
     }
     next.values[slot * WAVE_CELL_VALUES + WAVE_FOAM_BAND * WAVE_DIRECTIONS] = min(foam, 1.0);
 }

@@ -71,15 +71,33 @@ struct Link {
 };
 
 // The frame's links, see ParticleMath.LINKS_HEADER and on: the sky occlusion map, which holds the
-// highest thing over each place, as seen from the anchor's space, then the links by link less 1
+// highest thing over each place, as seen from the anchor's space; the water map, see WaterVolume,
+// with its corner relative to the anchor, x and z, and the anchor's height; then the links by link
+// less 1, the emitters' and then the water's
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer LinkList {
     mat4 skyMatrix;
     int skyMap;
     float skyDepthRange;
     uint splashSeed;
     uint linkPadding;
+    uvec2 waterMap;
+    uvec2 waterPadding;
+    vec4 waterCorner;
     Link links[];
 };
+
+// The water's own links, which only hits carry, see ParticleMath.WATER_LINK_SPRAY and on
+const uint WATER_LINK_SPRAY = 16;
+const uint WATER_LINK_MIST = 17;
+const uint WATER_LINK_SPLASH = 18;
+const uint WATER_LINK_DROP = 19;
+
+// The most hits the water records in a frame, ParticleMath.MAX_WATER_HITS
+const uint MAX_WATER_HITS = 2048;
+
+// How fast a particle of a linked emitter must go down into the water to splash there,
+// ParticleMath.WATER_DROP_SPEED
+const float WATER_DROP_SPEED = 2.0;
 
 // A hit the simulation recorded for splashes: where, relative to the anchor, and the link
 struct Hit {
@@ -123,7 +141,7 @@ layout(buffer_reference, std430, buffer_reference_align = 16) buffer Control {
     // Alive volumetric particles, which the CPU reads back; then the froxel splat's dispatch, a
     // workgroup per drawn particle
     uvec4 counts;
-    // Hits the simulation recorded this frame for splashes, then unused
+    // Hits the simulation recorded this frame for splashes, and the water last frame, then unused
     uvec4 hits;
 };
 

@@ -1,6 +1,7 @@
 #version 460
 #extension GL_GOOGLE_include_directive : require
 #extension GL_EXT_buffer_reference : require
+#extension GL_EXT_buffer_reference_uvec2 : require
 #extension GL_EXT_nonuniform_qualifier : require
 
 // Moves each alive particle through the frame, see ParticleUpdate: one thread per particle in the
@@ -9,10 +10,13 @@
 // collide step into an opaque voxel of the occupancy volume's finest level, which holds the static
 // world near the camera, and bounce, stick or die there. Particles around the camera wrap around in
 // their box, and come down onto the highest thing over them as the sky occlusion map has it; under
-// cover they die. Hits of particles whose emitter has a splash are recorded for the splash pass.
+// cover they die. Particles that collide go into water they fall into, as the water map has it at
+// rest, and leave the simulation; those of linked emitters falling fast enough, like rain, splash
+// there. Hits of particles whose emitter has a splash are recorded for the splash pass.
 
 #include "particles.glsl"
 #include "particle_cover.glsl"
+#include "water_map.glsl"
 
 layout(local_size_x = 64) in;
 
@@ -58,6 +62,25 @@ bool solidAt(vec3 position) {
     return (imageLoad(occupancyVolume, texel).x & OCCUPANCY_OPAQUE) != 0u;
 }
 
+// The water's surface over a point relative to the anchor, at rest, relative to the anchor; very low
+// where the map doesn't reach, holds no water there, or the point is under its bottom
+float waterSurface(vec3 position) {
+    const float NONE = -1e30;
+    if (all(equal(linkList.waterMap, uvec2(0)))) {
+        return NONE;
+    }
+    WaterMap map = WaterMap(linkList.waterMap);
+    ivec2 cell = ivec2(floor(position.xz - linkList.waterCorner.xy));
+    if (any(lessThan(cell, ivec2(0))) || any(greaterThanEqual(cell, ivec2(map.size)))) {
+        return NONE;
+    }
+    vec4 water = map.cells[cell.y * map.size + cell.x];
+    if (water.w <= 0.0 || position.y < water.y - linkList.waterCorner.z) {
+        return NONE;
+    }
+    return water.x - linkList.waterCorner.z;
+}
+
 void freeParticle(uint slot) {
     int free = atomicAdd(control.dead, 1);
     dead.indices[free] = slot;
@@ -96,6 +119,27 @@ void main() {
                 behaviorFriction(particle.behavior));
         }
         position = previous;
+    }
+    if (collision != COLLISION_NONE && !dies) {
+        float surface = waterSurface(position);
+        if (position.y < surface) {
+            bool around = link != 0u && linkList.links[link - 1].center.w != 0.0;
+            if (previous.y >= waterSurface(previous)) {
+                // Into the water: it goes in, splashing if it comes down fast enough
+                dies = true;
+                if (link != 0u && -velocity.y > WATER_DROP_SPEED
+                        && linkList.links[WATER_LINK_DROP - 1].splashCount > 0u) {
+                    uint recorded = atomicAdd(control.hits.x, 1);
+                    if (recorded < MAX_HITS) {
+                        hitList.hits[recorded] =
+                            Hit(vec3(position.x, surface, position.z), WATER_LINK_DROP);
+                    }
+                }
+            } else if (around) {
+                // Weather wrapped into the water shows nowhere
+                dies = true;
+            }
+        }
     }
     if (link != 0u && !dies && linkList.links[link - 1].center.w != 0.0) {
         Link record = linkList.links[link - 1];

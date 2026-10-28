@@ -62,5 +62,7 @@ void main() {
         control.dispatchArgs = uvec4((drawn + PARTICLE_WORKGROUP - 1) / PARTICLE_WORKGROUP, 1, 1, 0);
         // The froxel splat takes a workgroup per particle
         control.counts.yzw = uvec3(drawn, 1, 1);
+        // The splash pass is done with the water's hits; its next step records more
+        control.hits.y = 0;
     }
 }

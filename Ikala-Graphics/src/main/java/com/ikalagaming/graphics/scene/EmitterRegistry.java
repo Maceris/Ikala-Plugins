@@ -344,11 +344,6 @@ public class EmitterRegistry {
     }
 
     /**
-     * Free a slot, making handles to it stale. Hold the lock.
-     *
-     * @param slot The slot.
-     */
-    /**
      * Take a link for an emitter whose effect needs one, or let go of one it no longer needs. With
      * every link taken, it goes without: its particles spawn in a ball and don't splash.
      *
@@ -390,6 +385,11 @@ public class EmitterRegistry {
         }
     }
 
+    /**
+     * Free a slot, making handles to it stale. Hold the lock.
+     *
+     * @param slot The slot.
+     */
     private void free(int slot) {
         releaseLink(emitters.get(slot));
         emitters.set(slot, null);

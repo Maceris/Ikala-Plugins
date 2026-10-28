@@ -4,9 +4,10 @@
 
 // Spawns splashes where particles hit the world, see ParticleUpdate: one thread per hit the
 // simulation recorded, each spawning its link's splash count of its splash effect's particles
-// there, off the free list onto the alive list the simulation wrote. Dispatched for the most hits
-// a frame holds; threads past this frame's count do nothing. A pass of its own, since the
-// simulation frees particles while it runs.
+// there, off the free list onto the alive list the simulation wrote. Then one thread per hit the
+// water recorded at its last step, for spray and splashes, with the water's own links, see
+// water_wavelets.comp. Dispatched for the most hits a frame holds of both; threads past this
+// frame's counts do nothing. A pass of its own, since the simulation frees particles while it runs.
 
 #include "particles.glsl"
 
@@ -21,14 +22,28 @@ layout(push_constant) uniform Constants {
     HitList hitList;
     // Which alive list the simulation just wrote
     uint next;
+    // The water's hits, and how far they are from the anchor: they are kept relative to the
+    // camera as it was at the water's step
+    HitList waterHitList;
+    vec3 waterOffset;
 };
 
 void main() {
     uint index = gl_GlobalInvocationID.x;
-    if (index >= min(control.hits.x, MAX_HITS)) {
-        return;
+    Hit hit;
+    if (index < MAX_HITS) {
+        if (index >= min(control.hits.x, MAX_HITS)) {
+            return;
+        }
+        hit = hitList.hits[index];
+    } else {
+        uint water = index - MAX_HITS;
+        if (water >= min(control.hits.y, MAX_WATER_HITS)) {
+            return;
+        }
+        hit = waterHitList.hits[water];
+        hit.position += waterOffset;
     }
-    Hit hit = hitList.hits[index];
     Link record = linkList.links[hit.link - 1];
     uint seed = particleHash(linkList.splashSeed ^ particleHash(index));
     for (uint i = 0; i < record.splashCount; ++i) {

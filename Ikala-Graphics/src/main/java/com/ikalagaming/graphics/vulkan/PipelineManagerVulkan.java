@@ -736,6 +736,7 @@ public class PipelineManagerVulkan {
             state.particlePool =
                     new ParticlePool(
                             state, Math.max(1, GraphicsManager.getSettings().maxParticles));
+            state.waterVolume = new WaterVolume();
             state.occupancy = new OccupancyVolume(state);
             state.environment = new Environment(state);
             state.volumeBricks = new VolumeBricks(state);
@@ -1020,6 +1021,8 @@ public class PipelineManagerVulkan {
         state.fogVolume = null;
         state.particlePool.cleanup(state);
         state.particlePool = null;
+        state.waterVolume.cleanup(state);
+        state.waterVolume = null;
         state.occupancy.cleanup(state);
         state.occupancy = null;
         state.environment.cleanup(state);

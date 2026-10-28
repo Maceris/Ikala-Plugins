@@ -18,6 +18,7 @@ import java.nio.LongBuffer;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
+import javax.annotation.Nullable;
 
 /**
  * The wave amplitude grid around the camera, see {@link WaveletMath} and {@code
@@ -81,12 +82,15 @@ public class WaveGrid {
 
     /**
      * Values a cell of the mask holds: water or not, flow along x and z, and depth; then how far
-     * water falls onto it, and padding to a second vec4.
+     * water falls onto it, its surface's height at rest, and padding to a second vec4.
      */
     private static final int MASK_VALUES = 8;
 
     /** Where in a cell of the mask how far water falls onto it is. */
     private static final int MASK_PLUNGE = 4;
+
+    /** Where in a cell of the mask its surface's height is, in the world. */
+    private static final int MASK_SURFACE = 5;
 
     /**
      * Each cell's water, by world cell wrapping around: 1 if it holds water, else 0, its flow along
@@ -114,6 +118,12 @@ public class WaveGrid {
 
     /** When the last step was, from {@link System#nanoTime()}, or 0 before. */
     private long lastNanos;
+
+    /** Steps recorded, to seed each step's spray differently. */
+    private int steps;
+
+    /** What seeds step by from step to step, the golden ratio in 32 bits, so they spread. */
+    private static final int SEED_STEP = 0x9E3779B9;
 
     /**
      * Set up the grid.
@@ -201,6 +211,8 @@ public class WaveGrid {
      * @param climates The wind climates' address, for each direction's share of the wind's waves.
      * @param paints This frame's wave paints, in the world.
      * @param profiles The wave profiles' address, for where crests break.
+     * @param pool The particles, which take the hits the step records for spray and splashes, or
+     *     null for none.
      * @param stack The stack to allocate on.
      */
     public void step(
@@ -214,6 +226,7 @@ public class WaveGrid {
             long climates,
             @NonNull List<WaterRegistry.WavePaint> paints,
             long profiles,
+            @Nullable ParticlePool pool,
             @NonNull MemoryStack stack) {
         final long nanos = System.nanoTime();
         final double seconds =
@@ -268,14 +281,15 @@ public class WaveGrid {
             MemoryUtil.memPutFloat(entry + 5 * Float.BYTES, (float) Math.sin(p.direction()));
         }
 
+        // Also after the particles' splash pass read the last hits and emptied their count
         barrier(
                 commandBuffer,
                 VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
                         | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
                         | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                 stack);
         final int last = current;
         current = 1 - current;
@@ -310,6 +324,15 @@ public class WaveGrid {
         constants.putFloat(
                 ShaderBindings.Water.WAVELETS_CORNER_RENDER_OFFSET + Float.BYTES,
                 (float) (cornerZ * WaveletMath.CELL_SIZE - camera.z()));
+        constants.putFloat(ShaderBindings.Water.WAVELETS_CAMERA_HEIGHT_OFFSET, (float) camera.y());
+        constants.putInt(ShaderBindings.Water.WAVELETS_SEED_OFFSET, ++steps * SEED_STEP);
+        if (pool != null) {
+            constants.putLong(
+                    ShaderBindings.Water.WAVELETS_HITS_OFFSET, pool.getWaterHits().deviceAddress);
+            constants.putLong(
+                    ShaderBindings.Water.WAVELETS_HIT_COUNT_OFFSET, pool.waterHitCountAddress());
+            pool.waterHitsRecorded(camera);
+        }
         vkCmdPushConstants(commandBuffer, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
         final int groups = WaveletMath.GRID_SIZE / WORKGROUP_SIDE;
         vkCmdDispatch(commandBuffer, groups, groups, 1);
@@ -367,6 +390,7 @@ public class WaveGrid {
                         mask[at + 1 + i] = data == null ? 0 : data[i];
                     }
                     mask[at + MASK_PLUNGE] = data == null ? 0 : data[WaterMesh.CELL_PLUNGE];
+                    mask[at + MASK_SURFACE] = data == null ? 0 : data[WaterMesh.CELL_SURFACE];
                 }
             }
         }

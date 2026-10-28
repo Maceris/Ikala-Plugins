@@ -530,6 +530,7 @@ public class WaterRender implements RenderStage {
                     climateBuffers[frame].deviceAddress,
                     paints,
                     profileBuffers[frame].deviceAddress,
+                    state.particlePool,
                     stack);
         }
         preparedFrame = state.frameNumber;

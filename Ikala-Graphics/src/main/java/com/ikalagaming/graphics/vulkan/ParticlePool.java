@@ -45,6 +45,20 @@ public class ParticlePool {
      */
     @Getter private final SharedBuffer hits;
 
+    /**
+     * The hits the water recorded at its last step, for spray and splashes, {@link
+     * ParticleMath#MAX_WATER_HITS} of {@link ParticleMath#HIT_SIZE} bytes, relative to the camera
+     * as it was then; how many is in the control buffer, see {@link
+     * ParticleMath#CONTROL_WATER_HITS}.
+     */
+    @Getter private final SharedBuffer waterHits;
+
+    /** Where the camera was when the water last recorded hits, in the world. */
+    private final Vector3d waterHitsCamera = new Vector3d();
+
+    /** Whether the water recorded hits since the last splash pass, which then reads them. */
+    private boolean waterHitsPending;
+
     /** Which alive list the last frame's simulation wrote, and the billboards draw. */
     @Getter private int current;
 
@@ -84,6 +98,11 @@ public class ParticlePool {
                         (long) ParticleMath.MAX_HITS * ParticleMath.HIT_SIZE,
                         state,
                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+        waterHits =
+                SharedBuffer.allocateDeviceLocal(
+                        (long) ParticleMath.MAX_WATER_HITS * ParticleMath.HIT_SIZE,
+                        state,
+                        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
         control =
                 SharedBuffer.allocate(
                         ParticleMath.CONTROL_SIZE,
@@ -99,6 +118,40 @@ public class ParticlePool {
      */
     public long aliveListAddress(int list) {
         return aliveLists.deviceAddress + (long) list * capacity * Integer.BYTES;
+    }
+
+    /**
+     * Note that the water records hits this frame, relative to the camera, for the next frame's
+     * splash pass.
+     *
+     * @param camera Where the camera is, in the world.
+     */
+    public void waterHitsRecorded(@NonNull Vector3dc camera) {
+        waterHitsCamera.set(camera);
+        waterHitsPending = true;
+    }
+
+    /**
+     * Whether the water recorded hits since the last splash pass, forgetting it, and if so, how far
+     * they are from the anchor.
+     *
+     * @param offset Receives where the camera was when they were recorded, less the anchor.
+     * @return True if there are hits to read.
+     */
+    public boolean takeWaterHits(@NonNull Vector3d offset) {
+        final boolean pending = waterHitsPending;
+        waterHitsPending = false;
+        offset.set(waterHitsCamera).sub(anchor);
+        return pending;
+    }
+
+    /**
+     * The address in the control buffer of how many hits the water recorded, which it counts up.
+     *
+     * @return The device address.
+     */
+    public long waterHitCountAddress() {
+        return control.deviceAddress + ParticleMath.CONTROL_WATER_HITS;
     }
 
     /** Swap the alive lists, after a frame's simulation wrote the other one. */
@@ -192,5 +245,6 @@ public class ParticlePool {
         SharedBuffer.free(control, state);
         SharedBuffer.free(radiance, state);
         SharedBuffer.free(hits, state);
+        SharedBuffer.free(waterHits, state);
     }
 }

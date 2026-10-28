@@ -17,9 +17,11 @@ import java.util.List;
 
 /**
  * Where the water is around the camera, for the fog volume to fill with the water's medium, see
- * {@code fog_inject.comp}: a square of {@link #SIZE} cells of a meter, each its water's surface and
- * bottom heights and which water body fills it, with each body's optics. Rebuilt when the water
- * changes or the camera wanders from its middle; the camera's place is written every frame.
+ * {@code fog_inject.comp}, and for particles to stop at, see {@code particle_simulate.comp}: a
+ * square of {@link #SIZE} cells of a meter, each its water's surface and bottom heights and which
+ * water body fills it, with each body's optics. Brought up to date once a frame, by whichever stage
+ * needs it first: rebuilt when the water changes or the camera wanders from its middle; the
+ * camera's place is written every frame.
  *
  * <p>The buffer: the map's corner, in world cells, its size and how many bodies; the corner
  * relative to the camera and the camera's height; the bodies, {@link #BODY_SIZE} bytes each; then
@@ -87,15 +89,80 @@ public class WaterVolume {
     /** Each frame in flight's buffer. */
     private final SharedBuffer[] buffers = new SharedBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
 
+    /** The frame the map was last brought up to date for, -1 before. */
+    private long updatedFrame = -1;
+
+    /** This frame's buffer's address, 0 with no water around. */
+    private long address;
+
+    /** Whether the camera is under water this frame. */
+    private boolean underWater;
+
     /**
-     * Bring the map up to date for a frame and write it to that frame's buffer.
+     * Bring the map up to date for this frame and write it to its buffer, once a frame.
      *
      * @param state The Vulkan state.
      * @param registry The scene's water.
      * @param camera The camera's position.
-     * @return The buffer's address, or 0 with no water around or the camera out of the water.
      */
-    public long update(
+    public void update(
+            @NonNull VulkanState state,
+            @NonNull WaterRegistry registry,
+            @NonNull Vector3dc camera) {
+        if (updatedFrame == state.frameNumber) {
+            return;
+        }
+        updatedFrame = state.frameNumber;
+        address = write(state, registry, camera);
+    }
+
+    /**
+     * The map's address this frame, for particles to stop at the water.
+     *
+     * @return The address, or 0 with no water around.
+     */
+    public long mapAddress() {
+        return address;
+    }
+
+    /**
+     * The map's address this frame for the fog volume.
+     *
+     * @return The address, or 0 with no water around or the camera out of the water: the froxels
+     *     are too coarse for the water's edge, and from above the surface puts its own column on,
+     *     so the medium would only bleed into the air around it.
+     */
+    public long fogAddress() {
+        return underWater ? address : 0;
+    }
+
+    /**
+     * The map's corner, in world cells of a meter.
+     *
+     * @return Its x.
+     */
+    public int getCornerX() {
+        return cornerX;
+    }
+
+    /**
+     * The map's corner, in world cells of a meter.
+     *
+     * @return Its z.
+     */
+    public int getCornerZ() {
+        return cornerZ;
+    }
+
+    /**
+     * Bring the map up to date and write it to this frame's buffer.
+     *
+     * @param state The Vulkan state.
+     * @param registry The scene's water.
+     * @param camera The camera's position.
+     * @return The buffer's address, or 0 with no water around.
+     */
+    private long write(
             @NonNull VulkanState state,
             @NonNull WaterRegistry registry,
             @NonNull Vector3dc camera) {
@@ -109,9 +176,8 @@ public class WaterVolume {
             version = now;
             build(cameraX - SIZE / 2, cameraZ - SIZE / 2);
         }
-        // Only under water: the froxels are too coarse for the water's edge, and from above the
-        // surface puts its own column on, so the medium would only bleed into the air around it
-        if (!any || !isUnderWater(tiles, camera)) {
+        underWater = any && isUnderWater(tiles, camera);
+        if (!any) {
             return 0;
         }
         final int frame = state.frameIndex;
@@ -287,5 +353,8 @@ public class WaterVolume {
         }
         version = -1;
         built = false;
+        updatedFrame = -1;
+        address = 0;
+        underWater = false;
     }
 }

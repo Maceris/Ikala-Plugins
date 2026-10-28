@@ -67,10 +67,10 @@ public final class WaterMesh {
     private static final int QUAD_VERTICES = 6;
 
     /**
-     * Values a cell's data has: flow along x and z, depth, its wind climate, and how far water
-     * falling onto it falls.
+     * Values a cell's data has: flow along x and z, depth, its wind climate, how far water falling
+     * onto it falls, and its surface's height at rest.
      */
-    public static final int CELL_DATA = 5;
+    public static final int CELL_DATA = 6;
 
     /** Where in a cell's data its wind climate is, -1 for none. */
     public static final int CELL_CLIMATE = 3;
@@ -83,6 +83,9 @@ public final class WaterMesh {
 
     /** Where in a cell's data how far water falling onto it falls, in meters; 0 for none. */
     public static final int CELL_PLUNGE = 4;
+
+    /** Where in a cell's data its surface's height at rest is, in the world. */
+    public static final int CELL_SURFACE = 5;
 
     /** A side's four corners in its two triangles. */
     private static final int[] SIDE_TRIANGLES = {0, 1, 2, 0, 2, 3};
@@ -510,9 +513,11 @@ public final class WaterMesh {
                     }
                     final float[] data = new float[CELL_DATA];
                     data[CELL_CLIMATE] = climate;
+                    data[CELL_SURFACE] = (float) tile.origin().y();
                     for (int c = 0; c < CELL_CORNERS; ++c) {
                         final int cx = x + (c & 1);
                         final int cz = z + (c >> 1);
+                        data[CELL_SURFACE] += tile.heightAt(cx, cz) / CELL_CORNERS;
                         data[0] += tile.flowAt(cx, cz, false) / CELL_CORNERS;
                         data[1] += tile.flowAt(cx, cz, true) / CELL_CORNERS;
                         data[2] +=

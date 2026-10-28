@@ -117,6 +117,75 @@ public final class ParticleSamples {
                     .build();
 
     /**
+     * Spray the wind tears off breaking crests: fine drops flung up and slowed by the air, falling
+     * back into the water, see {@link WaterEffects}.
+     */
+    public static final ParticleEffect WATER_SPRAY =
+            ParticleEffect.builder()
+                    .rate(0)
+                    .burst(6)
+                    .lifetime(0.6f, 1.2f)
+                    .speed(2, 4)
+                    .spread(0.8f)
+                    .acceleration(GRAVITY)
+                    .drag(1)
+                    .spawnRadius(0.3f)
+                    .size(0.05f, 0.1f)
+                    .colors(new Vector4f(0.95f, 0.97f, 1, 0.5f), new Vector4f(0.95f, 0.97f, 1, 0))
+                    .anisotropy(0)
+                    .collision(ParticleEffect.Collision.DIE)
+                    .stretch(0.02f)
+                    .build();
+
+    /** Mist rising off water landing from a fall: soft, slow and faint, drifting up. */
+    public static final ParticleEffect WATER_MIST =
+            ParticleEffect.builder()
+                    .rate(0)
+                    .burst(1)
+                    .lifetime(2, 3)
+                    .speed(0.3f, 0.8f)
+                    .spread(1.2f)
+                    .acceleration(new Vector3f(0, 0.2f, 0))
+                    .drag(1.5f)
+                    .spawnRadius(0.3f)
+                    .size(0.3f, 1)
+                    .colors(new Vector4f(0.95f, 0.97f, 1, 0.12f), new Vector4f(0.95f, 0.97f, 1, 0))
+                    .anisotropy(0.3f)
+                    .build();
+
+    /** Droplets thrown up where falling water lands or the water is disturbed. */
+    public static final ParticleEffect WATER_SPLASH =
+            ParticleEffect.builder()
+                    .rate(0)
+                    .burst(6)
+                    .lifetime(0.4f, 0.8f)
+                    .speed(2, 3.5f)
+                    .spread(0.6f)
+                    .acceleration(GRAVITY)
+                    .spawnRadius(0.2f)
+                    .size(0.05f, 0.03f)
+                    .colors(new Vector4f(0.95f, 0.97f, 1, 0.9f), new Vector4f(0.95f, 0.97f, 1, 0))
+                    .anisotropy(0)
+                    .collision(ParticleEffect.Collision.DIE)
+                    .stretch(0.02f)
+                    .build();
+
+    /** The small crown a raindrop throws up landing in water. */
+    public static final ParticleEffect WATER_DROP =
+            ParticleEffect.builder()
+                    .rate(0)
+                    .burst(2)
+                    .lifetime(0.15f, 0.3f)
+                    .speed(0.6f, 1.2f)
+                    .spread(0.5f)
+                    .acceleration(GRAVITY)
+                    .size(0.01f, 0.006f)
+                    .colors(new Vector4f(0.95f, 0.97f, 1, 0.6f), new Vector4f(0.95f, 0.97f, 1, 0))
+                    .anisotropy(0)
+                    .stretch(0.03f)
+                    .build();
+
+    /**
      * Rain around the camera: thin streaks falling through a box that follows it, stopped by roofs
      * and splashing where they land. A drop is a small lens showing the light from all around it,
      * so it scatters evenly and is nearly white; scattering forward, it would vanish with the sun
