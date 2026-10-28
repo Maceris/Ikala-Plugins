@@ -651,7 +651,8 @@ public class OccupancyVolume {
             busyFrames += 1;
         }
         if (waiting == 0 && busySince != 0) {
-            log.debug(
+            // Nearly every frame while the camera moves, so only when tracing
+            log.trace(
                     "Occupancy volume caught up: {} triangles over {} frames in {} ms",
                     busyTriangles,
                     busyFrames,

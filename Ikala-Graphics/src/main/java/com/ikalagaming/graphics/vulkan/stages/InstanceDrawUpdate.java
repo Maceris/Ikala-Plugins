@@ -72,6 +72,26 @@ import java.util.Map;
 @Slf4j
 public class InstanceDrawUpdate implements RenderStage {
 
+    /**
+     * Where each mesh slot's room starts in a visible list, by kind, kept between frames as long as
+     * the mesh tables keep their sizes, so the frame allocates nothing for them.
+     */
+    private final int[][] firstVisible = new int[MeshKind.ALL.length][0];
+
+    /** The slots whose commands this frame writes as drawable, standard and baked; scratch. */
+    private final BitSet standardNow = new BitSet();
+
+    private final BitSet bakedNow = new BitSet();
+
+    /** The slots whose commands are emptied, scratch. */
+    private final BitSet emptySlots = new BitSet();
+
+    /** The culling counters read back, scratch. */
+    private final int[] counterScratch = new int[COUNTER_COUNT];
+
+    /** One pass's frustum planes, scratch. */
+    private final float[] planeScratch = new float[ShaderBindings.Cull.PLANES_PER_PASS * 4];
+
     /** The size of a VkDrawIndexedIndirectCommand in bytes. */
     public static final int DRAW_COMMAND_SIZE = 5 * Integer.BYTES;
 
@@ -283,7 +303,7 @@ public class InstanceDrawUpdate implements RenderStage {
         final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
         final InstanceTable instances = vulkanState.instances;
         frameData.modelDrawInfo.clear();
-        readCounters(frameData, instances);
+        readCounters(frameData, instances, counterScratch);
 
         // Culling needs the cascades before the shadow stage draws them, and the cache needs to
         // know what changed before it decides what to draw again
@@ -340,9 +360,11 @@ public class InstanceDrawUpdate implements RenderStage {
 
         // Room in each list for every instance of every mesh, kind by kind and mesh slot by mesh
         // slot, counted from the same snapshot the culling pass sees, so it can't overflow
-        final int[][] firstVisible = new int[MeshKind.ALL.length][];
         for (MeshKind kind : MeshKind.ALL) {
-            firstVisible[kind.ordinal()] = new int[slotsOf(kind, meshSlots, bakedSlots)];
+            final int slots = slotsOf(kind, meshSlots, bakedSlots);
+            if (firstVisible[kind.ordinal()].length != slots) {
+                firstVisible[kind.ordinal()] = new int[slots];
+            }
         }
         final int culledEntries = layoutVisible(snapshot.models(), firstVisible);
 
@@ -434,7 +456,7 @@ public class InstanceDrawUpdate implements RenderStage {
         final long[] layout = {frameData.sceneDrawCommands.buffer, meshSlots, bakedSlots};
         final boolean whole = !Arrays.equals(layout, frameData.drawnLayout);
         System.arraycopy(layout, 0, frameData.drawnLayout, 0, layout.length);
-        final BitSet standardNow = new BitSet(meshSlots);
+        standardNow.clear();
         writeCulledCommands(
                 commands,
                 meshes,
@@ -444,8 +466,9 @@ public class InstanceDrawUpdate implements RenderStage {
                 firstVisible,
                 culledEntries,
                 whole ? null : frameData.drawnStandard,
-                standardNow);
-        final BitSet bakedNow = new BitSet(bakedSlots);
+                standardNow,
+                emptySlots);
+        bakedNow.clear();
         for (MeshKind kind : MeshKind.ALL) {
             if (kind.isBaked()) {
                 writeCulledCommands(
@@ -457,14 +480,15 @@ public class InstanceDrawUpdate implements RenderStage {
                         firstVisible,
                         culledEntries,
                         whole ? null : frameData.drawnBaked,
-                        bakedNow);
+                        bakedNow,
+                        emptySlots);
             }
         }
         frameData.drawnStandard.clear();
         frameData.drawnStandard.or(standardNow);
         frameData.drawnBaked.clear();
         frameData.drawnBaked.or(bakedNow);
-        writeFrusta(scene, frameData, visualizers.isCullingDisabled());
+        writeFrusta(scene, frameData, visualizers.isCullingDisabled(), planeScratch);
         writeOcclusionView(scene, sceneTarget, vulkanState, frameData, visualizers);
 
         if (listed.isEmpty()) {
@@ -516,9 +540,9 @@ public class InstanceDrawUpdate implements RenderStage {
     static int layoutVisible(
             @NonNull List<InstanceTable.ModelCount> models,
             int @NonNull [] @NonNull [] firstVisible) {
-        final int[][] perSlot = new int[firstVisible.length][];
-        for (int kind = 0; kind < firstVisible.length; ++kind) {
-            perSlot[kind] = new int[firstVisible[kind].length];
+        // Each slot's instances are counted where its room's start goes, then turned into starts
+        for (int[] kindFirst : firstVisible) {
+            Arrays.fill(kindFirst, 0);
         }
         for (InstanceTable.ModelCount modelCount : models) {
             // Animated models are drawn from CPU-written commands instead
@@ -530,17 +554,18 @@ public class InstanceDrawUpdate implements RenderStage {
                 if (handle == null) {
                     continue;
                 }
-                final int[] slots = perSlot[handle.kind().ordinal()];
+                final int[] slots = firstVisible[handle.kind().ordinal()];
                 if (handle.slot() < slots.length) {
                     slots[handle.slot()] += modelCount.instanceCount();
                 }
             }
         }
         int total = 0;
-        for (int kind = 0; kind < firstVisible.length; ++kind) {
-            for (int slot = 0; slot < firstVisible[kind].length; ++slot) {
-                firstVisible[kind][slot] = total;
-                total += perSlot[kind][slot];
+        for (int[] kindFirst : firstVisible) {
+            for (int slot = 0; slot < kindFirst.length; ++slot) {
+                final int count = kindFirst[slot];
+                kindFirst[slot] = total;
+                total += count;
             }
         }
         return total;
@@ -552,16 +577,18 @@ public class InstanceDrawUpdate implements RenderStage {
      *
      * @param frameData This frame's data, which the GPU is done with.
      * @param instances Where to note the counts.
+     * @param counts Scratch for the counts, {@link #COUNTER_COUNT} long.
      */
     private static void readCounters(
-            @NonNull PerFrameData frameData, @NonNull InstanceTable instances) {
+            @NonNull PerFrameData frameData,
+            @NonNull InstanceTable instances,
+            int @NonNull [] counts) {
         if (frameData.cullCounters.allocationInfo.size() < (long) COUNTER_COUNT * Integer.BYTES) {
             return;
         }
         IntBuffer counters =
                 MemoryUtil.memIntBuffer(
                         frameData.cullCounters.allocationInfo.pMappedData(), COUNTER_COUNT);
-        int[] counts = new int[COUNTER_COUNT];
         counters.get(0, counts);
         instances.setDrawnCounts(counts);
         for (int i = 0; i < COUNTER_COUNT; ++i) {
@@ -585,6 +612,7 @@ public class InstanceDrawUpdate implements RenderStage {
      *     emptied if they aren't now; null to empty every slot's that isn't drawable now, when what
      *     the buffer holds is unknown.
      * @param drawnNow Receives the slots whose commands are written as drawable.
+     * @param empty Scratch for the slots to empty.
      */
     private static void writeCulledCommands(
             @NonNull ByteBuffer commands,
@@ -595,7 +623,8 @@ public class InstanceDrawUpdate implements RenderStage {
             int @NonNull [] @NonNull [] firstVisible,
             int listEntries,
             BitSet drawnBefore,
-            @NonNull BitSet drawnNow) {
+            @NonNull BitSet drawnNow,
+            @NonNull BitSet empty) {
         final int slots = slotsOf(kind, standardSlots, bakedSlots);
         final int[] kindFirst = firstVisible[kind.ordinal()];
         // As the GPU mesh table has them, so culling, which reads that table, only adds instances
@@ -619,7 +648,7 @@ public class InstanceDrawUpdate implements RenderStage {
                     }
                 });
         // Empty what was drawable and isn't now, or every other slot's when it isn't known
-        final BitSet empty = new BitSet(slots);
+        empty.clear();
         if (drawnBefore == null) {
             empty.set(0, slots);
         } else {
@@ -649,14 +678,17 @@ public class InstanceDrawUpdate implements RenderStage {
      * @param scene The scene.
      * @param frameData This frame's data, with the cascades already worked out.
      * @param disabled Whether culling is turned off, so every plane accepts everything.
+     * @param out Scratch for one pass's planes.
      */
     private static void writeFrusta(
-            @NonNull Scene scene, @NonNull PerFrameData frameData, boolean disabled) {
+            @NonNull Scene scene,
+            @NonNull PerFrameData frameData,
+            boolean disabled,
+            float @NonNull [] out) {
         final FloatBuffer planes =
                 MemoryUtil.memFloatBuffer(
                         frameData.cullFrusta.allocationInfo.pMappedData(),
                         FRUSTA_COUNT * ShaderBindings.Cull.PLANES_PER_PASS * 4);
-        final float[] out = new float[ShaderBindings.Cull.PLANES_PER_PASS * 4];
         if (disabled) {
             FrustumPlanes.acceptAll(out);
             for (int frustum = 0; frustum < FRUSTA_COUNT; ++frustum) {
