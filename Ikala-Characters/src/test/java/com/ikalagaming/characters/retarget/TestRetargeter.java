@@ -176,7 +176,7 @@ class TestRetargeter {
     @Test
     void testRpgOntoBiped() throws Exception {
         Path rpg = TEST_CONTENT.resolve("rpg_human/rpg_male.glb");
-        Path mannequin = TEST_CONTENT.resolve("mannequin/mannequin.glb");
+        Path mannequin = TEST_CONTENT.resolve("mannequin/male.glb");
         Assumptions.assumeTrue(
                 Files.exists(rpg) && Files.exists(mannequin), "No test art in the test content");
         Rig biped = registry.get(Rig.class, Id.parse("ikala:rig/biped"));

@@ -53,8 +53,7 @@ public class CharacterPlugin extends Plugin {
     static final String EDITOR_REFERENCE = "editor.reference";
 
     /** The reference file used when the config doesn't name one. */
-    private static final String DEFAULT_REFERENCE =
-            "test_content/characters/mannequin/mannequin.glb";
+    private static final String DEFAULT_REFERENCE = "test_content/characters/mannequin/male.glb";
 
     /** Two glTF file paths, which may hold spaces, and an optional clip name after them. */
     private static final Pattern TWO_FILES =

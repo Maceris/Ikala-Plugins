@@ -6,8 +6,9 @@
 content-folders: []
 
 # The character editor: the rig reference file used to move characters from other rigs onto
-# ikala:rig/biped, like the mannequin, and the content folder it saves designs to, as
-# namespace=folder (it should be one of the content folders, so saved designs load back).
+# ikala:rig/biped, like the male mannequin (tools/blender/mannequin.py), and the
+# content folder it saves designs to, as namespace=folder (it should be one of the content
+# folders, so saved designs load back).
 editor:
-  reference: test_content/characters/mannequin/mannequin.glb
+  reference: test_content/characters/mannequin/male.glb
   save-to: ""

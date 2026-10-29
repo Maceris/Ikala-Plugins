@@ -11,15 +11,20 @@ as well, in the same folder that the Ikala-Plugins folder was downloaded. To
 build this you will need to run `./gradlew clean build` from the command
 line.
 
-## Test mannequin
+## Mannequins
 
-`tools/blender/mannequin.py` builds a plain 2 m biped, one mesh per body slot,
-with idle and walk clips, and exports it as glTF. Its armature comes from the
-built-in rig definition, so add bones there first. Run it with Blender 3.3 or
-later, writing to the asset editor's `test_content` folder, which isn't in git:
+`tools/blender/mannequin.py` builds a male (2 m) and a female (1.85 m) biped from
+MakeHuman's CC0 game bodies, one mesh per body slot, with idle and walk clips,
+and exports them as glTF along with each seam's shared edge loop. Their
+armature comes from the built-in rig definition, so add bones there first. The
+male is the editor's rig reference, and the female's bones point the same ways
+at rest, so clips retargeted onto him fit her too. It needs Blender 5 or later
+with the MPFB extension (`blender --online-mode --command extension install -s
+-e mpfb`) and the MakeHuman system asset pack unpacked into MPFB's user data, and
+writes to the asset editor's `test_content` folder, which isn't in git:
 
 ```
-blender -b --factory-startup --python tools/blender/mannequin.py -- --rig src/main/resources/characters/ikala/rig/biped.json --out ../../Ikala-Asset-Editor/test_content/characters/mannequin
+blender -b --python tools/blender/mannequin.py -- --rig src/main/resources/characters/ikala/rig/biped.json --plan src/main/resources/characters/ikala/bodyPlan/biped.json --out ../../Ikala-Asset-Editor/test_content/characters/mannequin
 ```
 
 ## Test characters from Blender

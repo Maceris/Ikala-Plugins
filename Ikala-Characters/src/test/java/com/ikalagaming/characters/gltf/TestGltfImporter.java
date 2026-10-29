@@ -27,6 +27,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Tests for reading characters from glTF: a small file built here, and the exported test art in the
@@ -334,39 +335,44 @@ class TestGltfImporter {
     }
 
     /**
-     * The mannequin export fits the built-in biped rig and plays its clips.
+     * The male and female mannequin exports fit the built-in biped rig, stand their heights and
+     * play their clips.
      *
      * @throws Exception If something can't be read.
      */
     @Test
-    void testMannequin() throws Exception {
-        Path file = TEST_CONTENT.resolve("mannequin/mannequin.glb");
-        Assumptions.assumeTrue(Files.exists(file), "No mannequin export in the test content");
+    void testMannequins() throws Exception {
         CharacterRegistry registry = BuiltInContent.loadWith(List.of()).registry();
         Rig biped =
                 registry.get(
                         Rig.class, com.ikalagaming.characters.data.Id.parse("ikala:rig/biped"));
-        ImportedCharacter character = GltfImporter.read(file).onRig(biped);
-        Assertions.assertEquals(15, character.parts().size());
-        Assertions.assertNotNull(character.clip("idle"));
-        ImportedCharacter.ClipData walk = character.clip("walk");
-        Assertions.assertEquals(1, walk.duration(), 0.05);
-        Assertions.assertEquals("root", walk.translations().get(0).bone());
+        Map<String, Float> heights = Map.of("male", 2.0f, "female", 1.846f);
+        for (Map.Entry<String, Float> body : heights.entrySet()) {
+            Path file = TEST_CONTENT.resolve("mannequin/" + body.getKey() + ".glb");
+            Assumptions.assumeTrue(Files.exists(file), "No mannequin export in the test content");
+            ImportedCharacter character = GltfImporter.read(file).onRig(biped);
+            // A part per slot, and the head's eyes, which have their own material
+            Assertions.assertEquals(16, character.parts().size(), body.getKey());
+            Assertions.assertNotNull(character.clip("idle"));
+            ImportedCharacter.ClipData walk = character.clip("walk");
+            Assertions.assertEquals(1, walk.duration(), 0.05);
+            Assertions.assertEquals("root", walk.translations().get(0).bone());
 
-        float top = Float.NEGATIVE_INFINITY;
-        for (ImportedCharacter.Part part : character.parts()) {
-            top = Math.max(top, part.max().y);
+            float top = Float.NEGATIVE_INFINITY;
+            for (ImportedCharacter.Part part : character.parts()) {
+                top = Math.max(top, part.max().y);
+            }
+            Assertions.assertEquals(body.getValue(), top, 0.01, body.getKey());
+            Skeleton skeleton = character.skeleton();
+            Pose pose = new Pose(skeleton);
+            walk.bind(skeleton).sample(0.25f, pose);
+            PoseSolver solver = new PoseSolver(skeleton);
+            solver.solve(pose, Proportions.neutral(skeleton));
+            // A quarter of the way through the cycle, the root has walked about a quarter of
+            // 1.4 m; the keys are on whole frames, so not exactly
+            Vector3f root = solver.model(0).getTranslation(new Vector3f());
+            Assertions.assertEquals(0.35, root.length(), 0.03);
         }
-        Assertions.assertEquals(1.95, top, 0.03);
-        Skeleton skeleton = character.skeleton();
-        Pose pose = new Pose(skeleton);
-        walk.bind(skeleton).sample(0.25f, pose);
-        PoseSolver solver = new PoseSolver(skeleton);
-        solver.solve(pose, Proportions.neutral(skeleton));
-        // A quarter of the way through the cycle, the root has walked about a quarter of 1.4 m;
-        // the mannequin's keys are on whole frames, so not exactly
-        Vector3f root = solver.model(0).getTranslation(new Vector3f());
-        Assertions.assertEquals(0.35, root.length(), 0.03);
     }
 
     /**

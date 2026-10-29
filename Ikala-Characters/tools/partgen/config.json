@@ -5,7 +5,7 @@
   "controlnet": "diffusion_pytorch_model_promax.safetensors",
   "trellis": "D:/Programs/AI/TRELLIS.2",
   "blender": "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe",
-  "mannequin": "D:/Documents/Programming/Ikala workspace/Ikala-Asset-Editor/test_content/characters/mannequin/mannequin.glb",
+  "mannequin": "D:/Documents/Programming/Ikala workspace/Ikala-Asset-Editor/test_content/characters/mannequin/male.glb",
   "work": "D:/Programs/AI/partgen",
   "namespace": "gen",
   "content": "D:/Documents/Programming/Ikala workspace/Ikala-Asset-Editor/test_content/characters_gen"

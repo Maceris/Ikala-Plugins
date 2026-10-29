@@ -61,7 +61,8 @@ class TestTestArt {
         CharacterRegistry registry = load();
         List<Design> designs = registry.all(Design.class);
         // The generated designs, plus any the editor saved there
-        for (String name : List.of("mannequin", "rpg_male", "rpg_female")) {
+        for (String name :
+                List.of("mannequin_male", "mannequin_female", "rpg_male", "rpg_female")) {
             Assertions.assertNotNull(
                     registry.get(Design.class, Id.parse("test:design/" + name)), name);
         }
@@ -81,7 +82,7 @@ class TestTestArt {
     void testAssemble() throws Exception {
         CharacterRegistry registry = load();
         Assumptions.assumeTrue(
-                Files.exists(TEST_CONTENT.resolve("mannequin/mannequin.glb")), "No mannequin");
+                Files.exists(TEST_CONTENT.resolve("mannequin/male.glb")), "No mannequin");
         Design man = registry.get(Design.class, Id.parse("test:design/rpg_male"));
         BodyPlan biped = registry.get(BodyPlan.class, man.plan());
         Map<String, Id> worn = man.worn(biped, id -> registry.get(Part.class, id));
@@ -96,7 +97,7 @@ class TestTestArt {
                         biped,
                         man.variant(),
                         registry,
-                        TEST_CONTENT.resolve("mannequin/mannequin.glb"));
+                        TEST_CONTENT.resolve("mannequin/male.glb"));
         Assertions.assertNotNull(assembled);
         Assertions.assertEquals(biped.rig(), assembled.character().rig().id());
         for (Id id : worn.values()) {
