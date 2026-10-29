@@ -3916,8 +3916,8 @@ public final class GateBenchmark {
         log.info(
                 "Gate benchmark streaming at x {}: {} composed, {} empty, {} removed; backlog {}"
                         + " cells, {} sections waiting to be drawn; drawn after {} ms (median), {} (95th), {}"
-                        + " (most) for {} sections; LOD {} stale cells, {} batches waiting;"
-                        + " heap {} MiB",
+                        + " (most) for {} sections; LOD {} stale cells, {} batches waiting, {}"
+                        + " sections behind, {} taken out still shown; heap {} MiB",
                 String.format("%.0f", camera.x()),
                 stats.composed(),
                 stats.empty(),
@@ -3930,6 +3930,8 @@ public final class GateBenchmark {
                 stats.latencies().length,
                 live == null ? 0 : live.staleCells(),
                 live == null ? 0 : live.pendingBatches(),
+                renderer().getState().sections.getLodBehind(),
+                renderer().getState().sections.getLodRemovedWaiting(),
                 (runtime.totalMemory() - runtime.freeMemory()) / (long) BYTES_PER_MIB);
     }
 

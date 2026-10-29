@@ -570,6 +570,9 @@ public class SectionManager {
     /** How many sections feeding level of detail it didn't show at their newest bake last frame. */
     private volatile int lodBehind;
 
+    /** How many sections taken out the level of detail still showed last frame. */
+    private volatile int lodRemovedWaiting;
+
     /** Bakes submitted and not yet back. */
     private final AtomicInteger inFlight = new AtomicInteger();
 
@@ -1787,6 +1790,11 @@ public class SectionManager {
                 state.lods.setOverrides(world.world(), overrides.get(entry.getKey()));
             }
             behindCount = behind.size();
+            int waitingRemoved = 0;
+            for (Live world : live.values()) {
+                waitingRemoved += world.removed().size();
+            }
+            lodRemovedWaiting = waitingRemoved;
         } finally {
             lock.unlock();
         }
@@ -2530,6 +2538,16 @@ public class SectionManager {
      */
     public int getLodBehind() {
         return lodBehind;
+    }
+
+    /**
+     * How many sections taken out the level of detail still showed last frame, waiting for it to
+     * drop them.
+     *
+     * @return The count.
+     */
+    public int getLodRemovedWaiting() {
+        return lodRemovedWaiting;
     }
 
     /**

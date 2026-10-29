@@ -157,6 +157,39 @@ class MeshRegistryTest {
     }
 
     @Test
+    void writtenEntriesAreLoggedForOneReader() {
+        MeshRegistry registry = new MeshRegistry(100, 300);
+        MeshHandle first = add(registry, "a", 10).handle();
+        registry.markResident(first);
+        // Not logged until something reads the log
+        registry.takeChanged((slot, r, g, v, f, c, min, max) -> {});
+        long since = registry.recordedLogEnd();
+        List<Integer> seen = new ArrayList<>();
+        since =
+                registry.visitRecordedSince(
+                        since, (slot, r, g, v, f, c, min, max) -> seen.add(slot));
+        assertTrue(seen.isEmpty());
+
+        MeshHandle second = add(registry, "a", 10).handle();
+        registry.markResident(second);
+        registry.remove(first);
+        registry.takeChanged((slot, r, g, v, f, c, min, max) -> {});
+        List<Boolean> drawable = new ArrayList<>();
+        since =
+                registry.visitRecordedSince(
+                        since,
+                        (slot, resident, g, v, f, c, min, max) -> {
+                            seen.add(slot);
+                            drawable.add(resident);
+                        });
+        assertEquals(List.of(first.slot(), second.slot()), seen);
+        assertEquals(List.of(false, true), drawable, "Each as last written");
+        seen.clear();
+        registry.visitRecordedSince(since, (slot, r, g, v, f, c, min, max) -> seen.add(slot));
+        assertTrue(seen.isEmpty(), "Read once");
+    }
+
+    @Test
     void theSpaceGrowsForBigMeshes() {
         MeshRegistry registry = new MeshRegistry(16, 48);
         add(registry, "a", 100);

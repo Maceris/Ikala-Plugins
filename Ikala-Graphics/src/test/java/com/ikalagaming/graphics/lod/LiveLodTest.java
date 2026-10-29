@@ -256,6 +256,22 @@ class LiveLodTest {
         return false;
     }
 
+    /** Sections taken out before their cell was ever built are covered all the same. */
+    @Test
+    void testRemovalsBeforeTheFirstBuildAreCovered() {
+        final List<LodMesh> sections = DagTest.terrain(2);
+        final Kept kept = new Kept(LiveLod.SETTLE_NANOS);
+        final LodStore.SectionPos gone = position(sections.get(0));
+        kept.live.put(gone, sections.get(0), 1);
+        // Taken out while its cell still settles, so the cell is never built
+        kept.settle();
+        kept.live.remove(gone, 2);
+        kept.now += 10 * LiveLod.SETTLE_NANOS;
+        kept.settle();
+        assertEquals(2L, kept.covered.get(gone));
+        assertFalse(kept.cells.containsKey(kept.live.cellOf(gone)));
+    }
+
     /** Taking sections out is covered once their cells are rebuilt, or at once if never in. */
     @Test
     void testRemovalsAreCovered() {

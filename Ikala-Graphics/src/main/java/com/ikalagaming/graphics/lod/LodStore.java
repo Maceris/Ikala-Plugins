@@ -315,11 +315,14 @@ public final class LodStore {
      * @param stale Cells left in place that stand on children that changed since they were built,
      *     because their level 0 cells aren't all rebuilt yet: every ancestor of a changed level 0
      *     cell that is still there.
+     * @param emptied Level 0 cells whose sections all went before they were ever built, so there
+     *     was nothing to take out: their sections' removals are done with all the same.
      */
     public record Rebuilt(
             @NonNull List<CellKey> built,
             @NonNull List<CellKey> removed,
-            @NonNull SortedSet<CellKey> stale) {}
+            @NonNull SortedSet<CellKey> stale,
+            @NonNull List<CellKey> emptied) {}
 
     /**
      * One of a cell's own clusters, as the GPU takes it: what it gives way to, and which section a
@@ -699,6 +702,7 @@ public final class LodStore {
             boolean wholeLevels) {
         final List<CellKey> built = new ArrayList<>();
         final List<CellKey> removed = new ArrayList<>();
+        final List<CellKey> emptied = new ArrayList<>();
         final List<CellKey> order = new ArrayList<>();
         for (CellKey key : dirty) {
             if (ready.test(key)) {
@@ -708,16 +712,25 @@ public final class LodStore {
         order.sort(Comparator.comparingDouble(key -> distanceSquared(key, near)));
         // What each cell is built from, gathered here, since the workers don't touch the store
         final List<LeafJob> jobs = new ArrayList<>();
-        for (CellKey key : order.subList(0, Math.min(maxCells, order.size()))) {
+        for (CellKey key : order) {
+            // Cells left with no sections only need taking out, which costs nothing, so they
+            // don't count toward the cells built: a world streamed around a moving observer
+            // empties cells behind it as fast as it fills cells ahead
+            final boolean empty = isEmpty(key);
+            if (!empty && jobs.size() >= maxCells) {
+                continue;
+            }
             dirty.remove(key);
             final List<SectionPos> positions = new ArrayList<>();
-            final List<LodMesh> inside = sectionsIn(key, positions);
+            final List<LodMesh> inside = empty ? List.of() : sectionsIn(key, positions);
             if (inside.isEmpty()) {
                 sectionCounts.remove(key);
                 if (cells.remove(key) != null) {
                     keys.remove(key);
                     unparented.add(key);
                     removed.add(key);
+                } else {
+                    emptied.add(key);
                 }
                 continue;
             }
@@ -743,7 +756,7 @@ public final class LodStore {
                 stale.add(up);
             }
         }
-        return new Rebuilt(built, removed, stale);
+        return new Rebuilt(built, removed, stale, emptied);
     }
 
     /**

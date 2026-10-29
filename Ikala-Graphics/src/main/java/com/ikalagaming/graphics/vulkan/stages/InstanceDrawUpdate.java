@@ -73,10 +73,98 @@ import java.util.Map;
 public class InstanceDrawUpdate implements RenderStage {
 
     /**
-     * Where each mesh slot's room starts in a visible list, by kind, kept between frames as long as
-     * the mesh tables keep their sizes, so the frame allocates nothing for them.
+     * Where each mesh slot's room starts in a visible list, by kind: {@link #rooms}' starts, kept
+     * between frames.
      */
     private final int[][] firstVisible = new int[MeshKind.ALL.length][0];
+
+    /** How many instances each mesh slot needs room for this frame, by kind; scratch. */
+    private final int[][] need = new int[MeshKind.ALL.length][0];
+
+    /** Each mesh slot's room in the visible lists, kept while it fits. */
+    private final VisibleRooms rooms = new VisibleRooms(MeshKind.ALL.length);
+
+    /**
+     * The slots whose culled commands changed, in order: {@code slot * 2}, plus 1 for the baked
+     * mesh table, from {@link #changesStart} on. Each frame in flight writes those since it last
+     * wrote, rather than every slot's commands every frame.
+     */
+    private int[] changes = new int[INITIAL_CHANGES];
+
+    /** How many changes are logged. */
+    private int changeCount;
+
+    /** The place of the first logged change, counting every change ever logged. */
+    private long changesStart;
+
+    /** Where in the changes each frame in flight's commands were last written up to, -1 never. */
+    private final long[] writtenUpTo = newWrittenUpTo();
+
+    /**
+     * Each frame in flight's place in the changes, before it wrote any.
+     *
+     * @return -1 for each.
+     */
+    private static long[] newWrittenUpTo() {
+        final long[] places = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+        Arrays.fill(places, -1);
+        return places;
+    }
+
+    /** Where the main mesh table's log of written entries was read up to. */
+    private long pulledStandard;
+
+    /** Where the baked mesh table's log was read up to. */
+    private long pulledBaked;
+
+    /** The slots already written this frame, scratch, main and baked. */
+    private final BitSet seenStandard = new BitSet();
+
+    private final BitSet seenBaked = new BitSet();
+
+    /** The commands being written, for {@link #standardWriter} and {@link #bakedWriter}. */
+    private ByteBuffer writing;
+
+    /** The slot counts and list length of the commands being written. */
+    private int writingStandardSlots;
+
+    private int writingBakedSlots;
+
+    private int writingEntries;
+
+    /** Writes a main mesh table slot's commands, as it was last written to the GPU. */
+    private final MeshRegistry.EntryWriter standardWriter =
+            (slot, resident, generation, vertexOffset, firstIndex, indexCount, min, max) ->
+                    writeSlot(
+                            MeshKind.STANDARD,
+                            slot,
+                            resident,
+                            vertexOffset,
+                            firstIndex,
+                            indexCount);
+
+    /** Writes a baked mesh table slot's commands for every baked kind. */
+    private final MeshRegistry.EntryWriter bakedWriter =
+            (slot, resident, generation, vertexOffset, firstIndex, indexCount, min, max) -> {
+                for (MeshKind kind : MeshKind.ALL) {
+                    if (kind.isBaked()) {
+                        writeSlot(kind, slot, resident, vertexOffset, firstIndex, indexCount);
+                    }
+                }
+            };
+
+    /** Logs a main mesh table slot as changed. */
+    private final MeshRegistry.EntryWriter standardChanged =
+            (slot, resident, generation, vertexOffset, firstIndex, indexCount, min, max) ->
+                    logChange(slot, false);
+
+    /** Logs a baked mesh table slot as changed. */
+    private final MeshRegistry.EntryWriter bakedChanged =
+            (slot, resident, generation, vertexOffset, firstIndex, indexCount, min, max) ->
+                    logChange(slot, true);
+
+    /** How many changes the log starts with room for. */
+    private static final int INITIAL_CHANGES = 1024;
 
     /** The slots whose commands this frame writes as drawable, standard and baked; scratch. */
     private final BitSet standardNow = new BitSet();
@@ -362,11 +450,19 @@ public class InstanceDrawUpdate implements RenderStage {
         // slot, counted from the same snapshot the culling pass sees, so it can't overflow
         for (MeshKind kind : MeshKind.ALL) {
             final int slots = slotsOf(kind, meshSlots, bakedSlots);
-            if (firstVisible[kind.ordinal()].length != slots) {
-                firstVisible[kind.ordinal()] = new int[slots];
+            if (need[kind.ordinal()].length != slots) {
+                need[kind.ordinal()] = new int[slots];
             }
         }
-        final int culledEntries = layoutVisible(snapshot.models(), firstVisible);
+        countVisible(snapshot.models(), need);
+        final int culledEntries =
+                rooms.place(need, (kind, slot) -> logChange(slot, MeshKind.ALL[kind].isBaked()));
+        for (MeshKind kind : MeshKind.ALL) {
+            firstVisible[kind.ordinal()] = rooms.starts(kind.ordinal());
+        }
+        // And the slots whose GPU mesh table entries were written since last frame
+        pulledStandard = meshes.visitRecordedSince(pulledStandard, standardChanged);
+        pulledBaked = bakedMeshes.visitRecordedSince(pulledBaked, bakedChanged);
 
         // Models culling doesn't draw, with their instances
         final DebugVisualizers visualizers = scene.getDebugVisualizers();
@@ -451,43 +547,56 @@ public class InstanceDrawUpdate implements RenderStage {
                 MemoryUtil.memByteBuffer(
                         frameData.sceneDrawCommands.allocationInfo.pMappedData(),
                         Math.max(1, commandCount) * DRAW_COMMAND_SIZE);
-        // Only the commands of meshes drawable now or when this frame's commands were last
-        // written: the rest are already empty, and culling adds no instances to them
-        final long[] layout = {frameData.sceneDrawCommands.buffer, meshSlots, bakedSlots};
+        // Every culled command when the layout changed, else only those of slots whose mesh or
+        // room changed since this frame's commands were last written: the GPU zeroes the
+        // instance counts before culling, see InstanceCull
+        final long[] layout = {
+            frameData.sceneDrawCommands.buffer, meshSlots, bakedSlots, culledEntries
+        };
         final boolean whole = !Arrays.equals(layout, frameData.drawnLayout);
         System.arraycopy(layout, 0, frameData.drawnLayout, 0, layout.length);
-        standardNow.clear();
-        writeCulledCommands(
-                commands,
-                meshes,
-                MeshKind.STANDARD,
-                meshSlots,
-                bakedSlots,
-                firstVisible,
-                culledEntries,
-                whole ? null : frameData.drawnStandard,
-                standardNow,
-                emptySlots);
-        bakedNow.clear();
-        for (MeshKind kind : MeshKind.ALL) {
-            if (kind.isBaked()) {
-                writeCulledCommands(
-                        commands,
-                        bakedMeshes,
-                        kind,
-                        meshSlots,
-                        bakedSlots,
-                        firstVisible,
-                        culledEntries,
-                        whole ? null : frameData.drawnBaked,
-                        bakedNow,
-                        emptySlots);
+        final int frame = vulkanState.frameIndex;
+        if (whole || writtenUpTo[frame] < changesStart) {
+            standardNow.clear();
+            writeCulledCommands(
+                    commands,
+                    meshes,
+                    MeshKind.STANDARD,
+                    meshSlots,
+                    bakedSlots,
+                    firstVisible,
+                    culledEntries,
+                    null,
+                    standardNow,
+                    emptySlots);
+            bakedNow.clear();
+            for (MeshKind kind : MeshKind.ALL) {
+                if (kind.isBaked()) {
+                    writeCulledCommands(
+                            commands,
+                            bakedMeshes,
+                            kind,
+                            meshSlots,
+                            bakedSlots,
+                            firstVisible,
+                            culledEntries,
+                            null,
+                            bakedNow,
+                            emptySlots);
+                }
             }
+        } else {
+            writeChanged(
+                    commands,
+                    meshes,
+                    bakedMeshes,
+                    meshSlots,
+                    bakedSlots,
+                    culledEntries,
+                    writtenUpTo[frame]);
         }
-        frameData.drawnStandard.clear();
-        frameData.drawnStandard.or(standardNow);
-        frameData.drawnBaked.clear();
-        frameData.drawnBaked.or(bakedNow);
+        writtenUpTo[frame] = changesStart + changeCount;
+        trimChanges();
         writeFrusta(scene, frameData, visualizers.isCullingDisabled(), planeScratch);
         writeOcclusionView(scene, sceneTarget, vulkanState, frameData, visualizers);
 
@@ -528,19 +637,19 @@ public class InstanceDrawUpdate implements RenderStage {
     }
 
     /**
-     * Set aside room in a culled list for every instance of every mesh, kind by kind and mesh slot
-     * by mesh slot. A mesh slot used by more than one model, as when a released mesh's slot was
-     * reused, gets room for all of them; culling only fills it for the live mesh.
+     * Count how much room in a culled list every mesh needs, kind by kind and mesh slot by mesh
+     * slot: one entry for each instance. A mesh slot used by more than one model, as when a
+     * released mesh's slot was reused, needs room for all of them; culling only fills it for the
+     * live mesh. See {@link VisibleRooms} for where the rooms go.
      *
      * @param models Every model with instances, and how many each has.
-     * @param firstVisible Receives where each mesh slot's room starts, one array per {@link
-     *     MeshKind} ordinal, as long as that kind has slots.
-     * @return How many entries a list needs in all.
+     * @param counts Receives each mesh slot's count, one array per {@link MeshKind} ordinal, as
+     *     long as that kind has slots.
+     * @return How many entries the meshes need in all.
      */
-    static int layoutVisible(
-            @NonNull List<InstanceTable.ModelCount> models,
-            int @NonNull [] @NonNull [] firstVisible) {
-        // Each slot's instances are counted where its room's start goes, then turned into starts
+    static int countVisible(
+            @NonNull List<InstanceTable.ModelCount> models, int @NonNull [] @NonNull [] counts) {
+        final int[][] firstVisible = counts;
         for (int[] kindFirst : firstVisible) {
             Arrays.fill(kindFirst, 0);
         }
@@ -562,13 +671,112 @@ public class InstanceDrawUpdate implements RenderStage {
         }
         int total = 0;
         for (int[] kindFirst : firstVisible) {
-            for (int slot = 0; slot < kindFirst.length; ++slot) {
-                final int count = kindFirst[slot];
-                kindFirst[slot] = total;
+            for (int count : kindFirst) {
                 total += count;
             }
         }
         return total;
+    }
+
+    /**
+     * Log a slot as changed, so each frame in flight writes its commands again.
+     *
+     * @param slot The slot.
+     * @param baked Whether it is a baked mesh table slot.
+     */
+    private void logChange(int slot, boolean baked) {
+        if (changeCount == changes.length) {
+            changes = Arrays.copyOf(changes, changeCount * 2);
+        }
+        changes[changeCount++] = slot * 2 + (baked ? 1 : 0);
+    }
+
+    /** Forget the changes every frame in flight has written. */
+    private void trimChanges() {
+        long upTo = changesStart + changeCount;
+        for (long written : writtenUpTo) {
+            if (written >= changesStart) {
+                upTo = Math.min(upTo, written);
+            }
+        }
+        final int drop = (int) (upTo - changesStart);
+        if (drop > 0) {
+            System.arraycopy(changes, drop, changes, 0, changeCount - drop);
+            changeCount -= drop;
+            changesStart = upTo;
+        }
+    }
+
+    /**
+     * Write the culled commands of the slots logged as changed since a place in the log, each once.
+     *
+     * @param commands The mapped draw command buffer.
+     * @param meshes The main mesh table.
+     * @param bakedMeshes The baked mesh table.
+     * @param standardSlots How many slots the main mesh table has.
+     * @param bakedSlots How many slots the baked mesh table has.
+     * @param listEntries How many entries each culled list has.
+     * @param from The place in the log to start from.
+     */
+    private void writeChanged(
+            @NonNull ByteBuffer commands,
+            @NonNull MeshRegistry meshes,
+            @NonNull MeshRegistry bakedMeshes,
+            int standardSlots,
+            int bakedSlots,
+            int listEntries,
+            long from) {
+        writing = commands;
+        writingStandardSlots = standardSlots;
+        writingBakedSlots = bakedSlots;
+        writingEntries = listEntries;
+        seenStandard.clear();
+        seenBaked.clear();
+        for (int i = (int) (from - changesStart); i < changeCount; ++i) {
+            final int slot = changes[i] >>> 1;
+            if ((changes[i] & 1) != 0) {
+                if (slot < bakedSlots && !seenBaked.get(slot)) {
+                    seenBaked.set(slot);
+                    bakedMeshes.visitRecordedSlot(slot, bakedWriter);
+                }
+            } else if (slot < standardSlots && !seenStandard.get(slot)) {
+                seenStandard.set(slot);
+                meshes.visitRecordedSlot(slot, standardWriter);
+            }
+        }
+        writing = null;
+    }
+
+    /**
+     * Write one slot's culled commands for a kind, in every list, into {@link #writing}: drawable
+     * with no instances yet, or empty.
+     *
+     * @param kind The kind of mesh.
+     * @param slot The slot.
+     * @param resident Whether it holds a mesh that can be drawn.
+     * @param vertexOffset Where its vertices start.
+     * @param firstIndex Where its indices start.
+     * @param indexCount How many indices it has.
+     */
+    private void writeSlot(
+            @NonNull MeshKind kind,
+            int slot,
+            boolean resident,
+            int vertexOffset,
+            int firstIndex,
+            int indexCount) {
+        final int start = firstVisible[kind.ordinal()][slot];
+        for (int list = 0; list < LIST_COUNT; ++list) {
+            writeCommand(
+                    writing,
+                    commandIndex(kind, list, slot, writingStandardSlots, writingBakedSlots)
+                            * DRAW_COMMAND_SIZE,
+                    resident ? indexCount : 0,
+                    0,
+                    resident ? firstIndex : 0,
+                    resident ? vertexOffset : 0,
+                    list * writingEntries + start);
+        }
     }
 
     /**

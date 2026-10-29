@@ -504,6 +504,12 @@ public final class LiveLod implements AutoCloseable {
         for (LodStore.CellKey key : rebuilt.removed()) {
             cover(key, covered);
         }
+        // Cells whose sections all went before they were built: nothing to take out, but their
+        // removals are covered, or whoever waits on them waits for good
+        for (LodStore.CellKey key : rebuilt.emptied()) {
+            lastChange.remove(key);
+            cover(key, covered);
+        }
         final List<Piece> tops = new ArrayList<>();
         final boolean parentsBuilt = rebuilt.built().stream().anyMatch(key -> key.level() > 0);
         if (parentsBuilt || rebuilt.removed().stream().anyMatch(key -> key.level() > 0)) {

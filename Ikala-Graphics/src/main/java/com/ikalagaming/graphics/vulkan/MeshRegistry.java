@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.vulkan;
 
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.MeshKind;
+import com.ikalagaming.util.IntArrayList;
 
 import lombok.NonNull;
 import org.joml.Vector3f;
@@ -174,6 +175,19 @@ public class MeshRegistry {
 
     /** Each slot's generation as last written to the GPU mesh table. */
     private int[] recordedGenerations = new int[0];
+
+    /**
+     * The slots whose GPU mesh table entry was written, in order, from {@link #recordedLogStart}
+     * on: draw commands built from the entries are brought up to date from it, rather than written
+     * again for every slot each frame.
+     */
+    private final IntArrayList recordedLog = new IntArrayList();
+
+    /** The place in the log of its first entry, counting every entry ever logged. */
+    private long recordedLogStart;
+
+    /** Whether written GPU entries are logged, once something reads the log. */
+    private boolean logging;
 
     /**
      * Receives a mesh table entry that changed, to write into the GPU's copy.
@@ -583,6 +597,9 @@ public class MeshRegistry {
                     writer.write(slot, false, generations[slot], 0, 0, 0, ORIGIN, ORIGIN);
                     recordedResident.clear(slot);
                 }
+                if (logging) {
+                    recordedLog.addInt(slot);
+                }
             }
             changed.clear();
             return handles.length;
@@ -618,6 +635,84 @@ public class MeshRegistry {
             return handles.length;
         } finally {
             lock.unlock();
+        }
+    }
+
+    /**
+     * Where the log of written GPU entries ends, see {@link #visitRecordedSince}. Asking starts the
+     * log.
+     *
+     * @return The place after its last entry.
+     */
+    public long recordedLogEnd() {
+        lock.lock();
+        try {
+            logging = true;
+            return recordedLogStart + recordedLog.size();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Hand every slot whose GPU entry was written since a place in the log to a writer, as last
+     * written, drawable or not, and forget the log before that place: there is one reader.
+     *
+     * @param since The place to start from, as {@link #recordedLogEnd} gave it.
+     * @param writer Receives each slot, possibly more than once, with no bounding box.
+     * @return The place the log ends, to start from next time.
+     */
+    public long visitRecordedSince(long since, @NonNull EntryWriter writer) {
+        lock.lock();
+        try {
+            logging = true;
+            final int from = (int) Math.max(0, since - recordedLogStart);
+            for (int i = from; i < recordedLog.size(); ++i) {
+                visitRecordedLocked(recordedLog.getInt(i), writer);
+            }
+            final long end = recordedLogStart + recordedLog.size();
+            recordedLogStart = end;
+            recordedLog.clear();
+            return end;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Hand one slot to a writer as last written to the GPU mesh table.
+     *
+     * @param slot The slot.
+     * @param writer Receives it, with no bounding box: drawable or not.
+     */
+    public void visitRecordedSlot(int slot, @NonNull EntryWriter writer) {
+        lock.lock();
+        try {
+            visitRecordedLocked(slot, writer);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Hand one slot to a writer as last written. The lock must be held.
+     *
+     * @param slot The slot.
+     * @param writer Receives it.
+     */
+    private void visitRecordedLocked(int slot, @NonNull EntryWriter writer) {
+        if (slot < handles.length && recordedResident.get(slot)) {
+            writer.write(
+                    slot,
+                    true,
+                    recordedGenerations[slot],
+                    recordedVertexOffsets[slot],
+                    recordedFirstIndices[slot],
+                    recordedIndexCounts[slot],
+                    ORIGIN,
+                    ORIGIN);
+        } else {
+            writer.write(slot, false, 0, 0, 0, 0, ORIGIN, ORIGIN);
         }
     }
 
