@@ -5,7 +5,8 @@ male1591 and female1605 game proxies are CC0), each as the low-poly proxy plus e
 put in the rig's T pose, the male scaled to 2 m and the female by the same factor, and given
 the ikala:rig/biped armature, built from the rig definition so the bone names, parents and
 kinds can't drift from it: its bones are placed from MPFB's own rig and MakeHuman's face
-landmarks, and its weights carried over from MPFB's, smoothed over the shoulders, and shared
+landmarks, the main ones pointing the conventional ways at rest (spine up, arms out, legs
+down) whatever the body's lean, and its weights carried over from MPFB's, smoothed over the shoulders, and shared
 out to the shape bones (girth, muscle, bust, belly and the face) by zone, so the plan's sliders
 work. The female's bones point the male's way at rest, so clips retargeted onto the male's rest
 fit both. Each body is cut into the plan's body slots along seam planes; the two sides of a cut
@@ -342,8 +343,15 @@ def twist_bone(rig, name, degrees):
 
 
 def t_pose(rig, meshes):
-    """Raise the arms straight out to the sides, palms down and thumbs forward, and bake the
-    pose into the meshes."""
+    """Raise the arms straight out to the sides, palms down and thumbs forward, stand the legs
+    straight down with the feet under the hips (MakeHuman stands wide), and bake the pose into
+    the meshes."""
+    for s in ("l", "r"):
+        foot = rig.pose.bones["foot_" + s]
+        heading = (foot.tail - foot.head).normalized()
+        for name in ("thigh_", "calf_"):
+            point_bone(rig, name + s, (0, 0, -1))
+        point_bone(rig, "foot_" + s, heading)  # the feet keep their way, so they stay flat
     for s, out in (("l", 1), ("r", -1)):
         for name in ("upperarm_", "lowerarm_", "hand_"):
             point_bone(rig, name + s, (out, 0, 0))
@@ -499,12 +507,36 @@ def layout(joints, marks, skin, height):
 
 
 def point_like(bones, directions):
-    """Turn each bone about its head to point the given way, keeping its length."""
+    """Turn the bones given directions about their heads to point those ways, keeping their
+    lengths; the rest stay as they are."""
     turned = {}
     for name, (head, tail) in bones.items():
         a, b = Vector(head), Vector(tail)
-        turned[name] = (head, tuple(a + directions[name] * (b - a).length))
+        if name in directions:
+            tail = tuple(a + Vector(directions[name]).normalized() * (b - a).length)
+        turned[name] = (head, tail)
     return turned
+
+
+def conventional_directions():
+    """Which way the body's main bones point at rest, whatever the anatomy: the spine and head
+    straight up, the arms straight out, the legs straight down and the feet forward. Clips are
+    retargeted by turning each rest bone to its source bone's direction, and other rigs point
+    their bones this way, so a bone following the body's own lean (the pelvis tips back, the
+    legs angle out) would be turned at rest, tipping the hips and lowering the feet."""
+    up, down, forward = (0, 0, 1), (0, 0, -1), (0, -1, 0)
+    directions = {name: up for name in ("hips", "spine", "chest", "neck", "head",
+                                        "face.cranium", "girth.hips", "girth.waist",
+                                        "girth.chest")}
+    for side, out in (("L", 1), ("R", -1)):
+        for name in ("clavicle", "upperarm", "forearm", "hand", "girth.upperarm",
+                     "girth.forearm", "muscle.upperarm"):
+            directions["%s.%s" % (name, side)] = (out, 0, 0)
+        for name in ("thigh", "shin", "girth.thigh", "girth.shin", "muscle.thigh"):
+            directions["%s.%s" % (name, side)] = down
+        directions["foot." + side] = (0, -0.86, -0.51)
+        directions["toe." + side] = forward
+    return directions
 
 
 class Weights:
@@ -774,7 +806,7 @@ def build(gender_name, gender, proxy_name, rig_definition, plan, factor=None, di
     print("[mannequin] %s: %.3f m, %d triangles" % (
         gender_name, height, sum(len(p.vertices) - 2 for p in proxy.data.polygons)))
 
-    bones = layout(joints, marks, skin, height)
+    bones = point_like(layout(joints, marks, skin, height), conventional_directions())
     if directions is not None:
         bones = point_like(bones, directions)
     for obj in (basemesh, mpfb_rig):
