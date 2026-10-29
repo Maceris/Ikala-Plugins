@@ -1349,7 +1349,7 @@ public class LodRenderer {
         if (bound == null) {
             return;
         }
-        shadows.addSphere(
+        shadows.addLevelOfDetail(
                 new double[AXES],
                 LodCullMath.instanceSphere(
                         bound,
@@ -2612,7 +2612,7 @@ public class LodRenderer {
             return;
         }
         for (LodStore.PieceCluster cluster : piece.clusters) {
-            shadows.addSphere(world.origin, cluster.info().tight());
+            shadows.addLevelOfDetail(world.origin, cluster.info().tight());
         }
     }
 
@@ -2624,7 +2624,8 @@ public class LodRenderer {
      */
     private void invalidate(@NonNull World world, @NonNull Collection<Member> members) {
         for (Member member : members) {
-            shadows.addSphere(world.origin, member.piece().clusters[member.index()].info().tight());
+            shadows.addLevelOfDetail(
+                    world.origin, member.piece().clusters[member.index()].info().tight());
         }
     }
 
@@ -2761,7 +2762,7 @@ public class LodRenderer {
                 piece.clusters[index] = cluster;
                 joinUnits(world, piece, index);
                 writeEntry(world, piece, index);
-                shadows.addSphere(world.origin, cluster.info().tight());
+                shadows.addLevelOfDetail(world.origin, cluster.info().tight());
             }
         }
         invalidateChanged(world, world.batchStale, batch.stale());

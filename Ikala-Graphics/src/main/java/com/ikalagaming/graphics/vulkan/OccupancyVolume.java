@@ -175,14 +175,18 @@ public class OccupancyVolume {
     /** Whether each level is cleared whole this frame, so its other boxes are left out. */
     private final boolean[] clearedWhole = new boolean[OccupancyClipmap.LEVELS];
 
-    /** Sections to voxelize, by level, as section corners in sections, finest level first. */
-    private final List<Set<List<Long>>> queued = new ArrayList<>();
+    /**
+     * Sections to voxelize, by level, finest level first. Kept as section places, whose hash
+     * spreads them: lists of boxed corners hashed every four nearby sections alike, and cost an
+     * allocation per section queued.
+     */
+    private final List<Set<LodStore.SectionPos>> queued = new ArrayList<>();
 
     /**
      * Sections whose bricks came in after they were voxelized, to mark from them too, by level, as
-     * section corners in sections. Nothing is cleared for them: their bits only add to the voxels.
+     * section places. Nothing is cleared for them: their bits only add to the voxels.
      */
-    private final List<Set<List<Long>>> queuedBricks = new ArrayList<>();
+    private final List<Set<LodStore.SectionPos>> queuedBricks = new ArrayList<>();
 
     /** Triangles voxelized since the volume was made. */
     @Getter private long trianglesVoxelized;
@@ -520,10 +524,8 @@ public class OccupancyVolume {
         final double size = Sections.SECTION_SIZE;
         final double[] min = {position.x() * size, position.y() * size, position.z() * size};
         final double[] max = {min[0] + size, min[1] + size, min[2] + size};
-        final List<Long> corner =
-                List.of((long) position.x(), (long) position.y(), (long) position.z());
         for (OccupancyClipmap.Box box : clipmap.boxesFor(min, max)) {
-            queuedBricks.get(box.level()).add(corner);
+            queuedBricks.get(box.level()).add(position);
         }
     }
 
@@ -555,13 +557,13 @@ public class OccupancyVolume {
     private void queueSections(OccupancyClipmap.@NonNull Box box) {
         final double[] world = box.world();
         final int section = Sections.SECTION_SIZE;
-        final Set<List<Long>> sectionsQueued = queued.get(box.level());
+        final Set<LodStore.SectionPos> sectionsQueued = queued.get(box.level());
         for (long x = Math.floorDiv((long) world[0], section); x * section < world[3]; ++x) {
             for (long y = Math.floorDiv((long) world[1], section); y * section < world[4]; ++y) {
                 for (long z = Math.floorDiv((long) world[2], section);
                         z * section < world[5];
                         ++z) {
-                    sectionsQueued.add(List.of(x, y, z));
+                    sectionsQueued.add(new LodStore.SectionPos((int) x, (int) y, (int) z));
                 }
             }
         }
@@ -595,16 +597,16 @@ public class OccupancyVolume {
         long triangles = 0;
         final int size = Sections.SECTION_SIZE;
         for (int level = 0; level < OccupancyClipmap.LEVELS; ++level) {
-            final Iterator<List<Long>> it = queued.get(level).iterator();
+            final Iterator<LodStore.SectionPos> it = queued.get(level).iterator();
             while (it.hasNext() && triangles < MAX_TRIANGLES_PER_FRAME) {
-                final List<Long> corner = it.next();
+                final LodStore.SectionPos corner = it.next();
                 it.remove();
                 // Its brick is marked from here, if it stands in
                 queuedBricks.get(level).remove(corner);
                 final double[] min = {
-                    (double) corner.get(0) * size,
-                    (double) corner.get(1) * size,
-                    (double) corner.get(2) * size
+                    (double) corner.x() * size,
+                    (double) corner.y() * size,
+                    (double) corner.z() * size
                 };
                 for (SectionManager.Caster caster : sections.meshesAt(min)) {
                     final MeshHandle mesh = caster.mesh();
@@ -628,9 +630,9 @@ public class OccupancyVolume {
                 }
                 triangles += addBrickJob(sections, bricks, level, corner, brickJobs);
             }
-            final Iterator<List<Long>> late = queuedBricks.get(level).iterator();
+            final Iterator<LodStore.SectionPos> late = queuedBricks.get(level).iterator();
             while (late.hasNext() && triangles < MAX_TRIANGLES_PER_FRAME) {
-                final List<Long> corner = late.next();
+                final LodStore.SectionPos corner = late.next();
                 late.remove();
                 triangles += addBrickJob(sections, bricks, level, corner, brickJobs);
             }
@@ -669,7 +671,7 @@ public class OccupancyVolume {
      * @param sections The sections.
      * @param bricks The volume bricks, or null.
      * @param level The level.
-     * @param corner The section's corner, in sections.
+     * @param position The section.
      * @param out Where the job goes.
      * @return What it counts as against the budget, 0 if there is no job.
      */
@@ -677,16 +679,11 @@ public class OccupancyVolume {
             @NonNull SectionManager sections,
             VolumeBricks bricks,
             int level,
-            @NonNull List<Long> corner,
+            LodStore.@NonNull SectionPos position,
             @NonNull List<BrickJob> out) {
         if (bricks == null) {
             return 0;
         }
-        final LodStore.SectionPos position =
-                new LodStore.SectionPos(
-                        corner.get(0).intValue(),
-                        corner.get(1).intValue(),
-                        corner.get(2).intValue());
         if (!sections.bricksStandIn(position)) {
             return 0;
         }
@@ -699,7 +696,9 @@ public class OccupancyVolume {
                 new BrickJob(
                         level,
                         new long[] {
-                            corner.get(0) * size, corner.get(1) * size, corner.get(2) * size
+                            (long) position.x() * size,
+                            (long) position.y() * size,
+                            (long) position.z() * size
                         },
                         slot));
         return BRICK_COST;

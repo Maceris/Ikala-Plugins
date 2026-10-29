@@ -9,9 +9,9 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * Boxes in the world where something that doesn't move changed, such as a section baked again or
- * level of detail swapping cells, so cached shadow maps can draw those parts again. Some are only
- * swaps of one level of detail of a surface for another, which maps that may keep either can skip.
- * Added from any thread; taken by the render thread once a frame.
+ * level of detail swapping cells, so cached shadow maps can draw those parts again. Each says what
+ * changed, see {@link Change}, so maps that don't draw it can skip it. Added from any thread; taken
+ * by the render thread once a frame.
  */
 public final class ShadowInvalidation {
 
@@ -30,7 +30,26 @@ public final class ShadowInvalidation {
         void changed(double @NonNull [] min, double @NonNull [] max);
     }
 
-    /** How a changed box is taken when draining, with whether it is a swap. */
+    /** What changed in a box. */
+    public enum Change {
+        /**
+         * Sections' meshes or bricks, or anything else drawn from the sections themselves, which
+         * every map draws.
+         */
+        SURFACE,
+        /**
+         * Level of detail clusters or the instances it draws, which maps built only from the
+         * sections, like the occupancy volume, don't draw.
+         */
+        LEVEL_OF_DETAIL,
+        /**
+         * Only a surface's level of detail, swapped for another within its error, as when streaming
+         * shows or hides a unit; maps that may keep either can skip it too.
+         */
+        SWAP
+    }
+
+    /** How a changed box is taken when draining, with what changed. */
     @FunctionalInterface
     public interface Taker {
         /**
@@ -38,16 +57,18 @@ public final class ShadowInvalidation {
          *
          * @param min Its minimum corner, in the world.
          * @param max Its maximum corner, in the world.
-         * @param swap Whether only a surface's level of detail changed there, to another within its
-         *     error, as when streaming shows or hides a unit.
+         * @param change What changed there.
          */
-        void changed(double @NonNull [] min, double @NonNull [] max, boolean swap);
+        void changed(double @NonNull [] min, double @NonNull [] max, @NonNull Change change);
     }
 
-    /** Where a box says whether it is a swap: 1 if so. */
-    private static final int SWAP = 2 * AXES;
+    /** What changed, by ordinal. */
+    private static final Change[] CHANGES = Change.values();
 
-    /** The boxes waiting, each min x, y, z, max x, y, z, then whether it is a swap. */
+    /** Where a box says what changed, by {@link Change} ordinal. */
+    private static final int CHANGE = 2 * AXES;
+
+    /** The boxes waiting, each min x, y, z, max x, y, z, then what changed by ordinal. */
     private final ConcurrentLinkedQueue<double[]> boxes = new ConcurrentLinkedQueue<>();
 
     /**
@@ -57,7 +78,10 @@ public final class ShadowInvalidation {
      * @param max Its maximum corner, in the world.
      */
     public void add(double @NonNull [] min, double @NonNull [] max) {
-        boxes.add(new double[] {min[0], min[1], min[2], max[0], max[1], max[2], 0});
+        boxes.add(
+                new double[] {
+                    min[0], min[1], min[2], max[0], max[1], max[2], Change.SURFACE.ordinal()
+                });
     }
 
     /**
@@ -75,18 +99,18 @@ public final class ShadowInvalidation {
                     origin.x() + size,
                     origin.y() + size,
                     origin.z() + size,
-                    0
+                    Change.SURFACE.ordinal()
                 });
     }
 
     /**
-     * Note a changed sphere.
+     * Note a sphere where level of detail clusters, or instances it draws, changed.
      *
      * @param origin What the sphere's center is measured from, in the world.
      * @param sphere x, y, z and radius.
      */
-    public void addSphere(double @NonNull [] origin, double @NonNull [] sphere) {
-        addSphere(origin, sphere, false);
+    public void addLevelOfDetail(double @NonNull [] origin, double @NonNull [] sphere) {
+        addSphere(origin, sphere, Change.LEVEL_OF_DETAIL);
     }
 
     /**
@@ -96,7 +120,7 @@ public final class ShadowInvalidation {
      * @param sphere x, y, z and radius.
      */
     public void addSwap(double @NonNull [] origin, double @NonNull [] sphere) {
-        addSphere(origin, sphere, true);
+        addSphere(origin, sphere, Change.SWAP);
     }
 
     /**
@@ -104,9 +128,10 @@ public final class ShadowInvalidation {
      *
      * @param origin What the sphere's center is measured from, in the world.
      * @param sphere x, y, z and radius.
-     * @param swap Whether only a surface's level of detail changed there.
+     * @param change What changed there.
      */
-    private void addSphere(double @NonNull [] origin, double @NonNull [] sphere, boolean swap) {
+    private void addSphere(
+            double @NonNull [] origin, double @NonNull [] sphere, @NonNull Change change) {
         final double radius = sphere[AXES];
         boxes.add(
                 new double[] {
@@ -116,7 +141,7 @@ public final class ShadowInvalidation {
                     origin[0] + sphere[0] + radius,
                     origin[1] + sphere[1] + radius,
                     origin[2] + sphere[2] + radius,
-                    swap ? 1 : 0
+                    change.ordinal()
                 });
     }
 
@@ -132,7 +157,7 @@ public final class ShadowInvalidation {
         while ((box = boxes.poll()) != null) {
             System.arraycopy(box, 0, min, 0, AXES);
             System.arraycopy(box, AXES, max, 0, AXES);
-            taker.changed(min, max, box[SWAP] != 0);
+            taker.changed(min, max, CHANGES[(int) box[CHANGE]]);
         }
     }
 }

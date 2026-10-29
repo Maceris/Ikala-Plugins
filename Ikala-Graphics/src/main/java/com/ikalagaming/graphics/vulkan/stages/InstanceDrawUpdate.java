@@ -23,6 +23,7 @@ import com.ikalagaming.graphics.vulkan.PointShadows;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 import com.ikalagaming.graphics.vulkan.SceneTarget;
 import com.ikalagaming.graphics.vulkan.ShaderBindings;
+import com.ikalagaming.graphics.vulkan.ShadowInvalidation;
 import com.ikalagaming.graphics.vulkan.VulkanState;
 
 import lombok.NonNull;
@@ -396,15 +397,20 @@ public class InstanceDrawUpdate implements RenderStage {
         // Culling needs the cascades before the shadow stage draws them, and the cache needs to
         // know what changed before it decides what to draw again
         // Swaps between levels of detail of a surface aren't drawn into the sun's cached cascades:
-        // what they hold is within the error of either, and streaming makes several a frame
+        // what they hold is within the error of either, and streaming makes several a frame. The
+        // occupancy volume is voxelized from the sections alone: level of detail changes, a sphere
+        // per cluster and thousands a frame while streaming, would only clear and queue whole
+        // levels of it again
         vulkanState.shadowInvalidation.drain(
-                (min, max, swap) -> {
-                    if (!swap) {
+                (min, max, change) -> {
+                    if (change != ShadowInvalidation.Change.SWAP) {
                         vulkanState.sunShadows.invalidate(min, max);
                     }
                     vulkanState.skyOcclusion.invalidate(min, max);
                     vulkanState.pointShadows.invalidate(min, max);
-                    vulkanState.occupancy.invalidate(min, max);
+                    if (change == ShadowInvalidation.Change.SURFACE) {
+                        vulkanState.occupancy.invalidate(min, max);
+                    }
                 });
         vulkanState.sunShadows.plan(
                 frameData.cascadeShadowSplits,
