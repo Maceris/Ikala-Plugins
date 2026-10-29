@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -57,6 +58,9 @@ class LiveLodTest {
         /** The newest generation each section is shown at. */
         final Map<LodStore.SectionPos, Long> covered = new TreeMap<>();
 
+        /** Each cell's own clusters as the batches told them, consumers and all, by local id. */
+        final Map<LodStore.CellKey, Map<Integer, LodStore.PieceCluster>> told = new HashMap<>();
+
         /**
          * Step until there is nothing left to build, applying each batch.
          *
@@ -70,13 +74,39 @@ class LiveLodTest {
             final List<LiveLod.Batch> out = batches.subList(from, batches.size());
             for (LiveLod.Batch batch : out) {
                 batch.removed().forEach(cells::remove);
+                batch.removed().forEach(told::remove);
                 for (LiveLod.Piece piece : batch.added()) {
                     assertEquals(piece.clusters().size(), piece.meshes().size());
                     cells.put(piece.key(), piece.clusters().size());
+                    final Map<Integer, LodStore.PieceCluster> own = new HashMap<>();
+                    piece.clusters().forEach(cluster -> own.put(cluster.local(), cluster));
+                    told.put(piece.key(), own);
+                }
+                for (LiveLod.Piece tops : batch.tops()) {
+                    for (LodStore.PieceCluster cluster : tops.clusters()) {
+                        told.get(tops.key()).put(cluster.local(), cluster);
+                    }
                 }
                 covered.putAll(batch.covered());
             }
             return out;
+        }
+
+        /**
+         * Check that the batches told every cell's clusters' consumers as the store has them now:
+         * no top whose consumer changed was left out.
+         */
+        void assertToldAsStored() {
+            final LodStore store = live.store();
+            assertEquals(store.cellKeys(), told.keySet());
+            for (LodStore.CellKey key : store.cellKeys()) {
+                for (LodStore.PieceCluster cluster : store.piece(key)) {
+                    final LodStore.PieceCluster said = told.get(key).get(cluster.local());
+                    assertTrue(
+                            cluster.sameConsumer(said),
+                            key + " cluster " + cluster.local() + " was told another consumer");
+                }
+            }
         }
     }
 
@@ -147,6 +177,48 @@ class LiveLodTest {
         }
         assertEquals(2L, batch.covered().get(position(edited)));
         assertFalse(batch.tops().isEmpty(), "Untouched cells' tops get their new parents");
+    }
+
+    /**
+     * Batches send only the tops whose consumer changed, yet every consumer comes out as stored,
+     * through loading, an edit and taking a corner out; and fewer than every cell's tops.
+     */
+    @Test
+    void testOnlyChangedTopsAreSent() {
+        final List<LodMesh> sections = DagTest.terrain(4);
+        final Kept kept = new Kept();
+        putAll(kept, sections, 1);
+        kept.settle();
+        kept.assertToldAsStored();
+
+        final LodMesh edited = sections.get(sections.size() / 2);
+        kept.live.put(position(edited), edited, 2);
+        final List<LiveLod.Batch> batches = kept.settle();
+        kept.assertToldAsStored();
+        int sent = 0;
+        for (LiveLod.Batch batch : batches) {
+            for (LiveLod.Piece piece : batch.tops()) {
+                sent += piece.clusters().size();
+            }
+        }
+        int tops = 0;
+        for (LodStore.CellKey key : kept.live.store().cellKeys()) {
+            for (LodStore.PieceCluster cluster : kept.live.store().piece(key)) {
+                tops += cluster.parentCell() == null || !cluster.parentCell().equals(key) ? 1 : 0;
+            }
+        }
+        assertTrue(sent < tops, sent + " tops sent of " + tops);
+
+        // A corner of sections out, so cells and parents above them go or are rebuilt
+        long generation = 3;
+        for (LodMesh mesh : sections) {
+            final LodStore.SectionPos at = position(mesh);
+            if (at.x() < 2 && at.z() < 2) {
+                kept.live.remove(at, generation++);
+            }
+        }
+        kept.settle();
+        kept.assertToldAsStored();
     }
 
     /** Many edits to a section before a build come back as one, at the newest generation. */
