@@ -1,6 +1,6 @@
 """Fit a generated mesh onto the mannequin as a rigid accessory on one socket.
 
-Run it headless with Blender 3.3 or later, which partgen.py does:
+Run it headless with Blender 5 or later, which partgen.py does:
 
     blender -b --factory-startup --python fit_accessory.py -- --mesh <generated.glb>
         --mannequin <mannequin.glb> --bone <socket bone> --rule <json> --name <mesh name>
@@ -25,6 +25,17 @@ from mathutils import Vector
 # A part of the generated mesh this thin across, and this many times longer, is a sliver
 SLIVER_THICKNESS = 0.003
 SLIVER_ASPECT = 10
+# A loose part this many times longer than its second size is a needle, however thick
+NEEDLE_ASPECT = 8
+# Needles attached to the surface, as fractions of the mesh's size: neighbors within the reach
+# at the same height (heights stretched by the flatten factor) all inside the width make a
+# vertex thin, and a connected run of thin vertices is a needle if it is longer than the length,
+# stays within the width of a straight line, and leans less than the tilt (degrees)
+NEEDLE_REACH = 0.03
+NEEDLE_WIDTH = 0.02
+NEEDLE_FLATTEN = 20
+NEEDLE_LENGTH = 0.2
+NEEDLE_TILT = 15
 # Fewer faces than this is a speck
 SPECK_FACES = 12
 # Slices the mesh is cut into to find its crown, and the points a slice needs to count
@@ -92,6 +103,65 @@ def weld(obj):
     bm.free()
 
 
+def is_needle(points, size, narrow):
+    """Whether a run of thin vertices is a needle: long, straight (close to its own best line)
+    and upright."""
+    if len(points) < 3:
+        return False
+    centered = points - points.mean(0)
+    _, spread, axes = np.linalg.svd(centered, full_matrices=False)
+    axis = axes[0]
+    along = centered @ axis
+    off_line = np.linalg.norm(centered - np.outer(along, axis), axis=1).max()
+    return (along.max() - along.min() > size * NEEDLE_LENGTH and off_line < narrow
+            and abs(axis[2]) > math.cos(math.radians(NEEDLE_TILT)))
+
+
+def drop_needles(obj):
+    """Remove the straight vertical needles generated meshes can carry, attached to the surface.
+    A thin vertex has its neighbors at the same height crowded into a narrow cross-section,
+    where on a surface they spread out along it. A connected run of thin vertices is a needle
+    only if it is also long, straight and upright, which thin parts made on purpose rarely all
+    are: tassels sway and are short, grating bars lie mostly level, a crown's point is short."""
+    from mathutils.kdtree import KDTree
+    co = vertices(obj)
+    size = (co.max(0) - co.min(0)).max()
+    radius, narrow = size * NEEDLE_REACH, size * NEEDLE_WIDTH
+    tree = KDTree(len(co))
+    for i, p in enumerate(co):
+        tree.insert((p[0], p[1], p[2] * NEEDLE_FLATTEN), i)  # neighbors come from a thin slice
+    tree.balance()
+    thin = np.zeros(len(co), dtype=bool)
+    for i, p in enumerate(co):
+        near = co[[index for _, index, _ in tree.find_range((p[0], p[1], p[2] * NEEDLE_FLATTEN),
+                                                            radius)]]
+        thin[i] = (near[:, :2].max(0) - near[:, :2].min(0)).max() < narrow
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.verts.ensure_lookup_table()
+    seen, doomed = set(), []
+    for start in (v for v in bm.verts if thin[v.index]):
+        if start.index in seen:
+            continue
+        run, stack = [], [start]
+        seen.add(start.index)
+        while stack:
+            v = stack.pop()
+            run.append(v)
+            for edge in v.link_edges:
+                other = edge.other_vert(v)
+                if thin[other.index] and other.index not in seen:
+                    seen.add(other.index)
+                    stack.append(other)
+        if is_needle(np.array([v.co for v in run]), size, narrow):
+            doomed += run
+    bmesh.ops.delete(bm, geom=doomed, context="VERTS")
+    bm.to_mesh(obj.data)
+    bm.free()
+    print("[fit] dropped %d needle vertices" % len(doomed))
+
+
 def drop_slivers(obj):
     """Remove loose parts that are needles, sheets or specks, and give the mesh back whole."""
     select_only(obj)
@@ -103,12 +173,15 @@ def drop_slivers(obj):
     kept = []
     for piece in pieces:
         co = vertices(piece)
-        size = co.max(0) - co.min(0)
-        thin = size.min() < SLIVER_THICKNESS and size.max() > SLIVER_ASPECT * size.min()
-        if thin or len(piece.data.polygons) < SPECK_FACES:
+        thin, middle, long = np.sort(co.max(0) - co.min(0))
+        sheet = thin < SLIVER_THICKNESS and long > SLIVER_ASPECT * thin
+        needle = long > NEEDLE_ASPECT * middle
+        if sheet or needle or len(piece.data.polygons) < SPECK_FACES:
             bpy.data.objects.remove(piece)
         else:
             kept.append(piece)
+            print("[fit] kept a part of %d faces, %.3f x %.3f x %.3f" % (
+                len(piece.data.polygons), thin, middle, long))
     print("[fit] kept %d of %d loose parts" % (len(kept), len(pieces)))
     select_only(*kept)
     if len(kept) > 1:
@@ -316,7 +389,7 @@ def emit_base_color(obj):
     """Show each material's base color as emission, so an emission bake copies the base color
     as it is. A diffuse color bake leaves out the metallic share, which turns gold black."""
     for slot in obj.material_slots:
-        if slot.material is None or not slot.material.use_nodes:
+        if slot.material is None or slot.material.node_tree is None:
             continue
         tree = slot.material.node_tree
         bsdf = next((n for n in tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
@@ -337,8 +410,7 @@ def bake(high, low, name, size):
     enable_gpu()
     scene = bpy.context.scene
     scene.cycles.samples = 8
-    material = bpy.data.materials.new(name)
-    material.use_nodes = True
+    material = bpy.data.materials.new(name)  # with a node tree, from Blender 5
     low.data.materials.append(material)
     tree = material.node_tree
     bsdf = tree.nodes["Principled BSDF"]
@@ -453,6 +525,8 @@ def main():
 
     high = generated_mesh(args.mesh)
     weld(high)
+    if not rule.get("keepThin", False):
+        drop_needles(high)
     high = drop_slivers(high)
     if rule["anchor"] == "bottom" and rule["fit"] == "crown":
         place_bottom_crown(high, mannequin, armature, rule)

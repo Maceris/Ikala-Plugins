@@ -1,6 +1,6 @@
 """Render generated meshes from the front, a front corner and the back, for reviewing them.
 
-Run it headless with Blender 3.3 or later, which partgen.py does:
+Run it headless with Blender 5 or later, which partgen.py does:
 
     blender -b --factory-startup --python render_meshes.py -- <mesh.glb> <folder> [<mesh.glb> <folder>...]
 
