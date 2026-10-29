@@ -917,9 +917,15 @@ public class GraphicsManager {
             // Drives the gate benchmark's camera and timings, if one is running
             GateBenchmark.update(scene);
             render();
-            // Update the next time we should render a frame
+            // Frames keep to a fixed beat: one that started late, as the wait sometimes wakes a few
+            // milliseconds past its time, is followed by one that starts early, rather than every
+            // later frame moving back with it. More than a frame behind, as after a long pause, the
+            // beat starts again from now rather than rush frames out to catch up
             lastRenderTime = currentTime;
-            nextRenderTime = currentTime + frameTime;
+            nextRenderTime += frameTime;
+            if (nextRenderTime <= currentTime) {
+                nextRenderTime = currentTime + frameTime;
+            }
         }
 
         // Nothing is due until the next update or frame: wait for input rather than spin the main

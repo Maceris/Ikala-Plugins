@@ -159,6 +159,17 @@ public final class LodStore {
             return hashOf(x, y, z, level);
         }
 
+        // Written out: a record's own equals goes through method handles, which aren't always
+        // inlined, and these are compared in every hash lookup of sections
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof SectionPos other
+                    && x == other.x
+                    && y == other.y
+                    && z == other.z
+                    && level == other.level;
+        }
+
         /**
          * A full detail section's place.
          *
@@ -197,6 +208,17 @@ public final class LodStore {
                     Math.floorDiv(x, BRANCHING),
                     Math.floorDiv(y, BRANCHING),
                     Math.floorDiv(z, BRANCHING));
+        }
+
+        // Written out: a record's own equals goes through method handles, which aren't always
+        // inlined, and level of detail streaming compares cell keys thousands of times a batch
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof CellKey other
+                    && level == other.level
+                    && x == other.x
+                    && y == other.y
+                    && z == other.z;
         }
 
         @Override

@@ -51,6 +51,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
 import java.util.SortedSet;
@@ -561,6 +562,15 @@ public class LodRenderer {
             return cell == null
                     ? group
                     : LodStore.hashOf(cell.hashCode(), cell.level(), group, cell.x());
+        }
+
+        // Written out: a record's own equals goes through method handles, and wasn't inlined
+        // here, where applying a batch looks up three keys for every cluster
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof UnitKey other
+                    && group == other.group
+                    && Objects.equals(cell, other.cell);
         }
     }
 
