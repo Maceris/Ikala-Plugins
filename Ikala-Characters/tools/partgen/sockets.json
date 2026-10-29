@@ -1,11 +1,13 @@
 {
-  "_comment": "How an accessory is sized and placed for each socket type. head_top: headwear sits with its bottom a little above the brows, and its crown (the narrowest slice of its lower half, above any brim) is a little wider than the head at that height.",
+  "_comment": "How an accessory is sized and placed for each socket type. head_top: headwear sits with its bottom a little above the brows, its crown (the narrowest slice of its lower half, above any brim) is a little wider than the head at that height, and anything wider than maxWidth head widths is pulled in toward the crown. A hat too shallow to cover the top of the head (with topClearance) grows until it does.",
   "head_top": {
     "anchor": "bottom",
     "bottomAbove": "brow.L",
     "bottomOffset": 0.035,
+    "topClearance": 0.012,
     "fit": "crown",
     "clearance": 1.1,
+    "maxWidth": 2.2,
     "triangles": 1200,
     "texture": 512,
     "prompt": "a single {description}, hat only, front view, seen slightly from above, centered, whole object visible"

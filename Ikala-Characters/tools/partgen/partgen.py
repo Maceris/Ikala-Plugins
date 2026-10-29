@@ -1,29 +1,36 @@
-"""Make character parts from a written brief: concept images, a generated mesh, and a part fitted
-to the biped that the character editor loads.
+"""Make character parts in reviewed batches: written briefs, concept images, generated meshes,
+and parts fitted to the biped that the character editor loads.
 
-Each step is its own command, so the choices between them stay with a person:
+A batch is a folder with a manifest of briefs and what has been made and chosen for each. Each
+command does one stage for every brief ready for it, and the review page records the choices
+between stages, so expensive steps only run on what was kept:
 
-    python partgen.py images <brief.json> [--count 4] [--seed 1000]
-        Concept images from SDXL through ComfyUI, and a contact sheet of them.
-    python partgen.py mesh <brief.json> --pick <seed> [--type 512]
-        A textured mesh from the picked image, through TRELLIS.2, with renders.
-    python partgen.py fit <brief.json>
-        The mesh fitted onto the mannequin as a part: a glb and a part definition in the
-        content folder, and preview renders.
+    python partgen.py new <batch> <briefs.json> [--keep]
+        Start a batch, or add briefs to one, from a JSON list of briefs.
+    python partgen.py review <batch> [--port 8765]
+        A page for keeping briefs, picking images, and keeping meshes and parts.
+    python partgen.py images <batch> [--count 4] [--more]
+        Concept images from SDXL through ComfyUI, for kept briefs that have none (or more).
+    python partgen.py meshes <batch> [--type 512]
+        Meshes through TRELLIS.2 from picked images, and renders of them for review.
+    python partgen.py fit <batch>
+        Kept meshes fitted onto the mannequin: glbs and part definitions in the content folder.
+    python partgen.py status <batch>
 
-Paths come from config.json beside this file. Work files go in <work>/<brief id>/; finished
-parts go in the content folder, which the editor loads as the config's namespace. A brief is
-JSON:
+Every stage takes --only <id,...> to limit it, and --all to skip waiting for reviews. Paths come
+from config.json beside this file; batches live in <work>/<batch>/. A brief is:
 
     {"id": "adventurer_hat", "kind": "accessory", "socket": "head_top",
-     "description": "wide-brimmed weathered brown leather adventurer hat with a brass-buckled band",
+     "description": "wide-brimmed weathered brown leather adventurer hat with a dark band",
      "tags": ["hat"]}
 
 Only accessories on head_top sockets can be fitted so far. Run it with any Python that has
 Pillow, such as TRELLIS.2's.
 """
 import argparse
+import datetime
 import json
+import os
 import pathlib
 import re
 import subprocess
@@ -32,12 +39,11 @@ import time
 import urllib.parse
 import urllib.request
 
-from PIL import Image
-
 TOOLS = pathlib.Path(__file__).resolve().parent
 PLAN = TOOLS.parent.parent / "src/main/resources/characters/ikala/bodyPlan/biped.json"
 PLAN_ID = "ikala:biped"
 TEMPLATE = "ikala:mat/standard"
+MANIFEST = "manifest.json"
 
 # Every concept image starts with this, so they come out alike and easy to cut out. "Game asset"
 # makes SDXL draw sheets of many objects, so this asks for one isolated product render instead.
@@ -50,7 +56,10 @@ NEGATIVE = ("sprite sheet, collection, set, grid, multiple views, several object
 SDXL_STEPS = 30
 SDXL_CFG = 6.0
 SDXL_SIZE = 1024
-SHEET_THUMB = 256
+# Seeds count up from here. 1003 turned eight of ten SDXL subjects into pattern sheets.
+FIRST_SEED = 2000
+VIEWS = 3
+REVIEW_FIELDS = ("brief", "pick", "mesh", "part")
 
 
 def load_config():
@@ -61,13 +70,6 @@ def load_json_with_comments(path):
     """Read JSON whose lines may start with // comments, like the definitions."""
     text = path.read_text(encoding="utf8")
     return json.loads(re.sub(r"(?m)^\s*//.*$", "", text))
-
-
-def load_brief(path):
-    brief = json.loads(pathlib.Path(path).read_text(encoding="utf8"))
-    if not re.fullmatch(r"[a-z0-9_]+", brief["id"]):
-        raise SystemExit("A brief's id is lowercase letters, digits and underscores")
-    return brief
 
 
 def socket_of(brief):
@@ -82,10 +84,60 @@ def socket_of(brief):
     return socket, rules[socket["type"]]
 
 
-def work_dir(config, brief):
-    folder = pathlib.Path(config["work"]) / brief["id"]
-    folder.mkdir(parents=True, exist_ok=True)
-    return folder
+class Batch:
+    """A batch folder and its manifest. Every change reads the manifest fresh and replaces it
+    whole, so the review page and a running command don't undo each other's choices."""
+
+    def __init__(self, config, name):
+        if not re.fullmatch(r"[a-z0-9_]+", name):
+            raise SystemExit("A batch name is lowercase letters, digits and underscores")
+        self.folder = pathlib.Path(config["work"]) / name
+        self.name = name
+
+    @property
+    def path(self):
+        return self.folder / MANIFEST
+
+    def load(self):
+        if not self.path.exists():
+            raise SystemExit("No batch " + str(self.folder))
+        return json.loads(self.path.read_text(encoding="utf8"))
+
+    def save(self, manifest):
+        temp = self.path.with_suffix(".tmp")
+        temp.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf8")
+        for _ in range(20):
+            try:
+                os.replace(temp, self.path)
+                return
+            except PermissionError:  # the page may be reading it on Windows
+                time.sleep(0.05)
+        raise SystemExit("Couldn't write " + str(self.path))
+
+    def update(self, brief_id, change):
+        """Change one brief's entry with change(entry), on the newest manifest."""
+        manifest = self.load()
+        entry = next(b for b in manifest["briefs"] if b["id"] == brief_id)
+        change(entry)
+        self.save(manifest)
+
+    def brief_folder(self, brief_id):
+        folder = self.folder / brief_id
+        folder.mkdir(parents=True, exist_ok=True)
+        return folder
+
+
+def ready(manifest, args, wanted):
+    """The briefs a stage works on: those the filter takes, limited by --only."""
+    only = set(args.only.split(",")) if args.only else None
+    chosen = [b for b in manifest["briefs"] if (only is None or b["id"] in only) and wanted(b)]
+    if not chosen:
+        print("Nothing is ready for this stage")
+    return chosen
+
+
+def kept(entry, field, args):
+    return args.all or entry["review"][field] == "keep"
 
 
 class Comfy:
@@ -166,122 +218,204 @@ def sdxl_workflow(checkpoint, prompt, negative, seed, prefix):
     }
 
 
-def contact_sheet(paths, out, labels):
-    """Thumbnails side by side with their labels, for picking."""
-    from PIL import ImageDraw
-    sheet = Image.new("RGB", (SHEET_THUMB * len(paths), SHEET_THUMB + 20), "white")
-    draw = ImageDraw.Draw(sheet)
-    for i, (path, label) in enumerate(zip(paths, labels)):
-        image = Image.open(path).convert("RGB")
-        image.thumbnail((SHEET_THUMB, SHEET_THUMB))
-        sheet.paste(image, (i * SHEET_THUMB, 20))
-        draw.text((i * SHEET_THUMB + 4, 4), label, fill="black")
-    sheet.save(out)
-    print("contact sheet", out)
-
-
-def stitch(paths, out):
-    images = [Image.open(p).convert("RGB") for p in paths]
-    sheet = Image.new("RGB", (sum(i.width for i in images), max(i.height for i in images)))
-    x = 0
-    for image in images:
-        sheet.paste(image, (x, 0))
-        x += image.width
-    sheet.save(out)
-    print("renders", out)
-
-
-def command_images(config, brief, args):
+def prompt_for(brief):
     socket, rule = socket_of(brief)
-    subject = rule["prompt"].format(description=brief["description"])
-    prompt = STYLE.format(subject=subject)
-    folder = work_dir(config, brief) / "images"
-    folder.mkdir(exist_ok=True)
-    seeds = list(range(args.seed, args.seed + args.count))
-    paths = []
+    return STYLE.format(subject=rule["prompt"].format(description=brief["description"]))
+
+
+def command_new(config, batch, args):
+    briefs = json.loads(pathlib.Path(args.briefs).read_text(encoding="utf8"))
+    if batch.path.exists():
+        manifest = batch.load()
+    else:
+        batch.folder.mkdir(parents=True, exist_ok=True)
+        manifest = {"batch": batch.name, "created": datetime.date.today().isoformat(),
+                    "briefs": []}
+    known = {b["id"] for b in manifest["briefs"]}
+    for brief in briefs:
+        if not re.fullmatch(r"[a-z0-9_]+", brief["id"]):
+            raise SystemExit("Brief ids are lowercase letters, digits and underscores: "
+                             + brief["id"])
+        if brief["id"] in known:
+            print("already in the batch:", brief["id"])
+            continue
+        socket_of(brief)
+        entry = dict(brief)
+        entry["review"] = {field: None for field in REVIEW_FIELDS}
+        if args.keep:
+            entry["review"]["brief"] = "keep"
+        entry.update({"notes": {}, "images": [], "mesh": None, "part": None})
+        manifest["briefs"].append(entry)
+        known.add(brief["id"])
+    batch.save(manifest)
+    print("batch %s: %d briefs" % (batch.folder, len(manifest["briefs"])))
+
+
+def command_images(config, batch, args):
+    briefs = ready(batch.load(), args, lambda b: kept(b, "brief", args)
+                   and (args.more or not b["images"]))
+    if not briefs:
+        return
     with Comfy(config) as comfy:
-        for seed in seeds:
-            workflow = sdxl_workflow(config["checkpoint"], prompt, NEGATIVE, seed,
-                                     "partgen/" + brief["id"])
-            path = folder / ("%d.png" % seed)
-            path.write_bytes(comfy.run(workflow)[0])
-            paths.append(path)
-            print("image", path)
-    (folder / "prompt.json").write_text(json.dumps(
-        {"prompt": prompt, "negative": NEGATIVE, "steps": SDXL_STEPS, "cfg": SDXL_CFG,
-         "checkpoint": config["checkpoint"]}, indent=2), encoding="utf8")
-    contact_sheet(paths, work_dir(config, brief) / "images.png", [str(s) for s in seeds])
+        for brief in briefs:
+            prompt = prompt_for(brief)
+            folder = batch.brief_folder(brief["id"]) / "images"
+            folder.mkdir(exist_ok=True)
+            start = max(brief["images"], default=FIRST_SEED - 1) + 1
+            seeds = list(range(start, start + args.count))
+            for seed in seeds:
+                workflow = sdxl_workflow(config["checkpoint"], prompt, NEGATIVE, seed,
+                                         "partgen/" + brief["id"])
+                (folder / ("%d.png" % seed)).write_bytes(comfy.run(workflow)[0])
+            (folder / "prompt.json").write_text(json.dumps(
+                {"prompt": prompt, "negative": NEGATIVE, "steps": SDXL_STEPS, "cfg": SDXL_CFG,
+                 "checkpoint": config["checkpoint"]}, indent=2), encoding="utf8")
+            batch.update(brief["id"], lambda e: e["images"].extend(seeds))
+            print("images", brief["id"], seeds)
 
 
-def command_mesh(config, brief, args):
-    folder = work_dir(config, brief)
-    image = folder / "images" / ("%d.png" % args.pick)
-    if not image.exists():
-        raise SystemExit("No image " + str(image))
-    out = folder / ("mesh_%d_%s.glb" % (args.pick, args.type))
+def command_meshes(config, batch, args):
+    def wanted(b):
+        return b["review"]["pick"] is not None and (
+            b["mesh"] is None or b["mesh"]["image"] != b["review"]["pick"]
+            or b["mesh"]["type"] != args.type)
+
+    briefs = ready(batch.load(), args, wanted)
+    if not briefs:
+        return
+    pairs, renders = [], []
+    for brief in briefs:
+        folder = batch.brief_folder(brief["id"])
+        pick = brief["review"]["pick"]
+        glb = folder / ("mesh_%d_%s.glb" % (pick, args.type))
+        pairs += [str(folder / "images" / ("%d.png" % pick)), str(glb)]
+        renders += [str(glb), str(folder / ("views_%d_%s" % (pick, args.type)))]
     trellis = pathlib.Path(config["trellis"])
     subprocess.run([str(trellis / ".venv/Scripts/python.exe"), str(TOOLS / "trellis_run.py"),
-                    "--trellis", str(trellis), "--type", args.type, str(image), str(out)],
-                   check=True)
-    (folder / "picked.json").write_text(json.dumps(
-        {"image": image.name, "mesh": out.name, "type": args.type}, indent=2), encoding="utf8")
-
-
-def command_fit(config, brief, args):
-    folder = work_dir(config, brief)
-    picked = json.loads((folder / "picked.json").read_text(encoding="utf8"))
-    socket, rule = socket_of(brief)
-    content = pathlib.Path(config["content"])
-    relative = "accessory/%s.glb" % brief["id"]
-    out = content / relative
-    out.parent.mkdir(parents=True, exist_ok=True)
-    renders = folder / "fit"
-    renders.mkdir(exist_ok=True)
+                    "--trellis", str(trellis), "--type", args.type] + pairs, check=True)
     subprocess.run([config["blender"], "-b", "--factory-startup", "--python",
-                    str(TOOLS / "blender/fit_accessory.py"), "--",
-                    "--mesh", str(folder / picked["mesh"]), "--mannequin", config["mannequin"],
-                    "--bone", socket["bone"], "--rule", json.dumps(rule), "--name", brief["id"],
-                    "--out", str(out), "--preview", str(renders)], check=True)
-    stitch([renders / ("preview_%d.png" % i) for i in range(3)], folder / "fit.png")
+                    str(TOOLS / "blender/render_meshes.py"), "--"] + renders, check=True,
+                   stdout=subprocess.DEVNULL)
+    for brief in briefs:
+        pick = brief["review"]["pick"]
 
-    namespace = config["namespace"]
-    part = {
-        "id": "%s:part/%s/%s" % (namespace, socket["type"].replace(".", "_"), brief["id"]),
-        "plan": PLAN_ID,
-        "kind": "accessory",
-        "fits": [socket["id"]],
-        "rigid": True,
-        "meshes": {"*": "%s#%s" % (relative, brief["id"])},
-        "materialSlots": [{"name": brief["id"], "template": TEMPLATE}],
-        "tags": brief.get("tags", []),
-    }
-    definition = content / "part" / ("%s.json" % brief["id"])
-    definition.parent.mkdir(parents=True, exist_ok=True)
-    header = ("// %s, from %s\n// Written by Ikala-Characters/tools/partgen/partgen.py\n"
-              % (brief["description"], picked["image"]))
-    definition.write_text(header + json.dumps([part], indent=2) + "\n", encoding="utf8")
-    print("part", definition)
+        def record(entry, pick=pick):
+            entry["mesh"] = {"image": pick, "type": args.type,
+                             "file": "mesh_%d_%s.glb" % (pick, args.type),
+                             "views": "views_%d_%s" % (pick, args.type)}
+            entry["review"]["mesh"] = None
+            entry["review"]["part"] = None
+            entry["part"] = None
+
+        batch.update(brief["id"], record)
+        print("mesh", brief["id"])
+
+
+def command_fit(config, batch, args):
+    briefs = ready(batch.load(), args, lambda b: b["mesh"] is not None and kept(b, "mesh", args)
+                   and (args.redo or b["part"] is None))
+    for brief in briefs:
+        if brief["kind"] != "accessory":
+            print("Only accessories can be fitted so far; skipped", brief["id"])
+            continue
+        folder = batch.brief_folder(brief["id"])
+        socket, rule = socket_of(brief)
+        content = pathlib.Path(config["content"])
+        relative = "accessory/%s.glb" % brief["id"]
+        out = content / relative
+        out.parent.mkdir(parents=True, exist_ok=True)
+        renders = folder / "fit"
+        renders.mkdir(exist_ok=True)
+        log = folder / "fit.log"
+        with open(log, "w", encoding="utf8") as stream:
+            result = subprocess.run(
+                [config["blender"], "-b", "--factory-startup", "--python",
+                 str(TOOLS / "blender/fit_accessory.py"), "--",
+                 "--mesh", str(folder / brief["mesh"]["file"]), "--mannequin", config["mannequin"],
+                 "--bone", socket["bone"], "--rule", json.dumps(rule), "--name", brief["id"],
+                 "--out", str(out), "--preview", str(renders)],
+                stdout=stream, stderr=subprocess.STDOUT)
+        if result.returncode != 0:
+            print("fit failed for %s; see %s" % (brief["id"], log))
+            continue
+
+        part_id = "%s:part/%s/%s" % (config["namespace"], socket["type"].replace(".", "_"),
+                                     brief["id"])
+        part = {
+            "id": part_id,
+            "plan": PLAN_ID,
+            "kind": "accessory",
+            "fits": [socket["id"]],
+            "rigid": True,
+            "meshes": {"*": "%s#%s" % (relative, brief["id"])},
+            "materialSlots": [{"name": brief["id"], "template": TEMPLATE}],
+            "tags": brief.get("tags", []),
+        }
+        definition = content / "part" / ("%s.json" % brief["id"])
+        definition.parent.mkdir(parents=True, exist_ok=True)
+        header = ("// %s, batch %s, image %d\n"
+                  "// Written by Ikala-Characters/tools/partgen/partgen.py\n"
+                  % (brief["description"], batch.name, brief["mesh"]["image"]))
+        definition.write_text(header + json.dumps([part], indent=2) + "\n", encoding="utf8")
+
+        def record(entry, part_id=part_id):
+            entry["part"] = part_id
+            entry["review"]["part"] = None
+
+        batch.update(brief["id"], record)
+        print("part", part_id)
+
+
+def command_status(config, batch, args):
+    manifest = batch.load()
+    print("%-28s %-6s %-7s %-6s %-6s %-6s" % ("brief", "brief", "images", "pick", "mesh", "part"))
+    for b in manifest["briefs"]:
+        review = b["review"]
+        mesh = review["mesh"] or ("made" if b["mesh"] else "-")
+        part = review["part"] or ("made" if b["part"] else "-")
+        print("%-28s %-6s %-7d %-6s %-6s %-6s" % (b["id"], review["brief"] or "-", len(b["images"]),
+                                                  review["pick"] or "-", mesh, part))
+
+
+def command_review(config, batch, args):
+    import review
+    review.serve(batch, args.port)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Make character parts from a brief.")
+    parser = argparse.ArgumentParser(description="Make character parts in reviewed batches.")
     commands = parser.add_subparsers(dest="command", required=True)
-    images = commands.add_parser("images", help="Concept images for a brief.")
-    images.add_argument("brief")
+
+    def stage(name, help):
+        command = commands.add_parser(name, help=help)
+        command.add_argument("batch")
+        command.add_argument("--only", help="Comma-separated brief ids.")
+        command.add_argument("--all", action="store_true", help="Don't wait for reviews.")
+        return command
+
+    new = commands.add_parser("new", help="Start a batch or add briefs to it.")
+    new.add_argument("batch")
+    new.add_argument("briefs", help="A JSON list of briefs.")
+    new.add_argument("--keep", action="store_true", help="Keep the briefs without reviewing.")
+    review = commands.add_parser("review", help="The review page.")
+    review.add_argument("batch")
+    review.add_argument("--port", type=int, default=8765)
+    images = stage("images", "Concept images for kept briefs.")
     images.add_argument("--count", type=int, default=4)
-    images.add_argument("--seed", type=int, default=1000)
-    mesh = commands.add_parser("mesh", help="A mesh from a picked image.")
-    mesh.add_argument("brief")
-    mesh.add_argument("--pick", type=int, required=True, help="The picked image's seed.")
-    mesh.add_argument("--type", default="512", choices=["512", "1024", "1024_cascade"])
-    fit = commands.add_parser("fit", help="Fit the mesh onto the biped as a part.")
-    fit.add_argument("brief")
+    images.add_argument("--more", action="store_true", help="Add images to briefs that have some.")
+    meshes = stage("meshes", "Meshes from picked images.")
+    meshes.add_argument("--type", default="512", choices=["512", "1024", "1024_cascade"])
+    fit = stage("fit", "Fit kept meshes onto the biped.")
+    fit.add_argument("--redo", action="store_true", help="Fit again briefs that have a part.")
+    status = commands.add_parser("status", help="What each brief has.")
+    status.add_argument("batch")
     args = parser.parse_args()
 
     config = load_config()
-    brief = load_brief(args.brief)
-    {"images": command_images, "mesh": command_mesh, "fit": command_fit}[args.command](
-        config, brief, args)
+    batch = Batch(config, args.batch)
+    {"new": command_new, "review": command_review, "images": command_images,
+     "meshes": command_meshes, "fit": command_fit, "status": command_status}[args.command](
+        config, batch, args)
 
 
 if __name__ == "__main__":

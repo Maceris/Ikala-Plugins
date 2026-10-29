@@ -27,12 +27,18 @@ SLIVER_THICKNESS = 0.003
 SLIVER_ASPECT = 10
 # Fewer faces than this is a speck
 SPECK_FACES = 12
-# Slices the lower half of the mesh is cut into to find its crown
-CROWN_SLICES = 24
+# Slices the mesh is cut into to find its crown, and the points a slice needs to count
+CROWN_SLICES = 40
+SLICE_POINTS = 30
+# The brim is looked for in this lower fraction of the height, and the crown measured in this
+# band above it, as fractions of the height
+BRIM_REGION = 0.4
+CROWN_BAND = (0.08, 0.35)
 # Bake rays reach this far from the low-poly surface, as a fraction of the part's size
 BAKE_REACH = 0.08
 # Voxels across the part's largest side when remeshing it closed before decimating
 REMESH_VOXELS = 160
+DECIMATE_PASSES = 10
 
 
 def vertices(obj):
@@ -113,11 +119,14 @@ def drop_slivers(obj):
 
 
 def width_at(points, z, band):
-    """Side to side width, and center, of the points within band of a height, or None."""
+    """Side to side width, and center, of the points within band of a height, or None if too few
+    are there. The extremes are left out, so a stray point can't widen it."""
     near = points[np.abs(points[:, 2] - z) < band]
-    if len(near) < 8:
+    if len(near) < SLICE_POINTS:
         return None
-    return near[:, 0].max() - near[:, 0].min(), (near.min(0) + near.max(0)) / 2
+    left, right = np.percentile(near[:, 0], [1, 99])
+    lo, hi = np.percentile(near, [1, 99], axis=0)
+    return right - left, (lo + hi) / 2
 
 
 def section(obj, z):
@@ -134,29 +143,55 @@ def section(obj, z):
     return a + (b - a) * t[:, None]
 
 
+def measure_crown(points, low, height):
+    """The crown of headwear: the band just above the brim, where the head goes. The brim is the
+    widest slice of the lower part (the bottom edge of a brimless hat); the crown's width is the
+    median across the band above it, so a stray drooping edge can't decide it. Gives the width,
+    the center, and the height below which lies the brim."""
+    band = height / CROWN_SLICES
+    slices = []
+    for k in range(CROWN_SLICES):
+        z = low + band * (k + 0.5)
+        found = width_at(points, z, band / 2)
+        if found is not None:
+            slices.append(found + (z,))
+    lower = [s for s in slices if s[2] < low + height * BRIM_REGION]
+    brim_z = max(lower, key=lambda s: s[0])[2]
+    above = [s for s in slices
+             if brim_z + height * CROWN_BAND[0] <= s[2] <= brim_z + height * CROWN_BAND[1]]
+    if not above:
+        above = [s for s in slices if s[2] >= brim_z]
+    width = float(np.median([s[0] for s in above]))
+    center = np.mean([s[1] for s in above], axis=0)
+    return width, center, brim_z + height * CROWN_BAND[0]
+
+
 def place_bottom_crown(high, mannequin, armature, rule):
-    """Size and place headwear: bottom above a bone, crown a little wider than the head."""
+    """Size and place headwear: bottom above a bone, crown a little wider than the head. A hat too
+    shallow to cover the top of the head from there grows until it does, as caps and sun hats
+    are wider than the head; sitting lower would only drop its top further."""
     bones = armature.data.bones
-    bottom = (armature.matrix_world @ bones[rule["bottomAbove"]].head_local).z + rule["bottomOffset"]
+    brow = (armature.matrix_world @ bones[rule["bottomAbove"]].head_local).z
     head = next((obj for obj in mannequin if "head" in obj.name.lower()), None)
     if head is None:
         raise SystemExit("The mannequin has no head mesh among %s" % [o.name for o in mannequin])
+    head_top = vertices(head)[:, 2].max()
+
+    points = vertices(high)
+    low, high_z = points[:, 2].min(), points[:, 2].max()
+    crown_width, crown_center, crown_z = measure_crown(points, low, high_z - low)
+
+    bottom = brow + rule["bottomOffset"]
     ring = section(head, bottom)
     if len(ring) < 3:
         raise SystemExit("The mannequin's head doesn't reach %.3f m" % bottom)
     head_width = ring[:, 0].max() - ring[:, 0].min()
     head_center = (ring.min(0) + ring.max(0)) / 2
-
-    points = vertices(high)
-    low, high_z = points[:, 2].min(), points[:, 2].max()
-    widths = []
-    for k in range(CROWN_SLICES):
-        z = low + (high_z - low) * 0.5 * (k + 0.5) / CROWN_SLICES
-        found = width_at(points, z, (high_z - low) * 0.5 / CROWN_SLICES)
-        if found is not None:
-            widths.append(found)
-    crown_width, crown_center = min(widths, key=lambda w: w[0])
     scale = head_width * rule["clearance"] / crown_width
+    covering = (head_top + rule["topClearance"] - bottom) / (high_z - low)
+    if covering > scale:
+        print("[fit] too shallow at %.3f, grown to cover the head" % scale)
+        scale = covering
     print("[fit] head %.3f m wide at %.3f m, crown %.3f, scale %.3f" % (
         head_width, bottom, crown_width, scale))
 
@@ -166,6 +201,29 @@ def place_bottom_crown(high, mannequin, armature, rule):
                      bottom - low * scale)
     select_only(high)
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    pull_in_brim(high, head_center, crown_width * scale / 2, bottom + (crown_z - low) * scale,
+                 head_width * rule["maxWidth"] / 2)
+
+
+def pull_in_brim(obj, center, crown, top, limit):
+    """Pull the brim, what lies below the crown's narrowest height and outside it, toward the
+    crown, so it reaches at most limit from the center. Image models draw brims far wider than
+    they are worn, and shrinking the whole hat instead would leave the crown too small."""
+    co = np.empty(len(obj.data.vertices) * 3)
+    obj.data.vertices.foreach_get("co", co)
+    co = co.reshape(-1, 3)
+    offset = co[:, :2] - center[:2]
+    radius = np.linalg.norm(offset, axis=1)
+    brim = co[:, 2] < top
+    widest = radius[brim].max() if brim.any() else 0
+    if widest <= limit:
+        return
+    outside = brim & (radius > crown)
+    pulled = crown + (radius[outside] - crown) * (limit - crown) / (widest - crown)
+    co[outside, :2] = center[:2] + offset[outside] * (pulled / radius[outside])[:, None]
+    obj.data.vertices.foreach_set("co", co.ravel())
+    obj.data.update()
+    print("[fit] pulled the brim in from %.3f m to %.3f m across" % (widest * 2, limit * 2))
 
 
 def apply_modifier(obj, kind, **settings):
@@ -185,10 +243,13 @@ def low_poly(high, name, triangles):
     low.name = name
     low.data.name = name
     bpy.context.scene.collection.objects.link(low)
-    apply_modifier(low, "REMESH", mode="VOXEL", voxel_size=max(low.dimensions) / REMESH_VOXELS,
-                   adaptivity=0.0)
+    voxel = max(low.dimensions) / REMESH_VOXELS
+    # Generated shells can be thinner than a voxel, which remeshes into a sieve that decimation
+    # then collapses, so they are thickened to a couple of voxels first
+    apply_modifier(low, "SOLIDIFY", thickness=voxel * 2, offset=0.0)
+    apply_modifier(low, "REMESH", mode="VOXEL", voxel_size=voxel, adaptivity=0.0)
     # Collapsing stops short of a low target, so it goes again until close
-    for _ in range(4):
+    for _ in range(DECIMATE_PASSES):
         faces = len(low.data.polygons)
         if faces <= triangles * 1.05:
             break
@@ -249,6 +310,26 @@ def enable_gpu():
     scene.cycles.device = "CPU"
 
 
+def emit_base_color(obj):
+    """Show each material's base color as emission, so an emission bake copies the base color
+    as it is. A diffuse color bake leaves out the metallic share, which turns gold black."""
+    for slot in obj.material_slots:
+        if slot.material is None or not slot.material.use_nodes:
+            continue
+        tree = slot.material.node_tree
+        bsdf = next((n for n in tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
+        output = next((n for n in tree.nodes if n.type == "OUTPUT_MATERIAL"), None)
+        if bsdf is None or output is None:
+            continue
+        emission = tree.nodes.new("ShaderNodeEmission")
+        base = bsdf.inputs["Base Color"]
+        if base.links:
+            tree.links.new(base.links[0].from_socket, emission.inputs["Color"])
+        else:
+            emission.inputs["Color"].default_value = base.default_value
+        tree.links.new(emission.outputs["Emission"], output.inputs["Surface"])
+
+
 def bake(high, low, name, size):
     """Bake base color and normals from the generated mesh onto the low-poly copy."""
     enable_gpu()
@@ -260,9 +341,11 @@ def bake(high, low, name, size):
     tree = material.node_tree
     bsdf = tree.nodes["Principled BSDF"]
 
+    metallic, roughness = average_metal_roughness(high)
+    emit_base_color(high)
     extent = max(low.dimensions)
     images = {}
-    for kind, color in (("DIFFUSE", "sRGB"), ("NORMAL", "Non-Color")):
+    for kind, color in (("EMIT", "sRGB"), ("NORMAL", "Non-Color")):
         image = bpy.data.images.new("%s_%s" % (name, kind.lower()), size, size, alpha=False)
         image.colorspace_settings.name = color
         node = tree.nodes.new("ShaderNodeTexImage")
@@ -271,18 +354,17 @@ def bake(high, low, name, size):
         select_only(low)
         high.select_set(True)
         bpy.context.view_layer.objects.active = low
-        bpy.ops.object.bake(type=kind, pass_filter={"COLOR"}, use_selected_to_active=True,
+        bpy.ops.object.bake(type=kind, use_selected_to_active=True,
                             cage_extrusion=extent * BAKE_REACH * 0.5,
                             max_ray_distance=extent * BAKE_REACH, margin=8)
         image.pack()
         images[kind] = node
 
-    tree.links.new(images["DIFFUSE"].outputs["Color"], bsdf.inputs["Base Color"])
+    tree.links.new(images["EMIT"].outputs["Color"], bsdf.inputs["Base Color"])
     normal_map = tree.nodes.new("ShaderNodeNormalMap")
     tree.links.new(images["NORMAL"].outputs["Color"], normal_map.inputs["Color"])
     tree.links.new(normal_map.outputs["Normal"], bsdf.inputs["Normal"])
-    tree.nodes.active = images["DIFFUSE"]  # previews show the active image
-    metallic, roughness = average_metal_roughness(high)
+    tree.nodes.active = images["EMIT"]  # previews show the active image
     bsdf.inputs["Metallic"].default_value = metallic
     bsdf.inputs["Roughness"].default_value = roughness
     print("[fit] baked %d px, metallic %.2f, roughness %.2f" % (size, metallic, roughness))
