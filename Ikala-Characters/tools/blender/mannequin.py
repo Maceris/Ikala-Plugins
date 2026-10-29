@@ -2,11 +2,12 @@
 
 A male and a female body come from MPFB (MakeHuman for Blender; its base mesh, targets and the
 male1591 and female1605 game proxies are CC0), each as the low-poly proxy plus eyes. They are
-put in the rig's T pose, the male scaled to 2 m and the female by the same factor, and given
-the ikala:rig/biped armature, built from the rig definition so the bone names, parents and
-kinds can't drift from it: its bones are placed from MPFB's own rig and MakeHuman's face
-landmarks, the main ones pointing the conventional ways at rest (spine up, arms out, legs
-down) whatever the body's lean, and its weights carried over from MPFB's, smoothed over the shoulders, and shared
+put in the rig's A pose (arms out and down at ARM_DROP), the male scaled to 2 m and the female
+by the same factor, and given the ikala:rig/biped armature, built from the rig definition so the
+bone names, parents and kinds can't drift from it: its bones are placed from MPFB's own rig and
+MakeHuman's face landmarks, the main ones pointing the conventional ways at rest (spine up, arms
+out and down, legs down) whatever the body's lean, and its weights carried over from MPFB's,
+smoothed over the shoulders, and shared
 out to the shape bones (girth, muscle, bust, belly and the face) by zone, so the plan's sliders
 work. The female's bones point the male's way at rest, so clips retargeted onto the male's rest
 fit both. Each body is cut into the plan's body slots along seam planes; the two sides of a cut
@@ -62,6 +63,10 @@ EYES = "low-poly"
 # The male stands this tall; the female is scaled by the same factor
 MALE_HEIGHT = 2.0
 
+# How far the arms hang below straight out at rest, in degrees: an A pose, so the bodies are
+# skinned near how arms usually hang and generated clothing is fitted in the pose it was made in
+ARM_DROP = 45.0
+
 # MakeHuman's macro settings besides gender: a young adult of middling build
 MACRO = {"age": 0.5, "muscle": 0.5, "weight": 0.5, "proportions": 0.8, "height": 0.5,
          "cupsize": 0.5, "firmness": 0.5}
@@ -95,7 +100,7 @@ MUSCLE_AT, MUSCLE_SPREAD = 0.5, 0.18
 BELLY_SHARE, BELLY_REACH = 0.6, 0.07
 
 # Weights are smoothed this many times within this reach of each shoulder joint, so the deltoid
-# rounds over instead of folding when the arms come down from the T pose
+# rounds over instead of folding when the arms come down
 SHOULDER_SMOOTHING, SHOULDER_REACH = 12, 0.14
 
 # A vertex group marking the cut vertices while the body is cut, for their normals
@@ -167,10 +172,16 @@ def key_location(armature, bone, frame, offset):
     pose_bone.keyframe_insert("location", frame=frame, group=bone)
 
 
+def arm_direction(out):
+    """Which way an arm points at rest, for the left side (out 1) or the right (-1)."""
+    drop = math.radians(ARM_DROP)
+    return Vector((out * math.cos(drop), 0, -math.sin(drop)))
+
+
 def arms_down(armature, side, degrees):
-    """The rotation that lowers an arm from the T pose by some degrees."""
+    """The rotation that lowers an arm to some degrees below straight out."""
     flip = 1 if side == "L" else -1
-    return local_rotation(armature, "upperarm." + side, (0, 1, 0), flip * degrees)
+    return local_rotation(armature, "upperarm." + side, (0, 1, 0), flip * (degrees - ARM_DROP))
 
 
 def make_idle(armature):
@@ -342,10 +353,10 @@ def twist_bone(rig, name, degrees):
     bpy.context.view_layer.update()
 
 
-def t_pose(rig, meshes):
-    """Raise the arms straight out to the sides, palms down and thumbs forward, stand the legs
-    straight down with the feet under the hips (MakeHuman stands wide), and bake the pose into
-    the meshes."""
+def a_pose(rig, meshes):
+    """Put the arms out to the sides and down at ARM_DROP, palms down and thumbs forward, stand
+    the legs straight down with the feet under the hips (MakeHuman stands wide), and bake the
+    pose into the meshes."""
     for s in ("l", "r"):
         foot = rig.pose.bones["foot_" + s]
         heading = (foot.tail - foot.head).normalized()
@@ -353,14 +364,16 @@ def t_pose(rig, meshes):
             point_bone(rig, name + s, (0, 0, -1))
         point_bone(rig, "foot_" + s, heading)  # the feet keep their way, so they stay flat
     for s, out in (("l", 1), ("r", -1)):
+        arm = arm_direction(out)
         for name in ("upperarm_", "lowerarm_", "hand_"):
-            point_bone(rig, name + s, (out, 0, 0))
+            point_bone(rig, name + s, arm)
         # Turn the forearm until the thumb's root is in front of the hand's axis
         hand, thumb = rig.pose.bones["hand_" + s], rig.pose.bones["thumb_01_" + s]
         offset = thumb.head - hand.head
-        across = Vector((0, offset.y, offset.z))
-        angle = math.degrees(math.atan2(across.z, -across.y))
-        twist_bone(rig, "lowerarm_" + s, out * angle)
+        across = offset - arm * offset.dot(arm)
+        front = Vector((0, -1, 0))
+        angle = math.degrees(math.atan2(arm.dot(front.cross(across)), front.dot(across)))
+        twist_bone(rig, "lowerarm_" + s, -angle)
     joints = {b.name: (rig.matrix_world @ b.head, rig.matrix_world @ b.tail)
               for b in rig.pose.bones}
     for obj in meshes:
@@ -483,12 +496,14 @@ def layout(joints, marks, skin, height):
                      & (np.abs(skin[:, 2] - shoulder.z) < 0.15)]
         shoulder.z = float(above[:, 2].max())
         bones["socket.shoulder." + side] = (shoulder, shoulder + Vector((0, 0, 0.05)))
+        # Square to the arm, on its upper side and below it
+        drop = math.radians(ARM_DROP)
+        above_arm = Vector((out * math.sin(drop), 0, math.cos(drop)))
         palm = head("hand_" + s).lerp(head("middle_01_" + s), 0.6)
-        grip = palm + Vector((0, -0.02 * scale, -0.02 * scale))
+        grip = palm + Vector((0, -0.02 * scale, 0)) - above_arm * 0.02 * scale
         bones["socket.grip." + side] = (grip, forward(grip, 0.05))
-        mount = head("lowerarm_" + s).lerp(head("hand_" + s), 0.5)
-        mount.z += 0.05 * scale
-        bones["socket.forearm_mount." + side] = (mount, mount + Vector((0, 0, 0.05)))
+        mount = head("lowerarm_" + s).lerp(head("hand_" + s), 0.5) + above_arm * 0.05 * scale
+        bones["socket.forearm_mount." + side] = (mount, mount + above_arm * 0.05)
 
     # Wings, cape and tail keep their shape, sized to the body and moved onto its back
     shift = surface(skin, 0, chest_mid, 1) - 0.11 * scale
@@ -520,7 +535,7 @@ def point_like(bones, directions):
 
 def conventional_directions():
     """Which way the body's main bones point at rest, whatever the anatomy: the spine and head
-    straight up, the arms straight out, the legs straight down and the feet forward. Clips are
+    straight up, the arms out and down, the legs straight down and the feet forward. Clips are
     retargeted by turning each rest bone to its source bone's direction, and other rigs point
     their bones this way, so a bone following the body's own lean (the pelvis tips back, the
     legs angle out) would be turned at rest, tipping the hips and lowering the feet."""
@@ -529,9 +544,10 @@ def conventional_directions():
                                         "face.cranium", "girth.hips", "girth.waist",
                                         "girth.chest")}
     for side, out in (("L", 1), ("R", -1)):
-        for name in ("clavicle", "upperarm", "forearm", "hand", "girth.upperarm",
-                     "girth.forearm", "muscle.upperarm"):
-            directions["%s.%s" % (name, side)] = (out, 0, 0)
+        directions["clavicle." + side] = (out, 0, 0)
+        for name in ("upperarm", "forearm", "hand", "girth.upperarm", "girth.forearm",
+                     "muscle.upperarm"):
+            directions["%s.%s" % (name, side)] = tuple(arm_direction(out))
         for name in ("thigh", "shin", "girth.thigh", "girth.shin", "muscle.thigh"):
             directions["%s.%s" % (name, side)] = down
         directions["foot." + side] = (0, -0.86, -0.51)
@@ -669,15 +685,16 @@ def scale_to(objects, factor):
 
 
 def seam_planes(bones, skin, scale):
-    """Each seam's plane: a point, a normal pointing toward the second named slot, and the
-    region of the body (by side) it cuts in."""
+    """Each seam's plane: a point, a normal pointing toward the second named slot, the region
+    of the body (by side) it cuts in, and how far from the point it reaches (None for no
+    limit), so a tilted plane doesn't cut through the torso or thigh too."""
     def bone_head(name):
         return Vector(bones[name][0])
 
     neck_a, neck_b = (Vector(p) for p in bones["neck"])
     planes = {
-        "neck": (neck_a.lerp(neck_b, 0.4), (neck_b - neck_a).normalized(), 0),
-        "waist": (bone_head("spine"), Vector((0, 0, 1)), 0),
+        "neck": (neck_a.lerp(neck_b, 0.4), (neck_b - neck_a).normalized(), 0, None),
+        "waist": (bone_head("spine"), Vector((0, 0, 1)), 0, None),
     }
     crotch = skin[(np.abs(skin[:, 0]) < 0.01 * scale)
                   & (skin[:, 2] < bone_head("hips").z) & (skin[:, 2] > bone_head("hips").z
@@ -685,16 +702,19 @@ def seam_planes(bones, skin, scale):
     # Low enough below the crotch that the cut goes round the thigh alone
     crotch_z = float(crotch[:, 2].min()) - 0.03 * scale
     for side, out in (("L", 1), ("R", -1)):
-        wrist = min(bone_head("hand." + side).x * out, bone_head("thumb.01." + side).x * out)
-        planes["shoulder." + side] = (bone_head("upperarm." + side), Vector((out, 0, 0)), out)
-        planes["elbow." + side] = (bone_head("forearm." + side), Vector((out, 0, 0)), out)
-        planes["wrist." + side] = (Vector((out * (wrist - 0.015 * scale), 0,
-                                           bone_head("hand." + side).z)),
-                                   Vector((out, 0, 0)), out)
-        planes["hip." + side] = (Vector((0, 0, crotch_z)), Vector((0, 0, -1)), out)
-        planes["knee." + side] = (bone_head("shin." + side), Vector((0, 0, -1)), out)
+        arm = arm_direction(out)
+        hand = bone_head("hand." + side)
+        wrist = min(hand.dot(arm), bone_head("thumb.01." + side).dot(arm)) - 0.015 * scale
+        # The shoulder cut stays upright, over the shoulder and down into the armpit, where a
+        # cut square to the hanging arm would run into the chest
+        planes["shoulder." + side] = (bone_head("upperarm." + side), Vector((out, 0, 0)), out,
+                                      0.2 * scale)
+        planes["elbow." + side] = (bone_head("forearm." + side), arm, out, 0.15 * scale)
+        planes["wrist." + side] = (hand + arm * (wrist - hand.dot(arm)), arm, out, 0.12 * scale)
+        planes["hip." + side] = (Vector((0, 0, crotch_z)), Vector((0, 0, -1)), out, None)
+        planes["knee." + side] = (bone_head("shin." + side), Vector((0, 0, -1)), out, None)
         ankle = bone_head("foot." + side) + Vector((0, 0, 0.02 * scale))
-        planes["ankle." + side] = (ankle, Vector((0, 0, -1)), out)
+        planes["ankle." + side] = (ankle, Vector((0, 0, -1)), out, None)
     return planes
 
 
@@ -710,8 +730,10 @@ def cut_into_slots(body, eyes, plan, armature, planes):
     bm.from_mesh(body.data)
     deform = bm.verts.layers.deform.verify()
     loops = {}
-    for name, (point, normal, side) in planes.items():
+    for name, (point, normal, side, reach) in planes.items():
         faces = [f for f in bm.faces if side == 0 or f.calc_center_median().x * side > 0]
+        if reach is not None:
+            faces = [f for f in faces if (f.calc_center_median() - point).length < reach]
         if name == "neck" or name == "waist":
             faces = [f for f in faces if all(abs(v.co.x) < 0.2 for v in f.verts)]
         geom = list({e for f in faces for e in f.edges}) + faces + \
@@ -785,7 +807,7 @@ def build(gender_name, gender, proxy_name, rig_definition, plan, factor=None, di
     scale factor used and each bone's rest direction."""
     basemesh, mpfb_rig, proxy, eyes = make_body(gender, proxy_name)
     marks = landmarks(basemesh)
-    joints = t_pose(mpfb_rig, [proxy, eyes])
+    joints = a_pose(mpfb_rig, [proxy, eyes])
     skin = vertices(proxy)
     if factor is None:
         factor = MALE_HEIGHT / float(skin[:, 2].max() - skin[:, 2].min())
