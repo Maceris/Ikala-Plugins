@@ -17,6 +17,8 @@ import com.ikalagaming.graphics.scene.ParticleEffect;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Matrix4fc;
+import org.joml.Quaternionf;
 import org.joml.Quaternionfc;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
@@ -62,6 +64,9 @@ public final class CharacterFx implements AutoCloseable {
         /** Its offset in the bone's space. */
         final Vector3f offset;
 
+        /** The other end of the line it spawns along, in the bone's space, or null. */
+        final Vector3f to;
+
         /** How it is tuned. */
         final FxUse use;
 
@@ -83,13 +88,21 @@ public final class CharacterFx implements AutoCloseable {
          * @param effect The loaded effect.
          * @param bone The bone it follows.
          * @param offset Its offset in the bone's space.
+         * @param to The other end of its line in the bone's space, or null.
          * @param use How it is tuned.
          * @param tint The linear color that tints it, or null.
          */
-        Placed(EffectHandle effect, int bone, Vector3f offset, FxUse use, Vector3f tint) {
+        Placed(
+                EffectHandle effect,
+                int bone,
+                Vector3f offset,
+                Vector3f to,
+                FxUse use,
+                Vector3f tint) {
             this.effect = effect;
             this.bone = bone;
             this.offset = offset;
+            this.to = to;
             this.use = use;
             this.tint = tint;
         }
@@ -130,6 +143,12 @@ public final class CharacterFx implements AutoCloseable {
 
     /** Scratch for an emitter's position in the world. */
     private final Vector3d world = new Vector3d();
+
+    /** Scratch for the other end of an emitter's line in the world. */
+    private final Vector3d worldTo = new Vector3d();
+
+    /** Scratch for how an emitter is turned. */
+    private final Quaternionf turned = new Quaternionf();
 
     /** Guards the emitters, so closing doesn't race a pose. */
     private final ReentrantLock lock = new ReentrantLock();
@@ -172,9 +191,14 @@ public final class CharacterFx implements AutoCloseable {
                 continue;
             }
             Vector3f offset = toVector(use.offsetOrZero());
+            Vector3f to = use.to() == null ? null : toVector(use.to());
             String boneName = use.bone();
             if (use.socket() != null) {
+                Vector3f before = new Vector3f(offset);
                 boneName = socketBone(use.socket(), parts, plan, skeleton, offset);
+                if (to != null) {
+                    to.add(offset).sub(before);
+                }
             }
             int bone = boneName == null ? -1 : skeleton.index(boneName);
             if (bone < 0) {
@@ -182,7 +206,9 @@ public final class CharacterFx implements AutoCloseable {
                 continue;
             }
             Color color = use.color() == null ? null : colors.get(use.color());
-            placed.add(new Placed(effect, bone, offset, use, color == null ? null : linear(color)));
+            placed.add(
+                    new Placed(
+                            effect, bone, offset, to, use, color == null ? null : linear(color)));
         }
     }
 
@@ -265,7 +291,8 @@ public final class CharacterFx implements AutoCloseable {
                 if (base == null) {
                     continue;
                 }
-                solver.model(effect.bone).transformPosition(effect.offset, local);
+                Matrix4fc model = solver.model(effect.bone);
+                model.transformPosition(effect.offset, local);
                 facing.transform(local);
                 world.set(position).add(local.x, local.y, local.z);
                 if (effect.emitter == null) {
@@ -278,7 +305,18 @@ public final class CharacterFx implements AutoCloseable {
                     effect.applied = base;
                     particles.setEffect(effect.emitter, tune(base, effect.use, effect.tint));
                 }
-                particles.move(effect.emitter, world);
+                if (effect.to == null) {
+                    particles.move(effect.emitter, world);
+                } else {
+                    model.transformPosition(effect.to, local);
+                    facing.transform(local);
+                    worldTo.set(position).add(local.x, local.y, local.z);
+                    particles.moveLine(effect.emitter, world, worldTo);
+                }
+                if (effect.use.turn()) {
+                    model.getNormalizedRotation(turned).premul(facing);
+                    particles.orient(effect.emitter, turned);
+                }
             }
             for (AnimationSet.Event event : events) {
                 burst(event, solver, position, facing);
@@ -389,7 +427,7 @@ public final class CharacterFx implements AutoCloseable {
      * @param offset The effect's offset, which a move's offset is added to.
      * @return The bone's name, or null if the plan has no such socket.
      */
-    private static String socketBone(
+    static String socketBone(
             String socket,
             Collection<Part> parts,
             BodyPlan plan,

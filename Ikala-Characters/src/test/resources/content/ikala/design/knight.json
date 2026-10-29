@@ -10,5 +10,5 @@
   "layers": { "helmet": "ikala:part/biped/helmet_iron" },
   "palette": "ikala:palette/hero_blue",
   "colors": { "primary": "#3355aa", "skin": "#c58c62" },
-  "fx": [ { "fx": "ikala:fx/embers", "socket": "back", "offset": [0, 0.15, -0.1], "color": "primary", "scale": 1.5, "when": "combat" } ]
+  "fx": [ { "fx": "ikala:fx/embers", "socket": "back", "offset": [0, 0.15, -0.1], "color": "primary", "scale": 1.5, "when": "combat", "to": [0, 0.5, -0.1], "turn": true } ]
 }

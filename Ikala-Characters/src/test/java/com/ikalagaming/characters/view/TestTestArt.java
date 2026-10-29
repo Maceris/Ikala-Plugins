@@ -111,4 +111,44 @@ class TestTestArt {
         Assertions.assertEquals(channels.indexOf(Palette.ACCENT), mapped[2]);
         Assertions.assertEquals(PartAssembler.NO_CHANNEL, mapped[3]);
     }
+
+    /** Every weapon item finds its mesh, drawn and sheathed, on the RPG man's skeleton. */
+    @Test
+    void testWeapons() throws Exception {
+        CharacterRegistry registry = load();
+        Assumptions.assumeTrue(
+                Files.exists(TEST_CONTENT.resolve("weapons/weapons.glb")), "No weapons");
+        Design man = registry.get(Design.class, Id.parse("test:design/rpg_male"));
+        BodyPlan biped = registry.get(BodyPlan.class, man.plan());
+        com.ikalagaming.characters.pose.Skeleton skeleton =
+                com.ikalagaming.characters.gltf.GltfImporter.read(
+                                TEST_CONTENT.resolve("mannequin/mannequin.glb"))
+                        .onRig(
+                                registry.get(
+                                        com.ikalagaming.characters.definition.Rig.class,
+                                        biped.rig()))
+                        .skeleton();
+        HeldItems held = new HeldItems();
+        List<com.ikalagaming.characters.definition.Item> items =
+                registry.all(com.ikalagaming.characters.definition.Item.class);
+        Assertions.assertEquals(8, items.size());
+        for (com.ikalagaming.characters.definition.Item item : items) {
+            for (String state : List.of("drawn", "sheathed")) {
+                com.ikalagaming.characters.design.Equipment equipment =
+                        new com.ikalagaming.characters.design.Equipment(
+                                Map.of(
+                                        item.slots().get(0),
+                                        new com.ikalagaming.characters.design.Equipment.Equipped(
+                                                item.id(), state, null, false, Map.of())));
+                Assertions.assertEquals(List.of(), equipment.validate(registry, biped.id()));
+                com.ikalagaming.characters.design.LookStack.Shown shown =
+                        com.ikalagaming.characters.design.LookStack.resolve(
+                                man, equipment, registry);
+                Assertions.assertEquals(1, shown.held().size(), item.id() + " " + state);
+                Assertions.assertFalse(
+                        held.meshes(shown.held(), List.of(), biped, skeleton, registry).isEmpty(),
+                        item.id() + " " + state);
+            }
+        }
+    }
 }

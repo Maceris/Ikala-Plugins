@@ -19,7 +19,16 @@
     { "id": "hair", "covers": ["head"] },
     { "id": "helmet", "covers": ["head"], "order": 30 }
   ],
-  "sockets": [ { "id": "back", "bone": "socket.back", "type": "back.large" } ],
+  "sockets": [
+    { "id": "back", "bone": "socket.back", "type": "back.large" },
+    { "id": "grip.R", "bone": "hand.R", "type": "grip.1h" },
+    { "id": "grip.L", "bone": "hand.L", "type": "grip.1h" }
+  ],
+  "equipment": [
+    { "id": "mainHand", "sockets": ["grip.R", "back"] },
+    { "id": "offHand", "sockets": ["grip.L", "back"] },
+    { "id": "head", "layer": "helmet" }
+  ],
   "extensions": [ { "id": "cape", "root": "chest", "bones": ["cape.01", "cape.02"] } ],
   "sliders": ["ikala:slider/biped/*"],
   "regions": ["forearm", "hand", "scalp"],

@@ -22,6 +22,8 @@ import com.ikalagaming.graphics.graph.Material;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Matrix4f;
+import org.joml.Matrix4fc;
 import org.joml.Quaternionf;
 import org.joml.Vector3d;
 import org.joml.Vector3f;
@@ -32,8 +34,10 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -82,6 +86,18 @@ public final class ShownCharacter implements AutoCloseable {
     /** Each part's mesh, by the part's index. */
     private final List<SkinnedMeshHandle> meshes = new ArrayList<>();
 
+    /** The parts shown last, by index, which held items are drawn beside. */
+    private List<Integer> shownParts = List.of();
+
+    /** The held items' parts, drawn after the shown parts. */
+    private final List<SkinnedPart> heldParts = new ArrayList<>();
+
+    /** The held items' meshes, released when they change. */
+    private final List<SkinnedMeshHandle> heldMeshes = new ArrayList<>();
+
+    /** Materials for held items' files, made once per file. */
+    private final Map<ImportedCharacter, List<Material>> heldMaterials = new HashMap<>();
+
     /** Each part's material, by the part's index, or null. */
     private final List<Material> partMaterials = new ArrayList<>();
 
@@ -99,6 +115,9 @@ public final class ShownCharacter implements AutoCloseable {
 
     /** How fast a character moves before effects shown while moving show, in m/s. */
     private static final float MOVING_SPEED = 0.1f;
+
+    /** Floats per scene vertex: position, normal, tangent, bitangent, texture coordinates. */
+    private static final int VERTEX_FLOATS = 14;
 
     /** The clip playing, or null to stand at rest. */
     private volatile Clip clip;
@@ -247,8 +266,14 @@ public final class ShownCharacter implements AutoCloseable {
      * @param shown The indices of the parts to show.
      */
     public void showParts(@NonNull Collection<Integer> shown) {
+        shownParts = List.copyOf(shown);
+        sendParts();
+    }
+
+    /** Give graphics the shown parts and the held items. */
+    private void sendParts() {
         List<SkinnedPart> parts = new ArrayList<>();
-        for (int index : shown) {
+        for (int index : shownParts) {
             parts.add(
                     new SkinnedPart(
                             meshes.get(index),
@@ -256,7 +281,111 @@ public final class ShownCharacter implements AutoCloseable {
                             partMasks.get(index),
                             partSlots.get(index)));
         }
+        parts.addAll(heldParts);
         GraphicsManager.forPlugin(plugin).skins().setParts(instance, parts);
+    }
+
+    /**
+     * A mesh held in a socket: a part of another file, all of whose vertices follow one bone.
+     *
+     * @param source The file it is from, like the weapons.
+     * @param part The part's index in the file.
+     * @param bone The bone it follows, in this character's skeleton.
+     * @param attach Where it sits in the bone's space.
+     */
+    public record HeldMesh(
+            @NonNull ImportedCharacter source, int part, int bone, @NonNull Matrix4fc attach) {}
+
+    /**
+     * Change the held items, drawn with the shown parts. Each mesh is moved to its bone's rest and
+     * weighted to it alone, so it follows the bone as the character is posed.
+     *
+     * @param held The held meshes.
+     */
+    public void setHeld(@NonNull List<HeldMesh> held) {
+        var graphics = GraphicsManager.forPlugin(plugin);
+        Skins skins = graphics.skins();
+        List<SkinnedMeshHandle> old = new ArrayList<>(heldMeshes);
+        heldMeshes.clear();
+        heldParts.clear();
+        Matrix4f place = new Matrix4f();
+        for (HeldMesh mesh : held) {
+            ImportedCharacter.Part part = mesh.source().parts().get(mesh.part());
+            skeleton.inverseBind(mesh.bone(), place).invert().mul(mesh.attach());
+            float[] vertices = part.vertices().clone();
+            Vector3f min = new Vector3f(Float.POSITIVE_INFINITY);
+            Vector3f max = new Vector3f(Float.NEGATIVE_INFINITY);
+            Vector3f scratch = new Vector3f();
+            for (int v = 0; v < vertices.length; v += VERTEX_FLOATS) {
+                place.transformPosition(scratch.set(vertices[v], vertices[v + 1], vertices[v + 2]));
+                vertices[v] = scratch.x;
+                vertices[v + 1] = scratch.y;
+                vertices[v + 2] = scratch.z;
+                min.min(scratch);
+                max.max(scratch);
+                // Normal, tangent and bitangent turn with it
+                for (int d = 3; d < 12; d += 3) {
+                    place.transformDirection(
+                                    scratch.set(
+                                            vertices[v + d],
+                                            vertices[v + d + 1],
+                                            vertices[v + d + 2]))
+                            .normalize();
+                    vertices[v + d] = scratch.x;
+                    vertices[v + d + 1] = scratch.y;
+                    vertices[v + d + 2] = scratch.z;
+                }
+            }
+            int count = vertices.length / VERTEX_FLOATS;
+            int[] joints = new int[count * 4];
+            float[] weights = new float[count * 4];
+            for (int v = 0; v < count; ++v) {
+                joints[v * 4] = mesh.bone();
+                weights[v * 4] = 1;
+            }
+            SkinnedMeshHandle handle =
+                    skins.registerMesh(vertices, joints, weights, null, part.indices(), min, max);
+            heldMeshes.add(handle);
+            List<Material> fileMaterials = heldMaterials(mesh.source());
+            Material material =
+                    part.material() >= 0 && part.material() < fileMaterials.size()
+                            ? fileMaterials.get(part.material())
+                            : null;
+            heldParts.add(new SkinnedPart(handle, material, null, SkinnedPart.NO_TINT));
+        }
+        sendParts();
+        old.forEach(skins::releaseMesh);
+    }
+
+    /**
+     * The materials of a held item's file, made the first time.
+     *
+     * @param source The file.
+     * @return Its materials, by index.
+     */
+    private List<Material> heldMaterials(ImportedCharacter source) {
+        return heldMaterials.computeIfAbsent(
+                source,
+                file -> {
+                    var graphics = GraphicsManager.forPlugin(plugin);
+                    List<TextureHandle> images = new ArrayList<>();
+                    for (ImportedCharacter.ImageData image : file.images()) {
+                        TextureHandle texture =
+                                decode(graphics.textures(), image, Format.R8G8B8A8_SRGB);
+                        images.add(texture);
+                        if (texture != null) {
+                            textures.add(texture);
+                        }
+                    }
+                    List<Material> made = new ArrayList<>();
+                    for (ImportedCharacter.MaterialData data : file.materials()) {
+                        Material material = material(data, images);
+                        GraphicsManager.getScene().getMaterialCache().addMaterial(material);
+                        materials.add(material);
+                        made.add(material);
+                    }
+                    return made;
+                });
     }
 
     /**
@@ -479,6 +608,7 @@ public final class ShownCharacter implements AutoCloseable {
                 if (effects != null) {
                     if (actions != null) {
                         effects.setState(FxUse.MOVING, actions.speed() > MOVING_SPEED);
+                        effects.setState(FxUse.ACTING, actions.action() != null);
                     }
                     effects.update(solver, position, facing);
                 }
@@ -562,6 +692,7 @@ public final class ShownCharacter implements AutoCloseable {
         Skins skins = graphics.skins();
         skins.remove(instance);
         meshes.forEach(skins::releaseMesh);
+        heldMeshes.forEach(skins::releaseMesh);
         textures.forEach(graphics.textures()::release);
         materials.forEach(GraphicsManager.getScene().getMaterialCache()::removeMaterial);
     }

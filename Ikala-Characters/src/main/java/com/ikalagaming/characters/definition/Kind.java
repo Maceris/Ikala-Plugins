@@ -32,6 +32,8 @@ public enum Kind {
     ANIMATION_SET(AnimationSet.class),
     /** Ways of moving that override some actions. */
     ANIM_STYLE(AnimStyle.class),
+    /** How equippable items look. */
+    ITEM(Item.class),
     /** Saved characters. */
     DESIGN(Design.class);
 

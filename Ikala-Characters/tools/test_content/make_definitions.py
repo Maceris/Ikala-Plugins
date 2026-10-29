@@ -11,6 +11,7 @@ asset editor's test content (see tools/blender). This reads their meshes and wri
     fx/test.json          an effect definition for each
     animationSet/test.json the biped's actions, from the RPG clips and the mannequin's walk
     animStyle/test.json   a style per RPG weapon, overriding combat idles, attacks and casts
+    item/test.json        a held item per RPG weapon (weapons/weapons.glb, see export_weapons.py)
 
 all in the "test" namespace. Load them in the editor by listing the folder in Ikala-Characters'
 config, as test=<folder>. Mesh paths are relative to the folder, as file.glb#mesh name.
@@ -194,6 +195,16 @@ color:
 emissive: 3
 lit: false
 """,
+    "trail": """rate: 600
+lifetime: [0.12, 0.2]
+speed: [0, 0.05]
+size: [0.05, 0.0]
+color:
+  start: [0.8, 0.9, 1, 0.8]
+  end: [0.6, 0.8, 1, 0]
+emissive: 3
+lit: false
+""",
     "dust": """rate: 20
 burst: 6
 lifetime: [0.4, 0.8]
@@ -212,7 +223,7 @@ color:
 
 # Effect definitions' tags, by effect
 EFFECT_TAGS = {"flame": ["hand"], "motes": ["aura"], "sparks": ["part"], "embers": ["aura"],
-               "dust": ["event"]}
+               "dust": ["event"], "trail": ["item"]}
 
 
 def fx_definitions():
@@ -376,6 +387,70 @@ def read_clips(path):
     return [animation["name"] for animation in gltf.get("animations", [])]
 
 
+WEAPONS = "weapons/weapons.glb"
+
+# The RPG weapons: the equipment slots they go in, the hand they are drawn in, where they are
+# sheathed, the style they bring, and a trail along the blade in the mesh's space, if any
+# How weapons sit in each socket, as {"offset": [x, y, z] meters, "rotate": [x, y, z] degrees}.
+# Weapons are exported with their grip at the origin and their blade, shaft or limbs along +Y (see
+# export_weapons.py). The grip sockets point forward (+Y) with +Z up; the back and hip sockets point
+# backward (+Y) with +Z up, and +X is the character's left.
+POINT_FORWARD = {}
+STAND_UP = {"rotate": [90, 0, 0]}
+BACK_BLADE_DOWN = {"offset": [-0.12, 0.08, 0.25], "rotate": [-90, 0, -30]}
+BACK_SHAFT = {"offset": [0, 0.08, 0], "rotate": [-90, 0, -30]}
+BACK_UP = {"offset": [0, 0.1, 0], "rotate": [90, 0, 30]}
+BACK_FLAT = {"offset": [0, 0.1, 0], "rotate": [90, 180, 0]}
+HIP_BLADE_DOWN = {"offset": [-0.2, 0.02, 0.1], "rotate": [-90, 0, -15]}
+HIP_FLAT = {"offset": [0.2, 0.05, 0], "rotate": [90, 180, 0]}
+
+# The RPG weapons: the equipment slots they go in, the hand they are drawn in (None for either),
+# how they sit drawn, where they are sheathed and how, the style they bring, and a trail along the
+# blade, if any
+RPG_ITEMS = {
+    "main_hand_sword": (["mainHand", "offHand"], None, POINT_FORWARD, "hip_back", HIP_BLADE_DOWN,
+                        "main_hand_melee", ([0, 0.15, 0], [0, 0.8, 0])),
+    "two_handed_sword": (["mainHand"], "grip.R", POINT_FORWARD, "back", BACK_BLADE_DOWN,
+                         "two_handed_melee", ([0, 0.3, 0], [0, 1.6, 0])),
+    "shield": (["offHand"], "grip.L", STAND_UP, "back", BACK_FLAT, "off_hand_shield", None),
+    "bow": (["offHand"], "grip.L", STAND_UP, "back", BACK_UP, "two_handed_bow", None),
+    "crossbow": (["mainHand"], "grip.R", POINT_FORWARD, "back", BACK_SHAFT, "two_handed_crossbow",
+                 None),
+    "staff": (["mainHand"], "grip.R", STAND_UP, "back", BACK_SHAFT, "two_handed_staff", None),
+    "wand": (["mainHand"], "grip.R", POINT_FORWARD, "hip_back", HIP_BLADE_DOWN, "main_hand_wand",
+             None),
+    "grimoire": (["offHand"], "grip.L", STAND_UP, "hip_back", HIP_FLAT, None, None),
+}
+
+
+def items():
+    """A held item per RPG weapon, drawn in a hand and sheathed on the back or hip."""
+    made = []
+    for name, (slots, hand, drawn, sheath, sheathed, style, trail) in RPG_ITEMS.items():
+        grip = hand or "grip.1h"
+        attach = {sheath: sheathed}
+        if drawn:
+            attach[grip] = drawn
+        look = {
+            "mesh": f"{WEAPONS}#{name}",
+            "states": {"drawn": grip, "sheathed": sheath},
+            "attach": attach,
+        }
+        if style:
+            look["style"] = f"{NAMESPACE}:style/weapon/{style}"
+        if trail:
+            look["fx"] = [{"fx": f"{NAMESPACE}:fx/trail", "offset": trail[0], "to": trail[1],
+                           "when": "acting"}]
+        made.append({
+            "id": f"{NAMESPACE}:item/{name}",
+            "slots": slots,
+            "category": name,
+            "looks": {PLAN: look},
+            "tags": ["weapon"],
+        })
+    return made
+
+
 def write(path, value, comment):
     """Write definitions as JSON with a comment saying where they came from."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -395,6 +470,7 @@ def main():
     write_effects(root)
     write(root / "animationSet" / "test.json", animation_sets(), "The biped's actions")
     write(root / "animStyle" / "test.json", anim_styles(root), "A style per RPG weapon")
+    write(root / "item" / "test.json", items(), "A held item per RPG weapon")
 
 
 if __name__ == "__main__":

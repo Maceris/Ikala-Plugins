@@ -1,0 +1,34 @@
+// Test item looks: a helmet worn as a layer, and swords held in a hand or on the back
+[
+  {
+    "id": "ikala:item/iron_helm",
+    "slots": ["head"],
+    "category": "helmet.heavy",
+    "looks": { "ikala:biped": { "part": "ikala:part/biped/helmet_iron", "hidesLayers": ["hair"] } },
+    "dyeChannels": ["primary"]
+  },
+  {
+    "id": "ikala:item/sword",
+    "slots": ["mainHand", "offHand"],
+    "category": "sword.1h",
+    "looks": {
+      "ikala:biped": {
+        "mesh": "weapons/sword.glb#sword",
+        "states": { "drawn": "grip.1h", "sheathed": "back.large" },
+        "attach": { "back": { "offset": [0, 0.1, -0.1], "rotate": [0, 0, 180] } },
+        "style": "ikala:style/zombie",
+        "fx": [
+          { "fx": "ikala:fx/sparks", "bone": "hand.R", "when": "combat" },
+          { "fx": "ikala:fx/sparks", "offset": [0, 0.1, 0], "to": [0, 0.8, 0], "turn": true, "when": "acting" }
+        ]
+      }
+    },
+    "dyeChannels": ["primary", "accent"]
+  },
+  {
+    "id": "ikala:item/fancy_sword",
+    "slots": ["mainHand"],
+    "category": "sword.1h",
+    "looks": { "ikala:biped": { "mesh": "weapons/fancy.glb#sword", "states": { "drawn": "grip.R" } } }
+  }
+]

@@ -56,6 +56,13 @@
           },
           "description": "Attach points for accessories and held items."
         },
+        "equipment": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EquipmentSlot"
+          },
+          "description": "Equipment slots, which gameplay items go in, each drawn in a layer or held in a socket. Earlier slots' item styles come first."
+        },
         "extensions": {
           "type": "array",
           "items": {
@@ -150,6 +157,31 @@
       },
       "required": [
         "capsuleFromBones"
+      ],
+      "additionalProperties": false
+    },
+    "EquipmentSlot": {
+      "type": "object",
+      "description": "An equipment slot, like \"head\" or \"mainHand\", and where its items are drawn.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The slot's name, like \"mainHand\"."
+        },
+        "layer": {
+          "type": "string",
+          "description": "The layer items in it are drawn in, like \"helmet\"."
+        },
+        "sockets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The sockets, or socket types, items in it can be held in, like \"grip.R\" or \"back.large\"."
+        }
+      },
+      "required": [
+        "id"
       ],
       "additionalProperties": false
     },

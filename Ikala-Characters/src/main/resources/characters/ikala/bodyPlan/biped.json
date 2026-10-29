@@ -55,6 +55,16 @@
     {"id": "grip.R", "bone": "socket.grip.R", "type": "grip.1h"},
     {"id": "forearm_mount.R", "bone": "socket.forearm_mount.R", "type": "forearm"}
   ],
+  "equipment": [
+    {"id": "mainHand", "sockets": ["grip.R", "back", "hip_back"]},
+    {"id": "offHand", "sockets": ["grip.L", "back", "hip_back"]},
+    {"id": "head", "layer": "helmet"},
+    {"id": "chest", "layer": "jacket"},
+    {"id": "legs", "layer": "pants"},
+    {"id": "hands", "layer": "gloves"},
+    {"id": "feet", "layer": "boots"},
+    {"id": "back", "sockets": ["back"]}
+  ],
   "extensions": [
     {"id": "cape", "root": "chest", "bones": ["cape.01", "cape.02", "cape.03", "cape.04"]},
     {"id": "wing.L", "root": "chest", "bones": ["wing.01.L", "wing.02.L", "wing.03.L", "wing.04.L"]},

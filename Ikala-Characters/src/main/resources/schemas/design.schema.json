@@ -153,6 +153,20 @@
           "type": "string",
           "description": "When it shows: \"always\", \"moving\", \"combat\", or a toggle that gameplay or the player controls, like \"wings\". Lowercase words joined by dots, up to 32 letters.",
           "default": "always"
+        },
+        "to": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "The other end of a line it spawns along, like a blade's tip, in the same space as the offset and up to 1.27 m each way. Left out, it spawns at a point."
+        },
+        "turn": {
+          "type": "boolean",
+          "description": "Whether its spawn area and direction turn with its bone, like sparks off a blade. Left out, they keep to the world, so flames rise.",
+          "default": false
         }
       },
       "required": [

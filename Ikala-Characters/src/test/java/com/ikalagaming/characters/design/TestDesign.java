@@ -117,7 +117,8 @@ class TestDesign {
      * @return The effect.
      */
     private static FxUse sparks(String bone, String socket, String color, float scale, float rate) {
-        return new FxUse(SPARKS, bone, socket, null, color, scale, rate, 1, FxUse.ALWAYS);
+        return new FxUse(
+                SPARKS, bone, socket, null, color, scale, rate, 1, FxUse.ALWAYS, null, false);
     }
 
     /**
@@ -241,7 +242,9 @@ class TestDesign {
                                                 1,
                                                 1,
                                                 1,
-                                                FxUse.ALWAYS)))
+                                                FxUse.ALWAYS,
+                                                null,
+                                                false)))
                         .contains("ikala:fx/missing"));
         Assertions.assertTrue(
                 problems(
@@ -255,7 +258,9 @@ class TestDesign {
                                                 1,
                                                 1,
                                                 1,
-                                                FxUse.ALWAYS)))
+                                                FxUse.ALWAYS,
+                                                null,
+                                                false)))
                         .contains("Offsets go up to"));
         Assertions.assertTrue(
                 problems(wearing(sparks("hand.L", null, null, 1, 1).withWhen("Wings!")))

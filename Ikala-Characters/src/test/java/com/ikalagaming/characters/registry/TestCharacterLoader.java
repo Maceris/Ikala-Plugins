@@ -309,4 +309,33 @@ class TestCharacterLoader {
                 biped.actions().get("attack.melee").clips().get(0).events().get(1).effect());
         Assertions.assertNotNull(registry.get(AnimStyle.class, Id.parse("ikala:style/zombie")));
     }
+
+    /** Item looks are checked against their plans' slots, layers and sockets. */
+    @Test
+    void testItemProblems() throws Exception {
+        Path root = copy();
+        write(
+                root.resolve("item/broken.json"),
+                """
+                [
+                  { "id": "ikala:item/hat", "slots": ["head", "feet"],
+                    "looks": { "ikala:biped": { "part": "ikala:part/biped/forearm_stump" } } },
+                  { "id": "ikala:item/club", "slots": ["mainHand"],
+                    "looks": { "ikala:biped": { "mesh": "club.glb", "states": { "worn": "head_top" },
+                      "attach": { "belt": {} }, "style": "ikala:style/missing" } } },
+                  { "id": "ikala:item/both", "slots": ["mainHand"],
+                    "looks": { "ikala:biped": { "part": "ikala:part/biped/helmet_iron",
+                      "mesh": "a.glb#a" }, "biped": {} } }
+                ]
+                """);
+        String problems = text(CharacterLoader.load(List.of(new ContentSource("ikala", root))));
+        Assertions.assertTrue(problems.contains("no equipment slot 'feet'"), problems);
+        Assertions.assertTrue(problems.contains("isn't a layer part"), problems);
+        Assertions.assertTrue(problems.contains("A mesh is its file"), problems);
+        Assertions.assertTrue(problems.contains("holds items in 'head_top'"), problems);
+        Assertions.assertTrue(problems.contains("socket type 'belt'"), problems);
+        Assertions.assertTrue(problems.contains("ikala:style/missing"), problems);
+        Assertions.assertTrue(problems.contains("worn as a part or held as a mesh"), problems);
+        Assertions.assertTrue(problems.contains("Looks are by plan ID"), problems);
+    }
 }

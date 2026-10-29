@@ -43,6 +43,9 @@ final class CharacterMotion {
     /** The fastest speed the slider offers, in meters per second. */
     static final float MAX_SPEED = 8;
 
+    /** The idle played while ready to fight. */
+    static final String COMBAT_IDLE = ActionLookup.IDLE + "." + FxUse.COMBAT;
+
     /** The speed movement starts at, a walk. */
     static final float START_SPEED = 1.4f;
 
@@ -100,6 +103,9 @@ final class CharacterMotion {
     /** When the last frame was drawn, in nanoseconds, or 0. */
     private long lastFrame;
 
+    /** Whether a weapon is drawn, so the character idles ready to fight. */
+    private boolean combat;
+
     /** States effects are shown in that are on, like combat. */
     private final Set<String> states = new TreeSet<>();
 
@@ -110,7 +116,7 @@ final class CharacterMotion {
      * @param registry The loaded definitions.
      * @param plan The character's plan.
      * @param variant Its variant.
-     * @param style Its style, or null for the plan's own.
+     * @param styles Its styles, the first winning, like its items' and then its design's.
      * @param reference The rig's reference file.
      * @param character The shown character.
      * @param post Runs a task on the render thread.
@@ -119,7 +125,7 @@ final class CharacterMotion {
             @NonNull CharacterRegistry registry,
             @NonNull BodyPlan plan,
             @NonNull String variant,
-            Id style,
+            @NonNull List<Id> styles,
             @NonNull Path reference,
             @NonNull ShownCharacter character,
             @NonNull Consumer<Runnable> post) {
@@ -129,9 +135,7 @@ final class CharacterMotion {
             libraries.clear();
             librariesFor = registry;
         }
-        ActionLookup lookup =
-                new ActionLookup(
-                        registry, plan.id(), variant, style == null ? List.of() : List.of(style));
+        ActionLookup lookup = new ActionLookup(registry, plan.id(), variant, styles);
         hasActions = !lookup.isEmpty();
         if (!hasActions) {
             return;
@@ -157,7 +161,7 @@ final class CharacterMotion {
                                                             character.getSkeleton(),
                                                             plan,
                                                             new SplittableRandom());
-                                            animator.setMovement(movement, speed[0]);
+                                            animator.setMovement(movementAction(), speed[0]);
                                             if (action != null) {
                                                 animator.play(action, false);
                                             }
@@ -236,6 +240,37 @@ final class CharacterMotion {
     }
 
     /**
+     * Ready the character to fight, as when a weapon is drawn, or stand it down: it idles in its
+     * combat idle, and effects shown in combat show.
+     *
+     * @param on Whether it is ready to fight.
+     */
+    void setCombat(boolean on) {
+        if (on == combat) {
+            return;
+        }
+        combat = on;
+        if (on) {
+            states.add(FxUse.COMBAT);
+        } else {
+            states.remove(FxUse.COMBAT);
+        }
+        if (animator != null) {
+            animator.setMovement(movementAction(), speed[0]);
+        }
+    }
+
+    /**
+     * The movement to play: the one chosen, or the combat idle in place of the idle while ready to
+     * fight.
+     *
+     * @return The action.
+     */
+    private String movementAction() {
+        return combat && ActionLookup.IDLE.equals(movement) ? COMBAT_IDLE : movement;
+    }
+
+    /**
      * Whether an action is a movement, played on the whole body under other actions.
      *
      * @param name The action.
@@ -258,7 +293,7 @@ final class CharacterMotion {
         if (isMovement(name)) {
             movement = name;
             if (animator != null) {
-                animator.setMovement(movement, speed[0]);
+                animator.setMovement(movementAction(), speed[0]);
             }
             return;
         }
@@ -367,7 +402,7 @@ final class CharacterMotion {
             IkGui.endCombo();
         }
         if (IkGui.sliderFloat("Speed (m/s)##speed", speed, 0, MAX_SPEED)) {
-            animator.setMovement(movement, speed[0]);
+            animator.setMovement(movementAction(), speed[0]);
         }
         timeline(animator.movement());
 
