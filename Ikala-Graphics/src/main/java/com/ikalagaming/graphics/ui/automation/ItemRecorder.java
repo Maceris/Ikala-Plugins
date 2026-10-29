@@ -69,6 +69,15 @@ final class ItemRecorder implements TestEngineHooks {
     /** The items by ID. */
     private final Map<Integer, Item> items = new HashMap<>();
 
+    /**
+     * Labels reported this frame before their item was added, by ID. Tabs report theirs first, as
+     * Dear ImGui's do, so the label waits here for the add.
+     */
+    private final Map<Integer, String> early = new HashMap<>();
+
+    /** The frame the early labels were reported in. */
+    private int earlyFrame = -1;
+
     /** The context the hooks are installed in, or null. */
     private Context hooked;
 
@@ -101,6 +110,7 @@ final class ItemRecorder implements TestEngineHooks {
         }
         hooked = null;
         items.clear();
+        early.clear();
     }
 
     /**
@@ -159,8 +169,8 @@ final class ItemRecorder implements TestEngineHooks {
         Window window = context.windowCurrent;
         Item item = items.computeIfAbsent(id, Item::new);
         if (item.frame != context.frameCount) {
-            // A label is only reported after the item is added, so drop last frame's
-            item.label = null;
+            // Most labels are reported after the item is added, so drop last frame's
+            item.label = earlyFrame == context.frameCount ? early.remove(id) : null;
             item.statusFlags = 0;
         }
         item.window = window;
@@ -177,9 +187,18 @@ final class ItemRecorder implements TestEngineHooks {
 
     @Override
     public void itemInfo(int id, String label, int statusFlags) {
+        final int frame = IkGui.getContext().frameCount;
         Item item = items.get(id);
-        if (item == null || item.frame != IkGui.getContext().frameCount) {
-            // Reported without being added, like an item that was clipped away
+        if (item == null || item.frame != frame) {
+            // Not added yet this frame: a tab, which is added after, or an item clipped away,
+            // which never is. Its status flags are the item before's, so only the label is kept
+            if (earlyFrame != frame) {
+                early.clear();
+                earlyFrame = frame;
+            }
+            if (label != null) {
+                early.put(id, label);
+            }
             return;
         }
         item.label = label;
