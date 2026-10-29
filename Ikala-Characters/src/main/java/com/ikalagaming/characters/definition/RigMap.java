@@ -23,6 +23,8 @@ import java.util.Set;
  * @param drop Source bones that are left out.
  * @param scale How much to scale the source by.
  * @param height The standing height to scale the source to.
+ * @param keepRest Rig bones that keep the reference's rest direction instead of turning to their
+ *     driver's.
  * @author Ches Burks
  */
 @Doc(
@@ -38,7 +40,15 @@ public record RigMap(
         @Doc("How much to scale the source by, when height isn't given.") @Default("1") float scale,
         @Doc("The standing height in meters to scale the source to, which overrides scale.")
                 @Optional
-                Float height)
+                Float height,
+        @Doc(
+                        "Rig bones that keep the reference's rest direction instead of turning to"
+                                + " point the way their driver does, and follow its change from"
+                                + " rest. For bones the two skeletons point differently by"
+                                + " convention, like clavicles, the pelvis or the chest, rather"
+                                + " than by pose, like arms held out or down.")
+                @Optional
+                List<String> keepRest)
         implements Definition {
 
     /** The field for the rig it maps onto. */
@@ -52,6 +62,9 @@ public record RigMap(
 
     /** The field for the bone mapping. */
     public static final String FIELD_BONES = "bones";
+
+    /** The field for the bones that keep the reference's rest direction. */
+    public static final String FIELD_KEEP_REST = "keepRest";
 
     @Override
     public void check(Checks checks) {
@@ -76,5 +89,20 @@ public record RigMap(
                                 "The rig has no bone named '" + to + "'");
                     }
                 });
+        Set<String> mapped = new HashSet<>(bones.values());
+        for (int i = 0; i < keepRest.size(); ++i) {
+            String bone = keepRest.get(i);
+            if (target != null && target.bone(bone) == null) {
+                checks.error(
+                        JsonPath.at(FIELD_KEEP_REST, i),
+                        "The rig has no bone named '" + bone + "'");
+            } else if (!mapped.contains(bone)) {
+                checks.error(
+                        JsonPath.at(FIELD_KEEP_REST, i),
+                        "'"
+                                + bone
+                                + "' has no source bone, so it keeps the reference's rest anyway");
+            }
+        }
     }
 }

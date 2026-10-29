@@ -55,6 +55,13 @@
           "type": "number",
           "description": "The standing height in meters to scale the source to, which overrides scale."
         },
+        "keepRest": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Rig bones that keep the reference's rest direction instead of turning to point the way their driver does, and follow its change from rest. For bones the two skeletons point differently by convention, like clavicles, the pelvis or the chest, rather than by pose, like arms held out or down."
+        },
         "extends": {
           "type": "string",
           "description": "The ID of a definition of the same kind to start from. Fields written here replace the parent's, and objects merge field by field."

@@ -150,7 +150,8 @@ class TestRetargeter {
                         Map.of("base", "hips", "arm", "shoulder", "tip", "hand"),
                         List.of(),
                         1,
-                        null);
+                        null,
+                        List.of());
 
         ImportedCharacter moved = Retargeter.retarget(source, map, targetRig, reference);
         Skeleton sourceSkeleton = source.skeleton();
@@ -166,6 +167,96 @@ class TestRetargeter {
             Assertions.assertTrue(
                     from[1].equals(to[2], EPSILON), time + ": " + from[1] + " " + to[2]);
         }
+    }
+
+    /**
+     * A bone kept at the reference's rest rests pointing the reference's way, and turns from there
+     * as far as its driver turns from its own rest.
+     */
+    @Test
+    void testKeepRest() {
+        // The source: an arm pointing up and back, which the target points straight up
+        Rig sourceRig =
+                new Rig(
+                        Id.parse("test:rig/source"),
+                        List.of(
+                                new Rig.Bone("base", null, Rig.BoneKind.DEFORM),
+                                new Rig.Bone("arm", "base", Rig.BoneKind.DEFORM),
+                                new Rig.Bone("tip", "arm", Rig.BoneKind.DEFORM)));
+        Quaternionf leaning = new Quaternionf().rotateX(0.5f);
+        Map<String, Skeleton.Rest> sourceRest = new HashMap<>();
+        sourceRest.put("base", rest(new Vector3f(), new Quaternionf()));
+        sourceRest.put("arm", rest(new Vector3f(0, 1, 0), leaning));
+        sourceRest.put("tip", rest(new Vector3f(0, 0.5f, 0), new Quaternionf()));
+        // A clip turning the arm a further 0.4 radians about its local z
+        Quaternionf turned = new Quaternionf(leaning).rotateZ(0.4f);
+        ImportedCharacter.ClipData swing =
+                new ImportedCharacter.ClipData(
+                        "swing",
+                        1,
+                        true,
+                        List.of(
+                                new Clip.RotationTrack(
+                                        "arm",
+                                        new float[] {0, 1},
+                                        new float[] {
+                                            leaning.x, leaning.y, leaning.z, leaning.w, turned.x,
+                                            turned.y, turned.z, turned.w
+                                        })),
+                        List.of());
+        ImportedCharacter source =
+                new ImportedCharacter(
+                        "source",
+                        sourceRig,
+                        sourceRest,
+                        List.of(),
+                        List.of(swing),
+                        List.of(),
+                        List.of());
+
+        Rig targetRig =
+                new Rig(
+                        Id.parse("test:rig/target"),
+                        List.of(
+                                new Rig.Bone("root", null, Rig.BoneKind.DEFORM),
+                                new Rig.Bone("shoulder", "root", Rig.BoneKind.DEFORM),
+                                new Rig.Bone("hand", "shoulder", Rig.BoneKind.DEFORM)));
+        Map<String, Skeleton.Rest> reference = new HashMap<>();
+        reference.put("root", rest(new Vector3f(), new Quaternionf()));
+        reference.put("shoulder", rest(new Vector3f(0, 1, 0), new Quaternionf()));
+        reference.put("hand", rest(new Vector3f(0, 0.5f, 0), new Quaternionf()));
+        RigMap map =
+                new RigMap(
+                        Id.parse("test:rig_map/kept"),
+                        targetRig.id(),
+                        null,
+                        Map.of("base", "root", "arm", "shoulder", "tip", "hand"),
+                        List.of(),
+                        1,
+                        null,
+                        List.of("shoulder"));
+
+        ImportedCharacter moved = Retargeter.retarget(source, map, targetRig, reference);
+        Skeleton skeleton = moved.skeleton();
+        // At rest the shoulder points straight up, as the reference's does, not back
+        Assertions.assertTrue(
+                skeleton.restRotation(skeleton.index("shoulder"), new Quaternionf())
+                        .equals(new Quaternionf(), 1e-5f));
+        // Halfway through, it has turned from straight up the way the source's arm turned from its
+        // rest, about the same model space axis, and the hand is where the tip is. Sampled at the
+        // middle, since the clip loops and its end reads as its start
+        Pose pose = new Pose(skeleton);
+        moved.clip("swing").bind(skeleton).sample(0.5f, pose);
+        PoseSolver solver = new PoseSolver(skeleton);
+        solver.solve(pose, Proportions.neutral(skeleton));
+        Quaternionf halfway = new Quaternionf(leaning).rotateZ(0.2f);
+        Quaternionf change = new Quaternionf(halfway).mul(new Quaternionf(leaning).invert());
+        Quaternionf shoulder =
+                solver.model(skeleton.index("shoulder")).getNormalizedRotation(new Quaternionf());
+        Assertions.assertTrue(shoulder.equals(change, 1e-4f), shoulder + " vs " + change);
+        Vector3f tip = positions(source.skeleton(), swing.bind(source.skeleton()), 0.5f)[2];
+        Vector3f hand = solver.model(skeleton.index("hand")).getTranslation(new Vector3f());
+        Assertions.assertTrue(hand.equals(tip, EPSILON), hand + " vs " + tip);
     }
 
     /**

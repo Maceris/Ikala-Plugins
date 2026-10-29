@@ -1,10 +1,13 @@
 // Maps System G6's modular RPG characters onto the biped. Where several source bones map to
 // one biped bone, the first listed drives it in clips and the rest only merge their weights.
+// Their pelvis leans forward, their torso back and their shoulder bones point 30 degrees back
+// and up, by the skeleton's own convention, so those biped bones keep the mannequin's rest.
 {
   "id": "ikala:rig_map/modular_rpg_human",
   "rig": "ikala:rig/biped",
   "source": "System G6's modular RPG characters (human male and female)",
   "height": 2,
+  "keepRest": ["hips", "chest", "clavicle.L", "clavicle.R"],
   "bones": {
     "pelvis": "hips",
     "torso": "chest",

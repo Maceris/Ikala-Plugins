@@ -16,9 +16,11 @@ import org.joml.Vector3f;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Moves a character made on another skeleton onto a rig, through a {@link RigMap}, so it can use
@@ -28,7 +30,9 @@ import java.util.Map;
  * <ul>
  *   <li><b>Rest pose</b>: a rig bone with a source bone, its driver, takes the driver's position,
  *       and the reference rest's rotation turned to point the way the driver does, so the rig's
- *       twist conventions hold and its clips still fit. A bone with no driver keeps the reference's
+ *       twist conventions hold and its clips still fit. A bone the map says to keep at rest takes
+ *       the reference's rotation unturned instead, for bones the skeletons point differently by
+ *       convention rather than by pose, like clavicles. A bone with no driver keeps the reference's
  *       offset from its parent, so a spine between mapped hips and chest, or a jaw, lands where the
  *       reference puts it.
  *   <li><b>Weights</b> move to the mapped bones; several source bones mapping to one, like four
@@ -118,18 +122,22 @@ public final class Retargeter {
         Map<String, Skeleton.Rest> targetRest = new LinkedHashMap<>();
         Quaternionf[] restLocalRotation = new Quaternionf[targetCount];
         Vector3f[] restLocalTranslation = new Vector3f[targetCount];
+        Set<String> keepRest = new HashSet<>(map.keepRest());
         for (int j = 0; j < targetCount; ++j) {
             int parent = referenceSkeleton.parent(j);
             if (driver[j] >= 0) {
                 Quaternionf referenceRotation =
                         referenceRest[j].getNormalizedRotation(new Quaternionf());
-                Vector3f referenceAxis = referenceRotation.transform(new Vector3f(BONE_AXIS));
-                Vector3f sourceAxis =
-                        sourceRestRotation[driver[j]].transform(new Vector3f(BONE_AXIS));
-                Quaternionf rotation =
-                        new Quaternionf()
-                                .rotationTo(referenceAxis, sourceAxis)
-                                .mul(referenceRotation);
+                Quaternionf rotation = referenceRotation;
+                if (!keepRest.contains(target.bones().get(j).name())) {
+                    Vector3f referenceAxis = referenceRotation.transform(new Vector3f(BONE_AXIS));
+                    Vector3f sourceAxis =
+                            sourceRestRotation[driver[j]].transform(new Vector3f(BONE_AXIS));
+                    rotation =
+                            new Quaternionf()
+                                    .rotationTo(referenceAxis, sourceAxis)
+                                    .mul(referenceRotation);
+                }
                 targetModel[j] =
                         new Matrix4f()
                                 .translationRotate(
