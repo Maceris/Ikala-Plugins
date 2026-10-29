@@ -501,4 +501,6 @@ def main():
     print("Wrote", path, "and", blend)
 
 
-main()
+# mannequin_human.py imports this for its rig, clips and export
+if __name__ == "__main__":
+    main()

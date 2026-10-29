@@ -4,9 +4,11 @@ The test art is the generated mannequin and the modular RPG characters, exported
 asset editor's test content (see tools/blender). This reads their meshes and writes, beside them:
 
     part/mannequin.json   a body part per mannequin mesh, one per biped slot
+    part/human.json       the same for the realistic male and female mannequins, by variant
     part/rpg_human.json   the RPG body, heads, hands and feet as body parts, and hair, armor,
                           boots, gloves and helmets as layers, male and female meshes together
-    design/test.json      a mannequin, an RPG man with a hand flame and an RPG woman with an aura
+    design/test.json      both mannequins, an RPG man with a hand flame and an RPG woman with an
+                          aura
     effects/*.effect.yml  graphics particle effects: a flame, motes, sparks, embers and dust
     fx/test.json          an effect definition for each
     animationSet/test.json the biped's actions, from the RPG clips and the mannequin's walk
@@ -29,6 +31,9 @@ PLAN = "ikala:biped"
 TEMPLATE = "ikala:mat/standard"
 
 MANNEQUIN = "mannequin/mannequin.glb"
+# The realistic mannequins from tools/blender/mannequin_human.py, by variant
+HUMAN_FILES = {"male": "mannequin_human/male.glb", "female": "mannequin_human/female.glb"}
+HUMAN_EYES = "mannequin_eyes"
 RPG_FILES = {"male": "rpg_human/rpg_male.glb", "female": "rpg_human/rpg_female.glb"}
 
 # Where the RPG kit's pieces go on the biped, by the word their mesh names end in
@@ -85,6 +90,28 @@ def mannequin_parts(root):
             "meshes": {"*": f"{MANNEQUIN}#{mesh}"},
             "materialSlots": material_slots(materials, SKIN),
             "tags": ["mannequin"],
+        })
+    return parts
+
+
+def human_parts(root):
+    """A body part per slot of the realistic mannequins, the male's and female's meshes each for
+    their own variant, and the male's for the rest. The eyes take no palette color."""
+    parts = []
+    for mesh, materials in read_meshes(root / HUMAN_FILES["male"]):
+        slot = mesh.removeprefix("mannequin_")
+        meshes = {variant: f"{file}#{mesh}" for variant, file in HUMAN_FILES.items()}
+        meshes["*"] = meshes["male"]
+        parts.append({
+            "id": f"{NAMESPACE}:part/human/{slot.lower()}",
+            "plan": PLAN,
+            "kind": "body",
+            "fills": [slot],
+            "meshes": meshes,
+            "materialSlots": [{"name": name, "template": TEMPLATE,
+                               "channels": {} if name == HUMAN_EYES else SKIN}
+                              for name in materials],
+            "tags": ["mannequin", "human"],
         })
     return parts
 
@@ -248,7 +275,16 @@ def designs():
         "hand.L": f"{NAMESPACE}:part/rpg/hands_default",
         "foot.L": f"{NAMESPACE}:part/rpg/feet_default",
     }
-    return [
+    human = [
+        {
+            "id": f"{NAMESPACE}:design/human_{variant}",
+            "plan": PLAN,
+            "variant": variant,
+            "parts": {slot: f"{NAMESPACE}:part/human/{slot.lower()}" for slot in mannequin_slots},
+        }
+        for variant in HUMAN_FILES
+    ]
+    return human + [
         {
             "id": f"{NAMESPACE}:design/mannequin",
             "plan": PLAN,
@@ -389,6 +425,7 @@ def main():
     parser.add_argument("root", type=pathlib.Path, help="the test_content/characters folder")
     root = parser.parse_args().root
     write(root / "part" / "mannequin.json", mannequin_parts(root), "The mannequin's parts")
+    write(root / "part" / "human.json", human_parts(root), "The realistic mannequins' parts")
     write(root / "part" / "rpg_human.json", rpg_parts(root), "The modular RPG characters' parts")
     write(root / "design" / "test.json", designs(), "Designs made of the test parts")
     write(root / "fx" / "test.json", fx_definitions(), "Effects for the test characters")
