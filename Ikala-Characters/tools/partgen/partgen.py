@@ -70,6 +70,10 @@ VIEWS = 3
 # finishes the details
 SKETCH_STRENGTH = 0.7
 SKETCH_END = 0.7
+# Pixels darker than this (on light paper) are a sketch's lines; lighter fills are left out
+SKETCH_LINE = 96
+# Room left around a sketch's lines, as a share of their size
+SKETCH_MARGIN = 0.15
 REVIEW_FIELDS = ("brief", "pick", "mesh", "part")
 
 
@@ -247,14 +251,31 @@ def sketch_workflow(workflow, config, image, strength, end):
     return workflow
 
 
+def scaled_to_fit(size, limit):
+    """A size scaled up or down so its longer side is the limit."""
+    scale = limit / max(size)
+    return max(1, round(size[0] * scale)), max(1, round(size[1] * scale))
+
+
 def prepare_sketch(config, batch, brief):
-    """A brief's sketch as ComfyUI wants it, in its input folder: white lines on black, square,
-    the generated size, lines thickened a little. Gives its name there."""
-    from PIL import Image, ImageFilter, ImageOps, ImageStat
-    sketch = Image.open(brief["sketch"]).convert("L")
+    """A brief's sketch as ComfyUI wants it, in its input folder: only its lines, white on black,
+    square, the generated size, thickened a little. Fills and colored marks are left out, since
+    scribble mode would take a filled area for a shape of its own. Gives its name there."""
+    from PIL import Image, ImageFilter, ImageStat
+    sketch = Image.open(brief["sketch"]).convert("RGBA")
+    flat = Image.new("RGBA", sketch.size, "white")
+    flat.alpha_composite(sketch)  # a transparent background counts as paper
+    sketch = flat.convert("L")
     if ImageStat.Stat(sketch).mean[0] > 127:
-        sketch = ImageOps.invert(sketch)  # drawn dark on light
-    sketch.thumbnail((SDXL_SIZE, SDXL_SIZE))
+        sketch = sketch.point(lambda v: 255 if v < SKETCH_LINE else 0)  # drawn dark on light
+    else:
+        sketch = sketch.point(lambda v: 255 if v > 255 - SKETCH_LINE else 0)
+    # Fill most of the frame however small it was drawn, so the object does too
+    box = sketch.getbbox()
+    if box:
+        margin = int(max(box[2] - box[0], box[3] - box[1]) * SKETCH_MARGIN)
+        sketch = sketch.crop((box[0] - margin, box[1] - margin, box[2] + margin, box[3] + margin))
+    sketch = sketch.resize(scaled_to_fit(sketch.size, SDXL_SIZE))
     square = Image.new("L", (SDXL_SIZE, SDXL_SIZE), 0)
     square.paste(sketch, ((SDXL_SIZE - sketch.width) // 2, (SDXL_SIZE - sketch.height) // 2))
     square = square.filter(ImageFilter.MaxFilter(5))
