@@ -5,10 +5,10 @@ package com.ikalagaming.graphics.lod;
  * ints packed into a long, whose own hash (the two halves XORed) collides badly; this mixes every
  * bit first.
  */
-final class LongIntMap {
+public final class LongIntMap {
 
     /** What {@link #get} and {@link #putIfAbsent} return for a key that isn't there. */
-    static final int MISSING = -1;
+    public static final int MISSING = -1;
 
     /** The smallest table. */
     private static final int MIN_CAPACITY = 16;
@@ -42,7 +42,7 @@ final class LongIntMap {
      *
      * @param expected About how many keys it will hold.
      */
-    LongIntMap(int expected) {
+    public LongIntMap(int expected) {
         allocate(Integer.highestOneBit(Math.max(MIN_CAPACITY, expected << LOAD_SHIFT) - 1) << 1);
     }
 
@@ -94,7 +94,7 @@ final class LongIntMap {
      * @param key The key.
      * @return Its value, or {@link #MISSING}.
      */
-    int get(long key) {
+    public int get(long key) {
         final int i = slot(key);
         return used[i] ? values[i] : MISSING;
     }
@@ -106,7 +106,7 @@ final class LongIntMap {
      * @param value Its value, if added.
      * @return The value already there, or {@link #MISSING} if the key was added.
      */
-    int putIfAbsent(long key, int value) {
+    public int putIfAbsent(long key, int value) {
         int i = slot(key);
         if (used[i]) {
             return values[i];
@@ -120,6 +120,26 @@ final class LongIntMap {
         values[i] = value;
         ++size;
         return MISSING;
+    }
+
+    /**
+     * Set a key's value, adding the key if it isn't there.
+     *
+     * @param key The key.
+     * @param value Its value.
+     */
+    public void put(long key, int value) {
+        int i = slot(key);
+        if (!used[i]) {
+            if ((size + 1) << LOAD_SHIFT > keys.length) {
+                grow();
+                i = slot(key);
+            }
+            used[i] = true;
+            keys[i] = key;
+            ++size;
+        }
+        values[i] = value;
     }
 
     /** Double the table. */
@@ -143,7 +163,7 @@ final class LongIntMap {
      *
      * @return The count.
      */
-    int size() {
+    public int size() {
         return size;
     }
 
@@ -154,7 +174,7 @@ final class LongIntMap {
      * @param b The low int.
      * @return The key.
      */
-    static long pair(int a, int b) {
+    public static long pair(int a, int b) {
         return ((long) a << Integer.SIZE) | Integer.toUnsignedLong(b);
     }
 }

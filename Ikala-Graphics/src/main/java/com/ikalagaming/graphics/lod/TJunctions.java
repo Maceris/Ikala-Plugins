@@ -94,16 +94,95 @@ public final class TJunctions {
     record Line(long dx, long dy, long dz, long px, long py, long pz) {
         @Override
         public int hashCode() {
-            // The steps are small and alike, so mix them well rather than sum them
-            long h = dx * 0x9E3779B97F4A7C15L;
-            h = (h ^ (h >>> 29) ^ dy) * 0xBF58476D1CE4E5B9L;
-            h = (h ^ (h >>> 31) ^ dz) * 0x94D049BB133111EBL;
-            h = (h ^ (h >>> 29) ^ px) * 0x9E3779B97F4A7C15L;
-            h = (h ^ (h >>> 31) ^ py) * 0xBF58476D1CE4E5B9L;
-            h = (h ^ (h >>> 29) ^ pz) * 0x94D049BB133111EBL;
-            return (int) (h ^ (h >>> 32));
+            return hash(dx, dy, dz, px, py, pz);
         }
     }
+
+    /**
+     * A line's hash, the same for a {@link Line} and a {@link Probe} on it.
+     *
+     * @param dx The direction's x, in steps.
+     * @param dy Its y.
+     * @param dz Its z.
+     * @param px The nearest point's x, in steps.
+     * @param py Its y.
+     * @param pz Its z.
+     * @return The hash.
+     */
+    private static int hash(long dx, long dy, long dz, long px, long py, long pz) {
+        // The steps are small and alike, so mix them well rather than sum them
+        long h = dx * 0x9E3779B97F4A7C15L;
+        h = (h ^ (h >>> 29) ^ dy) * 0xBF58476D1CE4E5B9L;
+        h = (h ^ (h >>> 31) ^ dz) * 0x94D049BB133111EBL;
+        h = (h ^ (h >>> 29) ^ px) * 0x9E3779B97F4A7C15L;
+        h = (h ^ (h >>> 31) ^ py) * 0xBF58476D1CE4E5B9L;
+        h = (h ^ (h >>> 29) ^ pz) * 0x94D049BB133111EBL;
+        return (int) (h ^ (h >>> 32));
+    }
+
+    /**
+     * Where an edge lies, worked out into a reused object to look its line up with: equal to the
+     * {@link Line} it lies on, with the same hash, so the map of filed lines finds it. Simplifiers
+     * ask whether edges are covered for every collapse they consider, and a {@link Placed} and
+     * {@link Line} for each were a large share of what building level of detail allocated. One per
+     * thread, since cells are built on many at once.
+     */
+    private static final class Probe {
+        /** The line's direction and nearest point, in steps, as in {@link Line}. */
+        long dx;
+
+        /** Its direction's y. */
+        long dy;
+
+        /** Its direction's z. */
+        long dz;
+
+        /** Its nearest point's x. */
+        long px;
+
+        /** Its nearest point's y. */
+        long py;
+
+        /** Its nearest point's z. */
+        long pz;
+
+        /** Where the edge starts along the line. */
+        double from;
+
+        /** Where it ends, past the start. */
+        double to;
+
+        /** Whether it runs along the line's direction. */
+        boolean forward;
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Line line
+                    && line.dx() == dx
+                    && line.dy() == dy
+                    && line.dz() == dz
+                    && line.px() == px
+                    && line.py() == py
+                    && line.pz() == pz;
+        }
+
+        @Override
+        public int hashCode() {
+            return hash(dx, dy, dz, px, py, pz);
+        }
+
+        /**
+         * The line as a key to keep.
+         *
+         * @return The line.
+         */
+        Line line() {
+            return new Line(dx, dy, dz, px, py, pz);
+        }
+    }
+
+    /** Each thread's probe. */
+    private static final ThreadLocal<Probe> PROBES = ThreadLocal.withInitial(Probe::new);
 
     /**
      * An edge on a line.
@@ -157,13 +236,29 @@ public final class TJunctions {
      * @return Where it lies, or null if it has no length.
      */
     static Placed place(double @NonNull [] a, double @NonNull [] b) {
+        final Probe probe = new Probe();
+        if (!place(a, b, probe)) {
+            return null;
+        }
+        return new Placed(probe.line(), probe.from, probe.to, probe.forward);
+    }
+
+    /**
+     * Where an edge between two points lies, into a probe.
+     *
+     * @param a One end, x, y, z.
+     * @param b The other.
+     * @param out Receives the line and where the edge lies on it.
+     * @return False if it has no length, and nothing was written.
+     */
+    private static boolean place(double @NonNull [] a, double @NonNull [] b, @NonNull Probe out) {
         // In locals rather than arrays: edges are placed for every collapse a simplifier checks
         double dx = b[0] - a[0];
         double dy = b[1] - a[1];
         double dz = b[2] - a[2];
         final double length = Math.sqrt(dx * dx + dy * dy + dz * dz);
         if (length == 0) {
-            return null;
+            return false;
         }
         final double largest =
                 Math.abs(dx) >= Math.abs(dy) && Math.abs(dx) >= Math.abs(dz)
@@ -176,17 +271,16 @@ public final class TJunctions {
         dz *= scale;
         final double ta = a[0] * dx + a[1] * dy + a[2] * dz;
         final double tb = b[0] * dx + b[1] * dy + b[2] * dz;
-        return new Placed(
-                new Line(
-                        Math.round(dx / DIRECTION_STEP),
-                        Math.round(dy / DIRECTION_STEP),
-                        Math.round(dz / DIRECTION_STEP),
-                        Math.round((a[0] - ta * dx) / POINT_STEP),
-                        Math.round((a[1] - ta * dy) / POINT_STEP),
-                        Math.round((a[2] - ta * dz) / POINT_STEP)),
-                Math.min(ta, tb),
-                Math.max(ta, tb),
-                forward);
+        out.dx = Math.round(dx / DIRECTION_STEP);
+        out.dy = Math.round(dy / DIRECTION_STEP);
+        out.dz = Math.round(dz / DIRECTION_STEP);
+        out.px = Math.round((a[0] - ta * dx) / POINT_STEP);
+        out.py = Math.round((a[1] - ta * dy) / POINT_STEP);
+        out.pz = Math.round((a[2] - ta * dz) / POINT_STEP);
+        out.from = Math.min(ta, tb);
+        out.to = Math.max(ta, tb);
+        out.forward = forward;
+        return true;
     }
 
     /**
@@ -269,15 +363,16 @@ public final class TJunctions {
      * @return True if it is covered.
      */
     public boolean coveredByOthers(double @NonNull [] a, double @NonNull [] b, int tag) {
-        final Placed placed = place(a, b);
-        if (placed == null) {
+        final Probe placed = PROBES.get();
+        if (!place(a, b, placed)) {
             return false;
         }
-        final Sorted on = sortedOn(placed.line());
+        final Sorted on = sortedOn(placed);
         if (on == null) {
             return false;
         }
-        double reached = placed.from();
+        final double end = placed.to;
+        double reached = placed.from;
         for (Segment segment : on.segments()) {
             if (segment.tag() == tag || segment.to() <= reached + ALONG_SLACK) {
                 continue;
@@ -286,7 +381,7 @@ public final class TJunctions {
                 break;
             }
             reached = segment.to();
-            if (reached >= placed.to() - ALONG_SLACK) {
+            if (reached >= end - ALONG_SLACK) {
                 return true;
             }
         }
@@ -349,10 +444,10 @@ public final class TJunctions {
     /**
      * A line's segments sorted by start, made the first time they are asked for.
      *
-     * @param line The line.
+     * @param line The line, a {@link Line} or a {@link Probe} on one.
      * @return The segments, or null if the line has none.
      */
-    private Sorted sortedOn(@NonNull Line line) {
+    private Sorted sortedOn(@NonNull Object line) {
         final Filed filed = lines.get(line);
         if (filed == null) {
             return null;

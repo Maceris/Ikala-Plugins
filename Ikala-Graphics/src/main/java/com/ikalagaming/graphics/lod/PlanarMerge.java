@@ -175,10 +175,11 @@ public final class PlanarMerge {
             if (removed[u]) {
                 continue;
             }
-            final int[] neighbors = neighbors(u);
+            final IntArrayList neighbors = neighbors(u, runNeighbors);
             if (tryRemove(u)) {
                 any = true;
-                for (int w : neighbors) {
+                for (int i = 0; i < neighbors.size(); ++i) {
+                    final int w = neighbors.getInt(i);
                     if (!removed[w] && !queued[w]) {
                         queue.add(w);
                         queued[w] = true;
@@ -199,9 +200,10 @@ public final class PlanarMerge {
         if (locked[u] || around[u].isEmpty()) {
             return false;
         }
-        final int[] neighbors = neighbors(u);
+        final IntArrayList neighbors = neighbors(u, removeNeighbors);
         // Every edge around it must be used by exactly two triangles
-        for (int w : neighbors) {
+        for (int n = 0; n < neighbors.size(); ++n) {
+            final int w = neighbors.getInt(n);
             if (sharedFaces(u, w) != 2) {
                 return false;
             }
@@ -230,7 +232,8 @@ public final class PlanarMerge {
             group[k] = g;
         }
         if (groups == 1) {
-            for (int v : neighbors) {
+            for (int n = 0; n < neighbors.size(); ++n) {
+                final int v = neighbors.getInt(n);
                 if (tryCollapse(u, v)) {
                     return true;
                 }
@@ -240,7 +243,8 @@ public final class PlanarMerge {
         // Two groups: the edges between them must be two, in a straight line through u
         int a = -1;
         int b = -1;
-        for (int w : neighbors) {
+        for (int n = 0; n < neighbors.size(); ++n) {
+            final int w = neighbors.getInt(n);
             if (isSeam(u, w, faces, group)) {
                 if (a < 0) {
                     a = w;
@@ -314,7 +318,9 @@ public final class PlanarMerge {
         // Link condition: the only vertices both are next to are the far corners of their two
         // shared triangles
         int sharedFar = 0;
-        for (int w : neighbors(u)) {
+        final IntArrayList next = neighbors(u, collapseNeighbors);
+        for (int n = 0; n < next.size(); ++n) {
+            final int w = next.getInt(n);
             if (w != v && isNeighbor(v, w)) {
                 if (!sharesTriangleWith(u, v, w)) {
                     return false;
@@ -333,8 +339,7 @@ public final class PlanarMerge {
             if (uses(t, v)) {
                 continue;
             }
-            if (!normal(t, u, v, normal)
-                    || Geometry.dot(normal, slice(normals, t)) < 1 - SAME_PLANE) {
+            if (!normal(t, u, v, normal) || dotAt(normal, normals, t) < 1 - SAME_PLANE) {
                 return false;
             }
         }
@@ -397,14 +402,14 @@ public final class PlanarMerge {
      * @return False if the triangle is degenerate.
      */
     private boolean normal(int t, int from, int to, double @NonNull [] out) {
-        final double[][] p = new double[CORNERS][];
+        final double[][] p = cornerScratch;
         double longest = 0;
         for (int c = 0; c < CORNERS; ++c) {
             int vertex = corners[t * CORNERS + c];
             if (vertex == from) {
                 vertex = to;
             }
-            p[c] = slice(positions, vertex);
+            System.arraycopy(positions, vertex * AXES, p[c], 0, AXES);
         }
         for (int c = 0; c < CORNERS; ++c) {
             longest = Math.max(longest, Geometry.distanceSquared(p[c], p[(c + 1) % CORNERS]));
@@ -428,9 +433,56 @@ public final class PlanarMerge {
      * @return True if they are.
      */
     private boolean sameClass(int t, int s) {
-        return materials[t] == materials[s]
-                && Geometry.dot(slice(normals, t), slice(normals, s)) >= 1 - SAME_PLANE;
+        return materials[t] == materials[s] && dotAt(normals, t, normals, s) >= 1 - SAME_PLANE;
     }
+
+    /**
+     * The dot product of a vector with a triple of an array, as {@link Geometry#dot} gives it,
+     * without copying the triple out.
+     *
+     * @param a The vector.
+     * @param values The array.
+     * @param index Which triple.
+     * @return The dot product.
+     */
+    private static double dotAt(double @NonNull [] a, double @NonNull [] values, int index) {
+        final int at = index * AXES;
+        return a[0] * values[at] + a[1] * values[at + 1] + a[2] * values[at + 2];
+    }
+
+    /**
+     * The dot product of two triples of arrays.
+     *
+     * @param a One array.
+     * @param i Its triple.
+     * @param b The other.
+     * @param j Its triple.
+     * @return The dot product.
+     */
+    private static double dotAt(double @NonNull [] a, int i, double @NonNull [] b, int j) {
+        final int x = i * AXES;
+        final int y = j * AXES;
+        return a[x] * b[y] + a[x + 1] * b[y + 1] + a[x + 2] * b[y + 2];
+    }
+
+    /**
+     * The corners of a triangle {@link #normal} works on, reused: normals are found for every
+     * collapse tried, too often to allocate for.
+     */
+    private final double[][] cornerScratch = new double[CORNERS][AXES];
+
+    /**
+     * The neighbors {@link #run} holds while it tries a vertex, reused: one list for each caller,
+     * since each calls the next while holding its own, and neighbors are gathered for every vertex
+     * tried, too often to allocate for.
+     */
+    private final IntArrayList runNeighbors = new IntArrayList();
+
+    /** The neighbors {@link #tryRemove} holds while it tries collapses. */
+    private final IntArrayList removeNeighbors = new IntArrayList();
+
+    /** The neighbors {@link #tryCollapse} looks through. */
+    private final IntArrayList collapseNeighbors = new IntArrayList();
 
     /**
      * Three values of an array.
@@ -510,21 +562,38 @@ public final class PlanarMerge {
      * The vertices next to a vertex.
      *
      * @param u The vertex.
-     * @return Each once.
+     * @param out Receives each once, cleared first.
+     * @return The list given.
      */
-    private int[] neighbors(int u) {
-        final IntArrayList out = new IntArrayList();
+    private IntArrayList neighbors(int u, @NonNull IntArrayList out) {
+        out.clear();
         final IntArrayList faces = around[u];
         for (int k = 0; k < faces.size(); ++k) {
             final int t = faces.getInt(k);
             for (int c = 0; c < CORNERS; ++c) {
                 final int w = corners[t * CORNERS + c];
-                if (w != u && !out.contains(w)) {
+                if (w != u && !holds(out, w)) {
                     out.addInt(w);
                 }
             }
         }
-        return out.toIntArray();
+        return out;
+    }
+
+    /**
+     * Whether a list holds a value, without boxing it as {@link IntArrayList#contains} does.
+     *
+     * @param list The list.
+     * @param value The value.
+     * @return True if it does.
+     */
+    private static boolean holds(@NonNull IntArrayList list, int value) {
+        for (int i = 0; i < list.size(); ++i) {
+            if (list.getInt(i) == value) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

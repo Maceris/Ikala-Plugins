@@ -7,6 +7,8 @@ import lombok.NonNull;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.Set;
 import javax.annotation.Nullable;
 
 /**
@@ -145,7 +147,15 @@ public final class SectionBaker {
         return bits << (Integer.SIZE - POSITION_BITS) >> (Integer.SIZE - POSITION_BITS);
     }
 
-    /** A growing bucket while baking. */
+    /**
+     * Each thread's buckets, kept between bakes so they grow once rather than from small for every
+     * bake: sections are baked again whenever their meshes come back near the observer, and the
+     * growing was a large share of what a streamed world allocated.
+     */
+    private static final ThreadLocal<Builder[]> BUILDERS =
+            ThreadLocal.withInitial(() -> new Builder[Material.Transparency.values().length]);
+
+    /** A growing bucket while baking, reused by its thread, see {@link #BUILDERS}. */
     private static final class Builder {
         /** The vertices so far. */
         private ByteBuffer vertices =
@@ -161,10 +171,29 @@ public final class SectionBaker {
         private int indexCount;
 
         /** The bounds so far, in steps. */
-        private final float[] min = {Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE};
+        private final float[] min = new float[3];
 
         /** The bounds so far, in steps. */
-        private final float[] max = {-Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
+        private final float[] max = new float[3];
+
+        /** Start empty. */
+        Builder() {
+            reset();
+        }
+
+        /**
+         * Empty it for another bake, keeping its room.
+         *
+         * @return It.
+         */
+        Builder reset() {
+            vertexCount = 0;
+            indexCount = 0;
+            vertices.clear();
+            Arrays.fill(min, Float.MAX_VALUE);
+            Arrays.fill(max, -Float.MAX_VALUE);
+            return this;
+        }
 
         /**
          * Make room for and write a vertex, and take it into the bounds.
@@ -215,8 +244,12 @@ public final class SectionBaker {
             if (indexCount == 0) {
                 return null;
             }
-            vertices.limit(vertexCount * BakedVertex.SIZE);
-            return new Bucket(vertices, vertexCount, Arrays.copyOf(indices, indexCount), min, max);
+            // Copied out exactly, since the builder is kept for the next bake
+            final int bytes = vertexCount * BakedVertex.SIZE;
+            final ByteBuffer out = ByteBuffer.allocate(bytes).order(ByteOrder.LITTLE_ENDIAN);
+            out.put(0, vertices, 0, bytes);
+            return new Bucket(
+                    out, vertexCount, Arrays.copyOf(indices, indexCount), min.clone(), max.clone());
         }
     }
 
@@ -278,6 +311,38 @@ public final class SectionBaker {
             byte @NonNull [] rotations,
             byte @NonNull [] faceMasks,
             short @NonNull [] userData) {
+        return bakeByFace(
+                sources, faceMaterials, packedPositions, rotations, faceMasks, userData, ALL_KINDS);
+    }
+
+    /** Every kind of bucket. */
+    private static final Set<Material.Transparency> ALL_KINDS =
+            Set.copyOf(EnumSet.allOf(Material.Transparency.class));
+
+    /**
+     * Bake only some of a section's buckets, see {@link #bakeByFace(BakeSource[], int[], int[],
+     * byte[], byte[], short[])}: the placements of other kinds are skipped, as when only the
+     * buckets kept off the GPU are baked again to put them back.
+     *
+     * @param sources The mesh each placement puts down.
+     * @param faceMaterials {@link #FACE_KINDS} material indices per placement.
+     * @param packedPositions The cell each placement fills, from {@link #pack(int, int, int)}.
+     * @param rotations Each placement's rotation, one of {@link CubeRotations}.
+     * @param faceMasks The faces of each placement its neighbors hide, after rotation.
+     * @param userData What each placement writes into its vertices for shaders.
+     * @param kinds The buckets to bake.
+     * @return The baked meshes, only of those kinds.
+     * @throws IllegalArgumentException If the arrays differ in length, a rotation is out of range,
+     *     or a vertex lands too far from the origin.
+     */
+    public static Result bakeByFace(
+            @NonNull BakeSource @NonNull [] sources,
+            int @NonNull [] faceMaterials,
+            int @NonNull [] packedPositions,
+            byte @NonNull [] rotations,
+            byte @NonNull [] faceMasks,
+            short @NonNull [] userData,
+            @NonNull Set<Material.Transparency> kinds) {
         final int count = sources.length;
         if (faceMaterials.length != count * FACE_KINDS
                 || packedPositions.length != count
@@ -299,10 +364,17 @@ public final class SectionBaker {
                 throw new IllegalArgumentException(
                         "Rotation " + rotation + " isn't a cube rotation");
             }
+            if (!kinds.contains(source.getTransparency())) {
+                continue;
+            }
             final int hidden = faceMasks[placement];
             final int bucket = source.getTransparency().ordinal();
             if (builders[bucket] == null) {
-                builders[bucket] = new Builder();
+                final Builder[] kept = BUILDERS.get();
+                if (kept[bucket] == null) {
+                    kept[bucket] = new Builder();
+                }
+                builders[bucket] = kept[bucket].reset();
             }
             final Builder builder = builders[bucket];
             // A vertex shared by faces pointing different ways gets one copy per material

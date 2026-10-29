@@ -16,7 +16,6 @@ import org.lwjgl.vulkan.*;
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Supplier;
 import javax.annotation.Nullable;
 
@@ -99,7 +98,7 @@ public class WaveGrid {
     private final float[] mask = new float[CELLS * MASK_VALUES];
 
     /** The world cells water covers and their flow and depth, as of {@link #maskVersion}. */
-    private Map<Long, float[]> waterCells = Map.of();
+    private WaterMesh.CellData waterCells = WaterMesh.CellData.EMPTY;
 
     /** The tiles' version the mask was worked out for, -1 for none. */
     private long maskVersion = -1;
@@ -221,7 +220,7 @@ public class WaveGrid {
             int frame,
             @NonNull Vector3dc camera,
             long tilesVersion,
-            @NonNull Supplier<Map<Long, float[]>> water,
+            @NonNull Supplier<WaterMesh.CellData> water,
             @NonNull List<WaterRegistry.Disturbance> disturbances,
             long climates,
             @NonNull List<WaterRegistry.WavePaint> paints,
@@ -364,7 +363,7 @@ public class WaveGrid {
      * @param tilesVersion The tiles' version.
      * @param water The world cells water covers and their flow and depth.
      */
-    private void updateMask(long tilesVersion, Supplier<Map<Long, float[]>> water) {
+    private void updateMask(long tilesVersion, Supplier<WaterMesh.CellData> water) {
         final boolean all = tilesVersion != maskVersion;
         if (all) {
             waterCells = water.get();
@@ -384,7 +383,7 @@ public class WaveGrid {
                                 || worldX >= maskCornerX + WaveletMath.GRID_SIZE;
                 if (all || newCell) {
                     final int at = slot(worldX, worldZ) * MASK_VALUES;
-                    final float[] data = waterCells.get(WaterMesh.worldKey(worldX, worldZ));
+                    final float[] data = waterCells.get(worldX, worldZ);
                     mask[at] = data == null ? 0 : MASK_CLIMATE_BASE + data[WaterMesh.CELL_CLIMATE];
                     for (int i = 0; i < MASK_COPIED; ++i) {
                         mask[at + 1 + i] = data == null ? 0 : data[i];
