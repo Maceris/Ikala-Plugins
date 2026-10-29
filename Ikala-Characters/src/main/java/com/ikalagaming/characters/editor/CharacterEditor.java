@@ -339,8 +339,7 @@ public final class CharacterEditor {
                             .filter(
                                     part ->
                                             part.plan().equals(plan.id())
-                                                    && part.kind() != Part.PartKind.ACCESSORY
-                                                    && !part.fills().isEmpty()
+                                                    && !places(part).isEmpty()
                                                     && PartAssembler.meshFor(part, design.variant())
                                                             != null)
                             .sorted(Comparator.comparing(part -> !wornIds.contains(part.id())))
@@ -355,21 +354,27 @@ public final class CharacterEditor {
             List<String> places = new ArrayList<>();
             plan.slots().forEach(slot -> places.add(slot.id()));
             plan.layers().forEach(layer -> places.add(layer.id()));
+            plan.sockets().forEach(socket -> places.add(socket.id()));
             List<PartSlots.Slot> slots = new ArrayList<>();
             List<List<Id>> optionIds = new ArrayList<>();
             List<List<Set<String>>> fills = new ArrayList<>();
             for (String place : places) {
-                boolean layer = plan.layer(place) != null;
+                Part.PartKind wanted =
+                        plan.layer(place) != null
+                                ? Part.PartKind.LAYER
+                                : plan.socket(place) != null
+                                        ? Part.PartKind.ACCESSORY
+                                        : Part.PartKind.BODY;
                 List<List<Integer>> options = new ArrayList<>();
                 List<String> labels = new ArrayList<>();
                 List<Id> ids = new ArrayList<>();
                 List<Set<String>> optionFills = new ArrayList<>();
                 for (Part part :
                         candidates.stream().sorted(Comparator.comparing(Part::id)).toList()) {
-                    boolean kind =
-                            part.kind() == (layer ? Part.PartKind.LAYER : Part.PartKind.BODY);
                     List<Integer> meshes = assembled.partsOf(part.id());
-                    if (!kind || !part.fills().get(0).equals(place) || meshes.isEmpty()) {
+                    if (part.kind() != wanted
+                            || !places(part).get(0).equals(place)
+                            || meshes.isEmpty()) {
                         continue;
                     }
                     options.add(meshes);
@@ -381,8 +386,9 @@ public final class CharacterEditor {
                     continue;
                 }
                 int initial = ids.indexOf(worn.get(place));
-                // Layers can be empty; body slots only while another part covers them
-                slots.add(new PartSlots.Slot(place, options, labels, layer, initial));
+                // Layers and sockets can be empty; body slots only while another part covers them
+                boolean optional = wanted != Part.PartKind.BODY;
+                slots.add(new PartSlots.Slot(place, options, labels, optional, initial));
                 optionIds.add(ids);
                 fills.add(optionFills);
             }
@@ -416,6 +422,18 @@ public final class CharacterEditor {
                     fills,
                     assembled.channels(),
                     used.stream().map(all::get).toList());
+        }
+
+        /**
+         * Where a part goes: the slots or layers it fills, or for an accessory the sockets it fits
+         * by name. An accessory is placed on its socket by its mesh's weights, so one that only
+         * names a socket type has nowhere to go yet.
+         *
+         * @param part The part.
+         * @return The places, the one it is listed under first.
+         */
+        private static List<String> places(Part part) {
+            return part.kind() == Part.PartKind.ACCESSORY ? part.fits() : part.fills();
         }
 
         /**
@@ -839,6 +857,10 @@ public final class CharacterEditor {
                 continue;
             }
             String place = look.slots().slots().get(s).id();
+            if (plan.socket(place) != null) {
+                // Designs don't list accessories yet, so they are only tried on here
+                continue;
+            }
             Id part = prepared.optionIds().get(s).get(choice);
             (plan.layer(place) != null ? layers : parts).put(place, part);
         }

@@ -1,0 +1,11 @@
+{
+  "comfy": "D:/Programs/AI/ComfyUI",
+  "comfyPort": 8188,
+  "checkpoint": "sd_xl_base_1.0.safetensors",
+  "trellis": "D:/Programs/AI/TRELLIS.2",
+  "blender": "C:/Program Files/Blender Foundation/Blender 3.3/blender.exe",
+  "mannequin": "D:/Documents/Programming/Ikala workspace/Ikala-Asset-Editor/test_content/characters/mannequin/mannequin.glb",
+  "work": "D:/Programs/AI/partgen",
+  "namespace": "gen",
+  "content": "D:/Documents/Programming/Ikala workspace/Ikala-Asset-Editor/test_content/characters_gen"
+}
