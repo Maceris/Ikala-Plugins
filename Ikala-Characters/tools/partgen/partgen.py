@@ -27,7 +27,9 @@ from config.json beside this file; batches live in <work>/<batch>/. A brief is:
 "fit" is optional: values that replace the socket type's rule from sockets.json for this brief,
 like a wider brim limit for a sun hat or a scale nudge after review. "sketch" is an optional
 drawing, relative to the briefs file, that steers the shape where words don't: lines on a plain
-background, any color; "sketchStrength" (default 0.7) is how hard.
+background, any color; "sketchStrength" (default 0.7) is how hard, and "sketchEnd" (default 0.7)
+the share of the steps it steers. Too strong and the image traces the drawing's lines instead of
+making a real object of them.
 
 Only accessories on head_top sockets can be fitted so far. Run it with any Python that has
 Pillow, such as TRELLIS.2's.
@@ -311,16 +313,18 @@ def command_images(config, batch, args):
             seeds = list(range(start, start + args.count))
             sketch = prepare_sketch(config, batch, brief) if brief.get("sketch") else None
             strength = brief.get("sketchStrength", SKETCH_STRENGTH)
+            end = brief.get("sketchEnd", SKETCH_END)
             for seed in seeds:
                 workflow = sdxl_workflow(config["checkpoint"], prompt, NEGATIVE, seed,
                                          "partgen/" + brief["id"])
                 if sketch:
-                    workflow = sketch_workflow(workflow, config, sketch, strength, SKETCH_END)
+                    workflow = sketch_workflow(workflow, config, sketch, strength, end)
                 (folder / ("%d.png" % seed)).write_bytes(comfy.run(workflow)[0])
             (folder / "prompt.json").write_text(json.dumps(
                 {"prompt": prompt, "negative": NEGATIVE, "steps": SDXL_STEPS, "cfg": SDXL_CFG,
                  "checkpoint": config["checkpoint"], "sketch": brief.get("sketch"),
-                 "sketchStrength": strength if sketch else None}, indent=2), encoding="utf8")
+                 "sketchStrength": strength if sketch else None,
+                 "sketchEnd": end if sketch else None}, indent=2), encoding="utf8")
             batch.update(brief["id"], lambda e: e["images"].extend(seeds))
             print("images", brief["id"], seeds)
 
