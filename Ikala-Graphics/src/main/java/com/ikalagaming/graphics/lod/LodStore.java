@@ -393,6 +393,21 @@ public final class LodStore {
         public boolean paged() {
             return body == null;
         }
+
+        /**
+         * Whether another is consumed by the same group, with the same error and bound. A cell's
+         * tops are sent again whenever a cell above it is rebuilt, but most are consumed by a
+         * parent that wasn't, and nothing about them changed.
+         *
+         * @param other The other, such as this cluster as it was before.
+         * @return True if their consumers are the same.
+         */
+        public boolean sameConsumer(@NonNull PieceCluster other) {
+            return parentGroup == other.parentGroup
+                    && Double.compare(parentError, other.parentError) == 0
+                    && Objects.equals(parentCell, other.parentCell)
+                    && Arrays.equals(parentBound, other.parentBound);
+        }
     }
 
     /**

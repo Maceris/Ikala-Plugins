@@ -842,6 +842,13 @@ public class LodRenderer {
          */
         int streamGeneration;
 
+        /**
+         * Whether a unit was made, emptied or changed since the units were last worked out. Many
+         * batches change none, only covering sections, and working out every unit again for them
+         * took milliseconds and dropped the meshes on their way. Render thread.
+         */
+        boolean unitsChanged;
+
         /** When residency was last worked out. Render thread. */
         long lastResidency;
 
@@ -2094,7 +2101,9 @@ public class LodRenderer {
                 world.uploading = null;
                 world.busy = false;
                 apply(world, uploading.batch, uploading.meshes);
-                rebuildUnits(world);
+                if (world.unitsChanged) {
+                    rebuildUnits(world);
+                }
                 continue;
             }
             stream(state, world);
@@ -2108,6 +2117,7 @@ public class LodRenderer {
      * @param world The world.
      */
     private void rebuildUnits(@NonNull World world) {
+        world.unitsChanged = false;
         final int n = world.unitByIndex.size();
         final LodResidency before = world.residency;
         final LodResidency.Unit[] units = Arrays.copyOf(world.units, n);
@@ -2202,6 +2212,7 @@ public class LodRenderer {
         } else {
             world.unitByIndex.add(state);
         }
+        world.unitsChanged = true;
         return state;
     }
 
@@ -2215,6 +2226,7 @@ public class LodRenderer {
         final UnitState state = world.unitStates.get(key);
         if (state != null) {
             state.dirty = true;
+            world.unitsChanged = true;
         }
     }
 
@@ -2233,6 +2245,7 @@ public class LodRenderer {
         state.members.add(new Member(piece, i));
         state.bytes += bytes(world, piece, i);
         state.dirty = true;
+        world.unitsChanged = true;
         final int producer = cluster.info().producer();
         if (producer >= 0) {
             final UnitKey made = new UnitKey(piece.key, producer);
@@ -2258,6 +2271,7 @@ public class LodRenderer {
         if (state != null && state.members.remove(new Member(piece, i))) {
             state.bytes -= bytes(world, piece, i);
             state.dirty = true;
+            world.unitsChanged = true;
             if (state.members.isEmpty()) {
                 world.unitStates.remove(own);
                 world.unitByIndex.set(state.index, null);
@@ -2768,6 +2782,13 @@ public class LodRenderer {
             }
             for (LodStore.PieceCluster cluster : tops.clusters()) {
                 final int index = cluster.local() - piece.inputs;
+                if (cluster.sameConsumer(piece.clusters[index])) {
+                    // Consumed as before, by a parent that wasn't rebuilt: its unit, entry and
+                    // shadows are as they were. Most tops are, and every cell's come with any
+                    // batch that rebuilds the root
+                    piece.clusters[index] = cluster;
+                    continue;
+                }
                 leaveUnits(world, piece, index);
                 piece.clusters[index] = cluster;
                 joinUnits(world, piece, index);
