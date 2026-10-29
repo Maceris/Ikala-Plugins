@@ -22,7 +22,12 @@ from config.json beside this file; batches live in <work>/<batch>/. A brief is:
 
     {"id": "adventurer_hat", "kind": "accessory", "socket": "head_top",
      "description": "wide-brimmed weathered brown leather adventurer hat with a dark band",
-     "tags": ["hat"]}
+     "tags": ["hat"], "fit": {"maxWidth": 2.6}}
+
+"fit" is optional: values that replace the socket type's rule from sockets.json for this brief,
+like a wider brim limit for a sun hat or a scale nudge after review. "sketch" is an optional
+drawing, relative to the briefs file, that steers the shape where words don't: lines on a plain
+background, any color; "sketchStrength" (default 0.7) is how hard.
 
 Only accessories on head_top sockets can be fitted so far. Run it with any Python that has
 Pillow, such as TRELLIS.2's.
@@ -59,6 +64,10 @@ SDXL_SIZE = 1024
 # Seeds count up from here. 1003 turned eight of ten SDXL subjects into pattern sheets.
 FIRST_SEED = 2000
 VIEWS = 3
+# How hard a sketch steers the image, and for what share of the steps; past that the prompt
+# finishes the details
+SKETCH_STRENGTH = 0.7
+SKETCH_END = 0.7
 REVIEW_FIELDS = ("brief", "pick", "mesh", "part")
 
 
@@ -218,13 +227,48 @@ def sdxl_workflow(checkpoint, prompt, negative, seed, prefix):
     }
 
 
+def sketch_workflow(workflow, config, image, strength, end):
+    """Steer a text to image workflow with a sketch, through ControlNet Union's scribble mode."""
+    workflow.update({
+        "8": {"class_type": "LoadImage", "inputs": {"image": image}},
+        "9": {"class_type": "ControlNetLoader",
+              "inputs": {"control_net_name": config["controlnet"]}},
+        "10": {"class_type": "SetUnionControlNetType",
+               "inputs": {"control_net": ["9", 0], "type": "hed/pidi/scribble/ted"}},
+        "11": {"class_type": "ControlNetApplyAdvanced",
+               "inputs": {"positive": ["2", 0], "negative": ["3", 0], "control_net": ["10", 0],
+                          "image": ["8", 0], "strength": strength, "start_percent": 0.0,
+                          "end_percent": end, "vae": ["1", 2]}},
+    })
+    workflow["5"]["inputs"]["positive"] = ["11", 0]
+    workflow["5"]["inputs"]["negative"] = ["11", 1]
+    return workflow
+
+
+def prepare_sketch(config, batch, brief):
+    """A brief's sketch as ComfyUI wants it, in its input folder: white lines on black, square,
+    the generated size, lines thickened a little. Gives its name there."""
+    from PIL import Image, ImageFilter, ImageOps, ImageStat
+    sketch = Image.open(brief["sketch"]).convert("L")
+    if ImageStat.Stat(sketch).mean[0] > 127:
+        sketch = ImageOps.invert(sketch)  # drawn dark on light
+    sketch.thumbnail((SDXL_SIZE, SDXL_SIZE))
+    square = Image.new("L", (SDXL_SIZE, SDXL_SIZE), 0)
+    square.paste(sketch, ((SDXL_SIZE - sketch.width) // 2, (SDXL_SIZE - sketch.height) // 2))
+    square = square.filter(ImageFilter.MaxFilter(5))
+    name = "partgen_%s_%s.png" % (batch.name, brief["id"])
+    square.convert("RGB").save(pathlib.Path(config["comfy"]) / "input" / name)
+    return name
+
+
 def prompt_for(brief):
     socket, rule = socket_of(brief)
     return STYLE.format(subject=rule["prompt"].format(description=brief["description"]))
 
 
 def command_new(config, batch, args):
-    briefs = json.loads(pathlib.Path(args.briefs).read_text(encoding="utf8"))
+    briefs_file = pathlib.Path(args.briefs)
+    briefs = json.loads(briefs_file.read_text(encoding="utf8"))
     if batch.path.exists():
         manifest = batch.load()
     else:
@@ -241,6 +285,8 @@ def command_new(config, batch, args):
             continue
         socket_of(brief)
         entry = dict(brief)
+        if "sketch" in brief:
+            entry["sketch"] = str((briefs_file.parent / brief["sketch"]).resolve())
         entry["review"] = {field: None for field in REVIEW_FIELDS}
         if args.keep:
             entry["review"]["brief"] = "keep"
@@ -263,13 +309,18 @@ def command_images(config, batch, args):
             folder.mkdir(exist_ok=True)
             start = max(brief["images"], default=FIRST_SEED - 1) + 1
             seeds = list(range(start, start + args.count))
+            sketch = prepare_sketch(config, batch, brief) if brief.get("sketch") else None
+            strength = brief.get("sketchStrength", SKETCH_STRENGTH)
             for seed in seeds:
                 workflow = sdxl_workflow(config["checkpoint"], prompt, NEGATIVE, seed,
                                          "partgen/" + brief["id"])
+                if sketch:
+                    workflow = sketch_workflow(workflow, config, sketch, strength, SKETCH_END)
                 (folder / ("%d.png" % seed)).write_bytes(comfy.run(workflow)[0])
             (folder / "prompt.json").write_text(json.dumps(
                 {"prompt": prompt, "negative": NEGATIVE, "steps": SDXL_STEPS, "cfg": SDXL_CFG,
-                 "checkpoint": config["checkpoint"]}, indent=2), encoding="utf8")
+                 "checkpoint": config["checkpoint"], "sketch": brief.get("sketch"),
+                 "sketchStrength": strength if sketch else None}, indent=2), encoding="utf8")
             batch.update(brief["id"], lambda e: e["images"].extend(seeds))
             print("images", brief["id"], seeds)
 
@@ -320,6 +371,7 @@ def command_fit(config, batch, args):
             continue
         folder = batch.brief_folder(brief["id"])
         socket, rule = socket_of(brief)
+        rule = dict(rule, **brief.get("fit", {}))
         content = pathlib.Path(config["content"])
         relative = "accessory/%s.glb" % brief["id"]
         out = content / relative

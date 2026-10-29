@@ -192,6 +192,8 @@ def place_bottom_crown(high, mannequin, armature, rule):
     if covering > scale:
         print("[fit] too shallow at %.3f, grown to cover the head" % scale)
         scale = covering
+    # A brief can nudge the size after review
+    scale *= rule.get("scale", 1.0)
     print("[fit] head %.3f m wide at %.3f m, crown %.3f, scale %.3f" % (
         head_width, bottom, crown_width, scale))
 

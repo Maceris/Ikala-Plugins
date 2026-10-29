@@ -2,6 +2,7 @@
   "comfy": "D:/Programs/AI/ComfyUI",
   "comfyPort": 8188,
   "checkpoint": "sd_xl_base_1.0.safetensors",
+  "controlnet": "diffusion_pytorch_model_promax.safetensors",
   "trellis": "D:/Programs/AI/TRELLIS.2",
   "blender": "C:/Program Files/Blender Foundation/Blender 3.3/blender.exe",
   "mannequin": "D:/Documents/Programming/Ikala workspace/Ikala-Asset-Editor/test_content/characters/mannequin/mannequin.glb",
