@@ -71,6 +71,13 @@ shape with a drawing:
 python make_image.py "a red wooden treasure chest with iron bands" --style --count 4 --out D:/Programs/AI/partgen/scratch/chest
 ```
 
+More like them later, with the same prompt and settings from the folder's
+`prompt.json`, carrying on from the next seed (images are never overwritten):
+
+```
+python make_image.py --more D:/Programs/AI/partgen/scratch/chest --count 4
+```
+
 A textured mesh from an image, through TRELLIS.2 (about a minute to load, then
 under a minute to a few minutes per image at the default `--type 512`;
 `--type 1024_cascade` gives finer detail, slower). The glb is in a 1 m box, Y up, facing +Z. Several image and glb pairs
