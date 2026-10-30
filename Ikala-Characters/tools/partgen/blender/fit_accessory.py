@@ -780,4 +780,5 @@ def main():
         preview(args.preview, low, mannequin)
 
 
-main()
+if __name__ == "__main__":
+    main()

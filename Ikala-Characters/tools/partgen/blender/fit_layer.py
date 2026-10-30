@@ -35,7 +35,7 @@ import numpy as np
 from mathutils import Matrix, Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from bodies import load_body, nearest, tree, world_vertices  # noqa: E402
+from bodies import load_body, nearest, normals, tree, world_vertices  # noqa: E402
 
 # How many vertices ICP fits with, and how many rounds at most
 SAMPLES = 20000
@@ -241,6 +241,9 @@ def main():
     parser.add_argument("--body", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--painted", help="Where the figure's image was painted.")
+    parser.add_argument("--painted-back",
+                        help="The painted area for what faces away, with gaps like an open "
+                             "front's neckline closed.")
     parser.add_argument("--guide", help="The guide the image was painted over.")
     args = parser.parse_args(argv)
     os.makedirs(args.out, exist_ok=True)
@@ -254,7 +257,7 @@ def main():
     m, rounds, residual = icp(points, surface, m)
     turn = turn_degrees(m)
     figure.matrix_world = Matrix(m.tolist()) @ figure.matrix_world
-    points, _ = world_vertices(figure)
+    points, figure_faces = world_vertices(figure)
     _, signed = nearest(points, surface)
     report = {
         "rounds": rounds,
@@ -273,6 +276,10 @@ def main():
             guide = json.load(file)
         # Where the lined-up figure's vertices are, by the mesh's own vertex order
         keep = on_painted(points, read_mask(args.painted), guide)
+        if args.painted_back:
+            # What faces away from the camera, as the body faces -Y
+            away = normals(points, figure_faces)[:, 1] > 0
+            keep[away] = on_painted(points[away], read_mask(args.painted_back), guide)
         garment, faces = cut_garment(figure, keep)
         report["garment_faces"] = faces
         report["garment_pct"] = round(faces / max(1, len(figure.data.polygons)) * 100, 1)

@@ -13,8 +13,9 @@ and how much of the garment ends up inside the body.
 
     blender -b --python weight_layer.py -- --garment <shaped.glb> --body <male.blend> --out <folder>
 
-writes weighted.glb (the garment skinned to the rig, at rest), weights.json and renders
-pose_0.png to pose_3.png of the garment in each pose.
+writes weighted.glb (the garment skinned to the rig, at rest), weighted.blend (the mannequin with
+the weighted garment on it, for the bake), weights.json and renders pose_0.png to pose_3.png of
+the garment in each pose.
 """
 
 import argparse
@@ -217,6 +218,7 @@ def main():
     bpy.ops.export_scene.gltf(filepath=os.path.join(args.out, "weighted.glb"),
                               export_format="GLB", use_selection=True, export_skins=True,
                               export_animations=False)
+    bpy.ops.wm.save_as_mainfile(filepath=os.path.join(args.out, "weighted.blend"))
 
 
 if __name__ == "__main__":

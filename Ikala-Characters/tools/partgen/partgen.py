@@ -44,9 +44,9 @@ the share of the steps it steers. Too strong and the image traces the drawing's 
 making a real object of them.
 
 Only accessories on head_top sockets can be fitted so far; clothing is lined up on the
-mannequin, cut out of its figure, shaped over the body and weighted to the rig
-(fit/weighted.glb), but not baked yet. Run it with any Python that has Pillow, such as
-TRELLIS.2's.
+mannequin, cut out of its figure, shaped over the body, weighted to the rig and baked
+(fit/baked.glb), but it has no part definition yet. Run it with any Python that has Pillow, such
+as TRELLIS.2's.
 """
 import argparse
 import datetime
@@ -119,6 +119,16 @@ PAINTED = 25
 PAINT_CLOSE = 13
 # Painted pieces smaller than this share of the biggest are dropped, like redrawn bare skin
 PAINT_CRUMB = 0.05
+# A repainted pixel with less color than this (RGB max less min) is still the bare mannequin,
+# when the garment is colored; when it isn't, only if also this near the render's lightness
+BARE_CHROMA = 12
+BARE_LIGHTNESS = 28
+# A garment is colored when the median color (RGB max less min) of the pixels surely its own,
+# differing from the render by more than GARMENT_SURE, is at least this
+COLORED = 18
+GARMENT_SURE = 60
+# Gaps up to this wide in the painted area are closed for the garment's back, in pixels (odd)
+BACK_CLOSE = 61
 
 
 def load_config():
@@ -597,7 +607,18 @@ def painted_area(config, brief, out):
     folder = out.parent
     image = np.asarray(Image.open(folder / "images" / ("%d.png" % brief["review"]["pick"]))
                        .convert("RGB"), dtype=float)
-    differs = np.sqrt(((image - gray) ** 2).sum(-1)) > PAINTED
+    distance = np.sqrt(((image - gray) ** 2).sum(-1))
+    differs = distance > PAINTED
+    # Bare body the image repainted stays the mannequin's gray, if shaded differently. A
+    # colored garment leaves out everything nearly gray; a gray, white or black one only what is
+    # also about as light as the render, since its own color is nearly gray too
+    chroma = image.max(-1) - image.min(-1)
+    garment = distance > GARMENT_SURE
+    colored = garment.any() and np.median(chroma[garment]) >= COLORED
+    bare = chroma < BARE_CHROMA
+    if not colored:
+        bare &= np.abs(image.mean(-1) - gray.mean(-1)) < BARE_LIGHTNESS
+    differs &= ~bare
     differs &= np.asarray(Image.open(allowed).convert("L")) > 127
     mask = Image.fromarray(differs.astype(np.uint8) * 255).filter(ImageFilter.MedianFilter(5))
     mask = mask.filter(ImageFilter.MaxFilter(PAINT_CLOSE))
@@ -623,6 +644,10 @@ def painted_area(config, brief, out):
     painted = np.isin(np.asarray(pieces), keep)
     path = out / "painted.png"
     Image.fromarray(painted.astype(np.uint8) * 255).save(path)
+    # A garment's back is whole where its front is open, like a jacket's neckline: gaps are
+    # closed further for what faces away from the camera
+    back = Image.open(path).filter(ImageFilter.MaxFilter(BACK_CLOSE))
+    back.filter(ImageFilter.MinFilter(BACK_CLOSE)).save(out / "painted_back.png")
     return path
 
 
@@ -639,7 +664,8 @@ def run_blender(config, script, log, *arguments):
 def fit_layer(config, batch, brief):
     """Line a clothing figure up on the mannequin it was painted on, cut the garment out of it
     by where the image was painted, shape it to sit outside the body within its triangle budget,
-    and weight it to the rig, checking it in a few poses. The bake and part come next."""
+    weight it to the rig, checking it in a few poses, and bake its textures and tint masks. The
+    part definition comes next."""
     folder = batch.brief_folder(brief["id"])
     out = folder / "fit"
     out.mkdir(exist_ok=True)
@@ -650,7 +676,8 @@ def fit_layer(config, batch, brief):
             [config["blender"], "-b", "--factory-startup", "--python",
              str(TOOLS / "blender/fit_layer.py"), "--",
              "--mesh", str(folder / brief["mesh"]["file"]), "--body", str(body), "--out", str(out),
-             "--painted", str(painted), "--guide", str(guides(config) / "guide.json")],
+             "--painted", str(painted), "--painted-back", str(out / "painted_back.png"),
+             "--guide", str(guides(config) / "guide.json")],
             stdout=stream, stderr=subprocess.STDOUT)
     if result.returncode != 0 or not (out / "fit.json").exists():
         print("Lining up failed for %s; see %s" % (brief["id"], folder / "fit.log"))
@@ -674,6 +701,16 @@ def fit_layer(config, batch, brief):
         print("Weighting failed for %s; see %s" % (brief["id"], folder / "weights.log"))
         return
     report["poses"] = json.loads((out / "weights.json").read_text(encoding="utf8"))["poses"]
+    image = folder / "images" / ("%d.png" % brief["review"]["pick"])
+    baked = run_blender(config, "bake_layer.py", folder / "bake.log",
+                        "--weighted", out / "weighted.blend", "--figure", out / "garment.glb",
+                        "--image", image, "--painted", painted,
+                        "--guide", guides(config) / "guide.json", "--out", out,
+                        "--name", brief["id"])
+    if not baked or not (out / "bake.json").exists():
+        print("Baking failed for %s; see %s" % (brief["id"], folder / "bake.log"))
+        return
+    report["bake"] = json.loads((out / "bake.json").read_text(encoding="utf8"))
     batch.update(brief["id"], lambda e: e.update(lineUp=report))
     print("fitted", brief["id"], report)
 
