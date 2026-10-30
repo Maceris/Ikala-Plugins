@@ -114,7 +114,8 @@ public final class CharacterStage {
         previousAmbient = scene.getSceneLights().getAmbientLight();
         previousPosition.set(scene.getCamera().getPosition());
         previousRotation.set(scene.getCamera().getRotation());
-        GraphicsManager.swapPipeline(RenderConfig.WORLD);
+        // The debug stage draws the Align tab's markers
+        GraphicsManager.swapPipeline(RenderConfig.WORLD.withDebug(true));
         scene.getSceneLights()
                 .setDirLight(new DirectionalLight(SUN_COLOR, SUN_DIRECTION, SUN_INTENSITY));
         scene.getSceneLights()

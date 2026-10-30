@@ -4,10 +4,13 @@ import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.definition.BodyPlan;
 import com.ikalagaming.characters.definition.Part;
 import com.ikalagaming.characters.gltf.ImportedCharacter;
+import com.ikalagaming.characters.pose.Skeleton;
 import com.ikalagaming.characters.registry.CharacterRegistry;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Matrix4f;
+import org.joml.Vector3f;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -37,6 +40,9 @@ public final class PartAssembler {
 
     /** A tint mask channel that takes no palette color. */
     public static final int NO_CHANNEL = -1;
+
+    /** Floats per vertex: position, normal, tangent, bitangent and texture coordinates. */
+    private static final int VERTEX_FLOATS = 14;
 
     /** The tint mask channels, in order. */
     private static final List<String> MASK_CHANNELS = List.of("r", "g", "b", "a");
@@ -124,6 +130,8 @@ public final class PartAssembler {
             @NonNull Map<Path, ImportedCharacter> files) {
         List<String> channels = plan.allChannels();
         Merger merger = new Merger();
+        // Placements turn about the sockets of the rig's reference body, read when first needed
+        Skeleton referenceSkeleton = null;
         for (Part part : parts) {
             String mesh = meshFor(part, variant);
             if (mesh == null) {
@@ -143,7 +151,19 @@ public final class PartAssembler {
                 files.put(file, source);
             }
             if (source != null) {
-                merger.add(source, part, meshName, channels);
+                Part.Placement placement =
+                        part.kind() == Part.PartKind.ACCESSORY
+                                ? part.placementFor(variant)
+                                : Part.Placement.NONE;
+                if (placement != Part.Placement.NONE && referenceSkeleton == null) {
+                    ImportedCharacter body = files.get(reference);
+                    if (body == null && !files.containsKey(reference)) {
+                        body = read(reference, reference, registry, plan);
+                        files.put(reference, body);
+                    }
+                    referenceSkeleton = body == null ? source.skeleton() : body.skeleton();
+                }
+                merger.add(source, part, meshName, channels, placement, referenceSkeleton);
             }
         }
         return merger.result();
@@ -206,8 +226,17 @@ public final class PartAssembler {
          * @param part The part definition.
          * @param meshName The glTF mesh's name, or null for every mesh in the file.
          * @param channelNames The palette channels tints are numbered by.
+         * @param placement Where an accessory's meshes move on their socket.
+         * @param reference The rig's reference body, whose sockets placements turn about; null
+         *     when there is no placement.
          */
-        void add(ImportedCharacter source, Part part, String meshName, List<String> channelNames) {
+        void add(
+                ImportedCharacter source,
+                Part part,
+                String meshName,
+                List<String> channelNames,
+                Part.Placement placement,
+                Skeleton reference) {
             if (first == null) {
                 first = source;
             }
@@ -223,6 +252,9 @@ public final class PartAssembler {
                     continue;
                 }
                 found = true;
+                if (placement != Part.Placement.NONE) {
+                    piece = placed(piece, reference, placement);
+                }
                 int material = piece.material() < 0 ? -1 : piece.material() + materialStart;
                 parts.add(
                         new ImportedCharacter.Part(
@@ -311,6 +343,74 @@ public final class PartAssembler {
                             images);
             return new Assembled(merged, partIds, channels);
         }
+    }
+
+    /**
+     * Where a bone is at rest, in model space.
+     *
+     * @param skeleton The skeleton.
+     * @param bone The bone's index.
+     * @param out Where to put it.
+     * @return out.
+     */
+    public static Vector3f restPosition(Skeleton skeleton, int bone, Vector3f out) {
+        return skeleton.inverseBind(bone, new Matrix4f()).invert().getTranslation(out);
+    }
+
+    /**
+     * Move an accessory's mesh by its placement, about its socket on the rig's reference body. A
+     * rigid accessory is weighted to its socket bone alone, so its first vertex's bone is the
+     * socket.
+     *
+     * @param piece The mesh.
+     * @param reference The rig's reference body.
+     * @param placement The placement.
+     * @return The moved mesh.
+     */
+    static ImportedCharacter.Part placed(
+            ImportedCharacter.Part piece, Skeleton reference, Part.Placement placement) {
+        if (piece.joints().length == 0) {
+            return piece;
+        }
+        Vector3f socket = restPosition(reference, piece.joints()[0], new Vector3f());
+        Matrix4f move = placement.matrix(socket, new Matrix4f());
+        float[] vertices = piece.vertices().clone();
+        Vector3f min = new Vector3f(Float.POSITIVE_INFINITY);
+        Vector3f max = new Vector3f(Float.NEGATIVE_INFINITY);
+        Vector3f v = new Vector3f();
+        for (int base = 0; base < vertices.length; base += VERTEX_FLOATS) {
+            move.transformPosition(v.set(vertices[base], vertices[base + 1], vertices[base + 2]));
+            put(v, vertices, base);
+            min.min(v);
+            max.max(v);
+            // Normal, tangent and bitangent turn only, as the scale is the same on every axis
+            for (int direction = base + 3; direction < base + 12; direction += 3) {
+                v.set(vertices[direction], vertices[direction + 1], vertices[direction + 2]);
+                put(move.transformDirection(v).normalize(), vertices, direction);
+            }
+        }
+        return new ImportedCharacter.Part(
+                piece.name(),
+                vertices,
+                piece.joints(),
+                piece.weights(),
+                piece.indices(),
+                piece.material(),
+                min,
+                max);
+    }
+
+    /**
+     * Write a vector into an array.
+     *
+     * @param v The vector.
+     * @param out The array.
+     * @param at Where its x goes.
+     */
+    private static void put(Vector3f v, float[] out, int at) {
+        out[at] = v.x;
+        out[at + 1] = v.y;
+        out[at + 2] = v.z;
     }
 
     /** Static methods only. */

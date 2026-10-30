@@ -291,6 +291,41 @@ class TestCharacterLoader {
         Assertions.assertFalse(problems.contains("defaults.r"), problems);
     }
 
+    /** Placements are for accessories only, and their scale must be above 0. */
+    @Test
+    void testPlacementProblems() throws Exception {
+        Path root = copy();
+        write(
+                root.resolve("part/placed.json"),
+                """
+                [
+                  {
+                    "id": "ikala:part/biped/flat_hat",
+                    "plan": "ikala:biped",
+                    "kind": "accessory",
+                    "fits": ["head_top"],
+                    "meshes": { "*": "hat.glb#hat" },
+                    "placement": { "*": { "offset": [0, 0.01, 0] }, "female": { "scale": 0 } }
+                  },
+                  {
+                    "id": "ikala:part/biped/placed_arm",
+                    "plan": "ikala:biped",
+                    "kind": "body",
+                    "fills": ["lowerArm.L"],
+                    "meshes": { "*": "arm.glb" },
+                    "placement": { "*": { "scale": 2 } }
+                  }
+                ]
+                """);
+        CharacterLoader.Result result =
+                CharacterLoader.load(List.of(new ContentSource("ikala", root)));
+        String problems = text(result);
+        Assertions.assertTrue(problems.contains("placement.female.scale"), problems);
+        Assertions.assertTrue(problems.contains("A placement's scale is above 0"), problems);
+        Assertions.assertFalse(problems.contains("placement.*"), problems);
+        Assertions.assertTrue(problems.contains("fits, extension and placement"), problems);
+    }
+
     /** Animation sets and styles are checked against their plan, and repeats are warned about. */
     @Test
     void testAnimationProblems() throws Exception {

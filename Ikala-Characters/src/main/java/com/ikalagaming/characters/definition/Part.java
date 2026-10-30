@@ -9,6 +9,10 @@ import com.ikalagaming.characters.data.JsonPath;
 import com.ikalagaming.characters.data.Optional;
 import com.ikalagaming.characters.data.Vec3;
 
+import lombok.NonNull;
+import org.joml.Matrix4f;
+import org.joml.Vector3fc;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -77,7 +81,12 @@ public record Part(
                 @Optional
                 Map<String, SocketMove> sockets,
         @Doc("Effects it carries, like sparks on a robot arm, gone when it is swapped.") @Optional
-                List<FxUse> fx)
+                List<FxUse> fx,
+        @Doc(
+                        "For accessories: where it sits on its socket, by variant name with \"*\""
+                                + " for any other variant, moved from where its mesh puts it.")
+                @Optional
+                Map<String, Placement> placement)
         implements Definition {
 
     /** The field for the plan. */
@@ -103,6 +112,9 @@ public record Part(
 
     /** The field for conflicting parts. */
     public static final String FIELD_CONFLICTS = "conflicts";
+
+    /** The field for the placements. */
+    public static final String FIELD_PLACEMENT = "placement";
 
     /** The field for required parts. */
     public static final String FIELD_REQUIRES = "requires";
@@ -182,6 +194,67 @@ public record Part(
             @Doc("Its rotation from the bone, in degrees.") @Optional Vec3 rotate) {
         /** The field for the bone. */
         public static final String FIELD_BONE = "bone";
+    }
+
+    /**
+     * How an accessory is moved from where its mesh puts it, at rest in model space: scaled and
+     * turned about where its socket bone is on the rig's reference body, then moved. The axes are
+     * the model's (x across, y up, z forward), not the bone's, so the placement means the same on
+     * every skeleton, including ones moved onto the rig from another whose bones point other ways.
+     *
+     * @param offset How far it moves, in meters.
+     * @param rotate How it turns about the x, y and z axes, in degrees, in that order.
+     * @param scale How much it grows.
+     */
+    @Doc("Where an accessory sits on its socket, moved from where its mesh puts it.")
+    public record Placement(
+            @Doc("How far it moves, in meters: x across, y up, z forward.") @Optional Vec3 offset,
+            @Doc(
+                            "How it turns about the x, y and z axes through its socket, in degrees,"
+                                    + " in that order.")
+                    @Optional
+                    Vec3 rotate,
+            @Doc("How much it grows about its socket.") @Default("1") float scale) {
+        /** Leaves the accessory where its mesh puts it. */
+        public static final Placement NONE = new Placement(null, null, 1);
+
+        /** The field for the scale. */
+        public static final String FIELD_SCALE = "scale";
+
+        /**
+         * The placement as a transform in model space.
+         *
+         * @param socket Where the socket bone is at rest on the rig's reference body.
+         * @param out Where to put it.
+         * @return out.
+         */
+        public Matrix4f matrix(@NonNull Vector3fc socket, @NonNull Matrix4f out) {
+            out.translation(socket);
+            if (offset != null) {
+                out.translate(offset.x(), offset.y(), offset.z());
+            }
+            if (rotate != null) {
+                out.rotateXYZ(
+                        (float) Math.toRadians(rotate.x()),
+                        (float) Math.toRadians(rotate.y()),
+                        (float) Math.toRadians(rotate.z()));
+            }
+            return out.scale(scale).translate(-socket.x(), -socket.y(), -socket.z());
+        }
+    }
+
+    /**
+     * Where this accessory sits on a variant.
+     *
+     * @param variant The variant.
+     * @return Its placement for the variant, else for any variant, else {@link Placement#NONE}.
+     */
+    public Placement placementFor(@NonNull String variant) {
+        Placement found = placement.get(variant);
+        if (found == null) {
+            found = placement.get(ANY_VARIANT);
+        }
+        return found == null ? Placement.NONE : found;
     }
 
     @Override
@@ -290,10 +363,15 @@ public record Part(
                             JsonPath.at(FIELD_FILLS),
                             "A " + DataFormat.enumName(kind) + " part must fill something");
                 }
-                if (!fits.isEmpty() || extension != null) {
+                if (!fits.isEmpty() || extension != null || !placement.isEmpty()) {
                     checks.error(
                             JsonPath.ROOT,
-                            "Only accessories use " + FIELD_FITS + " and " + FIELD_EXTENSION);
+                            "Only accessories use "
+                                    + FIELD_FITS
+                                    + ", "
+                                    + FIELD_EXTENSION
+                                    + " and "
+                                    + FIELD_PLACEMENT);
                 }
             }
             case ACCESSORY -> {
@@ -307,6 +385,17 @@ public record Part(
                             JsonPath.at(FIELD_FITS),
                             "An accessory needs at least one socket it fits");
                 }
+                placement.forEach(
+                        (variant, place) -> {
+                            if (!(place.scale() > 0)) {
+                                checks.error(
+                                        JsonPath.field(
+                                                JsonPath.field(
+                                                        JsonPath.at(FIELD_PLACEMENT), variant),
+                                                Placement.FIELD_SCALE),
+                                        "A placement's scale is above 0");
+                            }
+                        });
             }
         }
     }

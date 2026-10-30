@@ -389,6 +389,23 @@ def command_meshes(config, batch, args):
         print("mesh", brief["id"])
 
 
+def saved_placement(definition):
+    """The placement an earlier part definition holds, or None."""
+    if not definition.exists():
+        return None
+    text = "\n".join(line for line in definition.read_text(encoding="utf8").splitlines()
+                     if not line.lstrip().startswith("//"))
+    try:
+        parts = json.loads(text)
+    except json.JSONDecodeError:
+        print("Couldn't read %s; its placement, if any, is lost" % definition)
+        return None
+    for part in parts if isinstance(parts, list) else [parts]:
+        if part.get("placement"):
+            return part["placement"]
+    return None
+
+
 def material_slot(name, tints):
     """A part's material slot: its tint mask channels take the costume's palette channels, and
     default to the colors the fit found, which give the part its own look."""
@@ -444,6 +461,10 @@ def command_fit(config, batch, args):
         }
         definition = content / "part" / ("%s.json" % brief["id"])
         definition.parent.mkdir(parents=True, exist_ok=True)
+        # A placement lined up by hand in the character editor outlives a refit
+        placement = saved_placement(definition)
+        if placement:
+            part["placement"] = placement
         header = ("// %s, batch %s, image %d\n"
                   "// Written by Ikala-Characters/tools/partgen/partgen.py\n"
                   % (brief["description"], batch.name, brief["mesh"]["image"]))

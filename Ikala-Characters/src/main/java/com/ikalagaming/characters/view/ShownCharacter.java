@@ -22,6 +22,8 @@ import com.ikalagaming.graphics.graph.Material;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Matrix4f;
+import org.joml.Matrix4fc;
 import org.joml.Quaternionf;
 import org.joml.Vector3d;
 import org.joml.Vector3f;
@@ -32,8 +34,10 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -126,6 +130,12 @@ public final class ShownCharacter implements AutoCloseable {
 
     /** Its effects, moved with it each pose, or null for none. */
     private volatile CharacterFx fx;
+
+    /**
+     * Extra transforms on bones, each in its bone's space at rest, applied after the pose, like an
+     * accessory's placement being lined up on its socket bone. Replaced whole, never changed.
+     */
+    private volatile Map<Integer, Matrix4fc> adjustments = Map.of();
 
     /**
      * Load a character and place it, standing at rest until a clip is played.
@@ -417,6 +427,24 @@ public final class ShownCharacter implements AutoCloseable {
         }
     }
 
+    /**
+     * Move what is weighted to a bone by an extra transform in the bone's space at rest, on top of
+     * the pose, until it is changed again. Editors preview an accessory's placement this way
+     * without rebuilding its mesh.
+     *
+     * @param bone The bone's index.
+     * @param adjustment The transform, or null for none.
+     */
+    public void setAdjustment(int bone, Matrix4fc adjustment) {
+        Map<Integer, Matrix4fc> changed = new HashMap<>(adjustments);
+        if (adjustment == null) {
+            changed.remove(bone);
+        } else {
+            changed.put(bone, new Matrix4f(adjustment));
+        }
+        adjustments = Map.copyOf(changed);
+    }
+
     /** Poses the character on the timer's thread, which alone touches the pose and solver. */
     private final class Updater implements Runnable {
         /** The skins API. */
@@ -439,6 +467,12 @@ public final class ShownCharacter implements AutoCloseable {
 
         /** Scratch for a bone's position. */
         private final Vector3f bone = new Vector3f();
+
+        /** Scratch for an adjusted bone's skinning matrix. */
+        private final Matrix4f adjusted = new Matrix4f();
+
+        /** Scratch for a bone's inverse bind matrix. */
+        private final Matrix4f unbind = new Matrix4f();
 
         /** How far into the clip, in seconds. */
         private float time;
@@ -480,6 +514,15 @@ public final class ShownCharacter implements AutoCloseable {
                 }
                 solver.solve(pose, current);
                 solver.writePalette(current, palette, 0);
+                for (Map.Entry<Integer, Matrix4fc> entry : adjustments.entrySet()) {
+                    int b = entry.getKey();
+                    // Bone space at rest is the inverse bind's output, so the adjustment goes
+                    // between the bone's pose and its inverse bind
+                    adjusted.set(solver.model(b))
+                            .mul(entry.getValue())
+                            .mul(skeleton.inverseBind(b, unbind))
+                            .get(palette, b * Skeleton.MATRIX_FLOATS);
+                }
                 min.set(Float.POSITIVE_INFINITY);
                 max.set(Float.NEGATIVE_INFINITY);
                 for (int b = 0; b < skeleton.size(); ++b) {

@@ -475,6 +475,9 @@ public final class CharacterEditor {
     /** The settings while open. */
     private EditorSettings current;
 
+    /** The Align tab, which lines accessories up on their sockets. */
+    private final AccessoryAligner aligner;
+
     /** Which of the loaded designs is shown. */
     private int designIndex;
 
@@ -606,6 +609,19 @@ public final class CharacterEditor {
         this.registry = registry;
         this.settings = settings;
         stage = new CharacterStage(graphics);
+        aligner =
+                new AccessoryAligner(
+                        graphics.debug(),
+                        registry,
+                        () -> current.reload().run(),
+                        (point, pitch, yaw, distance) ->
+                                orbit.look(
+                                        GraphicsManager.getScene().getCamera(),
+                                        point,
+                                        pitch,
+                                        yaw,
+                                        distance),
+                        () -> current.reference());
     }
 
     /** Register the panels' node types, once, when the plugin is enabled. */
@@ -1415,6 +1431,10 @@ public final class CharacterEditor {
                 drawMotion();
                 IkGui.endTabItem();
             }
+            if (IkGui.beginTabItem("Align")) {
+                aligner.draw(alignStage());
+                IkGui.endTabItem();
+            }
             IkGui.endTabBar();
         }
         showFx();
@@ -1690,6 +1710,42 @@ public final class CharacterEditor {
                                 fxEffects);
         motion.applyStates(shownEffects, uses);
         shown.setFx(shownEffects);
+    }
+
+    /**
+     * What the Align tab works on: the worn accessories and head.
+     *
+     * @return The stage.
+     */
+    private AccessoryAligner.Stage alignStage() {
+        List<AccessoryAligner.Worn> accessories = new ArrayList<>();
+        List<Integer> head = new ArrayList<>();
+        List<PartSlots.Slot> slots = look.slots().slots();
+        for (int s = 0; s < slots.size(); ++s) {
+            int choice = look.choice(s);
+            if (choice == CharacterLook.EMPTY) {
+                continue;
+            }
+            PartSlots.Slot slot = slots.get(s);
+            List<Integer> meshes = slot.options().get(choice);
+            if (slot.id().equals(AccessoryAligner.HEAD_SLOT)) {
+                head.addAll(meshes);
+            }
+            Part part = registry.get().get(Part.class, prepared.optionIds().get(s).get(choice));
+            if (part != null
+                    && part.kind() == Part.PartKind.ACCESSORY
+                    && plan.socket(slot.id()) != null
+                    && !meshes.isEmpty()) {
+                accessories.add(new AccessoryAligner.Worn(slot.id(), part, meshes));
+            }
+        }
+        return new AccessoryAligner.Stage(
+                prepared.character(),
+                shown,
+                accessories,
+                head,
+                plan.variants().get(Math.max(0, look.variant())).id(),
+                CharacterStage.origin());
     }
 
     /**

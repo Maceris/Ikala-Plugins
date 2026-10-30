@@ -220,6 +220,13 @@
           },
           "description": "Effects it carries, like sparks on a robot arm, gone when it is swapped."
         },
+        "placement": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Placement"
+          },
+          "description": "For accessories: where it sits on its socket, by variant name with \"*\" for any other variant, moved from where its mesh puts it."
+        },
         "extends": {
           "type": "string",
           "description": "The ID of a definition of the same kind to start from. Fields written here replace the parent's, and objects merge field by field."
@@ -240,6 +247,36 @@
           ]
         }
       ]
+    },
+    "Placement": {
+      "type": "object",
+      "description": "Where an accessory sits on its socket, moved from where its mesh puts it.",
+      "properties": {
+        "offset": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "How far it moves, in meters: x across, y up, z forward."
+        },
+        "rotate": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "How it turns about the x, y and z axes through its socket, in degrees, in that order."
+        },
+        "scale": {
+          "type": "number",
+          "description": "How much it grows about its socket.",
+          "default": 1
+        }
+      },
+      "additionalProperties": false
     },
     "SocketMove": {
       "type": "object",
