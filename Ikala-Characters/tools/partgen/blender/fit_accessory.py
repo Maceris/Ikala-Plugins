@@ -12,9 +12,9 @@ low-poly copy is unwrapped and baked from it: base color, a normal map, and an O
 to the socket's bone, so it moves rigidly with it, and written with the mannequin's armature so
 it loads onto the rig like any other part.
 
-The base color is split into up to four color groups and made recolorable: each group keeps only
-its lightness, as gray, and a tint mask beside the glb (<part>_masks/<image>.png) picks the groups, one
-per channel. Each group's color is written to --tints as the default for its mask channel, which
+The base color is split into up to four color groups and made recolorable: each group's base color
+turns white, so the tint the shader multiplies in replaces it, and a tint mask beside the glb
+(<part>_masks/<image>.png) picks the groups, one per channel. Each group's color is written to --tints as the default for its mask channel, which
 brings the part's own look back when a design leaves the palette channel uncolored. The preview
 folder gets front and side renders on the mannequin, in those default colors.
 """
@@ -63,8 +63,9 @@ GLTF_OUTPUT = "glTF Material Output"
 
 # Tint masks: how much lightness counts against hue when grouping colors, how many texels to
 # group from, the mean spread (in Lab units) a group may have, the smallest share of the texels
-# a group keeps, how close (in Lab units) two groups may be before they merge, and the percentile
-# of a group's colors taken as its color, so a few highlights don't decide it
+# a group keeps, how close (in Lab units) two groups may be before they merge, and the lightness
+# percentile (give or take TINT_BAND) of a group's colors taken as its color: above the median,
+# since generated base colors carry baked shadow, but below highlights like a light brim edge
 MASK_CHANNELS = ("r", "g", "b", "a")
 # Beside a part's glb, the folder of tint masks Ikala-Characters looks for (CharacterFiles)
 MASK_FOLDER_SUFFIX = "_masks"
@@ -73,7 +74,13 @@ TINT_SAMPLE = 20000
 TINT_SPREAD = 10.0
 TINT_SMALLEST = 0.03
 TINT_ALIKE = 12.0
-TINT_REFERENCE = 95
+TINT_REFERENCE = 80
+TINT_BAND = 5
+# How much of the texture's lightness a tinted group keeps, as a power of its lightness against
+# the group's color: 0 makes the tint replace the base color outright, as a design's color is
+# meant to (the normal and ORM maps still carry the shape and wear); 1 keeps it all. Generated
+# base colors carry baked shading, which kept would leave a recolored crown darker than its brim
+TINT_DETAIL = 0.0
 # Relative luminance of linear sRGB
 LUMINANCE = np.array([0.2126, 0.7152, 0.0722])
 # Voxels across the part's largest side when remeshing it closed before decimating
@@ -617,9 +624,9 @@ def color_groups(linear):
 
 
 def tint_masks(image, covered, folder):
-    """Make the baked base color recolorable: split it into color groups, keep only each group's
-    lightness against its own color, as gray, and write a mask whose channels pick the groups.
-    A group's color comes back when the tint multiplies it in, so it is the default tint. Gives
+    """Make the baked base color recolorable: split it into color groups, turn each group's
+    base color white (or gray with some of its lightness, see TINT_DETAIL), and write a mask
+    whose channels pick the groups. A group's typical color is its default tint. Gives
     the default colors, by mask channel, and the original pixels."""
     size = image.size[0]
     pixels = np.array(image.pixels[:]).reshape(-1, 4)
@@ -639,15 +646,16 @@ def tint_masks(image, covered, folder):
     defaults = {}
     for group in range(count):
         members = labels == group
-        # The group's color, and its detail as gray: lightness against the color's own. Dividing
-        # each channel instead leaves a saturated red with nothing in green or blue, which a
-        # green tint then multiplies into black
+        # The group's color, and what detail it keeps as gray: lightness against the color's
+        # own. Dividing each channel instead leaves a saturated red with nothing in green or
+        # blue, which a green tint then multiplies into black
         lightness = linear @ LUMINANCE
-        brightest = lightness[members & covered] >= np.percentile(
-            lightness[members & covered], TINT_REFERENCE)
-        reference = linear[members & covered][brightest].mean(0)
+        low, high = np.percentile(lightness[members & covered],
+                                  [TINT_REFERENCE - TINT_BAND, TINT_REFERENCE + TINT_BAND])
+        near = (lightness[members & covered] >= low) & (lightness[members & covered] <= high)
+        reference = linear[members & covered][near].mean(0)
         level = max(float(reference @ LUMINANCE), 1e-4)
-        linear[members] = np.clip(lightness[members] / level, 0, 1)[:, None]
+        linear[members] = (np.clip(lightness[members] / level, 0, 1) ** TINT_DETAIL)[:, None]
         mask[members, group] = 1
         rgb = np.round(linear_to_srgb(reference) * 255).astype(int)
         defaults[MASK_CHANNELS[group]] = "#%02x%02x%02x" % tuple(rgb)
