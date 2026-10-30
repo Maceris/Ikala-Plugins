@@ -43,9 +43,9 @@ background, any color; "sketchStrength" (default 0.7) is how hard, and "sketchEn
 the share of the steps it steers. Too strong and the image traces the drawing's lines instead of
 making a real object of them.
 
-Only accessories on head_top sockets can be fitted so far; clothing is lined up on the mannequin
-and cut out of its figure (fit/), not fitted yet. Run it with any Python that has
-Pillow, such as TRELLIS.2's.
+Only accessories on head_top sockets can be fitted so far; clothing is lined up on the
+mannequin, cut out of its figure and shaped over the body (fit/shaped.glb), but not weighted or
+baked yet. Run it with any Python that has Pillow, such as TRELLIS.2's.
 """
 import argparse
 import datetime
@@ -94,6 +94,8 @@ GUIDE_VARIANT = "male"
 GUIDE_MAP = "depth"
 GUIDE_MODE = "depth"
 SKETCH_MODE = "hed/pidi/scribble/ted"
+# Body slots a layer's mask never grows into unless the layer covers them
+BARE_SLOTS = ("head", "hand.L", "hand.R", "foot.L", "foot.R")
 
 SDXL_STEPS = 30
 SDXL_CFG = 6.0
@@ -425,6 +427,12 @@ def guide_inputs(config, layer, rule):
     hang = mask
     for step in range(rule.get("maskDown", 0) // 8):
         hang = ImageChops.lighter(hang, ImageChops.offset(mask, 0, (step + 1) * 8))
+    # Growing never reaches the head, hands or feet unless the layer covers them; repainted,
+    # they would differ from the render and be taken for clothing
+    kept_bare = {guide["slots"].index(slot) + 1 for slot in BARE_SLOTS
+                 if slot in guide["slots"] and slot not in layer["covers"]}
+    bare = slots.point(lambda v: 255 if v in kept_bare else 0)
+    hang = ImageChops.subtract(hang, bare)
     names["mask"] = "partgen_mask_%s_%s.png" % (GUIDE_VARIANT, layer["id"])
     hang.convert("RGB").save(inputs / names["mask"])
     return names
@@ -616,8 +624,9 @@ def painted_area(config, brief, out):
 
 
 def fit_layer(config, batch, brief):
-    """Line a clothing figure up on the mannequin it was painted on, and cut the garment out of
-    it by where the image was painted. The fit, weights and part come next."""
+    """Line a clothing figure up on the mannequin it was painted on, cut the garment out of it
+    by where the image was painted, and shape it to sit outside the body within its triangle
+    budget. The weights, bake and part come next."""
     folder = batch.brief_folder(brief["id"])
     out = folder / "fit"
     out.mkdir(exist_ok=True)
@@ -634,8 +643,20 @@ def fit_layer(config, batch, brief):
         print("Lining up failed for %s; see %s" % (brief["id"], folder / "fit.log"))
         return
     report = json.loads((out / "fit.json").read_text(encoding="utf8"))
+    rule = layer_of(brief)[1]
+    with open(folder / "shape.log", "w", encoding="utf8") as stream:
+        result = subprocess.run(
+            [config["blender"], "-b", "--factory-startup", "--python",
+             str(TOOLS / "blender/shape_layer.py"), "--",
+             "--garment", str(out / "garment.glb"), "--body", str(body), "--out", str(out),
+             "--gap", str(rule["gap"]), "--triangles", str(rule["triangles"])],
+            stdout=stream, stderr=subprocess.STDOUT)
+    if result.returncode != 0 or not (out / "shape.json").exists():
+        print("Shaping failed for %s; see %s" % (brief["id"], folder / "shape.log"))
+        return
+    report["shape"] = json.loads((out / "shape.json").read_text(encoding="utf8"))
     batch.update(brief["id"], lambda e: e.update(lineUp=report))
-    print("lined up", brief["id"], report)
+    print("fitted", brief["id"], report)
 
 
 def command_fit(config, batch, args):

@@ -50,6 +50,8 @@ SKIN = 0.008
 MAX_TURN = 20
 # Garment pieces with fewer faces than this share of the biggest are dropped
 CRUMB = 0.05
+# Vertices this close together are one, in the figure's own units
+WELD = 1e-5
 
 
 def similarity(source, target):
@@ -128,6 +130,13 @@ def import_figure(path):
         bpy.ops.object.join()
     figure = bpy.context.view_layer.objects.active
     figure.name = "figure"
+    # TRELLIS splits its meshes at every texture seam; joined up again, pieces and pushes see
+    # the surface as one. The texture coordinates stay with each face's corners.
+    mesh = bmesh.new()
+    mesh.from_mesh(figure.data)
+    bmesh.ops.remove_doubles(mesh, verts=mesh.verts, dist=WELD)
+    mesh.to_mesh(figure.data)
+    mesh.free()
     return figure
 
 
