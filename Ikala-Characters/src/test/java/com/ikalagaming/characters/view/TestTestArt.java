@@ -123,7 +123,7 @@ class TestTestArt {
         BodyPlan biped = registry.get(BodyPlan.class, man.plan());
         com.ikalagaming.characters.pose.Skeleton skeleton =
                 com.ikalagaming.characters.gltf.GltfImporter.read(
-                                TEST_CONTENT.resolve("mannequin/mannequin.glb"))
+                                TEST_CONTENT.resolve("mannequin/male.glb"))
                         .onRig(
                                 registry.get(
                                         com.ikalagaming.characters.definition.Rig.class,
