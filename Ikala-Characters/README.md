@@ -27,6 +27,18 @@ writes to the asset editor's `test_content` folder, which isn't in git:
 blender -b --python tools/blender/mannequin.py -- --rig src/main/resources/characters/ikala/rig/biped.json --plan src/main/resources/characters/ikala/bodyPlan/biped.json --out ../../Ikala-Asset-Editor/test_content/characters/mannequin
 ```
 
+Clothing fitted to one body type is carried to the others through cages: each
+mannequin's MakeHuman base mesh, posed and scaled the same way. The two proxies'
+vertices don't line up, but the base meshes do, so a garment bound to the male
+cage with a Surface Deform modifier follows when the cage takes the female's
+shape. `tools/blender/body_cages.py` writes them beside the mannequins (rerun it
+whenever they are rebuilt), and `tools/partgen/blender/cage_transfer_check.py`
+measures how a test shirt carries over:
+
+```
+blender -b --python tools/blender/body_cages.py -- --out ../../Ikala-Asset-Editor/test_content/characters/mannequin
+```
+
 ## Test clips from Blender
 
 The test animations are the modular RPG kit's clips (System G6, credit optional),
