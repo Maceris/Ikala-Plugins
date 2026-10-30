@@ -53,6 +53,14 @@ class TestCharacterPlugin {
         Assertions.assertNull(CharacterPlugin.parseSource("namespace="));
     }
 
+    /** Content folders written back to the config read the same as they were written. */
+    @Test
+    void testEntryRoundTrip() {
+        String written = "gen=D:/art/characters gen";
+        ContentSource source = CharacterPlugin.parseSource(written);
+        Assertions.assertEquals(written, CharacterPlugin.entry(source));
+    }
+
     /**
      * Test that the plugin.yml is valid and matches the plugin class, since a mismatch only shows
      * up when the plugin fails to load.

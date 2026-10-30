@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.ui;
 
 import com.ikalagaming.graphics.gui.IkGui;
+import com.ikalagaming.graphics.gui.enums.MouseButton;
 import com.ikalagaming.graphics.gui.flags.SelectableFlags;
 
 import lombok.Getter;
@@ -28,6 +29,9 @@ public class Selectable extends Node<Selectable> {
 
     /** Runs on the render thread after the frame the row is clicked in. */
     private Runnable onClick;
+
+    /** Runs on the render thread after the frame the row is double clicked in. */
+    private Runnable onDoubleClick;
 
     /**
      * Create a row.
@@ -77,6 +81,19 @@ public class Selectable extends Node<Selectable> {
         return this;
     }
 
+    /**
+     * Set what happens when the row is double clicked, like opening what it names. The first click
+     * of the two still runs {@link #onClick(Runnable)}. It runs on the render thread after the GUI
+     * is drawn, outside rendering.
+     *
+     * @param action The action, or null for none.
+     * @return This row.
+     */
+    public Selectable onDoubleClick(Runnable action) {
+        onDoubleClick = action;
+        return this;
+    }
+
     @Override
     protected void measure(@NonNull LayoutContext context, float[] out) {
         context.text().measure(text, fontPixels, out);
@@ -102,6 +119,11 @@ public class Selectable extends Node<Selectable> {
         recordItem(IkGui.getItemID());
         if (clicked) {
             frame.fire(onClick);
+        }
+        if (onDoubleClick != null
+                && IkGui.isItemHovered()
+                && IkGui.isMouseDoubleClicked(MouseButton.LEFT)) {
+            frame.fire(onDoubleClick);
         }
         pushed.pop();
     }

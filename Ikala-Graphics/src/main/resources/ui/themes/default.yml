@@ -118,6 +118,10 @@ classes:
     fontSize: $font-size.title
   muted:
     text: $color.text-muted
+  # Dims everything behind a modal dialog, like the file dialog
+  dialog-backdrop:
+    background: "#00000099"
+    borderSize: 0
   panel:
     background: $color.panel
     rounding: $corner-radius.panel

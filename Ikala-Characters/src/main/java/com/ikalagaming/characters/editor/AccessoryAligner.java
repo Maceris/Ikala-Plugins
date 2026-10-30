@@ -323,7 +323,9 @@ final class AccessoryAligner {
         }
 
         IkGui.separatorText("Save");
-        everyVariant = IkGui.checkbox("For every body type", everyVariant);
+        if (IkGui.checkbox("For every body type", everyVariant)) {
+            everyVariant = !everyVariant;
+        }
         if (IkGui.button(unsaved ? "Save*" : "Save")) {
             save(worn, stage.variant());
         }

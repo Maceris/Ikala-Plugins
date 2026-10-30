@@ -124,6 +124,23 @@ public class CharacterPlugin extends Plugin {
 
     /** Load the content folders listed in the config, replacing the current registry. */
     public void reload() {
+        List<ContentSource> sources = contentFolders();
+        CharacterLoader.Result result = loadWithBuiltIn(sources);
+        logProblems(result.problems());
+        registry = result.registry();
+        log.info(
+                "Loaded {} character definitions from the plugin and {} folders, content hash {}",
+                registry.size(),
+                sources.size(),
+                registry.getContentHash().substring(0, 12));
+    }
+
+    /**
+     * The content folders the config lists, skipping malformed entries.
+     *
+     * @return The folders, in order.
+     */
+    private List<ContentSource> contentFolders() {
         PluginConfig config = ConfigManager.loadConfig(getName());
         List<ContentSource> sources = new ArrayList<>();
         if (config.isList(CONTENT_FOLDERS)) {
@@ -138,14 +155,40 @@ public class CharacterPlugin extends Plugin {
                 }
             }
         }
-        CharacterLoader.Result result = loadWithBuiltIn(sources);
-        logProblems(result.problems());
-        registry = result.registry();
-        log.info(
-                "Loaded {} character definitions from the plugin and {} folders, content hash {}",
-                registry.size(),
-                sources.size(),
-                registry.getContentHash().substring(0, 12));
+        return sources;
+    }
+
+    /**
+     * Change the content folders and where the editor saves designs, write them to the config so
+     * they stay, and load the folders again. Comments in the config file are lost when it is
+     * written.
+     *
+     * @param folders The folders, in order.
+     * @param saveNamespace The namespace of the folder designs save to, or null to turn saving off.
+     */
+    private void setContentFolders(List<ContentSource> folders, String saveNamespace) {
+        PluginConfig config = ConfigManager.loadConfig(getName());
+        config.set(CONTENT_FOLDERS, folders.stream().map(CharacterPlugin::entry).toList());
+        String saveTo = "";
+        for (ContentSource folder : folders) {
+            if (folder.namespace().equals(saveNamespace)) {
+                saveTo = entry(folder);
+            }
+        }
+        config.set(EDITOR_SAVE_TO, saveTo);
+        ConfigManager.saveConfigToDisk(getName());
+        log.info("Content folders are now {}, saving designs to '{}'", folders, saveTo);
+        reload();
+    }
+
+    /**
+     * Write a content folder as a config entry.
+     *
+     * @param source The folder.
+     * @return The entry, as {@code namespace=folder}.
+     */
+    static String entry(ContentSource source) {
+        return source.namespace() + "=" + source.name();
     }
 
     /**
@@ -161,7 +204,9 @@ public class CharacterPlugin extends Plugin {
                 Path.of(reference),
                 saveTo == null ? null : saveTo.namespace(),
                 saveTo == null ? null : saveTo.root(),
-                this::reload);
+                this::reload,
+                contentFolders(),
+                this::setContentFolders);
     }
 
     /** Open the character editor, or close it if it is open, on the render thread. */

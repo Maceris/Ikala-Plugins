@@ -4,6 +4,7 @@ import com.ikalagaming.graphics.ui.Surface;
 import com.ikalagaming.graphics.ui.Tool;
 import com.ikalagaming.graphics.ui.UiManager;
 import com.ikalagaming.graphics.ui.automation.Steps;
+import com.ikalagaming.graphics.ui.dialog.FileDialog;
 import com.ikalagaming.graphics.ui.script.ScriptUi;
 import com.ikalagaming.graphics.ui.spec.NodeFactory;
 import com.ikalagaming.graphics.ui.spec.ObservableList;
@@ -21,6 +22,7 @@ import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import lombok.NonNull;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.ResourceBundle;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
@@ -282,6 +284,68 @@ public final class UI {
     public CompletableFuture<Void> automate(@NonNull Consumer<Steps> build) {
         context.checkOpen();
         return manager.get().getAutomation().run(context, build);
+    }
+
+    /**
+     * Ask for a folder, in a dialog over the window. Only one file dialog is open at a time; a new
+     * one cancels the last.
+     *
+     * @param title The dialog's title.
+     * @param start The folder to start in, or null for the one last picked from.
+     * @param chosen Gets the folder, absolute, or null if canceled, on the render thread. It isn't
+     *     called if this plugin unloads first.
+     */
+    public void pickFolder(@NonNull String title, Path start, @NonNull Consumer<Path> chosen) {
+        fileDialog(FileDialog.Options.folder(title, start), chosen);
+    }
+
+    /**
+     * Ask for a file to open, in a dialog over the window.
+     *
+     * @param title The dialog's title.
+     * @param start The folder to start in, or null for the one last opened from.
+     * @param chosen Gets the file, absolute, or null if canceled, on the render thread. It isn't
+     *     called if this plugin unloads first.
+     * @param extensions The file extensions to list, like {@code glb}, or none for every file.
+     */
+    public void openFile(
+            @NonNull String title,
+            Path start,
+            @NonNull Consumer<Path> chosen,
+            @NonNull String... extensions) {
+        fileDialog(FileDialog.Options.open(title, start, extensions), chosen);
+    }
+
+    /**
+     * Ask for a file to save to, in a dialog over the window. It asks before picking a file that
+     * exists, and adds the first extension to a name that ends in none of them.
+     *
+     * @param title The dialog's title.
+     * @param start The folder to start in, or null for the one last saved to.
+     * @param fileName The name to start with.
+     * @param chosen Gets the file, absolute, or null if canceled, on the render thread. It isn't
+     *     called if this plugin unloads first.
+     * @param extensions The file extensions to list, like {@code json}, or none for every file.
+     */
+    public void saveFile(
+            @NonNull String title,
+            Path start,
+            @NonNull String fileName,
+            @NonNull Consumer<Path> chosen,
+            @NonNull String... extensions) {
+        fileDialog(FileDialog.Options.save(title, start, fileName, extensions), chosen);
+    }
+
+    /**
+     * Open a file dialog.
+     *
+     * @param options What to ask for.
+     * @param chosen Gets the path picked, or null if canceled, on the render thread.
+     * @see FileDialog
+     */
+    public void fileDialog(@NonNull FileDialog.Options options, @NonNull Consumer<Path> chosen) {
+        context.checkOpen();
+        FileDialog.open(this, context::isClosed, options, chosen);
     }
 
     /**

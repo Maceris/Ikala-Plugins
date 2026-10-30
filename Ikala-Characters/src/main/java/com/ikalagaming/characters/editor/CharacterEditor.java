@@ -22,6 +22,7 @@ import com.ikalagaming.characters.pose.PoseSolver;
 import com.ikalagaming.characters.pose.Proportions;
 import com.ikalagaming.characters.pose.Skeleton;
 import com.ikalagaming.characters.registry.CharacterRegistry;
+import com.ikalagaming.characters.registry.ContentSource;
 import com.ikalagaming.characters.view.CharacterFx;
 import com.ikalagaming.characters.view.FxEffects;
 import com.ikalagaming.characters.view.PartAssembler;
@@ -478,6 +479,12 @@ public final class CharacterEditor {
     /** The Align tab, which lines accessories up on their sockets. */
     private final AccessoryAligner aligner;
 
+    /** The Content tab, which picks the content folders. */
+    private final ContentPanel content;
+
+    /** Whether the Content tab is showing. */
+    private boolean contentTab;
+
     /** Which of the loaded designs is shown. */
     private int designIndex;
 
@@ -584,12 +591,16 @@ public final class CharacterEditor {
      * @param saveNamespace The namespace saved designs go in, or null if saving is off.
      * @param saveFolder The content folder saved designs go in, as design/name.json, or null.
      * @param reload Loads the definitions again, so saved designs show up.
+     * @param folders The content folders loaded, in order.
+     * @param setFolders Changes the content folders and where designs save, then loads them again.
      */
     public record EditorSettings(
             @NonNull Path reference,
             String saveNamespace,
             Path saveFolder,
-            @NonNull Runnable reload) {}
+            @NonNull Runnable reload,
+            @NonNull List<ContentSource> folders,
+            ContentPanel.@NonNull FolderSetter setFolders) {}
 
     /**
      * Set up the editor; nothing is shown until it opens.
@@ -609,6 +620,7 @@ public final class CharacterEditor {
         this.registry = registry;
         this.settings = settings;
         stage = new CharacterStage(graphics);
+        content = new ContentPanel(graphics.ui(), registry);
         aligner =
                 new AccessoryAligner(
                         graphics.debug(),
@@ -716,7 +728,7 @@ public final class CharacterEditor {
     private void showDesign(int index) {
         List<Design> designs = designs();
         if (designs.isEmpty()) {
-            characterName.set("No designs loaded; add a content folder with some");
+            characterName.set("No designs loaded; add a content folder on the Content tab");
             return;
         }
         designIndex = Math.floorMod(index, designs.size());
@@ -950,7 +962,7 @@ public final class CharacterEditor {
      */
     private void save() {
         if (current.saveFolder() == null || current.saveNamespace() == null) {
-            saveStatus = "Saving is off; set editor.save-to in the config";
+            saveStatus = "Saving is off; pick a folder to save to on the Content tab";
             return;
         }
         String name = saveName.get().trim().toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_]+", "_");
@@ -1025,23 +1037,40 @@ public final class CharacterEditor {
      * @param frame The UI frame.
      */
     private void drawParts(@NonNull UiFrame frame) {
-        if (look == null || categories == null) {
-            IkGui.textDisabled("Loading...");
-            return;
-        }
+        boolean ready = look != null && categories != null;
         boolean body = bodyTab;
+        boolean onContent = false;
         if (IkGui.beginTabBar("##character-tabs")) {
             if (IkGui.beginTabItem("Body")) {
                 body = true;
-                drawBody();
+                if (ready) {
+                    drawBody();
+                } else {
+                    drawWaiting();
+                }
                 IkGui.endTabItem();
             }
             if (IkGui.beginTabItem("Costume")) {
                 body = false;
-                drawCostume();
+                if (ready) {
+                    drawCostume();
+                } else {
+                    drawWaiting();
+                }
+                IkGui.endTabItem();
+            }
+            if (IkGui.beginTabItem("Content")) {
+                onContent = true;
+                if (content.draw(current)) {
+                    frame.fire(this::contentChanged);
+                }
                 IkGui.endTabItem();
             }
             IkGui.endTabBar();
+        }
+        contentTab = onContent;
+        if (!ready) {
+            return;
         }
         if (body != bodyTab) {
             bodyTab = body;
@@ -1049,10 +1078,26 @@ public final class CharacterEditor {
             // The Body tab stands the character at rest, so the ruler reads its height true
             playClip(clipIndex);
         }
-        if (bodyTab) {
+        if (bodyTab || contentTab) {
             showWorn(CharacterLook.NO_PREVIEW, 0);
+        }
+        if (bodyTab && !contentTab) {
             drawRuler();
         }
+    }
+
+    /** Draw what the Body and Costume tabs show while there is no character: why not. */
+    private void drawWaiting() {
+        IkGui.textWrapped(
+                designs().isEmpty()
+                        ? "No designs are loaded; add a content folder with some on the Content tab"
+                        : "Loading...");
+    }
+
+    /** Read the settings again after the Content tab changed the folders, and show a design. */
+    private void contentChanged() {
+        current = settings.get();
+        showDesign(designIndex);
     }
 
     /** Draw the Body tab: a card for each variant of the body plan, and the character's height. */
