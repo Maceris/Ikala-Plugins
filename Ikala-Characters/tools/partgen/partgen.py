@@ -44,8 +44,9 @@ the share of the steps it steers. Too strong and the image traces the drawing's 
 making a real object of them.
 
 Only accessories on head_top sockets can be fitted so far; clothing is lined up on the
-mannequin, cut out of its figure and shaped over the body (fit/shaped.glb), but not weighted or
-baked yet. Run it with any Python that has Pillow, such as TRELLIS.2's.
+mannequin, cut out of its figure, shaped over the body and weighted to the rig
+(fit/weighted.glb), but not baked yet. Run it with any Python that has Pillow, such as
+TRELLIS.2's.
 """
 import argparse
 import datetime
@@ -625,10 +626,20 @@ def painted_area(config, brief, out):
     return path
 
 
+def run_blender(config, script, log, *arguments):
+    """Run one of the blender/ scripts headless, its output in a log. Gives whether it worked."""
+    with open(log, "w", encoding="utf8") as stream:
+        result = subprocess.run(
+            [config["blender"], "-b", "--factory-startup", "--python",
+             str(TOOLS / "blender" / script), "--"] + [str(a) for a in arguments],
+            stdout=stream, stderr=subprocess.STDOUT)
+    return result.returncode == 0
+
+
 def fit_layer(config, batch, brief):
     """Line a clothing figure up on the mannequin it was painted on, cut the garment out of it
-    by where the image was painted, and shape it to sit outside the body within its triangle
-    budget. The weights, bake and part come next."""
+    by where the image was painted, shape it to sit outside the body within its triangle budget,
+    and weight it to the rig, checking it in a few poses. The bake and part come next."""
     folder = batch.brief_folder(brief["id"])
     out = folder / "fit"
     out.mkdir(exist_ok=True)
@@ -657,6 +668,12 @@ def fit_layer(config, batch, brief):
         print("Shaping failed for %s; see %s" % (brief["id"], folder / "shape.log"))
         return
     report["shape"] = json.loads((out / "shape.json").read_text(encoding="utf8"))
+    weighted = run_blender(config, "weight_layer.py", folder / "weights.log",
+                           "--garment", out / "shaped.glb", "--body", body, "--out", out)
+    if not weighted or not (out / "weights.json").exists():
+        print("Weighting failed for %s; see %s" % (brief["id"], folder / "weights.log"))
+        return
+    report["poses"] = json.loads((out / "weights.json").read_text(encoding="utf8"))["poses"]
     batch.update(brief["id"], lambda e: e.update(lineUp=report))
     print("fitted", brief["id"], report)
 
