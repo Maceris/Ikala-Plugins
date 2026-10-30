@@ -47,10 +47,10 @@ import java.util.stream.Stream;
 
 /**
  * The character editor's Align tab: lines an accessory up on its socket by hand. Its placement
- * (offset along the model's axes, turn and scale about its socket on the rig's reference body,
- * see {@link Part.Placement}) previews live as an extra transform on the socket bone, measures show where the head shows through and how far the accessory sits above
- * the brow, and Save writes the placement into the part's definition, for the design's variant or
- * every variant.
+ * (offset along the model's axes, turn and scale about its socket on the rig's reference body, see
+ * {@link Part.Placement}) previews live as an extra transform on the socket bone, measures show
+ * where the head shows through and how far the accessory sits above the brow, and Save writes the
+ * placement into the part's definition, for the design's variant or every variant.
  *
  * @author Ches Burks
  */
@@ -353,7 +353,9 @@ final class AccessoryAligner {
                 Float.isNaN(browGap)
                         ? "No brow bone"
                         : String.format(
-                                Locale.ROOT, "Bottom %.1f mm above the brow", browGap * MILLIMETERS));
+                                Locale.ROOT,
+                                "Bottom %.1f mm above the brow",
+                                browGap * MILLIMETERS));
         IkGui.text(
                 Float.isNaN(seat.gap())
                         ? "Nothing of it is over the head"
@@ -645,8 +647,8 @@ final class AccessoryAligner {
                         round(offset[2] / MILLIMETERS, 4));
         Vec3 turned = new Vec3(round(turn[0], 2), round(turn[1], 2), round(turn[2], 2));
         return new Part.Placement(
-                moved.equals(Vec3.ZERO) ? null : moved,
-                turned.equals(Vec3.ZERO) ? null : turned,
+                Vec3.ZERO.equals(moved) ? null : moved,
+                Vec3.ZERO.equals(turned) ? null : turned,
                 new Scale(
                         Math.max(0.01f, round(scale[0], 4)),
                         Math.max(0.01f, round(scale[1], 4)),
@@ -672,9 +674,7 @@ final class AccessoryAligner {
      * @return out.
      */
     private Matrix4f moveFromBuilt(Matrix4f out) {
-        return placement()
-                .matrix(pivot, out)
-                .mul(built.matrix(pivot, new Matrix4f()).invert());
+        return placement().matrix(pivot, out).mul(built.matrix(pivot, new Matrix4f()).invert());
     }
 
     /**
@@ -741,9 +741,9 @@ final class AccessoryAligner {
     }
 
     /**
-     * The brow bone's height at rest on the rig's reference body, which accessories are fitted
-     * to. A skeleton moved onto the rig from another can have its brow elsewhere, as the brow
-     * turns with a head bone that points another way.
+     * The brow bone's height at rest on the rig's reference body, which accessories are fitted to.
+     * A skeleton moved onto the rig from another can have its brow elsewhere, as the brow turns
+     * with a head bone that points another way.
      *
      * @param stage What the tab works on.
      * @return The height, or NaN if the rig has no brow bone.
@@ -783,8 +783,11 @@ final class AccessoryAligner {
         }
         float bottom = accessoryMesh(stage, worn).bottom();
         moveBy(new Vector3f(0, brow + BROW_GAP - bottom, 0));
-        status = String.format(Locale.ROOT, "Bottom moved to %.0f mm above the brow",
-                BROW_GAP * MILLIMETERS);
+        status =
+                String.format(
+                        Locale.ROOT,
+                        "Bottom moved to %.0f mm above the brow",
+                        BROW_GAP * MILLIMETERS);
         return true;
     }
 
@@ -812,8 +815,8 @@ final class AccessoryAligner {
     }
 
     /**
-     * Center the accessory side to side over the head. Front to back stays, since a cap's visor
-     * or a hat's feather would pull a box's middle off the head.
+     * Center the accessory side to side over the head. Front to back stays, since a cap's visor or
+     * a hat's feather would pull a box's middle off the head.
      *
      * @param stage What the tab works on.
      * @param worn The accessory.
@@ -906,8 +909,11 @@ final class AccessoryAligner {
             return;
         }
         unsaved = false;
-        status = "Saved the placement for " + (everyVariant ? "every body type" : variant)
-                + " to " + file.getFileName();
+        status =
+                "Saved the placement for "
+                        + (everyVariant ? "every body type" : variant)
+                        + " to "
+                        + file.getFileName();
         log.info("Saved the placement of {} for {} to {}", id, key, file);
         reload.run();
     }
@@ -926,11 +932,10 @@ final class AccessoryAligner {
         }
         String quoted = "\"" + id + "\"";
         try (Stream<Path> files = Files.walk(root)) {
-            for (Path file :
-                    files.filter(path -> path.toString().endsWith(".json")).toList()) {
+            for (Path file : files.filter(path -> path.toString().endsWith(".json")).toList()) {
                 String text = Files.readString(file, StandardCharsets.UTF_8);
-                if (text.contains(quoted) && definitionIn(JsonText.parse(text, e -> {}), id)
-                        != null) {
+                if (text.contains(quoted)
+                        && definitionIn(JsonText.parse(text, e -> {}), id) != null) {
                     return file;
                 }
             }

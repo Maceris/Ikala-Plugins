@@ -123,8 +123,7 @@ class TestAccessoryPlacement {
                         SKELETON,
                         new Part.Placement(null, new Vec3(0, 0, 90), 1));
         Assertions.assertTrue(
-                position(turned).equals(new Vector3f(-0.5f, 1, 0), EPSILON),
-                "" + position(turned));
+                position(turned).equals(new Vector3f(-0.5f, 1, 0), EPSILON), "" + position(turned));
         Vector3f normal =
                 new Vector3f(turned.vertices()[3], turned.vertices()[4], turned.vertices()[5]);
         Assertions.assertTrue(normal.equals(new Vector3f(-1, 0, 0), EPSILON), "" + normal);
@@ -152,8 +151,7 @@ class TestAccessoryPlacement {
                         SKELETON,
                         new Part.Placement(null, new Vec3(0, 0, 90), new Scale(1, 2, 1)));
         Assertions.assertTrue(
-                position(turned).equals(new Vector3f(-1, 1.5f, 0), EPSILON),
-                "" + position(turned));
+                position(turned).equals(new Vector3f(-1, 1.5f, 0), EPSILON), "" + position(turned));
 
         // A slanted surface stretched twice as wide leans its normal toward up
         ImportedCharacter.Part wide =

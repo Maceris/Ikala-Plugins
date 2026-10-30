@@ -187,12 +187,14 @@ class TransformGizmoTest {
         gizmo.update(VIEW, AT, AXES, mouse(onBox, false, false));
         gizmo.update(VIEW, AT, AXES, mouse(onBox, true, true));
         TransformGizmo.Drag shrunk =
-                gizmo.update(VIEW, AT, AXES, mouse(screen(handleLength() * 0.5, 0, 0), false, true));
+                gizmo.update(
+                        VIEW, AT, AXES, mouse(screen(handleLength() * 0.5, 0, 0), false, true));
         assertEquals(0.5f, shrunk.scale().x(), EPSILON);
         assertEquals(1, shrunk.scale().y(), EPSILON);
         assertEquals(1, shrunk.scale().z(), EPSILON);
         TransformGizmo.Drag grown =
-                gizmo.update(VIEW, AT, AXES, mouse(screen(handleLength() * 1.5, 0, 0), false, true));
+                gizmo.update(
+                        VIEW, AT, AXES, mouse(screen(handleLength() * 1.5, 0, 0), false, true));
         assertEquals(1.5f, grown.scale().x(), EPSILON);
     }
 

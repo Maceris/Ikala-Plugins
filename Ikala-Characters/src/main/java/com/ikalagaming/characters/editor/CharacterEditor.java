@@ -565,8 +565,8 @@ public final class CharacterEditor {
     private int shownColorVersion = -1;
 
     /**
-     * The colors the worn parts give palette channels, as of {@link #shownColorVersion}, see
-     * {@link #findPartColors}.
+     * The colors the worn parts give palette channels, as of {@link #shownColorVersion}, see {@link
+     * #findPartColors}.
      */
     private Map<String, Integer> partColors = Map.of();
 
@@ -1820,7 +1820,7 @@ public final class CharacterEditor {
             }
             PartSlots.Slot slot = slots.get(s);
             List<Integer> meshes = slot.options().get(choice);
-            if (slot.id().equals(AccessoryAligner.HEAD_SLOT)) {
+            if (AccessoryAligner.HEAD_SLOT.equals(slot.id())) {
                 head.addAll(meshes);
             }
             Part part = registry.get().get(Part.class, prepared.optionIds().get(s).get(choice));

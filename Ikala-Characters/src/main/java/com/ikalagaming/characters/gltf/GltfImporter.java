@@ -654,8 +654,7 @@ public final class GltfImporter {
     /**
      * The image a material's texture reference uses.
      *
-     * @param owner The object holding the reference, like the material or its
-     *     pbrMetallicRoughness.
+     * @param owner The object holding the reference, like the material or its pbrMetallicRoughness.
      * @param field The reference's field, like "normalTexture".
      * @return The image's index, or -1 if there is no such texture or it has no image.
      */

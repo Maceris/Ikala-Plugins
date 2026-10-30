@@ -110,8 +110,7 @@ public final class GizmoMath {
     }
 
     /**
-     * Whether a point is inside a convex quad on the screen, its corners in order either way
-     * round.
+     * Whether a point is inside a convex quad on the screen, its corners in order either way round.
      *
      * @param x The point's x.
      * @param y Its y.

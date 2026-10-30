@@ -60,8 +60,8 @@ public final class TransformGizmo {
      * @param move How far it moved, in world units, for {@link Mode#MOVE}.
      * @param axis The axis it turns about, in the world, unit length, for {@link Mode#ROTATE}.
      * @param angle How far it turned about the axis, in radians, right-handed.
-     * @param scale How much it grew along the handles' x, y and z axes, for {@link Mode#SCALE}:
-     *     all three the same for uniform scaling.
+     * @param scale How much it grew along the handles' x, y and z axes, for {@link Mode#SCALE}: all
+     *     three the same for uniform scaling.
      * @param finished Whether the drag ended this frame; the change is final.
      * @param canceled Whether it ended by being canceled; put back what was there at the start.
      */
@@ -479,8 +479,7 @@ public final class TransformGizmo {
             case RING -> {
                 Vector3f toCenter = new Vector3f(center).normalize();
                 edgeOn = Math.abs(toCenter.dot(axes[axis])) < RING_FACING;
-                if (!edgeOn
-                        && GizmoMath.hitPlane(origin, ray, center, axes[axis], lastRingPoint)) {
+                if (!edgeOn && GizmoMath.hitPlane(origin, ray, center, axes[axis], lastRingPoint)) {
                     lastRingPoint.sub(center);
                 } else {
                     edgeOn = true;
@@ -538,8 +537,7 @@ public final class TransformGizmo {
                 }
                 case RING -> {
                     Vector3f hit = new Vector3f();
-                    if (!edgeOn
-                            && GizmoMath.hitPlane(origin, ray, startCenter, axes[axis], hit)) {
+                    if (!edgeOn && GizmoMath.hitPlane(origin, ray, startCenter, axes[axis], hit)) {
                         hit.sub(startCenter);
                         turned += GizmoMath.signedAngle(lastRingPoint, hit, axes[axis]);
                         lastRingPoint.set(hit);
@@ -555,8 +553,7 @@ public final class TransformGizmo {
                     // the mouse is than where the drag started: a handle's length doubles it.
                     // The change, not the ratio, so a drag started near the middle doesn't jump
                     float from = startMouse.distance(startScreen);
-                    float now =
-                            new Vector2f(input.mouseX(), input.mouseY()).distance(startScreen);
+                    float now = new Vector2f(input.mouseX(), input.mouseY()).distance(startScreen);
                     float factor = 1 + (now - from) / SIZE;
                     factor = snap ? GizmoMath.snap(factor, scaleStep) : factor;
                     factor = Math.max(0.01f, factor);
@@ -572,8 +569,8 @@ public final class TransformGizmo {
     }
 
     /**
-     * How far the mouse has moved along an axis as drawn on the screen, in world units, for an
-     * axis that points nearly at the camera.
+     * How far the mouse has moved along an axis as drawn on the screen, in world units, for an axis
+     * that points nearly at the camera.
      *
      * @param input This frame's input.
      * @param i The axis.
@@ -630,9 +627,7 @@ public final class TransformGizmo {
         Vector2f out = new Vector2f();
         for (int c = 0; c < 4; ++c) {
             Vector3f point =
-                    new Vector3f(center)
-                            .fma(steps[c][0] * length, a)
-                            .fma(steps[c][1] * length, b);
+                    new Vector3f(center).fma(steps[c][0] * length, a).fma(steps[c][1] * length, b);
             if (!view.toScreen(point.x, point.y, point.z, out)) {
                 return null;
             }
@@ -738,8 +733,7 @@ public final class TransformGizmo {
                     if (!axisEnd(i, 1, end)) {
                         continue;
                     }
-                    boolean active =
-                            (kind == Kind.AXIS && axis == i) || kind == Kind.UNIFORM;
+                    boolean active = (kind == Kind.AXIS && axis == i) || kind == Kind.UNIFORM;
                     int color = active ? ACTIVE_COLOR : AXIS_COLORS[i];
                     draw.addLine(middle.x, middle.y, end.x, end.y, color, LINE);
                     draw.addRectFilled(end.x - BOX, end.y - BOX, end.x + BOX, end.y + BOX, color);

@@ -76,9 +76,7 @@ class TestAccessoryFit {
     private static ImportedCharacter.Part lid(float height, float x) {
         return part(
                 new float[] {
-                    x - 0.1f, height, -0.1f,
-                    x + 0.1f, height, -0.1f,
-                    x + 0.1f, height, 0.1f,
+                    x - 0.1f, height, -0.1f, x + 0.1f, height, -0.1f, x + 0.1f, height, 0.1f,
                     x - 0.1f, height, 0.1f
                 },
                 new int[] {0, 1, 2, 0, 2, 3});
@@ -100,7 +98,8 @@ class TestAccessoryFit {
         AccessoryFit.Mesh head =
                 AccessoryFit.mesh(
                         List.of(points(0, 1.9f, 0, 0.05f, 1.95f, 0.05f, 0, 2.05f, 0)), null);
-        AccessoryFit.Seat seat = AccessoryFit.seat(head, AccessoryFit.mesh(List.of(lid(2, 0)), null));
+        AccessoryFit.Seat seat =
+                AccessoryFit.seat(head, AccessoryFit.mesh(List.of(lid(2, 0)), null));
         Assertions.assertEquals(0.05f, seat.gap(), EPSILON);
         Assertions.assertEquals(1, seat.showingCount());
         Assertions.assertEquals(2.05f, seat.showing()[1], EPSILON);
@@ -146,7 +145,8 @@ class TestAccessoryFit {
         JsonObject definition = AccessoryAligner.definitionIn(JsonText.parse(text, e -> {}), id);
         Assertions.assertNotNull(definition);
         JsonObject placements = definition.getAsJsonObject(Part.FIELD_PLACEMENT);
-        Assertions.assertEquals(0.9f, placements.getAsJsonObject("female").get("scale").getAsFloat());
+        Assertions.assertEquals(
+                0.9f, placements.getAsJsonObject("female").get("scale").getAsFloat());
         JsonObject any = placements.getAsJsonObject(Part.ANY_VARIANT);
         Assertions.assertEquals(1.1f, any.get("scale").getAsFloat(), EPSILON);
         Assertions.assertEquals(0.01f, any.getAsJsonArray("offset").get(1).getAsFloat(), EPSILON);

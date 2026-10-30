@@ -228,8 +228,8 @@ public final class PartAssembler {
          * @param meshName The glTF mesh's name, or null for every mesh in the file.
          * @param channelNames The palette channels tints are numbered by.
          * @param placement Where an accessory's meshes move on their socket.
-         * @param reference The rig's reference body, whose sockets placements turn about; null
-         *     when there is no placement.
+         * @param reference The rig's reference body, whose sockets placements turn about; null when
+         *     there is no placement.
          */
         void add(
                 ImportedCharacter source,

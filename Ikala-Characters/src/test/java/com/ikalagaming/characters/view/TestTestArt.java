@@ -61,8 +61,7 @@ class TestTestArt {
         CharacterRegistry registry = load();
         List<Design> designs = registry.all(Design.class);
         // The generated designs, plus any the editor saved there
-        for (String name :
-                List.of("mannequin_male", "mannequin_female", "fighter", "caster")) {
+        for (String name : List.of("mannequin_male", "mannequin_female", "fighter", "caster")) {
             Assertions.assertNotNull(
                     registry.get(Design.class, Id.parse("test:design/" + name)), name);
         }

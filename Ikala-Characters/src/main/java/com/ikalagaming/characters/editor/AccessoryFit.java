@@ -10,9 +10,9 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Measures how an accessory sits on a head, for lining it up: where the head shows through, how
- * far the accessory could drop before it rests on the head, and how far off center it is. Works
- * on positions at rest in model space, Y up, as parts are loaded.
+ * Measures how an accessory sits on a head, for lining it up: where the head shows through, how far
+ * the accessory could drop before it rests on the head, and how far off center it is. Works on
+ * positions at rest in model space, Y up, as parts are loaded.
  *
  * @author Ches Burks
  */
@@ -128,9 +128,9 @@ final class AccessoryFit {
     /**
      * How a head sits under an accessory.
      *
-     * @param showing The head's points above the accessory's bottom and under its outline that
-     *     have nothing of it straight above: where the head pokes through or shows through a hole.
-     *     Three floats each.
+     * @param showing The head's points above the accessory's bottom and under its outline that have
+     *     nothing of it straight above: where the head pokes through or shows through a hole. Three
+     *     floats each.
      * @param gap The smallest distance straight up from the head to the accessory, which it could
      *     drop before resting on the head, or NaN if nothing of it is over the head.
      */
@@ -161,7 +161,9 @@ final class AccessoryFit {
             float x = p[i];
             float y = p[i + 1];
             float z = p[i + 2];
-            if (x < accessory.min.x || x > accessory.max.x || z < accessory.min.z
+            if (x < accessory.min.x
+                    || x > accessory.max.x
+                    || z < accessory.min.z
                     || z > accessory.max.z) {
                 continue;
             }
@@ -175,8 +177,7 @@ final class AccessoryFit {
             }
         }
         return new Seat(
-                Arrays.copyOf(showing, count),
-                gap == Float.POSITIVE_INFINITY ? Float.NaN : gap);
+                Arrays.copyOf(showing, count), gap == Float.POSITIVE_INFINITY ? Float.NaN : gap);
     }
 
     /**

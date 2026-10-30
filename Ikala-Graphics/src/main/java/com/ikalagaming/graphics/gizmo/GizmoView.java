@@ -23,8 +23,8 @@ import org.joml.Vector4f;
  * @param top Its top edge.
  * @param width Its width, in pixels.
  * @param height Its height.
- * @param ySign 1 if clip space y points down the screen as it goes up, -1 if the projection
- *     already flips it.
+ * @param ySign 1 if clip space y points down the screen as it goes up, -1 if the projection already
+ *     flips it.
  */
 public record GizmoView(
         @NonNull Matrix4fc projectionView,
@@ -56,8 +56,7 @@ public record GizmoView(
         Vector4f up =
                 projectionView.transform(
                         new Vector4f(
-                                camera.getInvViewMatrix()
-                                        .transformDirection(new Vector3f(0, 1, 0)),
+                                camera.getInvViewMatrix().transformDirection(new Vector3f(0, 1, 0)),
                                 0));
         return new GizmoView(
                 projectionView,

@@ -7,8 +7,8 @@ import com.google.gson.JsonPrimitive;
 import lombok.NonNull;
 
 /**
- * How much something grows along x, y and z, written as one number when it grows the same along
- * all three, like {@code 1.2}, or as {@code [x, y, z]}.
+ * How much something grows along x, y and z, written as one number when it grows the same along all
+ * three, like {@code 1.2}, or as {@code [x, y, z]}.
  *
  * @param x How much it grows across.
  * @param y How much it grows up.
