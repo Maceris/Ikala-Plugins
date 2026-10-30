@@ -43,10 +43,9 @@ background, any color; "sketchStrength" (default 0.7) is how hard, and "sketchEn
 the share of the steps it steers. Too strong and the image traces the drawing's lines instead of
 making a real object of them.
 
-Only accessories on head_top sockets can be fitted so far; clothing is lined up on the
-mannequin, cut out of its figure, shaped over the body, weighted to the rig and baked
-(fit/baked.glb), but it has no part definition yet. Run it with any Python that has Pillow, such
-as TRELLIS.2's.
+Accessories can be fitted on head_top sockets so far. Clothing is lined up on the mannequin, cut
+out of its figure, shaped over the body, weighted to the rig, baked, carried over to the female
+body, and written as a layer part. Run it with any Python that has Pillow, such as TRELLIS.2's.
 """
 import argparse
 import datetime
@@ -95,6 +94,8 @@ GUIDE_VARIANT = "male"
 GUIDE_MAP = "depth"
 GUIDE_MODE = "depth"
 SKETCH_MODE = "hed/pidi/scribble/ted"
+# The palette channel a clothing tint group takes once its layers' own channels are used
+LAYER_EXTRA_CHANNEL = "accent"
 # Body slots a layer's mask never grows into unless the layer covers them
 BARE_SLOTS = ("head", "hand.L", "hand.R", "foot.L", "foot.R")
 
@@ -664,8 +665,8 @@ def run_blender(config, script, log, *arguments):
 def fit_layer(config, batch, brief):
     """Line a clothing figure up on the mannequin it was painted on, cut the garment out of it
     by where the image was painted, shape it to sit outside the body within its triangle budget,
-    weight it to the rig, checking it in a few poses, and bake its textures and tint masks. The
-    part definition comes next."""
+    weight it to the rig, checking it in a few poses, bake its textures and tint masks, and
+    write it to the content folder as a layer part, with a female version."""
     folder = batch.brief_folder(brief["id"])
     out = folder / "fit"
     out.mkdir(exist_ok=True)
@@ -703,7 +704,7 @@ def fit_layer(config, batch, brief):
     report["poses"] = json.loads((out / "weights.json").read_text(encoding="utf8"))["poses"]
     image = folder / "images" / ("%d.png" % brief["review"]["pick"])
     baked = run_blender(config, "bake_layer.py", folder / "bake.log",
-                        "--weighted", out / "weighted.blend", "--figure", out / "garment.glb",
+                        "--weighted", out / "weighted.blend", "--figure", out / "pushed.glb",
                         "--image", image, "--painted", painted,
                         "--guide", guides(config) / "guide.json", "--out", out,
                         "--name", brief["id"])
@@ -711,8 +712,81 @@ def fit_layer(config, batch, brief):
         print("Baking failed for %s; see %s" % (brief["id"], folder / "bake.log"))
         return
     report["bake"] = json.loads((out / "bake.json").read_text(encoding="utf8"))
-    batch.update(brief["id"], lambda e: e.update(lineUp=report))
-    print("fitted", brief["id"], report)
+    part_id = write_layer_part(config, batch, brief, out, rule)
+    if part_id is None:
+        return
+
+    def record(entry):
+        entry["lineUp"] = report
+        entry["part"] = part_id
+        entry["review"]["part"] = None
+
+    batch.update(brief["id"], record)
+    print("part", part_id, report)
+
+
+def layer_slot(name, layers, defaults):
+    """A clothing part's material slot. Each layer tints with its own palette channel, so a
+    shirt, trousers and a jacket worn together can differ: an outfit's tint groups take its
+    layers' channels in order, and any group past them the accent."""
+    rules = json.loads((TOOLS / "layers.json").read_text(encoding="utf8"))
+    channels = [rules[layer]["palette"] for layer in layers if "palette" in rules[layer]]
+    slot = {"name": name, "template": TEMPLATE}
+    if defaults:
+        masks = sorted(defaults)
+        slot["channels"] = {mask: channels[i] if i < len(channels) else LAYER_EXTRA_CHANNEL
+                            for i, mask in enumerate(masks)}
+        slot["defaults"] = defaults
+    return slot
+
+
+def write_layer_part(config, batch, brief, out, rule):
+    """Put a baked garment in the content folder as a layer part: the male mesh, a female one
+    carried over through the body cages, each with its tint mask beside it (found by the file's
+    name), and the part's definition. Other body types wear the male's. Gives the part's ID, or
+    None if the female mesh failed."""
+    import shutil
+    folder = batch.brief_folder(brief["id"])
+    content = pathlib.Path(config["content"])
+    mannequins = pathlib.Path(config["mannequin"]).parent
+    name = brief["id"]
+    meshes = {}
+    for variant, glb in ((GUIDE_VARIANT, "layer/%s.glb" % name),
+                         ("female", "layer/%s_female.glb" % name)):
+        target = content / glb
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if variant == GUIDE_VARIANT:
+            shutil.copyfile(out / "baked.glb", target)
+        elif not run_blender(config, "variant_layer.py", folder / "variant.log",
+                             "--baked", out / "baked.glb", "--body", mannequins / "female.blend",
+                             "--from-cage", mannequins / ("%s_cage.npz" % GUIDE_VARIANT),
+                             "--to-cage", mannequins / "female_cage.npz", "--gap", rule["gap"],
+                             "--name", name, "--out", target, "--preview", out):
+            print("The female mesh failed for %s; see %s" % (name, folder / "variant.log"))
+            return None
+        masks = target.with_name(target.stem + "_masks")
+        shutil.rmtree(masks, ignore_errors=True)
+        shutil.copytree(out / (name + "_masks"), masks)
+        meshes["*" if variant == GUIDE_VARIANT else variant] = "%s#%s" % (glb, name)
+    defaults = json.loads((out / "bake.json").read_text(encoding="utf8"))["defaults"]
+    layers = layers_of(brief)
+    part_id = "%s:part/%s/%s" % (config["namespace"], layers[0], name)
+    part = {
+        "id": part_id,
+        "plan": PLAN_ID,
+        "kind": "layer",
+        "fills": layers,
+        "meshes": meshes,
+        "materialSlots": [layer_slot(name, layers, defaults)],
+        "tags": brief.get("tags", []),
+    }
+    definition = content / "part" / ("%s.json" % name)
+    definition.parent.mkdir(parents=True, exist_ok=True)
+    header = ("// %s, batch %s, image %d\n"
+              "// Written by Ikala-Characters/tools/partgen/partgen.py\n"
+              % (brief["description"], batch.name, brief["mesh"]["image"]))
+    definition.write_text(header + json.dumps([part], indent=2) + "\n", encoding="utf8")
+    return part_id
 
 
 def command_fit(config, batch, args):

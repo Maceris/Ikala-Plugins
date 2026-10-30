@@ -1,5 +1,5 @@
 {
-  "_comment": "How clothing is generated for each body plan layer. Its images are painted over a front render of the male mannequin at rest, in its A pose, only inside a mask of the body slots the layer covers, grown \"maskGrow\" pixels outward and drawn \"maskDown\" pixels down for clothing that hangs, and steered by the render's depth, so the bare body and the pose stay as they are and the garment can be cut out of the mesh. \"prompt\" fills in {description}; \"guideStrength\" and \"guideEnd\" are how hard the depth steers and for what share of the steps (a loose garment wants less); \"gap\" is how far outside the body (or the layers under it) the fitted garment must sit, in meters; \"triangles\" is the budget for the fitted mesh. A brief's \"fit\" replaces any of these.",
+  "_comment": "How clothing is generated for each body plan layer. Its images are painted over a front render of the male mannequin at rest, in its A pose, only inside a mask of the body slots the layer covers, grown \"maskGrow\" pixels outward and drawn \"maskDown\" pixels down for clothing that hangs, and steered by the render's depth, so the bare body and the pose stay as they are and the garment can be cut out of the mesh. \"prompt\" fills in {description}; \"guideStrength\" and \"guideEnd\" are how hard the depth steers and for what share of the steps (a loose garment wants less); \"gap\" is how far outside the body (or the layers under it) the fitted garment must sit, in meters; \"triangles\" is the budget for the fitted mesh. A brief's \"fit\" replaces any of these. \"palette\" is the palette channel the layer's main tint group takes, so layers worn together can differ in color; further groups take the accent.",
   "shirt": {
     "prompt": "wearing only {description}, bare smooth gray legs",
     "guideStrength": 0.35,
@@ -7,7 +7,8 @@
     "gap": 0.004,
     "triangles": 2000,
     "maskGrow": 28,
-    "maskDown": 24
+    "maskDown": 24,
+    "palette": "primary"
   },
   "jacket": {
     "prompt": "wearing only {description}, bare smooth gray legs",
@@ -16,7 +17,8 @@
     "gap": 0.01,
     "triangles": 3000,
     "maskGrow": 48,
-    "maskDown": 60
+    "maskDown": 60,
+    "palette": "tertiary"
   },
   "pants": {
     "prompt": "wearing only {description}, bare smooth gray chest and arms, bare gray feet",
@@ -25,6 +27,7 @@
     "gap": 0.004,
     "triangles": 2000,
     "maskGrow": 16,
-    "maskDown": 0
+    "maskDown": 0,
+    "palette": "secondary"
   }
 }

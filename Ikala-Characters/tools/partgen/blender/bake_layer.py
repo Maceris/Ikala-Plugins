@@ -1,16 +1,18 @@
 """Bake a weighted garment's textures (see weight_layer.py), and make its colors recolorable.
 
-The garment was rebuilt while being shaped, so it is unwrapped afresh and baked from the cut
-figure as hats are (fit_accessory.py's bake: base color through emission, normals, and an ORM
-map of occlusion with the mannequin left out, roughness and metalness). TRELLIS.2's colors
-can't be trusted everywhere, though: where the garment came from inside the figure's body, like
-sleeves over thin arms, TRELLIS painted the bare mannequin's gray, and it makes up its own
-colors for the back (a cream shirt came out tan behind). So the picked image colors the whole
-garment: what the front camera saw exactly as it was generated, and the sides and back with the
-image's color at the same place, blurred over the garment alone so buttons and pockets don't
-print through to the back and the background and bare body don't bleed in. Wrinkles still come
-from the baked normals. Texels the image doesn't reach keep the bake. The base color is then
-split into tint groups.
+The garment was rebuilt while being shaped, so it is unwrapped afresh and baked as hats are
+(fit_accessory.py's bake: base color through emission, normals, and an ORM map of occlusion with
+the mannequin left out, roughness and metalness), from the garment pushed out at full detail:
+shape_layer.py's pushed.glb lies where the rebuilt garment does, where the cut figure, which
+doesn't, gave blotchy, jagged normals. TRELLIS.2's colors can't be trusted everywhere, though:
+where the garment came from inside the figure's body, like sleeves over thin arms, TRELLIS
+painted the bare mannequin's gray, and it makes up its own colors for the back (a cream shirt
+came out tan behind). So the picked image colors the whole garment: what the front camera saw
+exactly as it was generated, and the sides and back with the image's color at the same place,
+blurred over the garment alone so buttons and pockets don't print through to the back and the
+background and bare body don't bleed in. Wrinkles still come from the baked normals. Texels the
+image doesn't reach take the garment's typical color, as TRELLIS's is often dark there. The base
+color is then split into tint groups.
 
     blender -b --python bake_layer.py -- --weighted <weighted.blend> --figure <garment.glb>
         --image <picked.png> --painted <painted.png> --guide <guide.json> --out <folder>
@@ -40,6 +42,9 @@ FRONT_START = 0.15
 FRONT_FULL = 0.45
 # The blur that keeps the image's details off the back and sides, in image pixels
 BLUR = 12
+# How far bake rays reach, as a share of the garment's size: about 2 cm on a 2 m garment,
+# between the pushed garment it bakes from and the rebuilt one, which lie within millimeters
+BAKE_REACH = 0.01
 # How far outside the painted area a texel may land and still take the image's color, in image
 # pixels: shaping and TRELLIS's small errors move the garment's outline a little
 REACH = 20
@@ -142,7 +147,10 @@ def paint_from_image(base_image, covered, position, normal, picked, painted, gui
     # The body faces -Y, toward the front camera
     facing = np.clip((-normal[:, 1] - FRONT_START) / (FRONT_FULL - FRONT_START), 0, 1)
     facing[~inside] = 0
-    rest = np.where(on_image[:, None], soft, pixels[:, :3])
+    # Texels too far outside the outline for the image to reach take the garment's typical
+    # color rather than the bake's, which is TRELLIS's and often dark there
+    typical = np.median(picked[painted], axis=0) if painted.any() else pixels[covered, :3].mean(0)
+    rest = np.where(on_image[:, None], soft, np.where(covered[:, None], typical, pixels[:, :3]))
     pixels[:, :3] = exact * facing[:, None] + rest * (1 - facing[:, None])
     base_image.pixels.foreach_set(pixels.ravel().astype(np.float32))
     return int((facing > 0).sum()), int(on_image.sum())
@@ -161,6 +169,8 @@ def main():
     armature = next(o for o in bpy.data.objects if o.type == "ARMATURE")
     low = bpy.data.objects["garment"]
     low.name = args.name
+    # The part names its mesh by this, as file.glb#name
+    low.data.name = args.name
     bodies = [o for o in bpy.data.objects
               if o.type == "MESH" and o is not low and o.parent is armature]
     low.data.materials.clear()
@@ -170,6 +180,9 @@ def main():
     bpy.ops.uv.smart_project(island_margin=0.003)
     bpy.ops.object.mode_set(mode="OBJECT")
 
+    # A garment's surfaces lie close together, like a leg beside the other or an arm beside the
+    # body, so bake rays reach only a little way, not the hat's share of the size
+    hat.BAKE_REACH = BAKE_REACH
     high = import_figure(args.figure)
     base_image, covered = hat.bake(high, low, args.name, args.size, bodies)
     position, normal = surface_maps(low, args.size)

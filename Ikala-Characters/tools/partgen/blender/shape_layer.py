@@ -14,7 +14,8 @@ replaces. It is then pushed once more, as reducing can tuck some back in.
     blender -b --python shape_layer.py -- --garment <garment.glb> --body <male.blend>
         --out <folder> --gap 0.004 --triangles 2000
 
-writes shaped.glb, shape.json and renders preview_6.png and preview_7.png: the garment on the
+writes shaped.glb, pushed.glb (the garment pushed out at full detail, before it is rebuilt, for
+the bake), shape.json and renders preview_6.png and preview_7.png: the garment on the
 mannequin from the front and side, in a flat color until it is baked.
 """
 
@@ -167,6 +168,12 @@ def main():
     before = len(garment.data.loop_triangles)
     _, start = nearest(points_of(garment), surface)
     moved = shape(garment, surface, args.gap)
+    # The pushed garment at full detail, which the bake takes normals and texture from: it lies
+    # where the rebuilt one does, so bake rays find the right surface
+    bpy.ops.object.select_all(action="DESELECT")
+    garment.select_set(True)
+    bpy.ops.export_scene.gltf(filepath=os.path.join(args.out, "pushed.glb"),
+                              export_format="GLB", use_selection=True)
     rebuilt = rebuild(garment, surface)
     triangles = reduce(garment, args.triangles)
     shape(garment, surface, args.gap)
