@@ -8,9 +8,11 @@ import com.ikalagaming.factory.world.gen.density.Box;
 import com.ikalagaming.factory.world.gen.density.DensityNode;
 import com.ikalagaming.factory.world.gen.density.EvalCache;
 import com.ikalagaming.factory.world.gen.density.Interval;
+import com.ikalagaming.factory.world.gen.density.Styles;
 
 import lombok.NonNull;
 
+import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -245,7 +247,11 @@ public final class WorldGenerator {
         }
 
         final Lattice lattice = new Lattice(region, cell);
-        final DensityNode density = worldType.density();
+        // Overlays with their own grid are applied at each block after interpolating the rest,
+        // so thin shapes stay sharp; only those that can reach this region cost anything
+        final Styles styles = worldType.density() instanceof Styles s ? s : null;
+        final List<Styles.Style> fine = styles != null ? styles.fineIn(region) : List.of();
+        final DensityNode density = styles != null ? styles.coarse() : worldType.density();
         double[] samples = new double[lattice.count()];
         for (int ly = 0; ly < lattice.sizes[1]; ++ly) {
             for (int lz = 0; lz < lattice.sizes[2]; ++lz) {
@@ -267,8 +273,14 @@ public final class WorldGenerator {
                     final long x = startX + rx;
                     final long y = startY + ry;
                     final long z = startZ + rz;
-                    solid[regionIndex(rx, ry, rz)] =
-                            worldType.inside(x, y, z) && lattice.interpolate(samples, x, y, z) > 0;
+                    if (!worldType.inside(x, y, z)) {
+                        continue;
+                    }
+                    double value = lattice.interpolate(samples, x, y, z);
+                    if (!fine.isEmpty()) {
+                        value = styles.applyOverlays(value, fine, x, y, z, cache);
+                    }
+                    solid[regionIndex(rx, ry, rz)] = value > 0;
                 }
             }
         }

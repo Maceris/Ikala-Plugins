@@ -16,6 +16,7 @@ import com.ikalagaming.factory.world.gen.density.Box;
 import com.ikalagaming.factory.world.gen.density.DensityNode;
 import com.ikalagaming.factory.world.gen.density.Interval;
 import com.ikalagaming.factory.world.gen.density.Sources;
+import com.ikalagaming.factory.world.gen.density.Styles;
 import com.ikalagaming.factory.world.gen.noise.Noise;
 
 import lombok.NonNull;
@@ -214,7 +215,8 @@ public final class WorldgenDebug {
      * @return The target, like {@code lotomation:overworld#density}.
      */
     public String terrainTarget() {
-        return generator.getWorldType().id() + "#density";
+        final WorldType type = generator.getWorldType();
+        return type.id() + (type.density() instanceof Styles ? "#styles" : "#density");
     }
 
     /**

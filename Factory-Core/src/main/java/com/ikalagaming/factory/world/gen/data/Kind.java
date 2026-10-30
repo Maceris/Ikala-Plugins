@@ -16,6 +16,8 @@ public enum Kind {
     DENSITY("density"),
     /** Named density functions biomes are selected by. */
     PARAMETER("parameter"),
+    /** A region's terrain shape and where it applies. */
+    TERRAIN_STYLE("terrain_style"),
     /** Biomes. */
     BIOME("biome"),
     /** Which block goes where. */
