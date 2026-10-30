@@ -49,7 +49,7 @@ public final class TransformGizmo {
     public enum Space {
         /** The world's axes. */
         WORLD,
-        /** The thing's own axes, as given to {@link #update}. */
+        /** The thing's own axes, as given to {@link #update}. Scale handles always use these. */
         LOCAL
     }
 
@@ -325,7 +325,8 @@ public final class TransformGizmo {
                     (float) (position.y() - view.camera().y()),
                     (float) (position.z() - view.camera().z()));
             for (int i = 0; i < 3; ++i) {
-                if (space == Space.LOCAL) {
+                // Scaling is along the thing's own axes, as it grows along them, like Unreal's
+                if (space == Space.LOCAL || mode == Mode.SCALE) {
                     localAxes.getColumn(i, axes[i]);
                     if (axes[i].lengthSquared() < 1e-12f) {
                         axes[i].set(i == 0 ? 1 : 0, i == 1 ? 1 : 0, i == 2 ? 1 : 0);
@@ -550,11 +551,13 @@ public final class TransformGizmo {
                     angle = snap ? GizmoMath.snap(turned, turnStep) : turned;
                 }
                 case UNIFORM -> {
-                    // Right or up grows, left or down shrinks: a handle's length doubles it,
-                    // wherever on the box the drag started
-                    float travel =
-                            (input.mouseX() - startMouse.x) - (input.mouseY() - startMouse.y);
-                    float factor = 1 + travel / SIZE;
+                    // Away from the middle grows, toward it shrinks, by how much nearer or further
+                    // the mouse is than where the drag started: a handle's length doubles it.
+                    // The change, not the ratio, so a drag started near the middle doesn't jump
+                    float from = startMouse.distance(startScreen);
+                    float now =
+                            new Vector2f(input.mouseX(), input.mouseY()).distance(startScreen);
+                    float factor = 1 + (now - from) / SIZE;
                     factor = snap ? GizmoMath.snap(factor, scaleStep) : factor;
                     factor = Math.max(0.01f, factor);
                     grow.set(factor);

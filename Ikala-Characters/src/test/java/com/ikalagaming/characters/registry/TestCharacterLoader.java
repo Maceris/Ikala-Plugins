@@ -305,7 +305,19 @@ class TestCharacterLoader {
                     "kind": "accessory",
                     "fits": ["head_top"],
                     "meshes": { "*": "hat.glb#hat" },
-                    "placement": { "*": { "offset": [0, 0.01, 0] }, "female": { "scale": 0 } }
+                    "placement": {
+                      "*": { "offset": [0, 0.01, 0] },
+                      "female": { "scale": 0 },
+                      "male": { "scale": [1, -1, 1] }
+                    }
+                  },
+                  {
+                    "id": "ikala:part/biped/tall_hat",
+                    "plan": "ikala:biped",
+                    "kind": "accessory",
+                    "fits": ["head_top"],
+                    "meshes": { "*": "hat.glb#hat" },
+                    "placement": { "*": { "scale": [0.9, 1.2, 1] } }
                   },
                   {
                     "id": "ikala:part/biped/placed_arm",
@@ -324,6 +336,9 @@ class TestCharacterLoader {
         Assertions.assertTrue(problems.contains("A placement's scale is above 0"), problems);
         Assertions.assertFalse(problems.contains("placement.*"), problems);
         Assertions.assertTrue(problems.contains("fits, extension and placement"), problems);
+        // A scale can differ by axis, but must grow along each
+        Assertions.assertTrue(problems.contains("placement.male.scale"), problems);
+        Assertions.assertFalse(problems.contains("$[1].placement"), problems);
     }
 
     /** Animation sets and styles are checked against their plan, and repeats are warned about. */

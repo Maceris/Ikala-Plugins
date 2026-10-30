@@ -7,6 +7,7 @@ import com.ikalagaming.characters.data.Doc;
 import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.data.JsonPath;
 import com.ikalagaming.characters.data.Optional;
+import com.ikalagaming.characters.data.Scale;
 import com.ikalagaming.characters.data.Vec3;
 
 import lombok.NonNull;
@@ -204,7 +205,8 @@ public record Part(
      *
      * @param offset How far it moves, in meters.
      * @param rotate How it turns about the x, y and z axes, in degrees, in that order.
-     * @param scale How much it grows.
+     * @param scale How much it grows along its turned x, y and z axes, so a hat can be made
+     *     narrower without getting shorter.
      */
     @Doc("Where an accessory sits on its socket, moved from where its mesh puts it.")
     public record Placement(
@@ -214,9 +216,24 @@ public record Part(
                                     + " in that order.")
                     @Optional
                     Vec3 rotate,
-            @Doc("How much it grows about its socket.") @Default("1") float scale) {
+            @Doc(
+                            "How much it grows about its socket: one number to grow evenly, or"
+                                    + " [x, y, z] along its own turned axes.")
+                    @Default("1")
+                    Scale scale) {
         /** Leaves the accessory where its mesh puts it. */
-        public static final Placement NONE = new Placement(null, null, 1);
+        public static final Placement NONE = new Placement(null, null, Scale.ONE);
+
+        /**
+         * A placement that grows evenly.
+         *
+         * @param offset How far it moves, in meters.
+         * @param rotate How it turns about the x, y and z axes, in degrees, in that order.
+         * @param scale How much it grows.
+         */
+        public Placement(Vec3 offset, Vec3 rotate, float scale) {
+            this(offset, rotate, Scale.of(scale));
+        }
 
         /** The field for the scale. */
         public static final String FIELD_SCALE = "scale";
@@ -239,7 +256,8 @@ public record Part(
                         (float) Math.toRadians(rotate.y()),
                         (float) Math.toRadians(rotate.z()));
             }
-            return out.scale(scale).translate(-socket.x(), -socket.y(), -socket.z());
+            return out.scale(scale.x(), scale.y(), scale.z())
+                    .translate(-socket.x(), -socket.y(), -socket.z());
         }
     }
 
@@ -387,13 +405,13 @@ public record Part(
                 }
                 placement.forEach(
                         (variant, place) -> {
-                            if (!(place.scale() > 0)) {
+                            if (!place.scale().isPositive()) {
                                 checks.error(
                                         JsonPath.field(
                                                 JsonPath.field(
                                                         JsonPath.at(FIELD_PLACEMENT), variant),
                                                 Placement.FIELD_SCALE),
-                                        "A placement's scale is above 0");
+                                        "A placement's scale is above 0 along every axis");
                             }
                         });
             }

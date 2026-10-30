@@ -285,8 +285,20 @@
           "description": "How it turns about the x, y and z axes through its socket, in degrees, in that order."
         },
         "scale": {
-          "type": "number",
-          "description": "How much it grows about its socket.",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 3
+            }
+          ],
+          "description": "How much it grows about its socket: one number to grow evenly, or [x, y, z] along its own turned axes.",
           "default": 1
         }
       },

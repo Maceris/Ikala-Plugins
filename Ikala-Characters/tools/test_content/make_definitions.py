@@ -1,13 +1,12 @@
 """Write character definitions for the test art: a part per mesh, and a few designs.
 
-The test art is the mannequins and the modular RPG characters, exported as glTF into the
-asset editor's test content (see tools/blender). This reads their meshes and writes, beside them:
+The test art is the mannequins, exported as glTF into the asset editor's test content (see
+tools/blender), the modular RPG kit's clips (animations/rpg_clips.glb, its skeleton and clips
+only, see clips_only.py) and the kit's weapons. This reads them and writes, beside them:
 
     part/mannequin.json   a body part per mannequin slot, the male's and female's meshes by variant
-    part/rpg_human.json   the RPG body, heads, hands and feet as body parts, and hair, armor,
-                          boots, gloves and helmets as layers, male and female meshes together
-    design/test.json      both mannequins, an RPG man with a hand flame and an RPG woman with an
-                          aura
+    design/test.json      both mannequins, and each again with a hand flame and a weapon style
+                          or an aura
     effects/*.effect.yml  graphics particle effects: a flame, motes, sparks, embers and dust
     fx/test.json          an effect definition for each
     animationSet/test.json the biped's actions, from the RPG clips and the mannequin's walk
@@ -33,28 +32,11 @@ TEMPLATE = "ikala:mat/standard"
 # The mannequins from tools/blender/mannequin.py, by variant, and their eyes' material
 MANNEQUIN_FILES = {"male": "mannequin/male.glb", "female": "mannequin/female.glb"}
 MANNEQUIN_EYES = "mannequin_eyes"
-RPG_FILES = {"male": "rpg_human/rpg_male.glb", "female": "rpg_human/rpg_female.glb"}
-
-# Where the RPG kit's pieces go on the biped, by the word their mesh names end in
-RPG_BODY = {
-    "body": ["torso", "pelvis", "upperArm.L", "upperArm.R", "lowerArm.L", "lowerArm.R",
-             "upperLeg.L", "upperLeg.R", "lowerLeg.L", "lowerLeg.R"],
-    "head": ["head"],
-    "hands": ["hand.L", "hand.R"],
-    "feet": ["foot.L", "foot.R"],
-}
-RPG_LAYERS = {
-    "hair": ["hair"],
-    "armor": ["jacket", "pants"],
-    "boots": ["boots"],
-    "gloves": ["gloves"],
-    "helmet": ["helmet"],
-}
+# The RPG kit's clips, without its characters, which retarget onto the biped
+RPG_CLIPS = "animations/rpg_clips.glb"
 
 # Which palette channel each tint mask channel takes
 SKIN = {"r": "skin"}
-HAIR = {"r": "hair"}
-COSTUME = {"r": "primary", "g": "secondary", "b": "accent"}
 
 
 def read_meshes(path):
@@ -95,49 +77,6 @@ def mannequin_parts(root):
                                "channels": {} if name == MANNEQUIN_EYES else SKIN}
                               for name in materials],
             "tags": ["mannequin"],
-        })
-    return parts
-
-
-def rpg_piece(name, variant):
-    """What an RPG mesh is: its piece name without the variant, like head_2 or light_armor."""
-    prefix = f"human_{variant}_"
-    return name[len(prefix):] if name.startswith(prefix) else None
-
-
-def rpg_parts(root):
-    """A part per RPG piece, with the male and female meshes of it together."""
-    pieces = {}
-    for variant, file in RPG_FILES.items():
-        for mesh, materials in read_meshes(root / file):
-            piece = rpg_piece(mesh, variant)
-            if piece is None:
-                continue
-            entry = pieces.setdefault(piece, {"meshes": {}, "materials": []})
-            entry["meshes"][variant] = f"{file}#{mesh}"
-            entry["materials"] += [m for m in materials if m not in entry["materials"]]
-
-    parts = []
-    for piece, entry in sorted(pieces.items()):
-        # The last word before a number or "default" says what it is
-        kind_word = re.sub(r"(_\d+|_default)$", "", piece).split("_")[-1]
-        if kind_word in RPG_BODY:
-            kind, fills = "body", RPG_BODY[kind_word]
-            channels = SKIN
-        elif kind_word in RPG_LAYERS:
-            kind, fills = "layer", RPG_LAYERS[kind_word]
-            channels = HAIR if kind_word == "hair" else COSTUME
-        else:
-            print("skipping", piece)
-            continue
-        parts.append({
-            "id": f"{NAMESPACE}:part/rpg/{piece}",
-            "plan": PLAN,
-            "kind": kind,
-            "fills": fills,
-            "meshes": entry["meshes"],
-            "materialSlots": material_slots(entry["materials"], channels),
-            "tags": ["rpg"],
         })
     return parts
 
@@ -258,17 +197,11 @@ def write_effects(root):
 
 
 def designs():
-    """A male and a female mannequin, an RPG man with a hand flame and an RPG woman with an
-    aura."""
+    """A male and a female mannequin, and each again: the man with a hand flame and a weapon
+    style, the woman with an aura."""
     mannequin_slots = ["head", "torso", "pelvis", "upperArm.L", "upperArm.R", "lowerArm.L",
                        "lowerArm.R", "hand.L", "hand.R", "upperLeg.L", "upperLeg.R",
                        "lowerLeg.L", "lowerLeg.R", "foot.L", "foot.R"]
-    rpg = {
-        "torso": f"{NAMESPACE}:part/rpg/body_default",
-        "head": f"{NAMESPACE}:part/rpg/head_default",
-        "hand.L": f"{NAMESPACE}:part/rpg/hands_default",
-        "foot.L": f"{NAMESPACE}:part/rpg/feet_default",
-    }
     mannequins = [
         {
             "id": f"{NAMESPACE}:design/mannequin_{variant}",
@@ -279,28 +212,20 @@ def designs():
         }
         for variant in MANNEQUIN_FILES
     ]
+    male, female = mannequins
     return mannequins + [
         {
-            "id": f"{NAMESPACE}:design/rpg_male",
-            "plan": PLAN,
-            "variant": "male",
+            **male,
+            "id": f"{NAMESPACE}:design/fighter",
             "style": f"{NAMESPACE}:style/weapon/two_handed_melee",
-            "parts": rpg,
-            "layers": {"hair": f"{NAMESPACE}:part/rpg/hair_1"},
             "fx": [{"fx": f"{NAMESPACE}:fx/flame", "bone": "hand.R", "offset": [0, 0.08, 0]}],
         },
         {
-            "id": f"{NAMESPACE}:design/rpg_female",
-            "plan": PLAN,
-            "variant": "female",
-            "parts": rpg,
-            "layers": {"hair": f"{NAMESPACE}:part/rpg/hair_1"},
+            **female,
+            "id": f"{NAMESPACE}:design/caster",
             "fx": [{"fx": f"{NAMESPACE}:fx/motes", "socket": "aura_center", "color": "primary"}],
         },
     ]
-
-
-RPG_CLIPS = RPG_FILES["male"]
 
 
 def clip(name, file=RPG_CLIPS, **settings):
@@ -477,7 +402,6 @@ def main():
     parser.add_argument("root", type=pathlib.Path, help="the test_content/characters folder")
     root = parser.parse_args().root
     write(root / "part" / "mannequin.json", mannequin_parts(root), "The mannequin's parts")
-    write(root / "part" / "rpg_human.json", rpg_parts(root), "The modular RPG characters' parts")
     write(root / "design" / "test.json", designs(), "Designs made of the test parts")
     write(root / "fx" / "test.json", fx_definitions(), "Effects for the test characters")
     write_effects(root)

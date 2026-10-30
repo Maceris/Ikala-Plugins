@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
 
 /**
  * An imported character's parts sorted into slots by their names, until parts come from definitions
- * with real slots. Modular characters, like the RPG characters, name their parts like {@code
+ * with real slots. Modular characters, like many character kits', name their parts like {@code
  * human_male_head_2} or {@code human_male_light_armor}: the word before any number or {@code
  * _default} is the slot, so the heads are one slot and the armors another. Slots with a {@code
  * _default} part always wear one; the rest can be empty, and start empty but for hair. A character

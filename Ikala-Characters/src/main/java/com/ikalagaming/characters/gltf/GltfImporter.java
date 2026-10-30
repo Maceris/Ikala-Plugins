@@ -107,7 +107,7 @@ public final class GltfImporter {
      * @param path The {@code .glb} or {@code .gltf} file.
      * @return The character.
      * @throws IOException If the file can't be read.
-     * @throws IllegalArgumentException If it holds no usable skinned character.
+     * @throws IllegalArgumentException If it holds no usable skinned character or clips.
      */
     public static ImportedCharacter read(@NonNull Path path) throws IOException {
         String fileName = path.getFileName().toString();
@@ -121,7 +121,7 @@ public final class GltfImporter {
      * @param file The file.
      * @param name What to call the character.
      * @return The character.
-     * @throws IllegalArgumentException If it holds no usable skinned character.
+     * @throws IllegalArgumentException If it holds no usable skinned character or clips.
      */
     public static ImportedCharacter read(@NonNull GltfFile file, @NonNull String name) {
         if (file.count("skins") == 0) {
@@ -298,16 +298,17 @@ public final class GltfImporter {
                         part(partName, primitives.get(p).getAsJsonObject(), skinToRig, bindToRest));
             }
         }
-        if (parts.isEmpty()) {
-            throw new IllegalArgumentException("No mesh is skinned to the skeleton");
-        }
-
         List<ImportedCharacter.ClipData> clips = new ArrayList<>();
         for (int a = 0; a < file.count("animations"); ++a) {
             ImportedCharacter.ClipData clip = clip(a, order, rigIndexOfNode, rest);
             if (clip != null) {
                 clips.add(clip);
             }
+        }
+        // A file of only a skeleton and clips is a set of animations, with nothing to draw
+        if (parts.isEmpty() && clips.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "No mesh is skinned to the skeleton, and it has no clips");
         }
         return new ImportedCharacter(
                 name, rig, rest, List.copyOf(parts), List.copyOf(clips), materials(), images());

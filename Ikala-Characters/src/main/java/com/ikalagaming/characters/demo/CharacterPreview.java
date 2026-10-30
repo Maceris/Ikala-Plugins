@@ -25,7 +25,7 @@ import java.util.function.Supplier;
  * it, facing the camera and playing one of its clips, to check imports in the editor. Its textures
  * are decoded from the file and its materials made from glTF's, so nothing but the file is needed.
  *
- * <p>A modular file, with parts named {@code *_default} like the RPG characters, shows the parts
+ * <p>A modular file, with parts named {@code *_default} like character kits', shows the parts
  * {@link PartSlots} starts with; otherwise every part shows.
  *
  * @author Ches Burks

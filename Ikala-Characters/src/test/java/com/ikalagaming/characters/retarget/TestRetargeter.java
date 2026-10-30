@@ -29,7 +29,7 @@ import java.util.Map;
 
 /**
  * Tests for {@link Retargeter}: a small rig whose bones point differently from the source's, and
- * the RPG test character onto the biped when the test content is there.
+ * the RPG kit's clips onto the biped when the test content is there.
  *
  * @author Ches Burks
  */
@@ -260,13 +260,13 @@ class TestRetargeter {
     }
 
     /**
-     * The RPG character on the biped moves its hands, feet and head where the original does.
+     * The RPG kit's clips on the biped move its hands, feet and head where the original does.
      *
      * @throws Exception If the test art can't be read.
      */
     @Test
     void testRpgOntoBiped() throws Exception {
-        Path rpg = TEST_CONTENT.resolve("rpg_human/rpg_male.glb");
+        Path rpg = TEST_CONTENT.resolve("animations/rpg_clips.glb");
         Path mannequin = TEST_CONTENT.resolve("mannequin/male.glb");
         Assumptions.assumeTrue(
                 Files.exists(rpg) && Files.exists(mannequin), "No test art in the test content");

@@ -99,8 +99,8 @@ public final class CharacterFiles {
 
     /**
      * The folder beside a glTF file that holds its tint masks: the file's name without its
-     * extension, then {@value #MASK_FOLDER_SUFFIX}, like {@code rpg_male_masks} for {@code
-     * rpg_male.glb}. glTF has no place for tint masks, and exporters drop images nothing uses.
+     * extension, then {@value #MASK_FOLDER_SUFFIX}, like {@code top_hat_masks} for {@code
+     * top_hat.glb}. glTF has no place for tint masks, and exporters drop images nothing uses.
      *
      * @param file The glTF file.
      * @return The folder.
@@ -113,7 +113,7 @@ public final class CharacterFiles {
 
     /**
      * Give a character the tint masks beside its file: for each base color image, a PNG in the mask
-     * folder with the image's name, like {@code rpg_male_masks/human_male_armor.png}.
+     * folder with the image's name, like {@code top_hat_masks/top_hat_emit.png}.
      *
      * @param file The glTF file.
      * @param character The character read from it.

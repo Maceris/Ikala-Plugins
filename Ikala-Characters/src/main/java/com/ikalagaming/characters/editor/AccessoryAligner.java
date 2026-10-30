@@ -3,6 +3,7 @@ package com.ikalagaming.characters.editor;
 import com.ikalagaming.characters.data.DataFormat;
 import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.data.JsonText;
+import com.ikalagaming.characters.data.Scale;
 import com.ikalagaming.characters.data.Vec3;
 import com.ikalagaming.characters.definition.Part;
 import com.ikalagaming.characters.gltf.ImportedCharacter;
@@ -179,8 +180,11 @@ final class AccessoryAligner {
     /** The placement's turn, in degrees. */
     private final float[] turn = new float[3];
 
-    /** The placement's scale. */
-    private final float[] scale = {1};
+    /** The placement's scale along its turned x, y and z axes. */
+    private final float[] scale = {1, 1, 1};
+
+    /** The scale field for all three axes at once, as the scales' geometric mean. */
+    private final float[] overall = {1};
 
     /** Whether Save writes the placement for every variant rather than the design's. */
     private boolean everyVariant;
@@ -225,7 +229,7 @@ final class AccessoryAligner {
     private final float[] dragTurn = new float[3];
 
     /** The scale when the handles' drag started. */
-    private float dragScale = 1;
+    private final float[] dragScale = {1, 1, 1};
 
     /** Whether the handles were being dragged last frame, to tell when a drag starts. */
     private boolean wasDragging;
@@ -253,8 +257,6 @@ final class AccessoryAligner {
         this.reload = reload;
         this.views = views;
         this.reference = reference;
-        // Placements only scale evenly
-        gizmo.setUniformScale(true);
         gizmo.setSnap(SNAP_MOVE, SNAP_TURN, SNAP_SCALE);
     }
 
@@ -313,7 +315,18 @@ final class AccessoryAligner {
         IkGui.separatorText("Placement: x across, y up, z forward");
         changed |= IkGui.dragFloat3("Offset (mm)", offset, OFFSET_SPEED, -500, 500, "%.1f");
         changed |= IkGui.dragFloat3("Turn (deg)", turn, TURN_SPEED, -180, 180, "%.1f");
-        changed |= IkGui.dragFloat("Scale", scale, SCALE_SPEED, MIN_SCALE, MAX_SCALE, "%.3f");
+        changed |= IkGui.dragFloat3("Scale", scale, SCALE_SPEED, MIN_SCALE, MAX_SCALE, "%.3f");
+        overall[0] = (float) Math.cbrt(scale[0] * scale[1] * scale[2]);
+        float before = overall[0];
+        if (IkGui.dragFloat("Scale all", overall, SCALE_SPEED, MIN_SCALE, MAX_SCALE, "%.3f")
+                && before > 0) {
+            // Every axis grows by the same share, keeping their proportions
+            float factor = overall[0] / before;
+            for (int i = 0; i < 3; ++i) {
+                scale[i] = Math.clamp(scale[i] * factor, MIN_SCALE, MAX_SCALE);
+            }
+            changed = true;
+        }
         if (IkGui.button("Bottom to brow")) {
             changed |= snapToBrow(stage, worn);
         }
@@ -459,13 +472,24 @@ final class AccessoryAligner {
         if (started) {
             System.arraycopy(offset, 0, dragOffset, 0, 3);
             System.arraycopy(turn, 0, dragTurn, 0, 3);
-            dragScale = scale[0];
+            System.arraycopy(scale, 0, dragScale, 0, 3);
         }
-        float[] before = {offset[0], offset[1], offset[2], turn[0], turn[1], turn[2], scale[0]};
+        float[] before = fieldValues();
         applyDrag(drag);
-        float[] after = {offset[0], offset[1], offset[2], turn[0], turn[1], turn[2], scale[0]};
+        float[] after = fieldValues();
         // A click on a handle that doesn't move it changes nothing to save
         return !Arrays.equals(before, after);
+    }
+
+    /**
+     * Every field's value, to tell whether a drag changed any.
+     *
+     * @return The offset, turn and scale.
+     */
+    private float[] fieldValues() {
+        return new float[] {
+            offset[0], offset[1], offset[2], turn[0], turn[1], turn[2], scale[0], scale[1], scale[2]
+        };
     }
 
     /**
@@ -476,7 +500,7 @@ final class AccessoryAligner {
     private void applyDrag(TransformGizmo.Drag drag) {
         System.arraycopy(dragOffset, 0, offset, 0, 3);
         System.arraycopy(dragTurn, 0, turn, 0, 3);
-        scale[0] = dragScale;
+        System.arraycopy(dragScale, 0, scale, 0, 3);
         if (drag.canceled()) {
             return;
         }
@@ -496,8 +520,13 @@ final class AccessoryAligner {
                 turn[1] = (float) Math.toDegrees(angles.y);
                 turn[2] = (float) Math.toDegrees(angles.z);
             }
-            case SCALE ->
-                    scale[0] = Math.clamp(dragScale * drag.scale().x(), MIN_SCALE, MAX_SCALE);
+            case SCALE -> {
+                // Scale handles follow the placement's own turned axes, which it scales along
+                float[] grown = {drag.scale().x(), drag.scale().y(), drag.scale().z()};
+                for (int i = 0; i < 3; ++i) {
+                    scale[i] = Math.clamp(dragScale[i] * grown[i], MIN_SCALE, MAX_SCALE);
+                }
+            }
         }
     }
 
@@ -597,7 +626,9 @@ final class AccessoryAligner {
         turn[0] = turned.x();
         turn[1] = turned.y();
         turn[2] = turned.z();
-        scale[0] = placement.scale();
+        scale[0] = placement.scale().x();
+        scale[1] = placement.scale().y();
+        scale[2] = placement.scale().z();
         seat = null;
     }
 
@@ -616,7 +647,10 @@ final class AccessoryAligner {
         return new Part.Placement(
                 moved.equals(Vec3.ZERO) ? null : moved,
                 turned.equals(Vec3.ZERO) ? null : turned,
-                Math.max(0.01f, round(scale[0], 4)));
+                new Scale(
+                        Math.max(0.01f, round(scale[0], 4)),
+                        Math.max(0.01f, round(scale[1], 4)),
+                        Math.max(0.01f, round(scale[2], 4))));
     }
 
     /**

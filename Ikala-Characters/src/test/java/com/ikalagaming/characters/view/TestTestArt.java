@@ -62,7 +62,7 @@ class TestTestArt {
         List<Design> designs = registry.all(Design.class);
         // The generated designs, plus any the editor saved there
         for (String name :
-                List.of("mannequin_male", "mannequin_female", "rpg_male", "rpg_female")) {
+                List.of("mannequin_male", "mannequin_female", "fighter", "caster")) {
             Assertions.assertNotNull(
                     registry.get(Design.class, Id.parse("test:design/" + name)), name);
         }
@@ -77,19 +77,17 @@ class TestTestArt {
         }
     }
 
-    /** The RPG man builds from his parts, with armor masks taking the costume's colors. */
+    /** The fighter builds from the mannequin's parts, with skin masks taking the skin color. */
     @Test
     void testAssemble() throws Exception {
         CharacterRegistry registry = load();
         Assumptions.assumeTrue(
                 Files.exists(TEST_CONTENT.resolve("mannequin/male.glb")), "No mannequin");
-        Design man = registry.get(Design.class, Id.parse("test:design/rpg_male"));
+        Design man = registry.get(Design.class, Id.parse("test:design/fighter"));
         BodyPlan biped = registry.get(BodyPlan.class, man.plan());
         Map<String, Id> worn = man.worn(biped, id -> registry.get(Part.class, id));
         List<Part> parts = new ArrayList<>();
         worn.values().forEach(id -> parts.add(registry.get(Part.class, id)));
-        Id armorId = Id.parse("test:part/rpg/heavy_armor");
-        parts.add(registry.get(Part.class, armorId));
 
         PartAssembler.Assembled assembled =
                 PartAssembler.assemble(
@@ -103,23 +101,21 @@ class TestTestArt {
         for (Id id : worn.values()) {
             Assertions.assertFalse(assembled.partsOf(id).isEmpty(), id.toString());
         }
-        List<Integer> armor = assembled.partsOf(armorId);
-        Assertions.assertEquals(1, armor.size());
+        List<Integer> torso = assembled.partsOf(Id.parse("test:part/mannequin/torso"));
+        Assertions.assertFalse(torso.isEmpty());
         List<String> channels = biped.allChannels();
-        int[] mapped = assembled.channels().get(armor.get(0));
-        Assertions.assertEquals(channels.indexOf(Palette.PRIMARY), mapped[0]);
-        Assertions.assertEquals(channels.indexOf(Palette.SECONDARY), mapped[1]);
-        Assertions.assertEquals(channels.indexOf(Palette.ACCENT), mapped[2]);
-        Assertions.assertEquals(PartAssembler.NO_CHANNEL, mapped[3]);
+        int[] mapped = assembled.channels().get(torso.get(0));
+        Assertions.assertEquals(channels.indexOf(Palette.SKIN), mapped[0]);
+        Assertions.assertEquals(PartAssembler.NO_CHANNEL, mapped[1]);
     }
 
-    /** Every weapon item finds its mesh, drawn and sheathed, on the RPG man's skeleton. */
+    /** Every weapon item finds its mesh, drawn and sheathed, on the fighter's skeleton. */
     @Test
     void testWeapons() throws Exception {
         CharacterRegistry registry = load();
         Assumptions.assumeTrue(
                 Files.exists(TEST_CONTENT.resolve("weapons/weapons.glb")), "No weapons");
-        Design man = registry.get(Design.class, Id.parse("test:design/rpg_male"));
+        Design man = registry.get(Design.class, Id.parse("test:design/fighter"));
         BodyPlan biped = registry.get(BodyPlan.class, man.plan());
         com.ikalagaming.characters.pose.Skeleton skeleton =
                 com.ikalagaming.characters.gltf.GltfImporter.read(

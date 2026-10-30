@@ -147,8 +147,8 @@ class TransformGizmoTest {
     }
 
     /**
-     * The middle box scales evenly by how far the mouse travels, right or up to grow, wherever on
-     * the box the drag starts.
+     * Scaling evenly grows by how much further from the middle the mouse gets and shrinks by how
+     * much nearer, wherever the drag starts, so a drag started near the middle doesn't jump.
      */
     @Test
     void testUniformScale() {
@@ -160,12 +160,40 @@ class TransformGizmoTest {
         gizmo.update(VIEW, AT, AXES, mouse(near, false, false));
         gizmo.update(VIEW, AT, AXES, mouse(near, true, true));
         TransformGizmo.Drag grown =
-                gizmo.update(VIEW, AT, AXES, mouse(new Vector2f(near).add(55, 0), false, true));
+                gizmo.update(VIEW, AT, AXES, mouse(new Vector2f(middle).add(57, 0), false, true));
         assertEquals(1.5f, grown.scale().x(), EPSILON);
         assertEquals(1.5f, grown.scale().z(), EPSILON);
+        // Away from the middle on the other side still grows
+        TransformGizmo.Drag across =
+                gizmo.update(VIEW, AT, AXES, mouse(new Vector2f(middle).add(-57, 0), false, true));
+        assertEquals(1.5f, across.scale().y(), EPSILON);
+        gizmo.update(VIEW, AT, AXES, mouse(new Vector2f(middle).add(-57, 0), false, false));
+
+        // Starting out on an arm and moving toward the middle shrinks
+        Vector2f out = new Vector2f(middle).add(60, 0);
+        gizmo.update(VIEW, AT, AXES, mouse(out, false, false));
+        gizmo.update(VIEW, AT, AXES, mouse(out, true, true));
         TransformGizmo.Drag shrunk =
-                gizmo.update(VIEW, AT, AXES, mouse(new Vector2f(near).add(0, 55), false, true));
-        assertEquals(0.5f, shrunk.scale().y(), EPSILON);
+                gizmo.update(VIEW, AT, AXES, mouse(new Vector2f(middle).add(5, 0), false, true));
+        assertEquals(0.5f, shrunk.scale().x(), EPSILON);
+    }
+
+    /** An axis's box scales along that axis only, growing away from the middle. */
+    @Test
+    void testAxisScale() {
+        TransformGizmo gizmo = new TransformGizmo();
+        gizmo.setMode(TransformGizmo.Mode.SCALE);
+        Vector2f onBox = screen(handleLength(), 0, 0);
+        gizmo.update(VIEW, AT, AXES, mouse(onBox, false, false));
+        gizmo.update(VIEW, AT, AXES, mouse(onBox, true, true));
+        TransformGizmo.Drag shrunk =
+                gizmo.update(VIEW, AT, AXES, mouse(screen(handleLength() * 0.5, 0, 0), false, true));
+        assertEquals(0.5f, shrunk.scale().x(), EPSILON);
+        assertEquals(1, shrunk.scale().y(), EPSILON);
+        assertEquals(1, shrunk.scale().z(), EPSILON);
+        TransformGizmo.Drag grown =
+                gizmo.update(VIEW, AT, AXES, mouse(screen(handleLength() * 1.5, 0, 0), false, true));
+        assertEquals(1.5f, grown.scale().x(), EPSILON);
     }
 
     /** Canceling ends the drag with no change, and the mouse over UI grabs nothing. */

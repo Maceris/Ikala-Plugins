@@ -47,7 +47,9 @@ public final class DataFormat {
                     Vec3.class,
                     Vec3.CODEC,
                     Range.class,
-                    Range.CODEC);
+                    Range.CODEC,
+                    Scale.class,
+                    Scale.CODEC);
 
     private DataFormat() {}
 

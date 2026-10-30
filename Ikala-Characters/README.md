@@ -27,14 +27,17 @@ writes to the asset editor's `test_content` folder, which isn't in git:
 blender -b --python tools/blender/mannequin.py -- --rig src/main/resources/characters/ikala/rig/biped.json --plan src/main/resources/characters/ikala/bodyPlan/biped.json --out ../../Ikala-Asset-Editor/test_content/characters/mannequin
 ```
 
-## Test characters from Blender
+## Test clips from Blender
 
-`tools/blender/export_rpg.py` exports one of the modular RPG characters (System G6,
-credit optional) as glTF, scaled to a 2 m standing height, with every part,
-clip and texture:
+The test animations are the modular RPG kit's clips (System G6, credit optional),
+without its characters. `tools/blender/export_rpg.py` exports one of the kit's
+characters as glTF, scaled to a 2 m standing height, with every part, clip and
+texture; `tools/test_content/clips_only.py` then keeps just its skeleton and
+clips, which retarget onto the biped through `ikala:rig_map/modular_rpg_human`:
 
 ```
-blender -b human_male.blend --python tools/blender/export_rpg.py -- --out ../../Ikala-Asset-Editor/test_content/characters/rpg_human --name rpg_male
+blender -b human_male.blend --python tools/blender/export_rpg.py -- --out rpg_export --name rpg_male
+python tools/test_content/clips_only.py rpg_export/rpg_male.glb ../../Ikala-Asset-Editor/test_content/characters/animations/rpg_clips.glb
 ```
 
 ## Previewing characters
@@ -56,5 +59,5 @@ slider panel and a clip bar. Its panels are UI specs in
 It switches between the glTF files listed under `editor.characters` in the config,
 putting each on a loaded rig: straight on if a rig has its bones, else moved
 through a rig map using `editor.reference` as the rig's reference. Until parts
-come from definitions, parts are sorted into slots by name, so the RPG
-characters' heads, hair and armor are each one slot.
+come from definitions, parts are sorted into slots by name, so a modular kit's
+heads, hair and armor are each one slot.

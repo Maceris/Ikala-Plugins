@@ -482,21 +482,21 @@ class TestGltfImporter {
     }
 
     /**
-     * The RPG character exports read with their own skeleton and every clip.
+     * The RPG kit's clips, kept without its characters, read with their own skeleton and every
+     * clip, and no meshes.
      *
      * @throws Exception If something can't be read.
      */
     @Test
-    void testRpgCharacter() throws Exception {
-        Path file = TEST_CONTENT.resolve("rpg_human/rpg_male.glb");
-        Assumptions.assumeTrue(Files.exists(file), "No RPG export in the test content");
+    void testRpgClips() throws Exception {
+        Path file = TEST_CONTENT.resolve("animations/rpg_clips.glb");
+        Assumptions.assumeTrue(Files.exists(file), "No RPG clips in the test content");
         ImportedCharacter character = GltfImporter.read(file);
         Assertions.assertEquals(43, character.rig().bones().size());
         Assertions.assertEquals("pelvis", character.rig().bones().get(0).name());
-        // 32 meshes, four of them with a second material for a skirt, so a second part
-        Assertions.assertEquals(36, character.parts().size());
+        Assertions.assertEquals(0, character.parts().size());
         Assertions.assertEquals(47, character.clips().size());
-        Assertions.assertFalse(character.images().isEmpty());
+        Assertions.assertTrue(character.images().isEmpty());
         Skeleton skeleton = character.skeleton();
         for (ImportedCharacter.ClipData clip : character.clips()) {
             clip.bind(skeleton);

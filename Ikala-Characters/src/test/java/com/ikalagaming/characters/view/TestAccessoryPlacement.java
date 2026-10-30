@@ -1,6 +1,7 @@
 package com.ikalagaming.characters.view;
 
 import com.ikalagaming.characters.data.Id;
+import com.ikalagaming.characters.data.Scale;
 import com.ikalagaming.characters.data.Vec3;
 import com.ikalagaming.characters.definition.Part;
 import com.ikalagaming.characters.definition.Rig;
@@ -49,11 +50,24 @@ class TestAccessoryPlacement {
      * @return The mesh.
      */
     private static ImportedCharacter.Part vertexAt(Vector3f position) {
+        return vertexAt(position, new Vector3f(0, 1, 0));
+    }
+
+    /**
+     * A mesh of one vertex with a normal, weighted to bone 1.
+     *
+     * @param position The vertex's position.
+     * @param normal Its normal.
+     * @return The mesh.
+     */
+    private static ImportedCharacter.Part vertexAt(Vector3f position, Vector3f normal) {
         float[] vertices = new float[14];
         vertices[0] = position.x;
         vertices[1] = position.y;
         vertices[2] = position.z;
-        vertices[4] = 1;
+        vertices[3] = normal.x;
+        vertices[4] = normal.y;
+        vertices[5] = normal.z;
         vertices[6] = 1;
         vertices[11] = 1;
         return new ImportedCharacter.Part(
@@ -114,6 +128,42 @@ class TestAccessoryPlacement {
         Vector3f normal =
                 new Vector3f(turned.vertices()[3], turned.vertices()[4], turned.vertices()[5]);
         Assertions.assertTrue(normal.equals(new Vector3f(-1, 0, 0), EPSILON), "" + normal);
+    }
+
+    /**
+     * A scale that differs by axis stretches along the placement's turned axes, and normals lean
+     * the other way, staying square to the stretched surface.
+     */
+    @Test
+    void testScaleByAxis() {
+        // Taller only: up from the socket doubles, across stays
+        ImportedCharacter.Part taller =
+                PartAssembler.placed(
+                        vertexAt(new Vector3f(0.5f, 1.5f, 0)),
+                        SKELETON,
+                        new Part.Placement(null, null, new Scale(1, 2, 1)));
+        Assertions.assertTrue(
+                position(taller).equals(new Vector3f(0.5f, 2, 0), EPSILON), "" + position(taller));
+
+        // Turned a quarter about z first, its own y now points along -x
+        ImportedCharacter.Part turned =
+                PartAssembler.placed(
+                        vertexAt(new Vector3f(0.5f, 1.5f, 0)),
+                        SKELETON,
+                        new Part.Placement(null, new Vec3(0, 0, 90), new Scale(1, 2, 1)));
+        Assertions.assertTrue(
+                position(turned).equals(new Vector3f(-1, 1.5f, 0), EPSILON),
+                "" + position(turned));
+
+        // A slanted surface stretched twice as wide leans its normal toward up
+        ImportedCharacter.Part wide =
+                PartAssembler.placed(
+                        vertexAt(new Vector3f(0, 1.5f, 0), new Vector3f(1, 1, 0).normalize()),
+                        SKELETON,
+                        new Part.Placement(null, null, new Scale(2, 1, 1)));
+        Vector3f normal = new Vector3f(wide.vertices()[3], wide.vertices()[4], wide.vertices()[5]);
+        Assertions.assertTrue(
+                normal.equals(new Vector3f(1, 2, 0).normalize(), EPSILON), "" + normal);
     }
 
     /** No placement leaves the mesh where it was. */

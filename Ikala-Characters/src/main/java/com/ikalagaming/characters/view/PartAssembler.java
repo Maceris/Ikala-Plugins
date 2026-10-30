@@ -9,6 +9,7 @@ import com.ikalagaming.characters.registry.CharacterRegistry;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
@@ -374,6 +375,8 @@ public final class PartAssembler {
         }
         Vector3f socket = restPosition(reference, piece.joints()[0], new Vector3f());
         Matrix4f move = placement.matrix(socket, new Matrix4f());
+        // A scale that differs by axis leans normals the other way from the surface
+        Matrix3f normals = move.normal(new Matrix3f());
         float[] vertices = piece.vertices().clone();
         Vector3f min = new Vector3f(Float.POSITIVE_INFINITY);
         Vector3f max = new Vector3f(Float.NEGATIVE_INFINITY);
@@ -383,8 +386,10 @@ public final class PartAssembler {
             put(v, vertices, base);
             min.min(v);
             max.max(v);
-            // Normal, tangent and bitangent turn only, as the scale is the same on every axis
-            for (int direction = base + 3; direction < base + 12; direction += 3) {
+            v.set(vertices[base + 3], vertices[base + 4], vertices[base + 5]);
+            put(normals.transform(v).normalize(), vertices, base + 3);
+            // Tangent and bitangent lie along the surface, so they stretch with it
+            for (int direction = base + 6; direction < base + 12; direction += 3) {
                 v.set(vertices[direction], vertices[direction + 1], vertices[direction + 2]);
                 put(move.transformDirection(v).normalize(), vertices, direction);
             }
