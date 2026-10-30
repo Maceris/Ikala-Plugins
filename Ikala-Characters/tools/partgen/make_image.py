@@ -3,8 +3,9 @@
     python make_image.py "a red wooden treasure chest with iron bands" [--count 4] [--out <folder>]
 
 Each image is saved as <seed>.png in the folder (default <work>/scratch/images, from
-config.json), with prompt.json beside them. ComfyUI is started if it isn't running, and stopped
-again after. Options:
+config.json), with prompt.json beside them. ComfyUI is started if it isn't running, offline
+(its web page can't reach the internet and its paid API nodes are off), and stopped again after.
+Options:
 
     --negative <text>   what to keep out (default: partgen's negative prompt for objects)
     --style             wrap the prompt in partgen's isolated product render style, which makes

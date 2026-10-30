@@ -57,7 +57,10 @@ python tools/test_content/clips_only.py rpg_export/rpg_male.glb ../../Ikala-Asse
 `tools/partgen` makes character parts in reviewed batches (see `partgen.py`), but
 its two models can be used on their own too. Run these from `tools/partgen` with
 TRELLIS.2's Python (`D:/Programs/AI/TRELLIS.2/.venv/Scripts/python.exe`); paths
-to ComfyUI, TRELLIS.2 and Blender come from `config.json`.
+to ComfyUI, TRELLIS.2 and Blender come from `config.json`. Neither needs the
+internet once the models are downloaded: ComfyUI is started with `--offline`, and
+`trellis_run.py` only loads models from Hugging Face's local cache unless given
+`--online` (needed once, to download them).
 
 An image from a prompt, through SDXL in ComfyUI (started if it isn't running;
 about a minute, more with `--count`). `--style` asks for an isolated product
@@ -69,8 +72,8 @@ python make_image.py "a red wooden treasure chest with iron bands" --style --cou
 ```
 
 A textured mesh from an image, through TRELLIS.2 (about a minute to load, then
-three or four minutes per image at full quality; `--type 512` is a faster
-preview). The glb is in a 1 m box, Y up, facing +Z. Several image and glb pairs
+under a minute to a few minutes per image at the default `--type 512`;
+`--type 1024_cascade` gives finer detail, slower). The glb is in a 1 m box, Y up, facing +Z. Several image and glb pairs
 can follow, sharing one load:
 
 ```

@@ -247,7 +247,9 @@ def kept(entry, field, args):
 
 
 class Comfy:
-    """A ComfyUI server for the length of a command, started if one isn't running already."""
+    """A ComfyUI server for the length of a command, started if one isn't running already. One
+    it starts runs offline: its web page can't reach the internet and its paid API nodes are off.
+    One already running keeps however it was started."""
 
     def __init__(self, config):
         self.root = pathlib.Path(config["comfy"])
@@ -261,7 +263,7 @@ class Comfy:
         log = open(self.root / "partgen_server.log", "w", encoding="utf8")
         self.process = subprocess.Popen(
             [str(self.root / ".venv/Scripts/python.exe"), "main.py", "--port", str(self.port),
-             "--disable-auto-launch"],
+             "--disable-auto-launch", "--offline"],
             cwd=self.root, stdout=log, stderr=subprocess.STDOUT)
         for _ in range(180):
             if self.alive():

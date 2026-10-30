@@ -3,7 +3,12 @@
 Run it with TRELLIS.2's own Python, which partgen.py does:
 
     <trellis>/.venv/Scripts/python.exe trellis_run.py --trellis <trellis folder>
-        --type 512 [--seed 0] [--faces 200000] [--texture 2048] <image> <out.glb> [<image> <out.glb>...]
+        [--type 512] [--seed 0] [--faces 200000] [--texture 2048] [--online]
+        <image> <out.glb> [<image> <out.glb>...]
+
+It runs offline: the models load from Hugging Face's local cache without asking Hugging Face for
+newer versions, which by default it would on every run, sending any stored login token. Pass
+--online to download models the cache doesn't have yet, or to update them.
 
 Images with transparency skip background removal. Others go through BiRefNet with the MIT
 ZhengPeng7 weights, not the RMBG-2.0 weights TRELLIS.2's config names (non-commercial, gated).
@@ -22,6 +27,9 @@ def main():
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--faces", type=int, default=200000, help="Faces the glb is decimated to.")
     parser.add_argument("--texture", type=int, default=2048, help="The glb's texture size.")
+    parser.add_argument("--online", action="store_true",
+                        help="Let Hugging Face download or update models, rather than only use "
+                             "the local cache.")
     parser.add_argument("pairs", nargs="+", help="Image and glb paths, in pairs.")
     args = parser.parse_args()
     if len(args.pairs) % 2:
@@ -31,6 +39,11 @@ def main():
     os.environ.setdefault("SPARSE_ATTN_BACKEND", "xformers")
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+    # Before Hugging Face's libraries load, as they read these once
+    if not args.online:
+        os.environ["HF_HUB_OFFLINE"] = "1"
+        os.environ["TRANSFORMERS_OFFLINE"] = "1"
+    os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
     sys.path.insert(0, args.trellis)
 
     import torch
