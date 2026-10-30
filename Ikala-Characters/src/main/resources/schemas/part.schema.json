@@ -89,6 +89,14 @@
             "type": "string"
           },
           "description": "Which palette channel each tint mask channel (r, g, b, a) takes, like {\"r\": \"primary\"}."
+        },
+        "defaults": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "description": "The color each tint mask channel shows when the design leaves its palette channel uncolored, like {\"r\": \"#6b4a2f\"}."
         }
       },
       "required": [

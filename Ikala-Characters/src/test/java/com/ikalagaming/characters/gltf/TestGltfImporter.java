@@ -28,6 +28,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * Tests for reading characters from glTF: a small file built here, and the exported test art in the
@@ -187,6 +188,18 @@ class TestGltfImporter {
      * @throws IOException If it can't be written.
      */
     private Path smallCharacter(float boneScale) throws IOException {
+        return smallCharacter(boneScale, json -> {});
+    }
+
+    /**
+     * Write a small character, with more added to its JSON, see {@link #smallCharacter(float)}.
+     *
+     * @param boneScale The child bone's scale.
+     * @param extra Adds to the file's JSON before it is written.
+     * @return The file.
+     * @throws IOException If it can't be written.
+     */
+    private Path smallCharacter(float boneScale, Consumer<JsonObject> extra) throws IOException {
         GlbBuilder glb = new GlbBuilder();
         JsonArray nodes = glb.json.getAsJsonArray("nodes");
         nodes.add(node("armature", new float[] {0, 0, 5}, 1, 3));
@@ -268,6 +281,7 @@ class TestGltfImporter {
         animation.add("samplers", samplers);
         animation.add("channels", channels);
         glb.json.getAsJsonArray("animations").add(animation);
+        extra.accept(glb.json);
 
         Path path = temp.resolve("small.glb");
         glb.write(path);
@@ -306,6 +320,98 @@ class TestGltfImporter {
         Assertions.assertEquals(0, walk.times()[0], EPSILON);
         Assertions.assertEquals(5, walk.translations()[2], EPSILON);
         Assertions.assertEquals(8, walk.translations()[5], EPSILON);
+    }
+
+    /**
+     * Materials keep their normal, metal-roughness and emissive images, occlusion counts as packed
+     * only when it shares the metal-roughness image, and emissive strength scales the factor.
+     */
+    @Test
+    void testMaterialMaps() throws IOException {
+        Path file =
+                smallCharacter(
+                        1,
+                        json -> {
+                            JsonArray images = new JsonArray();
+                            JsonArray textures = new JsonArray();
+                            for (int i = 0; i < 4; ++i) {
+                                JsonObject image = new JsonObject();
+                                image.addProperty("uri", "missing_" + i + ".png");
+                                images.add(image);
+                                JsonObject texture = new JsonObject();
+                                texture.addProperty("source", i);
+                                textures.add(texture);
+                            }
+                            json.add("images", images);
+                            json.add("textures", textures);
+
+                            JsonObject packed = new JsonObject();
+                            JsonObject pbr = new JsonObject();
+                            pbr.add("baseColorTexture", textureRef(0));
+                            pbr.add("metallicRoughnessTexture", textureRef(2));
+                            packed.add("pbrMetallicRoughness", pbr);
+                            packed.add("normalTexture", textureRef(1));
+                            packed.add("occlusionTexture", textureRef(2));
+                            packed.add("emissiveTexture", textureRef(3));
+                            JsonArray emissive = new JsonArray();
+                            emissive.add(1);
+                            emissive.add(0.5f);
+                            emissive.add(0);
+                            packed.add("emissiveFactor", emissive);
+                            JsonObject strength = new JsonObject();
+                            strength.addProperty("emissiveStrength", 4);
+                            JsonObject extensions = new JsonObject();
+                            extensions.add(GltfImporter.EMISSIVE_STRENGTH, strength);
+                            packed.add("extensions", extensions);
+
+                            JsonObject separate = new JsonObject();
+                            JsonObject separatePbr = new JsonObject();
+                            separatePbr.add("metallicRoughnessTexture", textureRef(2));
+                            separate.add("pbrMetallicRoughness", separatePbr);
+                            separate.add("occlusionTexture", textureRef(3));
+
+                            JsonArray materials = new JsonArray();
+                            materials.add(packed);
+                            materials.add(separate);
+                            json.add("materials", materials);
+                        });
+        List<ImportedCharacter.MaterialData> materials = GltfImporter.read(file).materials();
+
+        ImportedCharacter.MaterialData packed = materials.get(0);
+        Assertions.assertEquals(0, packed.image());
+        Assertions.assertEquals(1, packed.normalImage());
+        Assertions.assertEquals(2, packed.ormImage());
+        Assertions.assertTrue(packed.packedOcclusion());
+        Assertions.assertEquals(3, packed.emissiveImage());
+        Assertions.assertArrayEquals(new float[] {4, 2, 0}, packed.emissive(), EPSILON);
+        Assertions.assertEquals(List.of(1, 2), packed.linearImages());
+
+        ImportedCharacter.MaterialData separate = materials.get(1);
+        Assertions.assertEquals(-1, separate.image());
+        Assertions.assertEquals(2, separate.ormImage());
+        Assertions.assertFalse(separate.packedOcclusion());
+        Assertions.assertArrayEquals(new float[3], separate.emissive(), EPSILON);
+
+        // Appending images moves every index, and leaves missing ones missing
+        ImportedCharacter.MaterialData moved = packed.withTintMask(4).shifted(10);
+        Assertions.assertEquals(10, moved.image());
+        Assertions.assertEquals(14, moved.tintMask());
+        Assertions.assertEquals(11, moved.normalImage());
+        Assertions.assertEquals(12, moved.ormImage());
+        Assertions.assertEquals(13, moved.emissiveImage());
+        Assertions.assertEquals(-1, separate.shifted(10).normalImage());
+    }
+
+    /**
+     * A texture reference, as materials hold them.
+     *
+     * @param texture The texture's index.
+     * @return The reference.
+     */
+    private static JsonObject textureRef(int texture) {
+        JsonObject reference = new JsonObject();
+        reference.addProperty("index", texture);
+        return reference;
     }
 
     /** At rest the palette is identity, so baked vertices draw where they were exported. */

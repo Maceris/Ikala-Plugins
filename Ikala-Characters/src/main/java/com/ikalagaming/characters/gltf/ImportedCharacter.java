@@ -94,6 +94,14 @@ public record ImportedCharacter(
      * @param roughness The roughness factor.
      * @param tintMask The index of its tint mask image, or -1 for none. glTF has no tint masks, so
      *     they are found beside the file; see {@link #withTintMasks}.
+     * @param normalImage The index of its tangent space normal map, or -1 for none.
+     * @param ormImage The index of its packed occlusion (red), roughness (green) and metalness
+     *     (blue) image, or -1 for none. Where set, its roughness and metalness stand in for the
+     *     factors.
+     * @param packedOcclusion Whether the ORM image's red channel is occlusion, as it is when the
+     *     file points its occlusion texture at the same image.
+     * @param emissiveImage The index of its emissive color image, or -1 for none.
+     * @param emissive The emissive factor, linear RGB, times any emissive strength.
      */
     public record MaterialData(
             @NonNull String name,
@@ -101,7 +109,92 @@ public record ImportedCharacter(
             int image,
             float metallic,
             float roughness,
-            int tintMask) {}
+            int tintMask,
+            int normalImage,
+            int ormImage,
+            boolean packedOcclusion,
+            int emissiveImage,
+            float @NonNull [] emissive) {
+        /**
+         * A plain material with only a base color image and factors.
+         *
+         * @param name The material's name.
+         * @param baseColor The base color factor, linear RGBA.
+         * @param image The index of its base color image, or -1 for none.
+         * @param metallic The metallic factor.
+         * @param roughness The roughness factor.
+         */
+        public MaterialData(
+                @NonNull String name,
+                float @NonNull [] baseColor,
+                int image,
+                float metallic,
+                float roughness) {
+            this(name, baseColor, image, metallic, roughness, -1, -1, -1, false, -1, new float[3]);
+        }
+
+        /**
+         * The same material with its images moved, as when images are appended to another list.
+         *
+         * @param offset How far each image index moves.
+         * @return The moved material.
+         */
+        public MaterialData shifted(int offset) {
+            return new MaterialData(
+                    name,
+                    baseColor,
+                    shift(image, offset),
+                    metallic,
+                    roughness,
+                    shift(tintMask, offset),
+                    shift(normalImage, offset),
+                    shift(ormImage, offset),
+                    packedOcclusion,
+                    shift(emissiveImage, offset),
+                    emissive);
+        }
+
+        /**
+         * The same material with another tint mask.
+         *
+         * @param mask The index of the mask image.
+         * @return The masked material.
+         */
+        public MaterialData withTintMask(int mask) {
+            return new MaterialData(
+                    name,
+                    baseColor,
+                    image,
+                    metallic,
+                    roughness,
+                    mask,
+                    normalImage,
+                    ormImage,
+                    packedOcclusion,
+                    emissiveImage,
+                    emissive);
+        }
+
+        /**
+         * The images that hold data rather than colors, so they load linear: the tint mask, normal
+         * map and ORM image.
+         *
+         * @return Their indices, those set.
+         */
+        public List<Integer> linearImages() {
+            List<Integer> linear = new ArrayList<>();
+            for (int index : new int[] {tintMask, normalImage, ormImage}) {
+                if (index >= 0) {
+                    linear.add(index);
+                }
+            }
+            return linear;
+        }
+
+        private static int shift(int index, int offset) {
+            return index < 0 ? -1 : index + offset;
+        }
+    }
 
     /**
      * The same character with tint masks for some of its base color images.
@@ -122,16 +215,7 @@ public record ImportedCharacter(
         List<MaterialData> masked = new ArrayList<>();
         for (MaterialData material : materials) {
             Integer mask = added.get(material.image());
-            masked.add(
-                    mask == null
-                            ? material
-                            : new MaterialData(
-                                    material.name(),
-                                    material.baseColor(),
-                                    material.image(),
-                                    material.metallic(),
-                                    material.roughness(),
-                                    mask));
+            masked.add(mask == null ? material : material.withTintMask(mask));
         }
         return new ImportedCharacter(name, rig, rest, parts, clips, masked, allImages);
     }

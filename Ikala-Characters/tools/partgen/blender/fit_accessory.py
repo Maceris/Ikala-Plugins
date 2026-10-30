@@ -7,14 +7,21 @@ Run it headless with Blender 5 or later, which partgen.py does:
         --out <part.glb> --preview <folder>
 
 The generated mesh is cleaned of thin slivers, sized and placed by the socket type's rule, then a
-low-poly copy is unwrapped and baked from it: base color and a normal map. The copy is weighted
-entirely to the socket's bone, so it moves rigidly with it, and written with the mannequin's
-armature so it loads onto the rig like any other part. Metallic and roughness are averaged into
-factors for now. The preview folder gets front and side renders on the mannequin.
+low-poly copy is unwrapped and baked from it: base color, a normal map, and an ORM map
+(ambient occlusion, then the generated roughness and metalness). The copy is weighted entirely
+to the socket's bone, so it moves rigidly with it, and written with the mannequin's armature so
+it loads onto the rig like any other part.
+
+The base color is split into up to four color groups and made recolorable: each group keeps only
+its lightness, as gray, and a tint mask beside the glb (<part>_masks/<image>.png) picks the groups, one
+per channel. Each group's color is written to --tints as the default for its mask channel, which
+brings the part's own look back when a design leaves the palette channel uncolored. The preview
+folder gets front and side renders on the mannequin, in those default colors.
 """
 import argparse
 import json
 import math
+import pathlib
 import sys
 
 import bmesh
@@ -47,6 +54,28 @@ BRIM_REGION = 0.4
 CROWN_BAND = (0.08, 0.35)
 # Bake rays reach this far from the low-poly surface, as a fraction of the part's size
 BAKE_REACH = 0.08
+# How far ambient occlusion looks for cover, as a share of the part's size
+OCCLUSION_REACH = 0.15
+# What texels the bake doesn't reach hold
+UNBAKED = (1.0, 0.0, 1.0, 1.0)
+# The node group the glTF exporter reads occlusion from
+GLTF_OUTPUT = "glTF Material Output"
+
+# Tint masks: how much lightness counts against hue when grouping colors, how many texels to
+# group from, the mean spread (in Lab units) a group may have, the smallest share of the texels
+# a group keeps, how close (in Lab units) two groups may be before they merge, and the percentile
+# of a group's colors taken as its color, so a few highlights don't decide it
+MASK_CHANNELS = ("r", "g", "b", "a")
+# Beside a part's glb, the folder of tint masks Ikala-Characters looks for (CharacterFiles)
+MASK_FOLDER_SUFFIX = "_masks"
+TINT_LIGHTNESS = 0.35
+TINT_SAMPLE = 20000
+TINT_SPREAD = 10.0
+TINT_SMALLEST = 0.03
+TINT_ALIKE = 12.0
+TINT_REFERENCE = 95
+# Relative luminance of linear sRGB
+LUMINANCE = np.array([0.2126, 0.7152, 0.0722])
 # Voxels across the part's largest side when remeshing it closed before decimating
 REMESH_VOXELS = 160
 DECIMATE_PASSES = 10
@@ -345,23 +374,33 @@ def low_poly(high, name, triangles):
     return low
 
 
-def average_metal_roughness(high):
-    """Metallic and roughness averaged over the generated texture's used texels."""
+def metal_roughness_image(high):
+    """The generated texture's metal-roughness image, which reaches the BSDF through a color
+    split rather than directly as the base color and normals do, or None."""
     for slot in high.material_slots:
         tree = slot.material.node_tree if slot.material else None
         if tree is None:
             continue
-        bsdf = next((n for n in tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
         for node in tree.nodes:
             if node.type != "TEX_IMAGE" or node.image is None:
                 continue
             linked = {link.to_node.type for link in tree.links if link.from_node == node}
-            if "BSDF_PRINCIPLED" in linked or "NORMAL_MAP" in linked:
-                continue  # base color or normals; the metal-roughness image goes through a separate
-            px = np.array(node.image.pixels[:]).reshape(-1, 4)
-            used = px[px[:, :3].max(1) > 0]
-            if len(used):
-                return float(used[:, 2].mean()), float(used[:, 1].mean())
+            if linked and not linked & {"BSDF_PRINCIPLED", "NORMAL_MAP"}:
+                return node
+    return None
+
+
+def average_metal_roughness(high):
+    """Metallic and roughness averaged over the generated texture's used texels."""
+    node = metal_roughness_image(high)
+    if node is not None:
+        px = np.array(node.image.pixels[:]).reshape(-1, 4)
+        used = px[px[:, :3].max(1) > 0]
+        if len(used):
+            return float(used[:, 2].mean()), float(used[:, 1].mean())
+    for slot in high.material_slots:
+        tree = slot.material.node_tree if slot.material else None
+        bsdf = tree and next((n for n in tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
         if bsdf is not None:
             return bsdf.inputs["Metallic"].default_value, bsdf.inputs["Roughness"].default_value
     return 0.0, 0.6
@@ -385,9 +424,10 @@ def enable_gpu():
     scene.cycles.device = "CPU"
 
 
-def emit_base_color(obj):
-    """Show each material's base color as emission, so an emission bake copies the base color
-    as it is. A diffuse color bake leaves out the metallic share, which turns gold black."""
+def emit(obj, source):
+    """Show each material's surface as emission of one of its colors, so an emission bake copies
+    that color as it is. A diffuse color bake leaves out the metallic share, which turns gold
+    black. source(tree, bsdf) gives the socket to show, or None to show the base color."""
     for slot in obj.material_slots:
         if slot.material is None or slot.material.node_tree is None:
             continue
@@ -397,16 +437,54 @@ def emit_base_color(obj):
         if bsdf is None or output is None:
             continue
         emission = tree.nodes.new("ShaderNodeEmission")
+        socket = source(tree, bsdf)
         base = bsdf.inputs["Base Color"]
-        if base.links:
+        if socket is not None:
+            tree.links.new(socket, emission.inputs["Color"])
+        elif base.links:
             tree.links.new(base.links[0].from_socket, emission.inputs["Color"])
         else:
             emission.inputs["Color"].default_value = base.default_value
         tree.links.new(emission.outputs["Emission"], output.inputs["Surface"])
 
 
-def bake(high, low, name, size):
-    """Bake base color and normals from the generated mesh onto the low-poly copy."""
+def bake_into(kind, high, low, tree, image):
+    """Bake one kind of map from the generated mesh into an image of the low-poly copy."""
+    node = tree.nodes.new("ShaderNodeTexImage")
+    node.image = image
+    tree.nodes.active = node
+    select_only(low)
+    high.select_set(True)
+    bpy.context.view_layer.objects.active = low
+    extent = max(low.dimensions)
+    bpy.ops.object.bake(type=kind, use_selected_to_active=True,
+                        cage_extrusion=extent * BAKE_REACH * 0.5,
+                        max_ray_distance=extent * BAKE_REACH, margin=8)
+    return node
+
+
+def new_image(name, size, color, fill=(0, 0, 0, 1)):
+    image = bpy.data.images.new(name, size, size, alpha=False)
+    image.colorspace_settings.name = color
+    image.generated_color = fill
+    return image
+
+
+def occlusion_output(tree):
+    """The node the glTF exporter takes occlusion from: a group named glTF Material Output."""
+    group = bpy.data.node_groups.get(GLTF_OUTPUT)
+    if group is None:
+        group = bpy.data.node_groups.new(GLTF_OUTPUT, "ShaderNodeTree")
+        group.interface.new_socket("Occlusion", in_out="INPUT", socket_type="NodeSocketFloat")
+    node = tree.nodes.new("ShaderNodeGroup")
+    node.node_tree = group
+    return node
+
+
+def bake(high, low, name, size, hidden):
+    """Bake base color, normals and an ORM map (occlusion, roughness, metalness) from the
+    generated mesh onto the low-poly copy. The hidden objects, like the mannequin, are left out
+    of the occlusion. Gives the base color image and which of its texels the bake covered."""
     enable_gpu()
     scene = bpy.context.scene
     scene.cycles.samples = 8
@@ -414,34 +492,177 @@ def bake(high, low, name, size):
     low.data.materials.append(material)
     tree = material.node_tree
     bsdf = tree.nodes["Principled BSDF"]
+    for obj in hidden:
+        obj.hide_render = True
+
+    # Texels the bake doesn't reach keep this color, so they can be told apart
+    base_image = new_image("%s_emit" % name, size, "sRGB", UNBAKED)
+    emit(high, lambda tree, bsdf: None)
+    base = bake_into("EMIT", high, low, tree, base_image)
+    covered = np.abs(np.array(base_image.pixels[:]).reshape(-1, 4)[:, :3]
+                     - np.array(UNBAKED[:3])).max(1) > 1e-3
+    normals = bake_into("NORMAL", high, low, tree, new_image("%s_normal" % name, size, "Non-Color"))
 
     metallic, roughness = average_metal_roughness(high)
-    emit_base_color(high)
-    extent = max(low.dimensions)
-    images = {}
-    for kind, color in (("EMIT", "sRGB"), ("NORMAL", "Non-Color")):
-        image = bpy.data.images.new("%s_%s" % (name, kind.lower()), size, size, alpha=False)
-        image.colorspace_settings.name = color
-        node = tree.nodes.new("ShaderNodeTexImage")
-        node.image = image
-        tree.nodes.active = node
-        select_only(low)
-        high.select_set(True)
-        bpy.context.view_layer.objects.active = low
-        bpy.ops.object.bake(type=kind, use_selected_to_active=True,
-                            cage_extrusion=extent * BAKE_REACH * 0.5,
-                            max_ray_distance=extent * BAKE_REACH, margin=8)
-        image.pack()
-        images[kind] = node
+    orm = np.empty((size * size, 4))
+    orm[:] = (1, roughness, metallic, 1)
+    source = metal_roughness_image(high)
+    if source is not None:
+        emit(high, lambda tree, bsdf: next(
+            (n for n in tree.nodes if n.type == "TEX_IMAGE" and n.image == source.image),
+            source).outputs["Color"])
+        values = new_image("%s_mr" % name, size, "Non-Color")
+        bake_into("EMIT", high, low, tree, values)
+        orm[:, 1:3] = np.array(values.pixels[:]).reshape(-1, 4)[:, 1:3]
+    scene.world = scene.world or bpy.data.worlds.new("bake")
+    scene.world.light_settings.distance = max(low.dimensions) * OCCLUSION_REACH
+    occlusion = new_image("%s_ao" % name, size, "Non-Color")
+    bake_into("AO", high, low, tree, occlusion)
+    orm[:, 0] = np.array(occlusion.pixels[:]).reshape(-1, 4)[:, 0]
+    orm_image = new_image("%s_orm" % name, size, "Non-Color")
+    orm_image.pixels.foreach_set(orm.ravel().astype(np.float32))
+    orm_image.pack()
+    normals.image.pack()
+    for obj in hidden:
+        obj.hide_render = False
 
-    tree.links.new(images["EMIT"].outputs["Color"], bsdf.inputs["Base Color"])
+    tree.links.new(base.outputs["Color"], bsdf.inputs["Base Color"])
     normal_map = tree.nodes.new("ShaderNodeNormalMap")
-    tree.links.new(images["NORMAL"].outputs["Color"], normal_map.inputs["Color"])
+    tree.links.new(normals.outputs["Color"], normal_map.inputs["Color"])
     tree.links.new(normal_map.outputs["Normal"], bsdf.inputs["Normal"])
-    tree.nodes.active = images["EMIT"]  # previews show the active image
-    bsdf.inputs["Metallic"].default_value = metallic
-    bsdf.inputs["Roughness"].default_value = roughness
-    print("[fit] baked %d px, metallic %.2f, roughness %.2f" % (size, metallic, roughness))
+    orm_node = tree.nodes.new("ShaderNodeTexImage")
+    orm_node.image = orm_image
+    split = tree.nodes.new("ShaderNodeSeparateColor")
+    tree.links.new(orm_node.outputs["Color"], split.inputs["Color"])
+    tree.links.new(split.outputs["Green"], bsdf.inputs["Roughness"])
+    tree.links.new(split.outputs["Blue"], bsdf.inputs["Metallic"])
+    tree.links.new(split.outputs["Red"], occlusion_output(tree).inputs["Occlusion"])
+    tree.nodes.active = base  # previews show the active image
+    print("[fit] baked %d px, metallic %.2f, roughness %.2f on average, occlusion %.2f" % (
+        size, metallic, roughness, float(orm[covered, 0].mean()) if covered.any() else 1))
+    return base_image, covered
+
+
+def srgb_to_linear(c):
+    return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+
+
+def linear_to_srgb(c):
+    c = np.clip(c, 0, 1)
+    return np.where(c <= 0.0031308, c * 12.92, 1.055 * c ** (1 / 2.4) - 0.055)
+
+
+def lab(linear):
+    """CIE Lab of linear sRGB colors, D65, as an n by 3 array."""
+    xyz = linear @ np.array([[0.4124, 0.3576, 0.1805],
+                             [0.2126, 0.7152, 0.0722],
+                             [0.0193, 0.1192, 0.9505]]).T
+    xyz /= np.array([0.9505, 1.0, 1.089])
+    f = np.where(xyz > 0.008856, np.cbrt(xyz), 7.787 * xyz + 16 / 116)
+    return np.stack([116 * f[:, 1] - 16, 500 * (f[:, 0] - f[:, 1]),
+                     200 * (f[:, 1] - f[:, 2])], axis=1)
+
+
+def kmeans(points, k, rounds=30):
+    """Plain k-means with farthest-point starts, so it gives the same groups every run."""
+    centers = [points[np.argmin(np.linalg.norm(points - np.median(points, 0), axis=1))]]
+    for _ in range(1, k):
+        distance = np.min([np.linalg.norm(points - c, axis=1) for c in centers], axis=0)
+        centers.append(points[np.argmax(distance)])
+    centers = np.array(centers)
+    for _ in range(rounds):
+        labels = np.argmin(((points[:, None, :] - centers[None]) ** 2).sum(2), axis=1)
+        moved = np.array([points[labels == c].mean(0) if (labels == c).any() else centers[c]
+                          for c in range(k)])
+        if np.allclose(moved, centers, atol=1e-3):
+            break
+        centers = moved
+    return labels, centers
+
+
+def color_groups(linear):
+    """Split texel colors into up to four groups a tint can recolor alike. Lightness counts
+    less than hue, so the shading across one cloth stays in one group; the fewest groups that
+    keep each one tight are used, and groups too small or too alike are merged."""
+    features = lab(linear) * np.array([TINT_LIGHTNESS, 1, 1])
+    sample = features[:: max(1, len(features) // TINT_SAMPLE)]
+    for k in range(1, len(MASK_CHANNELS) + 1):
+        labels, centers = kmeans(sample, k)
+        spread = np.linalg.norm(sample - centers[labels], axis=1).mean()
+        if spread < TINT_SPREAD:
+            break
+    labels = np.argmin(((features[:, None, :] - centers[None]) ** 2).sum(2), axis=1)
+    while len(centers) > 1:
+        counts = np.bincount(labels, minlength=len(centers))
+        gaps = np.linalg.norm(centers[:, None] - centers[None], axis=2)
+        np.fill_diagonal(gaps, np.inf)
+        small = np.argmin(counts)
+        if counts[small] < TINT_SMALLEST * len(labels):
+            gone = small
+        elif gaps.min() < TINT_ALIKE:
+            a, b = np.unravel_index(np.argmin(gaps), gaps.shape)
+            gone = a if counts[a] < counts[b] else b
+        else:
+            break
+        gaps[gone, gone] = np.inf
+        into = np.argmin(gaps[gone])
+        labels[labels == gone] = into
+        keep = [c for c in range(len(centers)) if c != gone]
+        centers = centers[keep]
+        labels = np.searchsorted(keep, labels)
+        centers = np.array([features[labels == c].mean(0) for c in range(len(centers))])
+    # The biggest group takes the first mask channel
+    order = np.argsort(-np.bincount(labels, minlength=len(centers)))
+    return np.argsort(order)[labels], len(centers)
+
+
+def tint_masks(image, covered, folder):
+    """Make the baked base color recolorable: split it into color groups, keep only each group's
+    lightness against its own color, as gray, and write a mask whose channels pick the groups.
+    A group's color comes back when the tint multiplies it in, so it is the default tint. Gives
+    the default colors, by mask channel, and the original pixels."""
+    size = image.size[0]
+    pixels = np.array(image.pixels[:]).reshape(-1, 4)
+    original = pixels.copy()
+    linear = srgb_to_linear(pixels[:, :3])
+    labels = np.zeros(len(linear), dtype=np.int64)
+    found, count = color_groups(linear[covered])
+    labels[covered] = found
+    if (~covered).any():
+        # Texels nothing was baked into follow the nearest covered one in the same row
+        index = np.where(covered, np.arange(len(covered)), -1)
+        index = np.maximum.accumulate(index)
+        index[index < 0] = np.argmax(covered)
+        labels[~covered] = labels[index[~covered]]
+        linear[~covered] = linear[index[~covered]]
+    mask = np.zeros((len(linear), 4))
+    defaults = {}
+    for group in range(count):
+        members = labels == group
+        # The group's color, and its detail as gray: lightness against the color's own. Dividing
+        # each channel instead leaves a saturated red with nothing in green or blue, which a
+        # green tint then multiplies into black
+        lightness = linear @ LUMINANCE
+        brightest = lightness[members & covered] >= np.percentile(
+            lightness[members & covered], TINT_REFERENCE)
+        reference = linear[members & covered][brightest].mean(0)
+        level = max(float(reference @ LUMINANCE), 1e-4)
+        linear[members] = np.clip(lightness[members] / level, 0, 1)[:, None]
+        mask[members, group] = 1
+        rgb = np.round(linear_to_srgb(reference) * 255).astype(int)
+        defaults[MASK_CHANNELS[group]] = "#%02x%02x%02x" % tuple(rgb)
+    pixels[:, :3] = linear_to_srgb(linear)
+    image.pixels.foreach_set(pixels.ravel().astype(np.float32))
+
+    folder.mkdir(parents=True, exist_ok=True)
+    out = bpy.data.images.new(image.name + "_mask", size, size, alpha=True)
+    out.colorspace_settings.name = "Non-Color"
+    out.pixels.foreach_set(mask.ravel().astype(np.float32))
+    out.filepath_raw = str(folder / (image.name + ".png"))
+    out.file_format = "PNG"
+    out.save()
+    print("[fit] %d tint groups: %s" % (count, defaults))
+    return defaults, original
 
 
 def rig(low, armature, bone):
@@ -470,6 +691,7 @@ def export(path, low, armature):
         "export_animations": False,
         "export_colors": False,
         "export_extras": False,
+        "export_tangents": True,  # normal maps follow them
         "export_image_format": "AUTO",
     }
     known = {p.identifier for p in bpy.ops.export_scene.gltf.get_rna_type().properties}
@@ -515,6 +737,7 @@ def main():
     parser.add_argument("--name", required=True, help="The part's mesh and material name.")
     parser.add_argument("--out", required=True)
     parser.add_argument("--preview", help="A folder for preview renders.")
+    parser.add_argument("--tints", help="Where to write the default tint colors, as JSON.")
     args = parser.parse_args(argv)
     rule = json.loads(args.rule)
 
@@ -533,10 +756,18 @@ def main():
     else:
         raise SystemExit("No fitting for anchor %s, fit %s yet" % (rule["anchor"], rule["fit"]))
     low = low_poly(high, args.name, rule["triangles"])
-    bake(high, low, args.name, rule["texture"])
+    base, covered = bake(high, low, args.name, rule["texture"], mannequin)
+    out = pathlib.Path(args.out)
+    defaults, original = tint_masks(base, covered, out.with_name(out.stem + MASK_FOLDER_SUFFIX))
+    base.pack()
     rig(low, armature, args.bone)
     export(args.out, low, armature)
+    if args.tints:
+        with open(args.tints, "w", encoding="utf8") as stream:
+            json.dump(defaults, stream, indent=2)
     if args.preview:
+        # Previews show the part in its own colors, as it is shown untinted
+        base.pixels.foreach_set(original.ravel().astype(np.float32))
         high.hide_render = True
         preview(args.preview, low, mannequin)
 

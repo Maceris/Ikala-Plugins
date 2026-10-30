@@ -526,6 +526,12 @@ public final class CharacterEditor {
     /** The look's version when the parts were last colored, or -1 to color them again. */
     private int shownColorVersion = -1;
 
+    /**
+     * The colors the worn parts give palette channels, as of {@link #shownColorVersion}, see
+     * {@link #findPartColors}.
+     */
+    private Map<String, Integer> partColors = Map.of();
+
     /** The channel last previewed, or null. */
     private String shownPreviewChannel;
 
@@ -1652,23 +1658,15 @@ public final class CharacterEditor {
         if (shown == null || look == null || fxEffects == null) {
             return;
         }
-        List<Part> worn = new ArrayList<>();
+        List<Part> worn = wornParts();
         List<FxUse> uses = new ArrayList<>();
-        for (int s = 0; s < look.slots().slots().size(); ++s) {
-            int choice = look.choice(s);
-            if (choice == CharacterLook.EMPTY) {
-                continue;
-            }
-            Part part = registry.get().get(Part.class, prepared.optionIds().get(s).get(choice));
-            if (part != null) {
-                worn.add(part);
-                uses.addAll(part.fx());
-            }
+        for (Part part : worn) {
+            uses.addAll(part.fx());
         }
         uses.addAll(look.fx());
         Map<String, Color> colors = new HashMap<>();
         for (String channel : plan.allChannels()) {
-            Integer code = look.color(channel);
+            Integer code = channelColor(channel);
             if (code != null) {
                 colors.put(channel, ColorCode.toColor(code));
             }
@@ -1695,6 +1693,60 @@ public final class CharacterEditor {
     }
 
     /**
+     * The parts the look wears.
+     *
+     * @return The worn parts' definitions.
+     */
+    private List<Part> wornParts() {
+        List<Part> worn = new ArrayList<>();
+        for (int s = 0; s < look.slots().slots().size(); ++s) {
+            int choice = look.choice(s);
+            if (choice == CharacterLook.EMPTY) {
+                continue;
+            }
+            Part part = registry.get().get(Part.class, prepared.optionIds().get(s).get(choice));
+            if (part != null) {
+                worn.add(part);
+            }
+        }
+        return worn;
+    }
+
+    /**
+     * Find the colors worn parts give palette channels the design may leave uncolored: for each
+     * channel, the first default of a material slot whose tint mask channel takes it.
+     *
+     * @return The color codes, by palette channel.
+     */
+    private Map<String, Integer> findPartColors() {
+        Map<String, Integer> found = new HashMap<>();
+        for (Part part : wornParts()) {
+            for (Part.MaterialSlot slot : part.materialSlots()) {
+                slot.channels()
+                        .forEach(
+                                (mask, channel) -> {
+                                    Color color = slot.defaults().get(mask);
+                                    if (color != null) {
+                                        found.putIfAbsent(channel, ColorCode.encode(color));
+                                    }
+                                });
+            }
+        }
+        return found;
+    }
+
+    /**
+     * The color a palette channel shows: the design's, or else the worn parts' own.
+     *
+     * @param channel The palette channel.
+     * @return The color code, or null if neither colors it.
+     */
+    private Integer channelColor(String channel) {
+        Integer code = look.color(channel);
+        return code != null ? code : partColors.get(channel);
+    }
+
+    /**
      * Draw the Colors tab: the palette channels the parts take, the chosen channel's swatches,
      * which preview on the character while hovered, and a picker that snaps to the colors a design
      * can hold.
@@ -1714,7 +1766,11 @@ public final class CharacterEditor {
         for (String channel : channels) {
             Integer code = look.color(channel);
             IkGui.colorButton(
-                    "##channel-" + channel, rgba(code), ColorEditFlags.NO_TOOLTIP, swatch, swatch);
+                    "##channel-" + channel,
+                    rgba(channelColor(channel)),
+                    ColorEditFlags.NO_TOOLTIP,
+                    swatch,
+                    swatch);
             IkGui.sameLine();
             String name = channel.substring(0, 1).toUpperCase(Locale.ROOT) + channel.substring(1);
             String text = code == null ? name + "  (the parts' own colors)" : name;
@@ -1744,8 +1800,9 @@ public final class CharacterEditor {
 
         // The picker snaps to the colors a design can hold
         Integer current = look.color(colorChannel);
-        if (current != null) {
-            ColorCode.decode(current, picker);
+        Integer shownColor = channelColor(colorChannel);
+        if (shownColor != null) {
+            ColorCode.decode(shownColor, picker);
         }
         IkGui.spacing();
         if (IkGui.colorPicker3(
@@ -1825,10 +1882,13 @@ public final class CharacterEditor {
                         && previewCode == shownPreviewCode) {
             return;
         }
+        if (shownColorVersion != look.version()) {
+            partColors = findPartColors();
+        }
         shownColorVersion = look.version();
         shownPreviewChannel = previewChannel;
         shownPreviewCode = previewCode;
-        // One tint per standard channel; channels without a color stay white, changing nothing
+        // One tint per standard channel; channels nothing colors stay white, changing nothing
         List<String> channels = plan.allChannels();
         float[] tints = new float[3 * Math.min(channels.size(), Skins.TINT_SLOTS)];
         Arrays.fill(tints, 1);
@@ -1838,7 +1898,7 @@ public final class CharacterEditor {
             Integer code =
                     channel.equals(previewChannel)
                             ? Integer.valueOf(previewCode)
-                            : look.color(channel);
+                            : channelColor(channel);
             if (code != null) {
                 ColorCode.decode(code, rgb);
                 System.arraycopy(rgb, 0, tints, 3 * c, 3);

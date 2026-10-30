@@ -38,6 +38,9 @@ import java.util.Map;
  *   <li>Bones mustn't be scaled; apply scales before exporting.
  *   <li>Clips keep every rotation track, and translation tracks only for bones that move, like the
  *       root. Scale tracks are ignored.
+ *   <li>Materials keep their base color, normal, metal-roughness and emissive textures. Occlusion
+ *       is kept only packed into the metal-roughness image's red channel. Normal maps need the
+ *       file's tangents; without them, tangents point any way across the normal.
  * </ul>
  *
  * @author Ches Burks
@@ -55,6 +58,9 @@ public final class GltfImporter {
 
     /** The namespace of rigs made from imported files. */
     public static final String RIG_NAMESPACE = "imported";
+
+    /** The extension that scales a material's emissive factor past 1. */
+    public static final String EMISSIVE_STRENGTH = "KHR_materials_emissive_strength";
 
     /** The glTF primitive mode for triangle lists. */
     private static final int TRIANGLES = 4;
@@ -599,14 +605,28 @@ public final class GltfImporter {
                     pbr.has("baseColorFactor")
                             ? floats(pbr.getAsJsonArray("baseColorFactor"))
                             : new float[] {1, 1, 1, 1};
-            int image = -1;
-            if (pbr.has("baseColorTexture")) {
-                JsonObject texture =
-                        file.get(
-                                "textures",
-                                pbr.getAsJsonObject("baseColorTexture").get("index").getAsInt());
-                if (texture.has("source")) {
-                    image = texture.get("source").getAsInt();
+            int orm = textureImage(pbr, "metallicRoughnessTexture");
+            int occlusion = textureImage(material, "occlusionTexture");
+            if (occlusion >= 0 && occlusion != orm) {
+                // The renderer takes occlusion only packed with roughness and metalness
+                log.debug("Material {} has its occlusion in a separate image, left out", m);
+            }
+            float[] emissive =
+                    material.has("emissiveFactor")
+                            ? floats(material.getAsJsonArray("emissiveFactor"))
+                            : new float[3];
+            JsonObject extensions =
+                    material.has("extensions")
+                            ? material.getAsJsonObject("extensions")
+                            : new JsonObject();
+            if (extensions.has(EMISSIVE_STRENGTH)) {
+                JsonObject strength = extensions.getAsJsonObject(EMISSIVE_STRENGTH);
+                float scale =
+                        strength.has("emissiveStrength")
+                                ? strength.get("emissiveStrength").getAsFloat()
+                                : 1;
+                for (int c = 0; c < emissive.length; ++c) {
+                    emissive[c] *= scale;
                 }
             }
             materials.add(
@@ -615,14 +635,36 @@ public final class GltfImporter {
                                     ? material.get("name").getAsString()
                                     : "material " + m,
                             color,
-                            image,
+                            textureImage(pbr, "baseColorTexture"),
                             pbr.has("metallicFactor") ? pbr.get("metallicFactor").getAsFloat() : 1,
                             pbr.has("roughnessFactor")
                                     ? pbr.get("roughnessFactor").getAsFloat()
                                     : 1,
-                            -1));
+                            -1,
+                            textureImage(material, "normalTexture"),
+                            orm,
+                            orm >= 0 && occlusion == orm,
+                            textureImage(material, "emissiveTexture"),
+                            emissive));
         }
         return materials;
+    }
+
+    /**
+     * The image a material's texture reference uses.
+     *
+     * @param owner The object holding the reference, like the material or its
+     *     pbrMetallicRoughness.
+     * @param field The reference's field, like "normalTexture".
+     * @return The image's index, or -1 if there is no such texture or it has no image.
+     */
+    private int textureImage(JsonObject owner, String field) {
+        if (!owner.has(field)) {
+            return -1;
+        }
+        JsonObject texture =
+                file.get("textures", owner.getAsJsonObject(field).get("index").getAsInt());
+        return texture.has("source") ? texture.get("source").getAsInt() : -1;
     }
 
     /**

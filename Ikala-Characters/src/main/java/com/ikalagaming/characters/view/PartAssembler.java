@@ -258,14 +258,7 @@ public final class PartAssembler {
             int imageStart = images.size();
             images.addAll(source.images());
             for (ImportedCharacter.MaterialData data : source.materials()) {
-                materials.add(
-                        new ImportedCharacter.MaterialData(
-                                data.name(),
-                                data.baseColor(),
-                                data.image() < 0 ? -1 : data.image() + imageStart,
-                                data.metallic(),
-                                data.roughness(),
-                                data.tintMask() < 0 ? -1 : data.tintMask() + imageStart));
+                materials.add(data.shifted(imageStart));
             }
             return materialStart;
         }

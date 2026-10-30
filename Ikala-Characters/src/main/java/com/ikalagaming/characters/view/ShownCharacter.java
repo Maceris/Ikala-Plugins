@@ -176,12 +176,10 @@ public final class ShownCharacter implements AutoCloseable {
         var graphics = GraphicsManager.forPlugin(plugin);
         Skins skins = graphics.skins();
 
-        // Tint masks hold weights, not colors, so they load linear
-        Set<Integer> maskImages = new HashSet<>();
+        // Tint masks, normal maps and ORM images hold data, not colors, so they load linear
+        Set<Integer> linearImages = new HashSet<>();
         for (ImportedCharacter.MaterialData data : character.materials()) {
-            if (data.tintMask() >= 0) {
-                maskImages.add(data.tintMask());
-            }
+            linearImages.addAll(data.linearImages());
         }
         List<TextureHandle> imageTextures = new ArrayList<>();
         for (int i = 0; i < character.images().size(); ++i) {
@@ -190,7 +188,9 @@ public final class ShownCharacter implements AutoCloseable {
                     decode(
                             graphics.textures(),
                             image,
-                            maskImages.contains(i) ? Format.R8G8B8A8_UNORM : Format.R8G8B8A8_SRGB);
+                            linearImages.contains(i)
+                                    ? Format.R8G8B8A8_UNORM
+                                    : Format.R8G8B8A8_SRGB);
             imageTextures.add(texture);
             if (texture != null) {
                 textures.add(texture);
@@ -335,10 +335,25 @@ public final class ShownCharacter implements AutoCloseable {
         material.getBaseColor().set(encode(color[0]), encode(color[1]), encode(color[2]), color[3]);
         material.setMetallic(data.metallic());
         material.setRoughness(data.roughness());
-        if (data.image() >= 0 && data.image() < imageTextures.size()) {
-            material.setTexture(imageTextures.get(data.image()));
-        }
+        material.setTexture(image(imageTextures, data.image()));
+        material.setNormalMap(image(imageTextures, data.normalImage()));
+        material.setOcclusionRoughnessMetal(image(imageTextures, data.ormImage()));
+        material.setPackedOcclusion(data.packedOcclusion());
+        material.setEmissiveMap(image(imageTextures, data.emissiveImage()));
+        float[] emissive = data.emissive();
+        material.getEmissive().set(emissive[0], emissive[1], emissive[2]);
         return material;
+    }
+
+    /**
+     * A loaded image.
+     *
+     * @param imageTextures The loaded images, by index, null where one couldn't be decoded.
+     * @param index The image's index, or -1 for none.
+     * @return Its texture, or null for none.
+     */
+    private static TextureHandle image(List<TextureHandle> imageTextures, int index) {
+        return index >= 0 && index < imageTextures.size() ? imageTextures.get(index) : null;
     }
 
     /**

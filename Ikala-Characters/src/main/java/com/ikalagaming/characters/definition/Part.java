@@ -1,5 +1,6 @@
 package com.ikalagaming.characters.definition;
 
+import com.ikalagaming.characters.data.Color;
 import com.ikalagaming.characters.data.DataFormat;
 import com.ikalagaming.characters.data.Default;
 import com.ikalagaming.characters.data.Doc;
@@ -140,6 +141,8 @@ public record Part(
      * @param name The material's name in the mesh.
      * @param template The material template it uses.
      * @param channels Which palette channel each tint mask channel takes.
+     * @param defaults The color each tint mask channel shows when the design leaves its palette
+     *     channel uncolored, as a generated part's own colors.
      */
     @Doc("One of the mesh's materials.")
     public record MaterialSlot(
@@ -149,12 +152,20 @@ public record Part(
                             "Which palette channel each tint mask channel (r, g, b, a) takes,"
                                     + " like {\"r\": \"primary\"}.")
                     @Optional
-                    Map<String, String> channels) {
+                    Map<String, String> channels,
+            @Doc(
+                            "The color each tint mask channel shows when the design leaves its"
+                                    + " palette channel uncolored, like {\"r\": \"#6b4a2f\"}.")
+                    @Optional
+                    Map<String, Color> defaults) {
         /** The field for the template. */
         public static final String FIELD_TEMPLATE = "template";
 
         /** The field for the channel mapping. */
         public static final String FIELD_CHANNELS = "channels";
+
+        /** The field for the default colors. */
+        public static final String FIELD_DEFAULTS = "defaults";
     }
 
     /**
@@ -332,6 +343,14 @@ public record Part(
                                             "The plan has no palette channel '" + channel + "'");
                                 }
                             });
+            String defaultsPath = JsonPath.field(path, MaterialSlot.FIELD_DEFAULTS);
+            for (String mask : slot.defaults().keySet()) {
+                if (!slot.channels().containsKey(mask)) {
+                    checks.error(
+                            JsonPath.field(defaultsPath, mask),
+                            "The tint mask channel '" + mask + "' takes no palette channel");
+                }
+            }
         }
     }
 

@@ -50,6 +50,8 @@ TOOLS = pathlib.Path(__file__).resolve().parent
 PLAN = TOOLS.parent.parent / "src/main/resources/characters/ikala/bodyPlan/biped.json"
 PLAN_ID = "ikala:biped"
 TEMPLATE = "ikala:mat/standard"
+# The palette channels a generated part's tint mask channels take, biggest color group first
+MASK_PALETTE = {"r": "primary", "g": "secondary", "b": "tertiary", "a": "accent"}
 MANIFEST = "manifest.json"
 
 # Every concept image starts with this, so they come out alike and easy to cut out. "Game asset"
@@ -387,6 +389,17 @@ def command_meshes(config, batch, args):
         print("mesh", brief["id"])
 
 
+def material_slot(name, tints):
+    """A part's material slot: its tint mask channels take the costume's palette channels, and
+    default to the colors the fit found, which give the part its own look."""
+    defaults = json.loads(tints.read_text(encoding="utf8")) if tints.exists() else {}
+    slot = {"name": name, "template": TEMPLATE}
+    if defaults:
+        slot["channels"] = {mask: MASK_PALETTE[mask] for mask in defaults}
+        slot["defaults"] = defaults
+    return slot
+
+
 def command_fit(config, batch, args):
     briefs = ready(batch.load(), args, lambda b: b["mesh"] is not None and kept(b, "mesh", args)
                    and (args.redo or b["part"] is None))
@@ -404,13 +417,14 @@ def command_fit(config, batch, args):
         renders = folder / "fit"
         renders.mkdir(exist_ok=True)
         log = folder / "fit.log"
+        tints = folder / "tints.json"
         with open(log, "w", encoding="utf8") as stream:
             result = subprocess.run(
                 [config["blender"], "-b", "--factory-startup", "--python",
                  str(TOOLS / "blender/fit_accessory.py"), "--",
                  "--mesh", str(folder / brief["mesh"]["file"]), "--mannequin", config["mannequin"],
                  "--bone", socket["bone"], "--rule", json.dumps(rule), "--name", brief["id"],
-                 "--out", str(out), "--preview", str(renders)],
+                 "--out", str(out), "--preview", str(renders), "--tints", str(tints)],
                 stdout=stream, stderr=subprocess.STDOUT)
         if result.returncode != 0:
             print("fit failed for %s; see %s" % (brief["id"], log))
@@ -425,7 +439,7 @@ def command_fit(config, batch, args):
             "fits": [socket["id"]],
             "rigid": True,
             "meshes": {"*": "%s#%s" % (relative, brief["id"])},
-            "materialSlots": [{"name": brief["id"], "template": TEMPLATE}],
+            "materialSlots": [material_slot(brief["id"], tints)],
             "tags": brief.get("tags", []),
         }
         definition = content / "part" / ("%s.json" % brief["id"])

@@ -264,6 +264,33 @@ class TestCharacterLoader {
                                 Id.parse("ikala:palette/odd")));
     }
 
+    /** A material slot's default colors are only for tint mask channels that take a channel. */
+    @Test
+    void testMaterialDefaults() throws Exception {
+        Path root = copy();
+        write(
+                root.resolve("part/hat.json"),
+                """
+                {
+                  "id": "ikala:part/biped/hat",
+                  "plan": "ikala:biped",
+                  "kind": "accessory",
+                  "fits": ["head_top"],
+                  "meshes": { "*": "hat.glb#hat" },
+                  "materialSlots": [ { "name": "hat", "template": "ikala:mat/standard",
+                    "channels": { "r": "primary" },
+                    "defaults": { "r": "#6b4a2f", "g": "#000000" } } ]
+                }
+                """);
+        CharacterLoader.Result result =
+                CharacterLoader.load(List.of(new ContentSource("ikala", root)));
+        String problems = text(result);
+        Assertions.assertTrue(problems.contains("defaults.g"), problems);
+        Assertions.assertTrue(
+                problems.contains("The tint mask channel 'g' takes no palette channel"), problems);
+        Assertions.assertFalse(problems.contains("defaults.r"), problems);
+    }
+
     /** Animation sets and styles are checked against their plan, and repeats are warned about. */
     @Test
     void testAnimationProblems() throws Exception {
