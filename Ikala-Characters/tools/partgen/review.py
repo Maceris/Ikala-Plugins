@@ -86,7 +86,8 @@ function card(b) {
   div.className = "card " + (field ? (b.review[field] || "") : "");
   div.innerHTML = `<div class="id"></div><div class="meta"></div>`;
   div.querySelector(".id").textContent = b.id;
-  div.querySelector(".meta").textContent = `${b.kind} on ${b.socket}` +
+  div.querySelector(".meta").textContent = `${b.kind} ${b.layers ? "in " + b.layers.join(" + ")
+      : b.layer ? "in " + b.layer : "on " + b.socket}` +
       (b.tags && b.tags.length ? " · " + b.tags.join(", ") : "");
   const text = document.createElement("div");
   text.textContent = b.description;

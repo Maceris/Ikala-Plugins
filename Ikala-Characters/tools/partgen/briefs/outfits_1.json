@@ -1,0 +1,8 @@
+[
+  {"id": "leather_catsuit", "kind": "layer", "layers": ["shirt", "pants"],
+   "description": "glossy black leather catsuit with silver zips and panel seams",
+   "tags": ["outfit", "bodysuit", "modern"]},
+  {"id": "work_coveralls", "kind": "layer", "layers": ["shirt", "pants"],
+   "description": "tan canvas work coveralls with a front zip, chest pockets and rolled sleeves",
+   "tags": ["outfit", "bodysuit", "work"]}
+]

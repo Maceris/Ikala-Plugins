@@ -24,6 +24,18 @@ from config.json beside this file; batches live in <work>/<batch>/. A brief is:
      "description": "wide-brimmed weathered brown leather adventurer hat with a dark band",
      "tags": ["hat"], "fit": {"maxWidth": 2.6}}
 
+Clothing names the body plan layer it goes in instead of a socket:
+
+    {"id": "linen_shirt", "kind": "layer", "layer": "shirt",
+     "description": "loose cream linen shirt with long sleeves and a wooden button placket"}
+
+An outfit that fills several layers at once, like a bodysuit, lists them as "layers" instead,
+such as ["shirt", "pants", "gloves"]; the character editor takes off whatever it overlaps.
+
+Its images are painted over a render of the male mannequin, only where the layer covers the
+body (grown a little for looser clothing), steered by the render's depth, so the bare body and
+the pose stay as they are; see blender/render_guides.py and the layer's rule in layers.json.
+
 "fit" is optional: values that replace the socket type's rule from sockets.json for this brief,
 like a wider brim limit for a sun hat or a scale nudge after review. "sketch" is an optional
 drawing, relative to the briefs file, that steers the shape where words don't: lines on a plain
@@ -31,7 +43,7 @@ background, any color; "sketchStrength" (default 0.7) is how hard, and "sketchEn
 the share of the steps it steers. Too strong and the image traces the drawing's lines instead of
 making a real object of them.
 
-Only accessories on head_top sockets can be fitted so far. Run it with any Python that has
+Only accessories on head_top sockets can be fitted so far; clothing stops at meshes. Run it with any Python that has
 Pillow, such as TRELLIS.2's.
 """
 import argparse
@@ -61,6 +73,26 @@ STYLE = ("isolated 3D product render of {subject}, one object only, plain white 
 NEGATIVE = ("sprite sheet, collection, set, grid, multiple views, several objects, person, face, "
             "mannequin, hands, cropped, cut off, text, watermark, logo, frame, border, busy "
             "background, scenery, floor, shadow, blurry, lowres, deformed")
+
+# Clothing is shown on the mannequin, so the garment can be cut out of the mesh by how far it
+# sits outside the body. The bare parts stay smooth and gray, and the head featureless.
+LAYER_STYLE = ("full body 3D render of a smooth featureless gray mannequin standing straight in "
+               "an A pose, arms out and down, seen from the front, {subject}, plain white "
+               "background, soft even studio light, clean readable shapes, distinct flat "
+               "material colors, PBR")
+LAYER_NEGATIVE = ("hair, face, eyes, skin texture, shoes, hat, accessories, extra clothing, "
+                  "sprite sheet, multiple views, several people, cropped, cut off, text, "
+                  "watermark, logo, frame, border, busy background, scenery, floor, shadow, "
+                  "blurry, lowres, deformed")
+# The prompt for an outfit filling several layers, like a bodysuit
+OUTFIT_PROMPT = "wearing only {description}"
+# The body type clothing is generated and fitted on; others take it through the base mesh cages
+GUIDE_VARIANT = "male"
+# Which guide steers clothing images, and ControlNet Union's mode for it; they are painted
+# over the guide's plain render, inside a mask
+GUIDE_MAP = "depth"
+GUIDE_MODE = "depth"
+SKETCH_MODE = "hed/pidi/scribble/ted"
 
 SDXL_STEPS = 30
 SDXL_CFG = 6.0
@@ -99,6 +131,54 @@ def socket_of(brief):
     if socket["type"] not in rules:
         raise SystemExit("No fitting rule for the socket type " + socket["type"] + " yet")
     return socket, rules[socket["type"]]
+
+
+def layers_of(brief):
+    """The layer ids a brief fills: its "layer", or its "layers" for an outfit like a bodysuit
+    that fills several at once, listed under the first."""
+    ids = brief.get("layers") or [brief.get("layer")]
+    if not ids or None in ids:
+        raise SystemExit("A layer brief names its \"layer\", or \"layers\": " + brief["id"])
+    return ids
+
+
+def layer_of(brief):
+    """Where the brief's clothing goes, as one layer covering every body slot its layers cover,
+    and its rule from layers.json. An outfit filling several layers takes the first one's rule,
+    with the most room any of them gives, their triangle budgets together, and a prompt that
+    doesn't ask for any part of the body it covers to be bare."""
+    plan = load_json_with_comments(PLAN)
+    rules = json.loads((TOOLS / "layers.json").read_text(encoding="utf8"))
+    found = []
+    for layer_id in layers_of(brief):
+        layer = next((l for l in plan["layers"] if l["id"] == layer_id), None)
+        if layer is None:
+            raise SystemExit("The biped has no layer %s" % layer_id)
+        if layer_id not in rules:
+            raise SystemExit("No rule for the layer " + layer_id + " yet")
+        found.append((layer, rules[layer_id]))
+    if len(found) == 1:
+        layer, rule = found[0]
+        return layer, dict(rule, **brief.get("fit", {}))
+    covers = []
+    for layer, _ in found:
+        covers += [slot for slot in layer.get("covers", []) if slot not in covers]
+    outfit = {"id": "+".join(layer["id"] for layer, _ in found), "covers": covers}
+    rule = dict(found[0][1])
+    rule["prompt"] = OUTFIT_PROMPT
+    for key in ("maskGrow", "maskDown", "gap"):
+        rule[key] = max(r.get(key, 0) for _, r in found)
+    rule["triangles"] = sum(r["triangles"] for _, r in found)
+    return outfit, dict(rule, **brief.get("fit", {}))
+
+
+def rule_of(brief):
+    """Where the brief's part goes, and its rule, by its kind."""
+    if brief["kind"] == "accessory":
+        return socket_of(brief)
+    if brief["kind"] == "layer":
+        return layer_of(brief)
+    raise SystemExit("Briefs are accessories or layers, not " + brief["kind"])
 
 
 class Batch:
@@ -235,14 +315,29 @@ def sdxl_workflow(checkpoint, prompt, negative, seed, prefix):
     }
 
 
-def sketch_workflow(workflow, config, image, strength, end):
-    """Steer a text to image workflow with a sketch, through ControlNet Union's scribble mode."""
+def inpaint_workflow(workflow, image, mask):
+    """Paint only inside a mask over an image, keeping the rest of it."""
+    workflow.update({
+        "12": {"class_type": "LoadImage", "inputs": {"image": image}},
+        "13": {"class_type": "VAEEncode", "inputs": {"pixels": ["12", 0], "vae": ["1", 2]}},
+        "14": {"class_type": "LoadImageMask", "inputs": {"image": mask, "channel": "red"}},
+        "15": {"class_type": "SetLatentNoiseMask",
+               "inputs": {"samples": ["13", 0], "mask": ["14", 0]}},
+    })
+    del workflow["4"]
+    workflow["5"]["inputs"]["latent_image"] = ["15", 0]
+    return workflow
+
+
+def control_workflow(workflow, config, image, mode, strength, end):
+    """Steer a text to image workflow with an image, through one of ControlNet Union's modes:
+    a sketch's scribble, or a guide's depth."""
     workflow.update({
         "8": {"class_type": "LoadImage", "inputs": {"image": image}},
         "9": {"class_type": "ControlNetLoader",
               "inputs": {"control_net_name": config["controlnet"]}},
         "10": {"class_type": "SetUnionControlNetType",
-               "inputs": {"control_net": ["9", 0], "type": "hed/pidi/scribble/ted"}},
+               "inputs": {"control_net": ["9", 0], "type": mode}},
         "11": {"class_type": "ControlNetApplyAdvanced",
                "inputs": {"positive": ["2", 0], "negative": ["3", 0], "control_net": ["10", 0],
                           "image": ["8", 0], "strength": strength, "start_percent": 0.0,
@@ -286,9 +381,52 @@ def prepare_sketch(config, batch, brief):
     return name
 
 
+def guides(config):
+    """The folder of guides rendered from the mannequin, rendered the first time."""
+    folder = pathlib.Path(config["work"]) / "guides" / GUIDE_VARIANT
+    source = folder / "guide.json"
+    if not source.exists():
+        body = pathlib.Path(config["mannequin"]).with_suffix(".blend")
+        result = subprocess.run(
+            [config["blender"], "-b", "--factory-startup", "--python",
+             str(TOOLS / "blender" / "render_guides.py"), "--", "--body", str(body),
+             "--out", str(folder), "--size", str(SDXL_SIZE)],
+            capture_output=True, text=True)
+        if result.returncode != 0 or not source.exists():
+            raise SystemExit("Rendering the guides failed:\n" + result.stdout[-2000:]
+                             + result.stderr[-2000:])
+    return folder
+
+
+def guide_inputs(config, layer, rule):
+    """The images that paint a layer's clothing, in ComfyUI's input folder: the mannequin's
+    render, its depth, and a mask of where the layer may paint. Gives their names there."""
+    from PIL import Image, ImageChops, ImageFilter
+    folder = guides(config)
+    guide = json.loads((folder / "guide.json").read_text(encoding="utf8"))
+    inputs = pathlib.Path(config["comfy"]) / "input"
+    names = {}
+    for kind in ("gray", GUIDE_MAP):
+        names[kind] = "partgen_guide_%s_%s.png" % (GUIDE_VARIANT, kind)
+        Image.open(folder / (kind + ".png")).convert("RGB").save(inputs / names[kind])
+    # The slots the layer covers, grown outward, then drawn down for clothing that hangs
+    covered = {guide["slots"].index(slot) + 1 for slot in layer["covers"]}
+    slots = Image.open(folder / "slots.png").getchannel("R")
+    mask = slots.point(lambda v: 255 if v in covered else 0)
+    for _ in range(rule["maskGrow"] // 4):
+        mask = mask.filter(ImageFilter.MaxFilter(9))
+    hang = mask
+    for step in range(rule.get("maskDown", 0) // 8):
+        hang = ImageChops.lighter(hang, ImageChops.offset(mask, 0, (step + 1) * 8))
+    names["mask"] = "partgen_mask_%s_%s.png" % (GUIDE_VARIANT, layer["id"])
+    hang.convert("RGB").save(inputs / names["mask"])
+    return names
+
+
 def prompt_for(brief):
-    socket, rule = socket_of(brief)
-    return STYLE.format(subject=rule["prompt"].format(description=brief["description"]))
+    where, rule = rule_of(brief)
+    subject = rule["prompt"].format(description=brief["description"])
+    return (LAYER_STYLE if brief["kind"] == "layer" else STYLE).format(subject=subject)
 
 
 def command_new(config, batch, args):
@@ -308,7 +446,7 @@ def command_new(config, batch, args):
         if brief["id"] in known:
             print("already in the batch:", brief["id"])
             continue
-        socket_of(brief)
+        rule_of(brief)
         entry = dict(brief)
         if "sketch" in brief:
             entry["sketch"] = str((briefs_file.parent / brief["sketch"]).resolve())
@@ -330,24 +468,36 @@ def command_images(config, batch, args):
     with Comfy(config) as comfy:
         for brief in briefs:
             prompt = prompt_for(brief)
+            negative = LAYER_NEGATIVE if brief["kind"] == "layer" else NEGATIVE
             folder = batch.brief_folder(brief["id"]) / "images"
             folder.mkdir(exist_ok=True)
             start = max(brief["images"], default=FIRST_SEED - 1) + 1
             seeds = list(range(start, start + args.count))
-            sketch = prepare_sketch(config, batch, brief) if brief.get("sketch") else None
-            strength = brief.get("sketchStrength", SKETCH_STRENGTH)
-            end = brief.get("sketchEnd", SKETCH_END)
+            # Clothing follows the mannequin's guide; anything may follow a sketch instead
+            control, mode, strength, end, painted = None, None, None, None, None
+            if brief["kind"] == "layer":
+                layer, rule = layer_of(brief)
+                painted = guide_inputs(config, layer, rule)
+                control, mode = painted[GUIDE_MAP], GUIDE_MODE
+                strength, end = rule["guideStrength"], rule["guideEnd"]
+            elif brief.get("sketch"):
+                control, mode = prepare_sketch(config, batch, brief), SKETCH_MODE
+                strength = brief.get("sketchStrength", SKETCH_STRENGTH)
+                end = brief.get("sketchEnd", SKETCH_END)
             for seed in seeds:
-                workflow = sdxl_workflow(config["checkpoint"], prompt, NEGATIVE, seed,
+                workflow = sdxl_workflow(config["checkpoint"], prompt, negative, seed,
                                          "partgen/" + brief["id"])
-                if sketch:
-                    workflow = sketch_workflow(workflow, config, sketch, strength, end)
+                if control:
+                    workflow = control_workflow(workflow, config, control, mode, strength, end)
+                if painted:
+                    workflow = inpaint_workflow(workflow, painted["gray"], painted["mask"])
                 (folder / ("%d.png" % seed)).write_bytes(comfy.run(workflow)[0])
             (folder / "prompt.json").write_text(json.dumps(
-                {"prompt": prompt, "negative": NEGATIVE, "steps": SDXL_STEPS, "cfg": SDXL_CFG,
+                {"prompt": prompt, "negative": negative, "steps": SDXL_STEPS, "cfg": SDXL_CFG,
                  "checkpoint": config["checkpoint"], "sketch": brief.get("sketch"),
-                 "sketchStrength": strength if sketch else None,
-                 "sketchEnd": end if sketch else None}, indent=2), encoding="utf8")
+                 "control": mode, "controlStrength": strength, "controlEnd": end,
+                 "mask": painted and painted["mask"]},
+                indent=2), encoding="utf8")
             batch.update(brief["id"], lambda e: e["images"].extend(seeds))
             print("images", brief["id"], seeds)
 
