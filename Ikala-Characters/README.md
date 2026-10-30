@@ -52,6 +52,37 @@ blender -b human_male.blend --python tools/blender/export_rpg.py -- --out rpg_ex
 python tools/test_content/clips_only.py rpg_export/rpg_male.glb ../../Ikala-Asset-Editor/test_content/characters/animations/rpg_clips.glb
 ```
 
+## Images and meshes from the local models
+
+`tools/partgen` makes character parts in reviewed batches (see `partgen.py`), but
+its two models can be used on their own too. Run these from `tools/partgen` with
+TRELLIS.2's Python (`D:/Programs/AI/TRELLIS.2/.venv/Scripts/python.exe`); paths
+to ComfyUI, TRELLIS.2 and Blender come from `config.json`.
+
+An image from a prompt, through SDXL in ComfyUI (started if it isn't running;
+about a minute, more with `--count`). `--style` asks for an isolated product
+render, which TRELLIS.2 turns into a mesh best; `--sketch drawing.png` steers the
+shape with a drawing:
+
+```
+python make_image.py "a red wooden treasure chest with iron bands" --style --count 4 --out D:/Programs/AI/partgen/scratch/chest
+```
+
+A textured mesh from an image, through TRELLIS.2 (about a minute to load, then
+three or four minutes per image at full quality; `--type 512` is a faster
+preview). The glb is in a 1 m box, Y up, facing +Z. Several image and glb pairs
+can follow, sharing one load:
+
+```
+D:/Programs/AI/TRELLIS.2/.venv/Scripts/python.exe trellis_run.py --trellis D:/Programs/AI/TRELLIS.2 D:/Programs/AI/partgen/scratch/chest/2000.png D:/Programs/AI/partgen/scratch/chest/chest.glb
+```
+
+Renders of a mesh from the front, a front corner and the back:
+
+```
+blender -b --factory-startup --python blender/render_meshes.py -- D:/Programs/AI/partgen/scratch/chest/chest.glb D:/Programs/AI/partgen/scratch/chest/views
+```
+
 ## Previewing characters
 
 In the editor, with a 3D scene open, `character show <file.glb> [clip]` reads a
