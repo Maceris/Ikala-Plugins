@@ -628,7 +628,8 @@ public final class CharacterEditor {
             Path saveFolder,
             @NonNull Runnable reload,
             @NonNull List<ContentSource> folders,
-            ContentPanel.@NonNull FolderSetter setFolders) {}
+            ContentPanel.@NonNull FolderSetter setFolders,
+            @NonNull Supplier<List<Problem>> problems) {}
 
     /**
      * Set up the editor; nothing is shown until it opens.

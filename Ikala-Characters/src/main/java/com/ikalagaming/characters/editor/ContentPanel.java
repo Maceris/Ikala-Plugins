@@ -1,5 +1,7 @@
 package com.ikalagaming.characters.editor;
 
+import com.ikalagaming.characters.data.Problem;
+import com.ikalagaming.characters.definition.Kind;
 import com.ikalagaming.characters.registry.CharacterRegistry;
 import com.ikalagaming.characters.registry.ContentSource;
 import com.ikalagaming.graphics.UI;
@@ -8,12 +10,20 @@ import com.ikalagaming.graphics.gui.data.IkString;
 
 import lombok.NonNull;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import javax.annotation.Nullable;
 
 /**
@@ -27,6 +37,15 @@ class ContentPanel {
 
     /** Runs of characters a namespace can't hold, replaced when suggesting one. */
     private static final Pattern NOT_NAMESPACE = Pattern.compile("[^a-z0-9_-]+");
+
+    /** The namespace in a definition's ID, as written in its JSON. */
+    private static final Pattern ID_NAMESPACE = Pattern.compile("\"id\"\\s*:\\s*\"([a-z0-9_-]+):");
+
+    /** The most definition files read to find a folder's namespace. */
+    private static final int MAX_FILES_READ = 200;
+
+    /** What definition files end with. */
+    private static final String JSON = ".json";
 
     /** The longest namespace that can be typed. */
     private static final int NAMESPACE_CAPACITY = 64;
@@ -55,6 +74,9 @@ class ContentPanel {
 
     /** The namespace to add the picked folder under. */
     private final IkString namespace = new IkString(NAMESPACE_CAPACITY);
+
+    /** The namespace the picked folder's definitions use, or null if they don't say. */
+    private String pickedUses;
 
     /** Whether designs should be saved to the folder added. */
     private boolean saveHere;
@@ -111,7 +133,8 @@ class ContentPanel {
     }
 
     /**
-     * Take the folder the dialog picked, suggesting a namespace from its name.
+     * Take the folder the dialog picked, suggesting the namespace its definitions use, or one from
+     * its name.
      *
      * @param folder The folder, or null if the dialog was canceled.
      */
@@ -120,7 +143,8 @@ class ContentPanel {
             return;
         }
         picked = folder;
-        namespace.set(suggestNamespace(folder), true);
+        pickedUses = namespaceUsed(folder);
+        namespace.set(pickedUses != null ? pickedUses : suggestNamespace(folder), true);
         saveHere = false;
         status = "";
     }
@@ -152,7 +176,7 @@ class ContentPanel {
                 List<ContentSource> left = new ArrayList<>(folders);
                 left.remove(i);
                 apply(settings, left, saves ? null : settings.saveNamespace());
-                status = "Removed " + folder.namespace() + "; " + loadedCount();
+                status = "Removed " + folder.namespace() + "; " + loadedCount(settings);
                 return true;
             }
             if (toggleSave) {
@@ -174,6 +198,13 @@ class ContentPanel {
         IkGui.separatorText("Add a folder");
         IkGui.textWrapped(picked.toString());
         IkGui.inputText("Namespace##namespace", namespace);
+        String chosen = namespace.get().trim();
+        if (pickedUses != null && !pickedUses.equals(chosen)) {
+            IkGui.textWrapped(
+                    "Its definitions are in the namespace "
+                            + pickedUses
+                            + "; under any other they won't load");
+        }
         if (IkGui.checkbox("Save designs here##save-new", saveHere)) {
             saveHere = !saveHere;
         }
@@ -188,7 +219,7 @@ class ContentPanel {
             // Forward slashes, like the config is written by hand
             folders.add(new ContentSource(added, picked, picked.toString().replace('\\', '/')));
             apply(settings, folders, saveHere ? added : settings.saveNamespace());
-            status = "Added " + added + "; " + loadedCount();
+            status = "Added " + added + "; " + loadedCount(settings);
             picked = null;
             return true;
         }
@@ -227,6 +258,49 @@ class ContentPanel {
     }
 
     /**
+     * The namespace a content folder's definitions use: the one most of the IDs in its definition
+     * files start with. Definitions must use their folder's namespace, so this is what it should be
+     * added under.
+     *
+     * @param folder The folder.
+     * @return The namespace, or null if no definition file names one.
+     */
+    static @Nullable String namespaceUsed(@NonNull Path folder) {
+        Map<String, Integer> counts = new HashMap<>();
+        int read = 0;
+        for (Kind kind : Kind.values()) {
+            Path kindFolder = folder.resolve(kind.getFolder());
+            if (!Files.isDirectory(kindFolder)) {
+                continue;
+            }
+            List<Path> files;
+            try (Stream<Path> walk = Files.walk(kindFolder)) {
+                files = walk.filter(file -> file.toString().endsWith(JSON)).toList();
+            } catch (IOException | UncheckedIOException e) {
+                continue;
+            }
+            for (Path file : files) {
+                if (read++ >= MAX_FILES_READ) {
+                    break;
+                }
+                try {
+                    Matcher ids =
+                            ID_NAMESPACE.matcher(Files.readString(file, StandardCharsets.UTF_8));
+                    while (ids.find()) {
+                        counts.merge(ids.group(1), 1, Integer::sum);
+                    }
+                } catch (IOException | UncheckedIOException e) {
+                    // An unreadable file says nothing about the namespace
+                }
+            }
+        }
+        return counts.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(null);
+    }
+
+    /**
      * A namespace for a content folder, from its name: lowercase, with what a namespace can't hold
      * turned into underscores.
      *
@@ -255,11 +329,30 @@ class ContentPanel {
     }
 
     /**
-     * How many definitions are loaded, for the status.
+     * How many definitions are loaded, and how many errors the load found, for the status.
      *
+     * @param settings The editor's settings, which give the load's problems.
      * @return The text.
      */
-    private String loadedCount() {
-        return registry.get().size() + " definitions loaded";
+    private String loadedCount(CharacterEditor.EditorSettings settings) {
+        String loaded = registry.get().size() + " definitions loaded";
+        long errors =
+                settings.problems().get().stream()
+                        .filter(problem -> problem.severity() == Problem.Severity.ERROR)
+                        .count();
+        if (errors == 0) {
+            return loaded;
+        }
+        Problem first =
+                settings.problems().get().stream()
+                        .filter(problem -> problem.severity() == Problem.Severity.ERROR)
+                        .findFirst()
+                        .orElseThrow();
+        return loaded
+                + ", but "
+                + errors
+                + (errors == 1 ? " error" : " errors")
+                + " kept some out (see the log), like: "
+                + first.message();
     }
 }

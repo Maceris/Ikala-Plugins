@@ -40,4 +40,17 @@ class TestContentPanel {
         Assertions.assertNotNull(
                 ContentPanel.addProblem(loaded, Path.of("D:/art/./characters"), "other"));
     }
+
+    /**
+     * A folder's namespace is the one its definitions use, whatever the folder is called.
+     *
+     * @param temp An empty folder.
+     * @throws Exception If the test content can't be found.
+     */
+    @Test
+    void testNamespaceUsed(@org.junit.jupiter.api.io.TempDir Path temp) throws Exception {
+        Path content = Path.of(TestContentPanel.class.getResource("/content/ikala").toURI());
+        Assertions.assertEquals("ikala", ContentPanel.namespaceUsed(content));
+        Assertions.assertNull(ContentPanel.namespaceUsed(temp));
+    }
 }

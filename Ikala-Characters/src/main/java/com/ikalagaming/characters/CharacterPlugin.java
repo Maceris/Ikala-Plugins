@@ -76,6 +76,9 @@ public class CharacterPlugin extends Plugin {
     /** The definitions currently loaded, replaced whole on each reload. */
     private volatile CharacterRegistry registry = CharacterRegistry.EMPTY;
 
+    /** The problems the last reload found. */
+    private volatile List<Problem> problems = List.of();
+
     /**
      * The definitions currently loaded. Registries are immutable, so hold on to the one returned
      * for the length of a task rather than calling this repeatedly.
@@ -127,6 +130,7 @@ public class CharacterPlugin extends Plugin {
         List<ContentSource> sources = contentFolders();
         CharacterLoader.Result result = loadWithBuiltIn(sources);
         logProblems(result.problems());
+        problems = List.copyOf(result.problems());
         registry = result.registry();
         log.info(
                 "Loaded {} character definitions from the plugin and {} folders, content hash {}",
@@ -206,7 +210,8 @@ public class CharacterPlugin extends Plugin {
                 saveTo == null ? null : saveTo.root(),
                 this::reload,
                 contentFolders(),
-                this::setContentFolders);
+                this::setContentFolders,
+                () -> problems);
     }
 
     /** Open the character editor, or close it if it is open, on the render thread. */
