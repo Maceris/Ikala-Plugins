@@ -43,8 +43,8 @@ background, any color; "sketchStrength" (default 0.7) is how hard, and "sketchEn
 the share of the steps it steers. Too strong and the image traces the drawing's lines instead of
 making a real object of them.
 
-Only accessories on head_top sockets can be fitted so far; clothing is only lined up on the
-mannequin (fit/), not cut or fitted yet. Run it with any Python that has
+Only accessories on head_top sockets can be fitted so far; clothing is lined up on the mannequin
+and cut out of its figure (fit/), not fitted yet. Run it with any Python that has
 Pillow, such as TRELLIS.2's.
 """
 import argparse
@@ -110,6 +110,12 @@ SKETCH_LINE = 96
 # Room left around a sketch's lines, as a share of their size
 SKETCH_MARGIN = 0.15
 REVIEW_FIELDS = ("brief", "pick", "mesh", "part")
+# A pixel differing from the guide's render by more than this (RGB distance) was painted
+PAINTED = 25
+# Gaps up to this wide in the painted area are closed, in pixels (odd)
+PAINT_CLOSE = 13
+# Painted pieces smaller than this share of the biggest are dropped, like redrawn bare skin
+PAINT_CRUMB = 0.05
 
 
 def load_config():
@@ -568,18 +574,61 @@ def material_slot(name, tints):
     return slot
 
 
+def painted_area(config, brief, out):
+    """Where the brief's picked image was painted, as a mask the guide's size: the pixels that
+    differ from the mannequin's render, inside the layer's mask, with gaps closed, holes filled
+    (a garment shaded like the bare body leaves some) and crumbs dropped. Gives its path."""
+    from PIL import Image, ImageDraw, ImageFilter
+    import numpy as np
+    layer, rule = layer_of(brief)
+    allowed = pathlib.Path(config["comfy"]) / "input" / guide_inputs(config, layer, rule)["mask"]
+    gray = np.asarray(Image.open(guides(config) / "gray.png").convert("RGB"), dtype=float)
+    folder = out.parent
+    image = np.asarray(Image.open(folder / "images" / ("%d.png" % brief["review"]["pick"]))
+                       .convert("RGB"), dtype=float)
+    differs = np.sqrt(((image - gray) ** 2).sum(-1)) > PAINTED
+    differs &= np.asarray(Image.open(allowed).convert("L")) > 127
+    mask = Image.fromarray(differs.astype(np.uint8) * 255).filter(ImageFilter.MedianFilter(5))
+    mask = mask.filter(ImageFilter.MaxFilter(PAINT_CLOSE))
+    mask = mask.filter(ImageFilter.MinFilter(PAINT_CLOSE))
+    # Whatever a flood from the corner can't reach is inside the garment
+    flood = mask.copy()
+    ImageDraw.floodfill(flood, (0, 0), 128)
+    mask = np.where(np.asarray(flood) == 128, 0, 255).astype(np.uint8)
+    # Label the pieces by flooding each in turn, then keep the big ones
+    # A copy: flood fills don't write into an image sharing the array's memory
+    pieces = Image.fromarray(mask).copy()
+    sizes = {}
+    label = 1
+    while True:
+        left = np.argwhere(np.asarray(pieces) == 255)
+        if not len(left) or label >= 255:
+            break
+        ImageDraw.floodfill(pieces, (int(left[0][1]), int(left[0][0])), label)
+        sizes[label] = int((np.asarray(pieces) == label).sum())
+        label += 1
+    biggest = max(sizes.values(), default=0)
+    keep = [k for k, size in sizes.items() if size >= biggest * PAINT_CRUMB]
+    painted = np.isin(np.asarray(pieces), keep)
+    path = out / "painted.png"
+    Image.fromarray(painted.astype(np.uint8) * 255).save(path)
+    return path
+
+
 def fit_layer(config, batch, brief):
-    """Line a clothing figure up on the mannequin it was painted on. Clothing stops here for
-    now: the cut, fit, weights and part come next."""
+    """Line a clothing figure up on the mannequin it was painted on, and cut the garment out of
+    it by where the image was painted. The fit, weights and part come next."""
     folder = batch.brief_folder(brief["id"])
     out = folder / "fit"
     out.mkdir(exist_ok=True)
     body = pathlib.Path(config["mannequin"]).with_suffix(".blend")
+    painted = painted_area(config, brief, out)
     with open(folder / "fit.log", "w", encoding="utf8") as stream:
         result = subprocess.run(
             [config["blender"], "-b", "--factory-startup", "--python",
              str(TOOLS / "blender/fit_layer.py"), "--",
-             "--mesh", str(folder / brief["mesh"]["file"]), "--body", str(body), "--out", str(out)],
+             "--mesh", str(folder / brief["mesh"]["file"]), "--body", str(body), "--out", str(out),
+             "--painted", str(painted), "--guide", str(guides(config) / "guide.json")],
             stdout=stream, stderr=subprocess.STDOUT)
     if result.returncode != 0 or not (out / "fit.json").exists():
         print("Lining up failed for %s; see %s" % (brief["id"], folder / "fit.log"))

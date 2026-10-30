@@ -6,13 +6,21 @@ lined up by its closest points: first stood as tall as the body, feet on the gro
 centered, then moved, turned a little and scaled by trimmed ICP, which fits only the share of
 points nearest the body each round, so the garment standing out doesn't pull it off.
 
+The garment is then cut out of the figure by where the image was painted: the figure was made
+from an image painted over a render of the mannequin, only where the garment goes, so every
+point of the figure that falls on a painted pixel seen from the front is garment, front and
+back, and the rest is the bare mannequin. Faces mostly on the garment are kept, and pieces much
+smaller than the biggest dropped.
+
     blender -b --python fit_layer.py -- --mesh <figure.glb> --body <male.blend> --out <folder>
+        [--painted <painted.png> --guide <guide.json>]
 
 writes aligned.glb (the figure on the body; imported into Blender it lands on the mannequin's
-.blend), distances.npz (how
-far outside the body each of its vertices is, negative inside), fit.json and renders,
-preview_0.png to preview_3.png: the figure with the body's wireframe over it from the front and
-side, then colored by distance: blue on the skin, orange outside it, red inside it.
+.blend), distances.npz (how far outside the body each of its vertices is, negative inside),
+fit.json and renders, preview_0.png to preview_3.png: the figure with the body's wireframe over
+it from the front and side, then colored by distance: blue on the skin, orange outside it, red
+inside it. With a painted area, also garment.glb and preview_4.png and preview_5.png: the
+garment on the mannequin from the front and side.
 """
 
 import argparse
@@ -21,6 +29,7 @@ import math
 import os
 import sys
 
+import bmesh
 import bpy
 import numpy as np
 from mathutils import Matrix, Vector
@@ -39,6 +48,8 @@ SETTLED = 1e-4
 SKIN = 0.008
 # How far a figure may turn about each axis while fitting, in degrees; more means a bad fit
 MAX_TURN = 20
+# Garment pieces with fewer faces than this share of the biggest are dropped
+CRUMB = 0.05
 
 
 def similarity(source, target):
@@ -153,12 +164,75 @@ def render(path, view, color):
     bpy.ops.render.render(write_still=True)
 
 
+def read_mask(path):
+    """A black and white image as booleans, rows from the top."""
+    image = bpy.data.images.load(os.path.abspath(path))
+    width, height = image.size
+    pixels = np.empty(width * height * 4, dtype=np.float32)
+    image.pixels.foreach_get(pixels)
+    # Blender's images start at the bottom row
+    return np.flipud(pixels.reshape(height, width, 4)[..., 0] > 0.5)
+
+
+def on_painted(points, painted, guide):
+    """Whether each point, seen straight on from the front, falls on a painted pixel."""
+    size = guide["size"]
+    column = np.floor((points[:, 0] / guide["view"] + 0.5) * size).astype(int)
+    row = np.floor(((guide["middleHeight"] - points[:, 2]) / guide["view"] + 0.5) * size)
+    row = row.astype(int)
+    inside = (column >= 0) & (column < size) & (row >= 0) & (row < size)
+    found = np.zeros(len(points), dtype=bool)
+    found[inside] = painted[row[inside], column[inside]]
+    return found
+
+
+def cut_garment(figure, keep):
+    """A copy of the figure with only the faces most of whose corners are kept, less pieces
+    much smaller than the biggest. Gives it and how many faces it has."""
+    garment = figure.copy()
+    garment.data = figure.data.copy()
+    garment.name = "garment"
+    bpy.context.scene.collection.objects.link(garment)
+    mesh = bmesh.new()
+    mesh.from_mesh(garment.data)
+    mesh.faces.ensure_lookup_table()
+    dropped = [f for f in mesh.faces if sum(keep[v.index] for v in f.verts) * 2 <= len(f.verts)]
+    bmesh.ops.delete(mesh, geom=dropped, context="FACES_ONLY")
+    # Pieces: faces joined through shared edges
+    seen, pieces = set(), []
+    for face in mesh.faces:
+        if face in seen:
+            continue
+        piece, stack = [], [face]
+        seen.add(face)
+        while stack:
+            current = stack.pop()
+            piece.append(current)
+            for edge in current.edges:
+                for other in edge.link_faces:
+                    if other not in seen:
+                        seen.add(other)
+                        stack.append(other)
+        pieces.append(piece)
+    biggest = max((len(p) for p in pieces), default=0)
+    crumbs = [f for p in pieces if len(p) < biggest * CRUMB for f in p]
+    bmesh.ops.delete(mesh, geom=crumbs, context="FACES_ONLY")
+    loose = [v for v in mesh.verts if not v.link_faces]
+    bmesh.ops.delete(mesh, geom=loose, context="VERTS")
+    count = len(mesh.faces)
+    mesh.to_mesh(garment.data)
+    mesh.free()
+    return garment, count
+
+
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--mesh", required=True)
     parser.add_argument("--body", required=True)
     parser.add_argument("--out", required=True)
+    parser.add_argument("--painted", help="Where the figure's image was painted.")
+    parser.add_argument("--guide", help="The guide the image was painted over.")
     args = parser.parse_args(argv)
     os.makedirs(args.out, exist_ok=True)
 
@@ -183,20 +257,36 @@ def main():
         "inside_pct": round(float((signed < -SKIN).mean()) * 100, 1),
         "ok": bool(max(abs(a) for a in turn) <= MAX_TURN),
     }
+
+    garment = None
+    if args.painted:
+        with open(args.guide, encoding="utf-8") as file:
+            guide = json.load(file)
+        # Where the lined-up figure's vertices are, by the mesh's own vertex order
+        keep = on_painted(points, read_mask(args.painted), guide)
+        garment, faces = cut_garment(figure, keep)
+        report["garment_faces"] = faces
+        report["garment_pct"] = round(faces / max(1, len(figure.data.polygons)) * 100, 1)
     print("[fit_layer]", json.dumps(report))
     with open(os.path.join(args.out, "fit.json"), "w", encoding="utf-8") as file:
         json.dump(report, file, indent=1)
     np.savez(os.path.join(args.out, "distances.npz"), signed=signed.astype(np.float32))
 
-    bpy.ops.object.select_all(action="DESELECT")
-    figure.select_set(True)
-    bpy.context.view_layer.objects.active = figure
-    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-    bpy.ops.export_scene.gltf(filepath=os.path.join(args.out, "aligned.glb"),
-                              export_format="GLB", use_selection=True)
+    for obj, name in ((figure, "aligned.glb"), (garment, "garment.glb")):
+        if obj is None:
+            continue
+        bpy.ops.object.select_all(action="DESELECT")
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        bpy.ops.export_scene.gltf(filepath=os.path.join(args.out, name),
+                                  export_format="GLB", use_selection=True)
+    if garment is not None:
+        garment.hide_render = True
 
     # The figure as made, with the body's wireframe over it, then colored by distance
-    bodies = [o for o in bpy.data.objects if o.type == "MESH" and o is not figure]
+    bodies = [o for o in bpy.data.objects
+              if o.type == "MESH" and o is not figure and o is not garment]
     for obj in bodies:
         obj.display_type = "WIRE"
     for k, view in enumerate((0, 90)):
@@ -206,6 +296,16 @@ def main():
     color_by_distance(figure, signed)
     for k, view in enumerate((0, 90)):
         render(os.path.join(args.out, "preview_%d.png" % (k + 2)), view, "VERTEX")
+
+    # The garment alone on the gray mannequin
+    if garment is not None:
+        figure.hide_render = True
+        garment.hide_render = False
+        for obj in bodies:
+            obj.hide_render = False
+            obj.display_type = "SOLID"
+        for k, view in enumerate((0, 90)):
+            render(os.path.join(args.out, "preview_%d.png" % (k + 4)), view, "TEXTURE")
 
 
 if __name__ == "__main__":
