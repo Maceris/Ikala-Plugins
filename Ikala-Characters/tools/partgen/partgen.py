@@ -43,7 +43,8 @@ background, any color; "sketchStrength" (default 0.7) is how hard, and "sketchEn
 the share of the steps it steers. Too strong and the image traces the drawing's lines instead of
 making a real object of them.
 
-Only accessories on head_top sockets can be fitted so far; clothing stops at meshes. Run it with any Python that has
+Only accessories on head_top sockets can be fitted so far; clothing is only lined up on the
+mannequin (fit/), not cut or fitted yet. Run it with any Python that has
 Pillow, such as TRELLIS.2's.
 """
 import argparse
@@ -567,12 +568,33 @@ def material_slot(name, tints):
     return slot
 
 
+def fit_layer(config, batch, brief):
+    """Line a clothing figure up on the mannequin it was painted on. Clothing stops here for
+    now: the cut, fit, weights and part come next."""
+    folder = batch.brief_folder(brief["id"])
+    out = folder / "fit"
+    out.mkdir(exist_ok=True)
+    body = pathlib.Path(config["mannequin"]).with_suffix(".blend")
+    with open(folder / "fit.log", "w", encoding="utf8") as stream:
+        result = subprocess.run(
+            [config["blender"], "-b", "--factory-startup", "--python",
+             str(TOOLS / "blender/fit_layer.py"), "--",
+             "--mesh", str(folder / brief["mesh"]["file"]), "--body", str(body), "--out", str(out)],
+            stdout=stream, stderr=subprocess.STDOUT)
+    if result.returncode != 0 or not (out / "fit.json").exists():
+        print("Lining up failed for %s; see %s" % (brief["id"], folder / "fit.log"))
+        return
+    report = json.loads((out / "fit.json").read_text(encoding="utf8"))
+    batch.update(brief["id"], lambda e: e.update(lineUp=report))
+    print("lined up", brief["id"], report)
+
+
 def command_fit(config, batch, args):
     briefs = ready(batch.load(), args, lambda b: b["mesh"] is not None and kept(b, "mesh", args)
                    and (args.redo or b["part"] is None))
     for brief in briefs:
-        if brief["kind"] != "accessory":
-            print("Only accessories can be fitted so far; skipped", brief["id"])
+        if brief["kind"] == "layer":
+            fit_layer(config, batch, brief)
             continue
         folder = batch.brief_folder(brief["id"])
         socket, rule = socket_of(brief)

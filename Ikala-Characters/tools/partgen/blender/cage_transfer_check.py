@@ -22,56 +22,14 @@ import sys
 import bpy
 import numpy as np
 from mathutils import Vector
-from mathutils.bvhtree import BVHTree
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from bodies import load_body, normals, signed_distances, world_vertices  # noqa: E402
 
 # How far the test shirt sits outside the male body, in meters
 GAP = 0.01
 # The body slots the test shirt covers, matched against the mannequin's mesh names
 SHIRT_SLOTS = ("torso", "upperarm", "lowerarm")
-
-
-def world_vertices(obj):
-    """An object's evaluated vertices in world space, and its triangles."""
-    depsgraph = bpy.context.evaluated_depsgraph_get()
-    evaluated = obj.evaluated_get(depsgraph)
-    mesh = evaluated.to_mesh()
-    mesh.calc_loop_triangles()
-    co = np.empty(len(mesh.vertices) * 3)
-    mesh.vertices.foreach_get("co", co)
-    co = co.reshape(-1, 3)
-    m = np.array(obj.matrix_world)
-    co = co @ m[:3, :3].T + m[:3, 3]
-    tris = np.empty(len(mesh.loop_triangles) * 3, dtype=np.int32)
-    mesh.loop_triangles.foreach_get("vertices", tris)
-    evaluated.to_mesh_clear()
-    return co, tris.reshape(-1, 3)
-
-
-def body_meshes():
-    """The mannequin's skin meshes: every mesh but the eyes."""
-    return [o for o in bpy.data.objects if o.type == "MESH" and "eye" not in o.name.lower()]
-
-
-def merged(objects):
-    """Vertices and triangles of several objects together, in world space."""
-    points, faces, offset = [], [], 0
-    for obj in objects:
-        co, tris = world_vertices(obj)
-        points.append(co)
-        faces.append(tris + offset)
-        offset += len(co)
-    return np.concatenate(points), np.concatenate(faces)
-
-
-def normals(points, faces):
-    """Area-weighted vertex normals."""
-    n = np.zeros_like(points)
-    a, b, c = points[faces[:, 0]], points[faces[:, 1]], points[faces[:, 2]]
-    face = np.cross(b - a, c - a)
-    for k in range(3):
-        np.add.at(n, faces[:, k], face)
-    length = np.linalg.norm(n, axis=1, keepdims=True)
-    return n / np.maximum(length, 1e-12)
 
 
 def make_object(name, points, faces):
@@ -81,17 +39,6 @@ def make_object(name, points, faces):
     obj = bpy.data.objects.new(name, mesh)
     bpy.context.scene.collection.objects.link(obj)
     return obj
-
-
-def signed_distances(points, body_points, body_faces):
-    """How far outside the body each point is, negative inside."""
-    tree = BVHTree.FromPolygons([tuple(p) for p in body_points],
-                                [tuple(f) for f in body_faces])
-    out = np.empty(len(points))
-    for i, p in enumerate(points):
-        location, normal, _, distance = tree.find_nearest(Vector(p))
-        out[i] = distance if (Vector(p) - location).dot(normal) >= 0 else -distance
-    return out
 
 
 def summary(name, d):
@@ -105,19 +52,6 @@ def summary(name, d):
     }
     print("[check] %-28s %s" % (name, result))
     return result
-
-
-def load_body(path):
-    bpy.ops.wm.open_mainfile(filepath=path)
-    # The files are saved with a clip playing; clothing is fitted to the rest A pose
-    for armature in bpy.data.armatures:
-        armature.pose_position = "REST"
-    bodies = body_meshes()
-    shirt = [o for o in bodies if any(s in o.name.lower() for s in SHIRT_SLOTS)]
-    print("[check] %s: %d meshes, shirt from %s" % (os.path.basename(path), len(bodies),
-                                                    sorted(o.name for o in shirt)))
-    body = merged(bodies)
-    return body, merged(shirt)
 
 
 def render(path, body, garment, view):
@@ -157,7 +91,7 @@ def main():
     args = parser.parse_args(argv)
     os.makedirs(args.out, exist_ok=True)
 
-    male_body, male_shirt = load_body(os.path.join(args.mannequins, "male.blend"))
+    male_body, male_shirt = load_body(os.path.join(args.mannequins, "male.blend"), SHIRT_SLOTS)
     female_body, _ = load_body(os.path.join(args.mannequins, "female.blend"))
     shirt = male_shirt[0] + normals(*male_shirt) * GAP
     cages = {name: np.load(os.path.join(args.cages, name + "_cage.npz"))
