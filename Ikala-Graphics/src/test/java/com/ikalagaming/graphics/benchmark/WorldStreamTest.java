@@ -26,6 +26,31 @@ class WorldStreamTest {
     }
 
     @Test
+    void cellsOnTheStartingSpheresEdgeAreLaidOutAgain() {
+        final int radius = 9;
+        final Set<LodStore.SectionPos> inSphere = new HashSet<>(WorldStream.sphere(ORIGIN, radius));
+        final List<LodStore.SectionPos> edge = WorldStream.edgeCells(ORIGIN, radius);
+        assertFalse(edge.isEmpty());
+        final Set<LodStore.SectionPos> touched = new HashSet<>();
+        for (LodStore.SectionPos section : inSphere) {
+            touched.add(WorldStream.cellOf(section));
+        }
+        for (LodStore.SectionPos cell : touched) {
+            assertEquals(
+                    !inSphere.containsAll(WorldStream.sectionsOf(cell)),
+                    edge.contains(cell),
+                    "Laid out again exactly when the start held only part of it: " + cell);
+        }
+        assertTrue(touched.size() > edge.size(), "Whole cells are not laid out again");
+        long last = 0;
+        for (LodStore.SectionPos cell : edge) {
+            final long distance = WorldStream.doubledDistanceSquared(cell, ORIGIN);
+            assertTrue(distance >= last, "Nearest first");
+            last = distance;
+        }
+    }
+
+    @Test
     void sectionsBelongToTheCellOfTheirFloor() {
         assertEquals(ORIGIN, WorldStream.cellOf(new LodStore.SectionPos(CELL - 1, 0, 0)));
         assertEquals(

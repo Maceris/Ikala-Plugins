@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -146,6 +147,13 @@ final class WorldStream {
     /** The cells left to lay out from the last look, nearest first. Worker. */
     private final Queue<LodStore.SectionPos> queue = new ArrayDeque<>();
 
+    /**
+     * Cells counted as laid out that the world laid out at the start holds only part of, see {@link
+     * #edgeCells}: laid out once they come within the radius. Worker thread only, after
+     * construction.
+     */
+    private final Set<LodStore.SectionPos> partial = new HashSet<>();
+
     /** The section the camera was in at the last look. Worker. */
     private LodStore.SectionPos lookedFrom;
 
@@ -215,11 +223,37 @@ final class WorldStream {
         for (LodStore.SectionPos position : sphere(start, radius)) {
             known.add(cellOf(position));
         }
+        partial.addAll(edgeCells(start, radius));
         knownTiles.addAll(startTiles);
         center = start;
         worker = new Thread(this::run, "Gate benchmark streamer");
         worker.setDaemon(true);
         worker.start();
+    }
+
+    /**
+     * The cells on the edge of the world laid out at the start, which it holds only part of: the
+     * stream lays them out first, composing what is missing. Only counted as laid out, their
+     * sections past the edge were never composed, and showed as holes a radius from the start.
+     *
+     * @param start The section the world was laid out around.
+     * @param radius The radius, in sections.
+     * @return The cells, nearest the start first.
+     */
+    static List<LodStore.SectionPos> edgeCells(LodStore.@NonNull SectionPos start, int radius) {
+        final Map<LodStore.SectionPos, Integer> counts = new HashMap<>();
+        for (LodStore.SectionPos position : sphere(start, radius)) {
+            counts.merge(cellOf(position), 1, Integer::sum);
+        }
+        final int whole = CELL_SECTIONS * CELL_SECTIONS * CELL_SECTIONS;
+        final List<LodStore.SectionPos> cells = new ArrayList<>();
+        for (Map.Entry<LodStore.SectionPos, Integer> entry : counts.entrySet()) {
+            if (entry.getValue() < whole) {
+                cells.add(entry.getKey());
+            }
+        }
+        cells.sort(Comparator.comparingLong(cell -> doubledDistanceSquared(cell, start)));
+        return cells;
     }
 
     /**
@@ -535,14 +569,22 @@ final class WorldStream {
         lookedFrom = now;
         for (LodStore.SectionPos far : beyond(known, now, radius)) {
             known.remove(far);
+            partial.remove(far);
             for (LodStore.SectionPos section : sectionsOf(far)) {
                 if (target.remove(section)) {
                     removed.incrementAndGet();
                 }
             }
         }
+        final List<LodStore.SectionPos> next = missing(known, now, radius);
+        for (LodStore.SectionPos cell : partial) {
+            if (within(cell, now, radius)) {
+                next.add(cell);
+            }
+        }
+        next.sort(Comparator.comparingLong(cell -> doubledDistanceSquared(cell, now)));
         queue.clear();
-        queue.addAll(missing(known, now, radius));
+        queue.addAll(next);
         backlog.set(queue.size());
         lookAtTiles();
     }
@@ -586,6 +628,7 @@ final class WorldStream {
      */
     private void layOutCell(LodStore.@NonNull SectionPos cell) {
         known.add(cell);
+        partial.remove(cell);
         final List<LodStore.SectionPos> sections = new ArrayList<>();
         for (LodStore.SectionPos section : sectionsOf(cell)) {
             if (!target.isComposed(section)) {
