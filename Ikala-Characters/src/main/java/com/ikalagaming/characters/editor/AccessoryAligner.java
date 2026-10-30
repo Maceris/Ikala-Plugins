@@ -12,7 +12,11 @@ import com.ikalagaming.characters.view.CharacterFiles;
 import com.ikalagaming.characters.view.PartAssembler;
 import com.ikalagaming.characters.view.ShownCharacter;
 import com.ikalagaming.graphics.DebugDraw;
+import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.gizmo.GizmoView;
+import com.ikalagaming.graphics.gizmo.TransformGizmo;
 import com.ikalagaming.graphics.gui.IkGui;
+import com.ikalagaming.graphics.gui.data.Viewport;
 import com.ikalagaming.graphics.gui.util.Color;
 import com.ikalagaming.graphics.scene.debug.DebugLine;
 import com.ikalagaming.graphics.scene.debug.DebugSphere;
@@ -23,6 +27,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
@@ -33,6 +38,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Supplier;
@@ -84,6 +90,21 @@ final class AccessoryAligner {
 
     /** The slot whose parts are the head. */
     static final String HEAD_SLOT = "head";
+
+    /** What Ctrl snaps moves to, in meters. */
+    private static final float SNAP_MOVE = 0.005f;
+
+    /** What Ctrl snaps turns to, in degrees. */
+    private static final float SNAP_TURN = 5;
+
+    /** What Ctrl snaps scales to. */
+    private static final float SNAP_SCALE = 0.05f;
+
+    /** The smallest scale the handles set, as the field allows. */
+    private static final float MIN_SCALE = 0.2f;
+
+    /** The largest scale the handles set, as the field allows. */
+    private static final float MAX_SCALE = 5;
 
     /** Millimeters per meter. */
     private static final float MILLIMETERS = 1000;
@@ -194,6 +215,24 @@ final class AccessoryAligner {
     /** Whether the placement changed since it was read or saved. */
     private boolean unsaved;
 
+    /** The handles drawn on the accessory for moving, turning and scaling it with the mouse. */
+    private final TransformGizmo gizmo = new TransformGizmo();
+
+    /** The offset when the handles' drag started, in millimeters. */
+    private final float[] dragOffset = new float[3];
+
+    /** The turn when the handles' drag started, in degrees. */
+    private final float[] dragTurn = new float[3];
+
+    /** The scale when the handles' drag started. */
+    private float dragScale = 1;
+
+    /** Whether the handles were being dragged last frame, to tell when a drag starts. */
+    private boolean wasDragging;
+
+    /** The IkGui frame the handles were last updated in, to tell whether the tab is open. */
+    private int gizmoFrame = -1;
+
     /**
      * Set up the tab.
      *
@@ -214,6 +253,18 @@ final class AccessoryAligner {
         this.reload = reload;
         this.views = views;
         this.reference = reference;
+        // Placements only scale evenly
+        gizmo.setUniformScale(true);
+        gizmo.setSnap(SNAP_MOVE, SNAP_TURN, SNAP_SCALE);
+    }
+
+    /**
+     * Whether the handles want the mouse this frame, so the editor's camera should leave it alone.
+     *
+     * @return True while the mouse is on a handle or dragging one, with the tab open.
+     */
+    boolean wantsMouse() {
+        return gizmoFrame >= IkGui.getFrameCount() - 1 && gizmo.wantsMouse();
     }
 
     /**
@@ -262,7 +313,7 @@ final class AccessoryAligner {
         IkGui.separatorText("Placement: x across, y up, z forward");
         changed |= IkGui.dragFloat3("Offset (mm)", offset, OFFSET_SPEED, -500, 500, "%.1f");
         changed |= IkGui.dragFloat3("Turn (deg)", turn, TURN_SPEED, -180, 180, "%.1f");
-        changed |= IkGui.dragFloat("Scale", scale, SCALE_SPEED, 0.2f, 5, "%.3f");
+        changed |= IkGui.dragFloat("Scale", scale, SCALE_SPEED, MIN_SCALE, MAX_SCALE, "%.3f");
         if (IkGui.button("Bottom to brow")) {
             changed |= snapToBrow(stage, worn);
         }
@@ -274,6 +325,7 @@ final class AccessoryAligner {
         if (IkGui.button("Center")) {
             changed |= center(stage, worn);
         }
+        changed |= drawHandles(stage);
         if (changed) {
             unsaved = true;
             status = null;
@@ -344,6 +396,123 @@ final class AccessoryAligner {
         if (status != null) {
             IkGui.textWrapped(status);
         }
+    }
+
+    /**
+     * Draw the handles' settings and key hints, update the handles on the accessory, and apply
+     * their drag to the fields.
+     *
+     * @param stage What the tab works on.
+     * @return Whether the fields changed.
+     */
+    private boolean drawHandles(Stage stage) {
+        IkGui.separatorText("Handles");
+        TransformGizmo.Mode mode = gizmo.getMode();
+        if (IkGui.radioButton("Move##handle-move", mode == TransformGizmo.Mode.MOVE)) {
+            gizmo.setMode(TransformGizmo.Mode.MOVE);
+        }
+        IkGui.sameLine();
+        if (IkGui.radioButton("Turn##handle-turn", mode == TransformGizmo.Mode.ROTATE)) {
+            gizmo.setMode(TransformGizmo.Mode.ROTATE);
+        }
+        IkGui.sameLine();
+        if (IkGui.radioButton("Scale##handle-scale", mode == TransformGizmo.Mode.SCALE)) {
+            gizmo.setMode(TransformGizmo.Mode.SCALE);
+        }
+        IkGui.sameLine();
+        boolean local = gizmo.getSpace() == TransformGizmo.Space.LOCAL;
+        if (IkGui.checkbox("Its own axes", local)) {
+            gizmo.setSpace(local ? TransformGizmo.Space.WORLD : TransformGizmo.Space.LOCAL);
+        }
+        for (String hint : TransformGizmo.KEY_HINTS) {
+            IkGui.textDisabled(hint);
+        }
+        if (bone < 0) {
+            return false;
+        }
+        gizmoFrame = IkGui.getFrameCount();
+        gizmo.handleKeys();
+
+        Viewport viewport = IkGui.getMainViewport();
+        GizmoView view =
+                GizmoView.of(
+                        GraphicsManager.getScene(),
+                        viewport.position.x,
+                        viewport.position.y,
+                        viewport.size.x,
+                        viewport.size.y);
+        // Placements turn and scale about the socket on the reference body, moved by the offset
+        Vector3d at =
+                new Vector3d(stage.origin())
+                        .add(
+                                pivot.x + offset[0] / MILLIMETERS,
+                                pivot.y + offset[1] / MILLIMETERS,
+                                pivot.z + offset[2] / MILLIMETERS);
+        TransformGizmo.Drag drag =
+                gizmo.update(view, at, turnMatrix(turn), TransformGizmo.Input.fromIkGui());
+        gizmo.draw(IkGui.getBackgroundDrawList());
+        boolean started = gizmo.isDragging() && !wasDragging;
+        wasDragging = gizmo.isDragging();
+        if (drag == null) {
+            return false;
+        }
+        if (started) {
+            System.arraycopy(offset, 0, dragOffset, 0, 3);
+            System.arraycopy(turn, 0, dragTurn, 0, 3);
+            dragScale = scale[0];
+        }
+        float[] before = {offset[0], offset[1], offset[2], turn[0], turn[1], turn[2], scale[0]};
+        applyDrag(drag);
+        float[] after = {offset[0], offset[1], offset[2], turn[0], turn[1], turn[2], scale[0]};
+        // A click on a handle that doesn't move it changes nothing to save
+        return !Arrays.equals(before, after);
+    }
+
+    /**
+     * Set the fields from what they were when the drag started and the drag so far.
+     *
+     * @param drag The drag.
+     */
+    private void applyDrag(TransformGizmo.Drag drag) {
+        System.arraycopy(dragOffset, 0, offset, 0, 3);
+        System.arraycopy(dragTurn, 0, turn, 0, 3);
+        scale[0] = dragScale;
+        if (drag.canceled()) {
+            return;
+        }
+        switch (drag.mode()) {
+            case MOVE -> {
+                offset[0] += drag.move().x() * MILLIMETERS;
+                offset[1] += drag.move().y() * MILLIMETERS;
+                offset[2] += drag.move().z() * MILLIMETERS;
+            }
+            case ROTATE -> {
+                Matrix3f turned =
+                        new Matrix3f()
+                                .rotation(drag.angle(), drag.axis())
+                                .mul(turnMatrix(dragTurn));
+                Vector3f angles = turned.getEulerAnglesXYZ(new Vector3f());
+                turn[0] = (float) Math.toDegrees(angles.x);
+                turn[1] = (float) Math.toDegrees(angles.y);
+                turn[2] = (float) Math.toDegrees(angles.z);
+            }
+            case SCALE ->
+                    scale[0] = Math.clamp(dragScale * drag.scale().x(), MIN_SCALE, MAX_SCALE);
+        }
+    }
+
+    /**
+     * A placement's turn as a matrix, built the way {@link Part.Placement#matrix} builds it.
+     *
+     * @param degrees The turn about x, y and z, in degrees.
+     * @return The matrix.
+     */
+    static Matrix3f turnMatrix(float[] degrees) {
+        return new Matrix3f()
+                .rotationXYZ(
+                        (float) Math.toRadians(degrees[0]),
+                        (float) Math.toRadians(degrees[1]),
+                        (float) Math.toRadians(degrees[2]));
     }
 
     /**

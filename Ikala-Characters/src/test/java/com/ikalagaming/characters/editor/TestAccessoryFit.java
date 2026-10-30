@@ -7,6 +7,7 @@ import com.ikalagaming.characters.definition.Part;
 import com.ikalagaming.characters.gltf.ImportedCharacter;
 
 import com.google.gson.JsonObject;
+import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.junit.jupiter.api.Assertions;
@@ -170,5 +171,21 @@ class TestAccessoryFit {
                         AccessoryAligner.writePlacement(
                                 file, Id.parse("test:part/helmet"), "*", Part.Placement.NONE));
         Assertions.assertEquals(original, Files.readString(file, StandardCharsets.UTF_8));
+    }
+
+    /** The handles turn the placement the same way a saved placement's matrix turns it. */
+    @Test
+    void testTurnMatrixMatchesPlacement() {
+        float[] degrees = {10, -35, 70};
+        Matrix4f placed =
+                new Part.Placement(null, new Vec3(degrees[0], degrees[1], degrees[2]), 1)
+                        .matrix(new Vector3f(), new Matrix4f());
+        Matrix3f turned = AccessoryAligner.turnMatrix(degrees);
+        Vector3f x = new Vector3f(1, 0, 0);
+        Vector3f fromPlacement = placed.transformDirection(new Vector3f(x));
+        Vector3f fromHandles = turned.transform(new Vector3f(x));
+        Assertions.assertEquals(fromPlacement.x, fromHandles.x, EPSILON);
+        Assertions.assertEquals(fromPlacement.y, fromHandles.y, EPSILON);
+        Assertions.assertEquals(fromPlacement.z, fromHandles.z, EPSILON);
     }
 }

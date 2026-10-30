@@ -2411,7 +2411,8 @@ public final class CharacterEditor {
         final Camera camera = GraphicsManager.getScene().getCamera();
         orbit.follow(camera);
         if (IkGui.isMouseClicked(MouseButton.LEFT)) {
-            pressedOnStage = !io.wantCaptureMouse;
+            // A press on the Align tab's handles drags them, not the camera
+            pressedOnStage = !io.wantCaptureMouse && !aligner.wantsMouse();
         }
         if (IkGui.isMouseClicked(MouseButton.MIDDLE)) {
             middlePressedOnStage = !io.wantCaptureMouse;
