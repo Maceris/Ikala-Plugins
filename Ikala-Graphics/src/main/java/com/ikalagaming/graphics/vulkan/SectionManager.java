@@ -570,6 +570,9 @@ public class SectionManager {
     /** How many sections feeding level of detail it didn't show at their newest bake last frame. */
     private volatile int lodBehind;
 
+    /** How many sections taken out the level of detail still showed last frame. */
+    private volatile int lodRemovedWaiting;
+
     /** Bakes submitted and not yet back. */
     private final AtomicInteger inFlight = new AtomicInteger();
 
@@ -617,7 +620,16 @@ public class SectionManager {
             sections.put(id, section);
             if (section.position != null) {
                 byPosition.put(section.position, section);
-                if (live.containsKey(owner)) {
+                final Live world = live.get(owner);
+                if (world != null) {
+                    // A section streamed back in goes on from where the one taken out there
+                    // stopped: starting again from the first generation, its bakes were older
+                    // than the removal, which then waited for ever and hid the level of detail
+                    // there near the observer
+                    final Long removedAt = world.removed().get(section.position);
+                    if (removedAt != null) {
+                        section.requested = removedAt;
+                    }
                     markBehind(section);
                 }
             }
@@ -1625,14 +1637,6 @@ public class SectionManager {
     }
 
     /**
-     * Decide which sections feeding level of detail are overrides this frame: those near the
-     * observer whose bake is newer than the level of detail shows. Place or take out their opaque
-     * blocks, and tell each world which sections to hide. Render thread.
-     *
-     * @param state The Vulkan state.
-     * @param observer Where the scene is seen from.
-     */
-    /**
      * How far from the observer live worlds build their cells: the view distance and one level 0
      * cell more, so cells at its edge are built, but not those a streamed world changes behind the
      * observer.
@@ -1648,6 +1652,20 @@ public class SectionManager {
                 + (double) Sections.SECTION_SIZE * LodStore.DEFAULT_CELL_SECTIONS;
     }
 
+    /** How many frames apart every section taken out is checked, not only those near. */
+    private static final int REMOVED_SWEEP_FRAMES = 64;
+
+    /** Frames since every section taken out was last checked. Render thread. */
+    private int removedSweep;
+
+    /**
+     * Decide which sections feeding level of detail are overrides this frame: those near the
+     * observer whose bake is newer than the level of detail shows. Place or take out their opaque
+     * blocks, and tell each world which sections to hide. Render thread.
+     *
+     * @param state The Vulkan state.
+     * @param observer Where the scene is seen from.
+     */
     private void updateOverrides(@NonNull VulkanState state, @NonNull Observer observer) {
         final Vector3dc eye = observer.getPosition();
         lastEye = new Vector3d(eye);
@@ -1677,6 +1695,14 @@ public class SectionManager {
                             final Section section = byPosition.get(position);
                             if (section != null && behind.contains(section)) {
                                 recheck.add(section);
+                            }
+                            // A section taken out is done with once the level of detail drops it
+                            final Long removedAt = world.removed().get(position);
+                            if (removedAt != null
+                                    && state.lods.coveredGeneration(world.world(), position)
+                                            >= removedAt) {
+                                state.lods.forgetCovered(world.world(), position);
+                                world.removed().remove(position);
                             }
                         });
             }
@@ -1744,18 +1770,28 @@ public class SectionManager {
                 }
             }
             // Sections taken out show as gaps near the observer until the level of detail drops
-            // them
+            // them. The coverage changes above let go of the rest as it drops them, so only those
+            // near are looked at each frame, and every one only now and then: a world streamed
+            // around the observer has thousands waiting at once
+            final boolean sweep = ++removedSweep >= REMOVED_SWEEP_FRAMES;
+            if (sweep) {
+                removedSweep = 0;
+            }
             for (Map.Entry<String, Live> entry : live.entrySet()) {
                 final Live world = entry.getValue();
                 final var it = world.removed().entrySet().iterator();
                 while (it.hasNext()) {
                     final var removed = it.next();
+                    final boolean near = distance(eye, removed.getKey()) <= reach;
+                    if (!near && !sweep) {
+                        continue;
+                    }
                     final long shown =
                             state.lods.coveredGeneration(world.world(), removed.getKey());
                     if (shown >= removed.getValue()) {
                         state.lods.forgetCovered(world.world(), removed.getKey());
                         it.remove();
-                    } else if (distance(eye, removed.getKey()) <= reach) {
+                    } else if (near) {
                         overrides.get(entry.getKey()).add(removed.getKey());
                         ++count;
                     }
@@ -1763,6 +1799,11 @@ public class SectionManager {
                 state.lods.setOverrides(world.world(), overrides.get(entry.getKey()));
             }
             behindCount = behind.size();
+            int waitingRemoved = 0;
+            for (Live world : live.values()) {
+                waitingRemoved += world.removed().size();
+            }
+            lodRemovedWaiting = waitingRemoved;
         } finally {
             lock.unlock();
         }
@@ -2189,6 +2230,9 @@ public class SectionManager {
         }
         section.restoring = true;
         final long generation = current.generation();
+        // Only the buckets coming back: the opaque one, the biggest, usually stays with the
+        // level of detail
+        final Set<Material.Transparency> only = Set.copyOf(kinds);
         try {
             workers.execute(
                     () ->
@@ -2203,7 +2247,8 @@ public class SectionManager {
                                                     request.packedPositions(),
                                                     request.rotations(),
                                                     request.faceMasks(),
-                                                    request.userData()))));
+                                                    request.userData(),
+                                                    only))));
         } catch (RejectedExecutionException e) {
             section.restoring = false;
         }
@@ -2502,6 +2547,16 @@ public class SectionManager {
      */
     public int getLodBehind() {
         return lodBehind;
+    }
+
+    /**
+     * How many sections taken out the level of detail still showed last frame, waiting for it to
+     * drop them.
+     *
+     * @return The count.
+     */
+    public int getLodRemovedWaiting() {
+        return lodRemovedWaiting;
     }
 
     /**

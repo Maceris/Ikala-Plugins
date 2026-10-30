@@ -11,11 +11,14 @@ import com.ikalagaming.characters.definition.BodyPlan;
 import com.ikalagaming.characters.definition.Design;
 import com.ikalagaming.characters.definition.Fx;
 import com.ikalagaming.characters.definition.FxUse;
+import com.ikalagaming.characters.definition.Item;
 import com.ikalagaming.characters.definition.Part;
 import com.ikalagaming.characters.definition.Rig;
 import com.ikalagaming.characters.definition.Slider;
 import com.ikalagaming.characters.demo.CharacterPreview;
 import com.ikalagaming.characters.design.DesignCodec;
+import com.ikalagaming.characters.design.Equipment;
+import com.ikalagaming.characters.design.LookStack;
 import com.ikalagaming.characters.gltf.ImportedCharacter;
 import com.ikalagaming.characters.pose.Pose;
 import com.ikalagaming.characters.pose.PoseSolver;
@@ -25,6 +28,7 @@ import com.ikalagaming.characters.registry.CharacterRegistry;
 import com.ikalagaming.characters.registry.ContentSource;
 import com.ikalagaming.characters.view.CharacterFx;
 import com.ikalagaming.characters.view.FxEffects;
+import com.ikalagaming.characters.view.HeldItems;
 import com.ikalagaming.characters.view.PartAssembler;
 import com.ikalagaming.characters.view.PartCategories;
 import com.ikalagaming.characters.view.PartRegions;
@@ -114,6 +118,21 @@ public final class CharacterEditor {
 
     /** The slider panel's spec, in the plugin's jar. */
     static final String SLIDERS_SPEC = "/ui/character-editor/sliders.yml";
+
+    /** What grip socket types start with, like grip.1h. */
+    static final String GRIP_TYPE = "grip";
+
+    /** What the equipment dropdowns call an empty slot. */
+    static final String EMPTY_SLOT = "(empty)";
+
+    /** What the look-as dropdown calls an item's own look. */
+    static final String OWN_LOOK = "its own";
+
+    /** The state held items are in when drawn, by the test items' naming. */
+    static final String DRAWN = "drawn";
+
+    /** The state held items are in when sheathed. */
+    static final String SHEATHED = "sheathed";
 
     /** What the style dropdown calls having no style. */
     static final String PLAN_STYLE = "the plan's own";
@@ -515,8 +534,17 @@ public final class CharacterEditor {
     /** The shown character's animation and the Motion tab. */
     private final CharacterMotion motion = new CharacterMotion();
 
-    /** The style the animation was last built for. */
-    private Id motionStyle;
+    /** The styles the animation was last built for. */
+    private List<Id> motionStyles = List.of();
+
+    /** What the shown character has equipped. */
+    private Equipment equipment = Equipment.NONE;
+
+    /** Reads held items' meshes. */
+    private final HeldItems heldItems = new HeldItems();
+
+    /** The effects the equipped items carry. */
+    private List<FxUse> itemFx = List.of();
 
     /** The character shown, or null while loading or if it failed. */
     private ShownCharacter shown;
@@ -806,6 +834,9 @@ public final class CharacterEditor {
                         new Quaternionf(),
                         lastWorn);
         shown.setHiddenRegions(regions.hidden(lastWorn));
+        equipment = Equipment.NONE;
+        itemFx = List.of();
+        motion.setCombat(false);
         shownColorVersion = -1;
         shownFx = List.of();
         characterName.set(design.id().toString());
@@ -830,13 +861,13 @@ public final class CharacterEditor {
      * @param variant The variant.
      */
     private void buildMotion(String variant) {
-        motionStyle = look.style();
+        motionStyles = styles();
         motion.setStanding(bodyTab);
         motion.build(
                 registry.get(),
                 plan,
                 variant,
-                motionStyle,
+                motionStyles,
                 current.reference(),
                 shown,
                 task -> graphics.ui().post(task));
@@ -1472,6 +1503,10 @@ public final class CharacterEditor {
                 drawEffects();
                 IkGui.endTabItem();
             }
+            if (IkGui.beginTabItem("Equipment")) {
+                drawEquipment();
+                IkGui.endTabItem();
+            }
             if (IkGui.beginTabItem("Motion")) {
                 drawMotion();
                 IkGui.endTabItem();
@@ -1560,7 +1595,9 @@ public final class CharacterEditor {
                                             1,
                                             1,
                                             1,
-                                            FxUse.ALWAYS)));
+                                            FxUse.ALWAYS,
+                                            null,
+                                            false)));
         }
         if (uses.size() >= Design.MAX_FX) {
             IkGui.textDisabled("A design wears up to " + Design.MAX_FX + " effects");
@@ -1647,7 +1684,9 @@ public final class CharacterEditor {
                             Math.max(MIN_FX_SCALE, DesignCodec.snapFactor(scale[0])),
                             DesignCodec.snapFactor(rate[0]),
                             DesignCodec.snapFactor(intensity[0]),
-                            use.when()));
+                            use.when(),
+                            use.to(),
+                            use.turn()));
         }
         if (IkGui.button("Remove")) {
             changeLook(changed2 -> changed2.setFx(index, null));
@@ -1671,7 +1710,9 @@ public final class CharacterEditor {
                 use.scale(),
                 use.rate(),
                 use.intensity(),
-                use.when());
+                use.when(),
+                use.to(),
+                use.turn());
     }
 
     /**
@@ -1692,7 +1733,9 @@ public final class CharacterEditor {
                 use.scale(),
                 use.rate(),
                 use.intensity(),
-                use.when());
+                use.when(),
+                use.to(),
+                use.turn());
     }
 
     /**
@@ -1712,7 +1755,9 @@ public final class CharacterEditor {
                 use.scale(),
                 use.rate(),
                 use.intensity(),
-                use.when());
+                use.when(),
+                use.to(),
+                use.turn());
     }
 
     /**
@@ -1729,6 +1774,7 @@ public final class CharacterEditor {
             uses.addAll(part.fx());
         }
         uses.addAll(look.fx());
+        uses.addAll(itemFx);
         Map<String, Color> colors = new HashMap<>();
         for (String channel : plan.allChannels()) {
             Integer code = channelColor(channel);
@@ -2112,12 +2158,224 @@ public final class CharacterEditor {
         motion.draw(shownEffects, shownUses);
     }
 
+    /**
+     * The styles the character moves in: its equipped items', in the plan's slot order, then the
+     * look's.
+     *
+     * @return The styles, the first winning.
+     */
+    private List<Id> styles() {
+        List<Id> styles = new ArrayList<>();
+        CharacterRegistry definitions = registry.get();
+        for (BodyPlan.EquipmentSlot slot : plan.equipment()) {
+            Equipment.Equipped equipped = equipment.slots().get(slot.id());
+            Item item = equipped == null ? null : definitions.get(Item.class, equipped.item());
+            Item.Look itemLook = item == null ? null : item.lookOn(plan.id());
+            if (itemLook != null && itemLook.style() != null) {
+                styles.add(itemLook.style());
+            }
+        }
+        if (look.style() != null) {
+            styles.add(look.style());
+        }
+        return styles;
+    }
+
+    /**
+     * Draw the Equipment tab: for each of the plan's slots that something held fits, the item in
+     * it, its state, a look shown in its place, and whether it is hidden. Worn items, which the
+     * look stack puts in layers, aren't offered here yet.
+     */
+    private void drawEquipment() {
+        CharacterRegistry definitions = registry.get();
+        List<Item> all = definitions.all(Item.class);
+        boolean any = false;
+        for (BodyPlan.EquipmentSlot slot : plan.equipment()) {
+            List<Item> fits =
+                    all.stream()
+                            .filter(
+                                    item ->
+                                            item.slots().contains(slot.id())
+                                                    && item.lookOn(plan.id()) != null
+                                                    && item.lookOn(plan.id()).held())
+                            .toList();
+            if (fits.isEmpty()) {
+                continue;
+            }
+            any = true;
+            IkGui.pushID(slot.id());
+            IkGui.separatorText(slot.id());
+            drawEquipped(slot.id(), equipment.slots().get(slot.id()), fits, definitions);
+            IkGui.popID();
+        }
+        if (!any) {
+            IkGui.textDisabled("No held items fit this plan");
+            return;
+        }
+        IkGui.spacing();
+        if (IkGui.button("Draw all")) {
+            setAllStates(DRAWN);
+        }
+        IkGui.sameLine();
+        if (IkGui.button("Sheathe all")) {
+            setAllStates(SHEATHED);
+        }
+    }
+
+    /**
+     * Draw one slot's rows.
+     *
+     * @param slot The slot.
+     * @param equipped What is in it, or null.
+     * @param fits The held items that fit it.
+     * @param definitions The loaded definitions.
+     */
+    private void drawEquipped(
+            String slot,
+            Equipment.Equipped equipped,
+            List<Item> fits,
+            CharacterRegistry definitions) {
+        String preview = equipped == null ? EMPTY_SLOT : Prepared.label(equipped.item());
+        if (IkGui.beginCombo("Item##item", preview)) {
+            if (IkGui.selectable(EMPTY_SLOT + "##empty", equipped == null)) {
+                equip(slot, null);
+            }
+            for (Item item : fits) {
+                if (IkGui.selectable(
+                        Prepared.label(item.id()) + "##" + item.id(),
+                        equipped != null && item.id().equals(equipped.item()))) {
+                    equip(slot, new Equipment.Equipped(item.id(), null, null, false, Map.of()));
+                }
+            }
+            IkGui.endCombo();
+        }
+        if (equipped == null) {
+            return;
+        }
+        Item shownItem = definitions.get(Item.class, equipped.shown());
+        Item.Look shownLook = shownItem == null ? null : shownItem.lookOn(plan.id());
+        if (shownLook != null) {
+            String state = equipped.state() == null ? shownLook.firstState() : equipped.state();
+            if (IkGui.beginCombo("State##state", state)) {
+                for (String option : shownLook.states().keySet()) {
+                    if (IkGui.selectable(option + "##" + option, option.equals(state))) {
+                        equip(slot, equipped.withState(option));
+                    }
+                }
+                IkGui.endCombo();
+            }
+        }
+        String lookAs = equipped.lookAs() == null ? OWN_LOOK : Prepared.label(equipped.lookAs());
+        if (IkGui.beginCombo("Look as##look-as", lookAs)) {
+            if (IkGui.selectable(OWN_LOOK + "##own", equipped.lookAs() == null)) {
+                equip(
+                        slot,
+                        new Equipment.Equipped(
+                                equipped.item(),
+                                equipped.state(),
+                                null,
+                                equipped.hidden(),
+                                equipped.dye()));
+            }
+            for (Item item : fits) {
+                if (item.id().equals(equipped.item())) {
+                    continue;
+                }
+                if (IkGui.selectable(
+                        Prepared.label(item.id()) + "##look-" + item.id(),
+                        item.id().equals(equipped.lookAs()))) {
+                    equip(
+                            slot,
+                            new Equipment.Equipped(
+                                    equipped.item(),
+                                    equipped.state(),
+                                    item.id(),
+                                    equipped.hidden(),
+                                    equipped.dye()));
+                }
+            }
+            IkGui.endCombo();
+        }
+        if (IkGui.checkbox("Hidden##hidden", equipped.hidden())) {
+            equip(
+                    slot,
+                    new Equipment.Equipped(
+                            equipped.item(),
+                            equipped.state(),
+                            equipped.lookAs(),
+                            !equipped.hidden(),
+                            equipped.dye()));
+        }
+    }
+
+    /**
+     * Put an item in a slot and show the change.
+     *
+     * @param slot The slot.
+     * @param equipped The item, or null to empty the slot.
+     */
+    private void equip(String slot, Equipment.Equipped equipped) {
+        Map<String, Equipment.Equipped> slots = new LinkedHashMap<>(equipment.slots());
+        if (equipped == null) {
+            slots.remove(slot);
+        } else {
+            slots.put(slot, equipped);
+        }
+        equipment = new Equipment(slots);
+        applyEquipment();
+    }
+
+    /**
+     * Put every held item that has a state in it.
+     *
+     * @param state The state, like drawn.
+     */
+    private void setAllStates(String state) {
+        Map<String, Equipment.Equipped> slots = new LinkedHashMap<>();
+        equipment.slots().forEach((slot, equipped) -> slots.put(slot, equipped.withState(state)));
+        equipment = new Equipment(slots);
+        applyEquipment();
+    }
+
+    /**
+     * Show the equipment on the character: its held meshes on their sockets and its items' effects.
+     * The styles follow on the next frame, as the animation is rebuilt for them.
+     */
+    private void applyEquipment() {
+        if (shown == null) {
+            return;
+        }
+        CharacterRegistry definitions = registry.get();
+        Design design =
+                currentDesign(
+                        prepared.design().id(), look.variants().get(look.variant()).id(), true);
+        LookStack.Shown stack = LookStack.resolve(design, equipment, definitions);
+        List<Part> worn = new ArrayList<>();
+        for (Id partId : stack.worn().values()) {
+            Part part = definitions.get(Part.class, partId);
+            if (part != null) {
+                worn.add(part);
+            }
+        }
+        shown.setHeld(heldItems.meshes(stack.held(), worn, plan, shown.getSkeleton(), definitions));
+        // A weapon in a hand readies the character to fight
+        boolean drawn =
+                stack.held().stream()
+                        .anyMatch(
+                                held ->
+                                        held.socket().type() != null
+                                                && held.socket().type().startsWith(GRIP_TYPE));
+        motion.setCombat(drawn);
+        motion.applyStates(shownEffects, shownUses);
+        itemFx = List.copyOf(stack.fx().subList(design.fx().size(), stack.fx().size()));
+    }
+
     /** Rebuild the animation when the style changed, repeat actions, and fill the clip bar. */
     private void tickMotion() {
         if (shown == null) {
             return;
         }
-        if (!Objects.equals(motionStyle, look.style())) {
+        if (!motionStyles.equals(styles())) {
             buildMotion(look.variants().get(look.variant()).id());
         }
         motion.tick();

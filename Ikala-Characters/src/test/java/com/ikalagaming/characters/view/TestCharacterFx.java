@@ -52,7 +52,9 @@ class TestCharacterFx {
                 scale,
                 rate,
                 intensity,
-                FxUse.ALWAYS);
+                FxUse.ALWAYS,
+                null,
+                false);
     }
 
     /** Scale, rate and intensity multiply the effect's own values. */

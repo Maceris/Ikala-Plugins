@@ -37,7 +37,6 @@ import java.nio.LongBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
@@ -275,7 +274,7 @@ public class WaterRender implements RenderStage {
     private WaterMesh.Mesh mesh;
 
     /** What each one meter cell of the drawn tiles holds, for the wave grid. */
-    private Map<Long, float[]> cellData = Map.of();
+    private WaterMesh.CellData cellData = WaterMesh.CellData.EMPTY;
 
     /** The build of the newest tiles under way, or null. Render thread. */
     private CompletableFuture<Built> building;
@@ -310,7 +309,7 @@ public class WaterRender implements RenderStage {
             @NonNull List<WaterTile> tiles,
             @NonNull Climates climates,
             WaterMesh.@NonNull Mesh mesh,
-            @NonNull Map<Long, float[]> cells) {}
+            WaterMesh.@NonNull CellData cells) {}
 
     /**
      * Set up the stage.

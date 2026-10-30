@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ikala character item",
+  "description": "How an equippable item looks: a layer part it is worn as, or a mesh held in a socket, for each body plan. Gameplay items name one of these for their look.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Item"
+    },
+    {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Item"
+      }
+    }
+  ],
+  "$defs": {
+    "Attach": {
+      "type": "object",
+      "description": "How a held mesh sits in a socket.",
+      "properties": {
+        "offset": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "Its offset from the socket, in meters."
+        },
+        "rotate": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "Its rotation from the socket, in degrees about x, y and z."
+        }
+      },
+      "additionalProperties": false
+    },
+    "FxUse": {
+      "type": "object",
+      "description": "An effect placed on a character: which effect, the bone or socket it follows, and tuning.",
+      "properties": {
+        "fx": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "The effect, like \"ikala:fx/hand_flame\"."
+        },
+        "bone": {
+          "type": "string",
+          "description": "The bone it follows, like \"hand.R\". Give a bone or a socket."
+        },
+        "socket": {
+          "type": "string",
+          "description": "The socket it follows, like \"head_top\". Give a bone or a socket."
+        },
+        "offset": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "Its offset from the bone or socket, in meters, in the bone's space, up to 1.27 each way."
+        },
+        "color": {
+          "type": "string",
+          "description": "The palette channel that tints it, like \"accent\". Left out, it keeps the effect's own colors."
+        },
+        "scale": {
+          "type": "number",
+          "description": "Its size and speed, times the effect's, above 0 and up to 4.",
+          "default": 1
+        },
+        "rate": {
+          "type": "number",
+          "description": "How many particles it spawns, times the effect's, 0 to 4.",
+          "default": 1
+        },
+        "intensity": {
+          "type": "number",
+          "description": "How brightly it glows, times the effect's, 0 to 4.",
+          "default": 1
+        },
+        "when": {
+          "type": "string",
+          "description": "When it shows: \"always\", \"moving\", \"combat\", or a toggle that gameplay or the player controls, like \"wings\". Lowercase words joined by dots, up to 32 letters.",
+          "default": "always"
+        },
+        "to": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "The other end of a line it spawns along, like a blade's tip, in the same space as the offset and up to 1.27 m each way. Left out, it spawns at a point."
+        },
+        "turn": {
+          "type": "boolean",
+          "description": "Whether its spawn area and direction turn with its bone, like sparks off a blade. Left out, they keep to the world, so flames rise.",
+          "default": false
+        }
+      },
+      "required": [
+        "fx"
+      ],
+      "additionalProperties": false
+    },
+    "Item": {
+      "type": "object",
+      "description": "How an equippable item looks: a layer part it is worn as, or a mesh held in a socket, for each body plan. Gameplay items name one of these for their look.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "This look's ID, like \"ikala:item/iron_helm\"."
+        },
+        "slots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The equipment slots it goes in, like [\"mainHand\"]."
+        },
+        "category": {
+          "type": "string",
+          "description": "What kind of thing it is, like \"sword.2h\"."
+        },
+        "looks": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Look"
+          },
+          "description": "How it looks on each plan, by plan ID."
+        },
+        "dyeChannels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The palette channels it can be dyed in, like [\"primary\", \"accent\"]."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Tags that editors filter by, like \"weapon\"."
+        },
+        "extends": {
+          "type": "string",
+          "description": "The ID of a definition of the same kind to start from. Fields written here replace the parent's, and objects merge field by field."
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "extends"
+          ]
+        },
+        {
+          "required": [
+            "id",
+            "slots",
+            "looks"
+          ]
+        }
+      ]
+    },
+    "Look": {
+      "type": "object",
+      "description": "How an item looks on one plan: worn as a layer part, or held as a mesh in a socket.",
+      "properties": {
+        "part": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "The layer part it is worn as, like a helmet."
+        },
+        "mesh": {
+          "type": "string",
+          "description": "The mesh it is held as, like \"weapons/sword.glb#sword\", relative to its namespace's content folder, with its grip at the origin."
+        },
+        "states": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Where a held item goes in each state, like {\"drawn\": \"grip.R\", \"sheathed\": \"back\"}, as socket names or types. The first is where it starts."
+        },
+        "attach": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Attach"
+          },
+          "description": "How a held mesh sits in each socket or socket type, like {\"back\": {...}}."
+        },
+        "hidesLayers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Layers it hides, like a helmet hiding hair."
+        },
+        "hidesRegions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Mask regions of the body it hides."
+        },
+        "style": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "The way the character moves with it, like \"ikala:style/weapon/two_handed_melee\"."
+        },
+        "fx": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FxUse"
+          },
+          "description": "Effects it carries, like a glowing blade. On a held item, an effect with no bone or socket sits on the item, with offsets in its mesh's space."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

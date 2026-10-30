@@ -159,6 +159,17 @@ public final class LodStore {
             return hashOf(x, y, z, level);
         }
 
+        // Written out: a record's own equals goes through method handles, which aren't always
+        // inlined, and these are compared in every hash lookup of sections
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof SectionPos other
+                    && x == other.x
+                    && y == other.y
+                    && z == other.z
+                    && level == other.level;
+        }
+
         /**
          * A full detail section's place.
          *
@@ -197,6 +208,17 @@ public final class LodStore {
                     Math.floorDiv(x, BRANCHING),
                     Math.floorDiv(y, BRANCHING),
                     Math.floorDiv(z, BRANCHING));
+        }
+
+        // Written out: a record's own equals goes through method handles, which aren't always
+        // inlined, and level of detail streaming compares cell keys thousands of times a batch
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof CellKey other
+                    && level == other.level
+                    && x == other.x
+                    && y == other.y
+                    && z == other.z;
         }
 
         @Override
@@ -241,7 +263,16 @@ public final class LodStore {
      * @param child The child cell.
      * @param cluster The cluster's id in the child's DAG.
      */
-    record Input(@NonNull CellKey child, int cluster) {}
+    record Input(@NonNull CellKey child, int cluster) {
+        // Written out: a record's own equals goes through method handles, which aren't always
+        // inlined, and inputs are looked up for every top cluster of every piece
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof Input other
+                    && cluster == other.cluster
+                    && child.equals(other.child);
+        }
+    }
 
     /** Where positions are measured from, in the world. */
     private final double[] origin;
@@ -315,11 +346,14 @@ public final class LodStore {
      * @param stale Cells left in place that stand on children that changed since they were built,
      *     because their level 0 cells aren't all rebuilt yet: every ancestor of a changed level 0
      *     cell that is still there.
+     * @param emptied Level 0 cells whose sections all went before they were ever built, so there
+     *     was nothing to take out: their sections' removals are done with all the same.
      */
     public record Rebuilt(
             @NonNull List<CellKey> built,
             @NonNull List<CellKey> removed,
-            @NonNull SortedSet<CellKey> stale) {}
+            @NonNull SortedSet<CellKey> stale,
+            @NonNull List<CellKey> emptied) {}
 
     /**
      * One of a cell's own clusters, as the GPU takes it: what it gives way to, and which section a
@@ -367,6 +401,21 @@ public final class LodStore {
          */
         public boolean paged() {
             return body == null;
+        }
+
+        /**
+         * Whether another is consumed by the same group, with the same error and bound. A cell's
+         * tops are sent again whenever a cell above it is rebuilt, but most are consumed by a
+         * parent that wasn't, and nothing about them changed.
+         *
+         * @param other The other, such as this cluster as it was before.
+         * @return True if their consumers are the same.
+         */
+        public boolean sameConsumer(@NonNull PieceCluster other) {
+            return parentGroup == other.parentGroup
+                    && Double.compare(parentError, other.parentError) == 0
+                    && Objects.equals(parentCell, other.parentCell)
+                    && Arrays.equals(parentBound, other.parentBound);
         }
     }
 
@@ -699,6 +748,7 @@ public final class LodStore {
             boolean wholeLevels) {
         final List<CellKey> built = new ArrayList<>();
         final List<CellKey> removed = new ArrayList<>();
+        final List<CellKey> emptied = new ArrayList<>();
         final List<CellKey> order = new ArrayList<>();
         for (CellKey key : dirty) {
             if (ready.test(key)) {
@@ -708,16 +758,25 @@ public final class LodStore {
         order.sort(Comparator.comparingDouble(key -> distanceSquared(key, near)));
         // What each cell is built from, gathered here, since the workers don't touch the store
         final List<LeafJob> jobs = new ArrayList<>();
-        for (CellKey key : order.subList(0, Math.min(maxCells, order.size()))) {
+        for (CellKey key : order) {
+            // Cells left with no sections only need taking out, which costs nothing, so they
+            // don't count toward the cells built: a world streamed around a moving observer
+            // empties cells behind it as fast as it fills cells ahead
+            final boolean empty = isEmpty(key);
+            if (!empty && jobs.size() >= maxCells) {
+                continue;
+            }
             dirty.remove(key);
             final List<SectionPos> positions = new ArrayList<>();
-            final List<LodMesh> inside = sectionsIn(key, positions);
+            final List<LodMesh> inside = empty ? List.of() : sectionsIn(key, positions);
             if (inside.isEmpty()) {
                 sectionCounts.remove(key);
                 if (cells.remove(key) != null) {
                     keys.remove(key);
                     unparented.add(key);
                     removed.add(key);
+                } else {
+                    emptied.add(key);
                 }
                 continue;
             }
@@ -743,7 +802,7 @@ public final class LodStore {
                 stale.add(up);
             }
         }
-        return new Rebuilt(built, removed, stale);
+        return new Rebuilt(built, removed, stale, emptied);
     }
 
     /**
@@ -912,8 +971,9 @@ public final class LodStore {
         final Cell cell = cells.get(key);
         final List<PieceCluster> out = new ArrayList<>();
         final LodDag dag = cell.dag();
+        final Map<CellKey, Map<Input, Integer>> inputIndices = new HashMap<>();
         for (int local = cell.inputs().size(); local < dag.clusters().size(); ++local) {
-            out.add(pieceCluster(key, cell, local));
+            out.add(pieceCluster(key, cell, local, inputIndices));
         }
         return out;
     }
@@ -929,21 +989,124 @@ public final class LodStore {
     }
 
     /**
-     * A cell's own clusters that nothing in it consumed, with what consumes them now. After a
-     * parent is rebuilt, these are what change in a child that wasn't.
+     * The top clusters whose consumer may have changed in a rebuild, with what consumes them now,
+     * by cell, for the cells that weren't rebuilt themselves. A top's consumer is found going up
+     * the cells that take it in as an input until one consumes it, so it changes only if one of
+     * those was rebuilt or taken out: those of a rebuilt cell's inputs, followed down to the cell
+     * whose own cluster each is, and every top of the cells under one taken out. Sending every
+     * cell's tops after any parent was rebuilt, as most streaming batches rebuild the root, was
+     * thousands a batch.
      *
-     * @param key The cell, which must be built.
-     * @return Its top clusters.
+     * @param built The cells just built.
+     * @param removed The cells just taken out.
+     * @return The tops, by cell in key order, each cell's in id order.
      */
-    public List<PieceCluster> topParents(@NonNull CellKey key) {
-        final Cell cell = cells.get(key);
-        final List<PieceCluster> out = new ArrayList<>();
-        for (int local : cell.tops()) {
-            if (local >= cell.inputs().size()) {
-                out.add(pieceCluster(key, cell, local));
+    public SortedMap<CellKey, List<PieceCluster>> changedTops(
+            @NonNull Set<CellKey> built, @NonNull Collection<CellKey> removed) {
+        final Map<CellKey, BitSet> affected = new HashMap<>();
+        for (CellKey key : built) {
+            final Cell cell = key.level() > 0 ? cells.get(key) : null;
+            if (cell == null) {
+                continue;
+            }
+            for (Input input : cell.inputs()) {
+                // Down through the children that pass it on, to the cell it is its own in
+                Input at = input;
+                Cell child = cells.get(at.child());
+                while (child != null && at.cluster() < child.inputs().size()) {
+                    at = child.inputs().get(at.cluster());
+                    child = cells.get(at.child());
+                }
+                if (child != null && !built.contains(at.child())) {
+                    affected.computeIfAbsent(at.child(), k -> new BitSet()).set(at.cluster());
+                }
+            }
+        }
+        final Set<CellKey> gone = new HashSet<>();
+        int highest = 0;
+        for (CellKey key : removed) {
+            if (key.level() > 0) {
+                gone.add(key);
+                highest = Math.max(highest, key.level());
+            }
+        }
+        if (!gone.isEmpty()) {
+            for (Map.Entry<CellKey, Cell> entry : cells.entrySet()) {
+                if (built.contains(entry.getKey()) || !isUnder(entry.getKey(), gone, highest)) {
+                    continue;
+                }
+                final Cell cell = entry.getValue();
+                final BitSet own = affected.computeIfAbsent(entry.getKey(), k -> new BitSet());
+                for (int local : cell.tops()) {
+                    if (local >= cell.inputs().size()) {
+                        own.set(local);
+                    }
+                }
+            }
+        }
+        final SortedMap<CellKey, List<PieceCluster>> out = new TreeMap<>();
+        final Map<CellKey, Map<Input, Integer>> inputIndices = new HashMap<>();
+        for (Map.Entry<CellKey, BitSet> entry : affected.entrySet()) {
+            final Cell cell = cells.get(entry.getKey());
+            final BitSet locals = entry.getValue();
+            final List<PieceCluster> tops = new ArrayList<>(locals.cardinality());
+            for (int local = locals.nextSetBit(0);
+                    local >= 0;
+                    local = locals.nextSetBit(local + 1)) {
+                tops.add(pieceCluster(entry.getKey(), cell, local, inputIndices));
+            }
+            if (!tops.isEmpty()) {
+                out.put(entry.getKey(), tops);
             }
         }
         return out;
+    }
+
+    /**
+     * Whether a cell is under any of some cells.
+     *
+     * @param key The cell.
+     * @param above The cells that might be above it.
+     * @param highest The highest level among them.
+     * @return True if one of them is an ancestor of it.
+     */
+    private static boolean isUnder(@NonNull CellKey key, @NonNull Set<CellKey> above, int highest) {
+        for (CellKey up = key.parent(); up.level() <= highest; up = up.parent()) {
+            if (above.contains(up)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Where a cluster is among a cell's inputs, looked up through an index of them made once per
+     * cell for the caller, since cells hold thousands.
+     *
+     * @param inputIndices The caller's indices, by cell.
+     * @param key The cell.
+     * @param cell The cell's data.
+     * @param input The cluster, as an input.
+     * @return Its place, or -1 if it isn't one.
+     */
+    private static int inputIndex(
+            @NonNull Map<CellKey, Map<Input, Integer>> inputIndices,
+            @NonNull CellKey key,
+            @NonNull Cell cell,
+            @NonNull Input input) {
+        final Map<Input, Integer> index =
+                inputIndices.computeIfAbsent(
+                        key,
+                        k -> {
+                            final List<Input> inputs = cell.inputs();
+                            final Map<Input, Integer> made = new HashMap<>(inputs.size() * 2);
+                            for (int i = 0; i < inputs.size(); ++i) {
+                                // The first place, as indexOf found it
+                                made.putIfAbsent(inputs.get(i), i);
+                            }
+                            return made;
+                        });
+        return index.getOrDefault(input, -1);
     }
 
     /**
@@ -1031,9 +1194,14 @@ public final class LodStore {
      * @param key The cell.
      * @param cell The cell's data.
      * @param local The cluster's id in it.
+     * @param inputIndices The caller's indices of cells' inputs, see {@link #inputIndex}.
      * @return The cluster.
      */
-    private PieceCluster pieceCluster(@NonNull CellKey key, @NonNull Cell cell, int local) {
+    private PieceCluster pieceCluster(
+            @NonNull CellKey key,
+            @NonNull Cell cell,
+            int local,
+            @NonNull Map<CellKey, Map<Input, Integer>> inputIndices) {
         final Paged paged = paged(key, cell);
         final boolean hollow = paged != null && paged.hollow()[local];
         final LodDag.Cluster stored = cell.dag().clusters().get(local);
@@ -1064,7 +1232,9 @@ public final class LodStore {
             final CellKey up = at.parent();
             final Cell upCell = cells.get(up);
             final int upLocal =
-                    upCell == null ? -1 : upCell.inputs().indexOf(new Input(at, atLocal));
+                    upCell == null
+                            ? -1
+                            : inputIndex(inputIndices, up, upCell, new Input(at, atLocal));
             if (upLocal < 0) {
                 return new PieceCluster(
                         local,

@@ -54,6 +54,8 @@ import java.util.Map;
  *          offset (3 signed bytes of centimeters)
  *          scale, rate, intensity (unsigned bytes of 1/{@value #FACTOR_STEPS})
  *          when (length byte, 0 for always, then ASCII)
+ *          flags (byte: 1 turns with its bone, 2 spawns along a line)
+ *          line's other end, if it has one (3 signed bytes of centimeters)
  * </pre>
  *
  * Encoding is lossy where the steps are coarse: slider values go to steps of 1/{@value #STEPS},
@@ -75,6 +77,12 @@ public final class DesignCodec {
 
     /** Effect offset steps per meter: a signed byte of centimeters. */
     public static final float OFFSET_STEPS = 100;
+
+    /** The effect flag for turning with its bone. */
+    private static final int TURN_BIT = 1;
+
+    /** The effect flag for spawning along a line. */
+    private static final int LINE_BIT = 2;
 
     /** The largest effect factor step. */
     private static final int MAX_FACTOR_STEP = 0xFF;
@@ -164,6 +172,12 @@ public final class DesignCodec {
             out.write(factorStep(use.rate()));
             out.write(factorStep(use.intensity()));
             writeWhen(out, use.when());
+            out.write((use.turn() ? TURN_BIT : 0) | (use.to() == null ? 0 : LINE_BIT));
+            if (use.to() != null) {
+                out.write(offsetStep(use.to().x()));
+                out.write(offsetStep(use.to().y()));
+                out.write(offsetStep(use.to().z()));
+            }
         }
         return out.toByteArray();
     }
@@ -250,6 +264,15 @@ public final class DesignCodec {
                 float rate = (in.get() & 0xFF) / FACTOR_STEPS;
                 float intensity = (in.get() & 0xFF) / FACTOR_STEPS;
                 String when = readWhen(in);
+                int flags = in.get() & 0xFF;
+                Vec3 to = null;
+                if ((flags & LINE_BIT) != 0) {
+                    to =
+                            new Vec3(
+                                    in.get() / OFFSET_STEPS,
+                                    in.get() / OFFSET_STEPS,
+                                    in.get() / OFFSET_STEPS);
+                }
                 fx.add(
                         new FxUse(
                                 effect,
@@ -260,7 +283,9 @@ public final class DesignCodec {
                                 scale,
                                 rate,
                                 intensity,
-                                when));
+                                when,
+                                to,
+                                (flags & TURN_BIT) != 0));
             }
             if (in.hasRemaining()) {
                 throw new IllegalArgumentException("Extra bytes after the design");
@@ -420,7 +445,7 @@ public final class DesignCodec {
      * @return The numeric ID.
      * @throws IllegalArgumentException If it isn't loaded.
      */
-    private static int numeric(CharacterRegistry registry, Kind kind, Id id) {
+    static int numeric(CharacterRegistry registry, Kind kind, Id id) {
         int numeric = registry.numericId(kind, id);
         if (numeric < 0) {
             throw new IllegalArgumentException("No loaded " + kind.getFolder() + " " + id);
@@ -438,7 +463,7 @@ public final class DesignCodec {
      * @return The definition.
      * @throws IllegalArgumentException If there is none.
      */
-    private static <T extends Definition> T definition(
+    static <T extends Definition> T definition(
             CharacterRegistry registry, Class<T> type, int numeric) {
         T found = registry.get(type, numeric);
         if (found == null) {
@@ -475,7 +500,7 @@ public final class DesignCodec {
      * @return The element.
      * @throws IllegalArgumentException If the position is out of range.
      */
-    private static <T> T element(List<T> list, int index, String what) {
+    static <T> T element(List<T> list, int index, String what) {
         if (index < 0 || index >= list.size()) {
             throw new IllegalArgumentException("No " + what + " numbered " + index);
         }

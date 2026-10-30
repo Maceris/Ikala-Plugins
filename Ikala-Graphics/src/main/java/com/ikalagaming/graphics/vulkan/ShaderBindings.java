@@ -112,6 +112,12 @@ public class ShaderBindings {
         /** The phase that culls the scene against the depth pyramid. */
         public static final int PHASE_LATE = 1;
 
+        /**
+         * Not a culling phase: zeroes the instance counts of the culled draw commands, as many as
+         * the slot count says, before the early phase adds to them.
+         */
+        public static final int PHASE_RESET = 2;
+
         /*
          * The occlusion view (std430): mat4 projectionView; ivec2 size; int levels; uint flags;
          */

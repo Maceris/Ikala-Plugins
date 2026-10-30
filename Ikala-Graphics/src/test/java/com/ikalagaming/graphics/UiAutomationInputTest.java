@@ -71,6 +71,11 @@ class UiAutomationInputTest {
     private int mode;
     private static final String[] MODES = {"Coarse", "Fine", "Exact"};
 
+    /** The tab whose contents were drawn last. */
+    private String openTab;
+
+    private static final String[] TABS = {"Body", "Costume", "Colors"};
+
     @BeforeEach
     void setUp() {
         context = IkGui.createContext();
@@ -168,6 +173,25 @@ class UiAutomationInputTest {
                         }));
     }
 
+    /** Show a surface with a tab bar, whose open tab is written to {@link #openTab}. */
+    private void showTabs() {
+        show(
+                "tabs",
+                new Immediate(
+                        "bar",
+                        frame -> {
+                            if (IkGui.beginTabBar("##sections")) {
+                                for (String tab : TABS) {
+                                    if (IkGui.beginTabItem(tab)) {
+                                        openTab = tab;
+                                        IkGui.endTabItem();
+                                    }
+                                }
+                                IkGui.endTabBar();
+                            }
+                        }));
+    }
+
     private String failure(Consumer<Steps> build) {
         return assertThrows(UiAutomationException.class, () -> driver.run(build)).getMessage();
     }
@@ -217,6 +241,19 @@ class UiAutomationInputTest {
                                 .assertItemChecked("tools", "Show bounds", true));
         assertEquals(1, applied);
         assertTrue(showBounds.get());
+    }
+
+    @Test
+    void tabsAreClickedByLabel() {
+        showTabs();
+        assertEquals("Body", openTab);
+        driver.run(
+                steps ->
+                        steps.waitForItem("tabs", "Costume")
+                                .clickItem("tabs", "Colors")
+                                .clickItem("tabs//bar", "Costume"));
+        driver.frames(1);
+        assertEquals("Costume", openTab);
     }
 
     @Test

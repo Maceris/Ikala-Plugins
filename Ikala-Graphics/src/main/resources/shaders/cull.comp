@@ -128,7 +128,7 @@ layout(push_constant) uniform Constants {
     uint meshSlotCount;
     History history;
     View view;
-    // PHASE_EARLY or PHASE_LATE
+    // PHASE_EARLY, PHASE_LATE or PHASE_RESET
     uint phase;
     // How many slots the baked mesh table has, which is how many commands each list of each baked
     // kind has
@@ -151,6 +151,9 @@ const uint NO_MESH = 0xFFFFFFFFu;
 // The phases, see the top
 const uint PHASE_EARLY = 0;
 const uint PHASE_LATE = 1;
+// Before the early phase: zero the instance counts of the first slotCount commands, the culled
+// ones, which the CPU only writes when a mesh or its room changes, and which culling adds to
+const uint PHASE_RESET = 2;
 
 // The visible lists and their draw commands, see InstanceDrawUpdate
 const uint LIST_SCENE_EARLY = 0;
@@ -273,6 +276,13 @@ void draw(uint list, uint kind, uint meshSlot, uint slot, uint material)
 
 void main()
 {
+    if (phase == PHASE_RESET) {
+        uint command = gl_GlobalInvocationID.x;
+        if (command < slotCount) {
+            commands.commands[command].instanceCount = 0u;
+        }
+        return;
+    }
     uint slot = gl_GlobalInvocationID.x;
     // Early, the scene then each cascade; late, only the scene
     uint pass = gl_GlobalInvocationID.y;

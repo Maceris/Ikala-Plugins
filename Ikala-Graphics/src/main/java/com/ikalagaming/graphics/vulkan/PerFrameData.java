@@ -128,7 +128,7 @@ public class PerFrameData {
      * The command buffer, standard slots and baked slots its draw commands were laid out for, or -1
      * before the first: anything else, and every command is written again.
      */
-    public final long[] drawnLayout = {-1, -1, -1};
+    public final long[] drawnLayout = {-1, -1, -1, -1};
 
     /**
      * Indirect draw commands for level of detail clusters this frame, written by the culling pass:

@@ -35,6 +35,10 @@ import java.nio.LongBuffer;
  * the shadow cascades by their frusta and the scene by last frame's visibility, before anything is
  * drawn. The late one runs after the depth pyramid is built, tests the scene against it, and only
  * runs while occlusion culling is on.
+ *
+ * <p>The early stage first zeroes the culled draw commands' instance counts with the same shader,
+ * see {@link ShaderBindings.Cull#PHASE_RESET}: the CPU writes a command only when its mesh or its
+ * room changes, see {@link InstanceDrawUpdate}, so last use's counts are still in it.
  */
 @Slf4j
 public class InstanceCull implements RenderStage {
@@ -99,6 +103,66 @@ public class InstanceCull implements RenderStage {
         }
     }
 
+    /**
+     * Zero the instance counts of this frame's culled draw commands, then make them visible to
+     * culling and the draws.
+     *
+     * @param state The Vulkan state.
+     * @param frameData This frame's data.
+     */
+    private void resetCounts(@NonNull VulkanState state, @NonNull PerFrameData frameData) {
+        final int commands =
+                InstanceDrawUpdate.culledCommandCount(
+                        frameData.meshSlotCount, frameData.bakedSlotCount);
+        if (commands == 0) {
+            return;
+        }
+        final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+            // Bound though unread, as the pipeline's layout has it
+            vkCmdBindDescriptorSets(
+                    commandBuffer,
+                    VK_PIPELINE_BIND_POINT_COMPUTE,
+                    pipelineLayout,
+                    0,
+                    stack.longs(state.depthPyramid.getReadSet()),
+                    null);
+            final ByteBuffer constants = stack.calloc(ShaderBindings.Cull.PUSH_CONSTANTS_SIZE);
+            constants.putLong(
+                    ShaderBindings.Cull.PUSH_CONSTANT_COMMANDS_OFFSET,
+                    frameData.sceneDrawCommands.deviceAddress);
+            constants.putInt(ShaderBindings.Cull.PUSH_CONSTANT_SLOT_COUNT_OFFSET, commands);
+            constants.putInt(
+                    ShaderBindings.Cull.PUSH_CONSTANT_PHASE_OFFSET,
+                    ShaderBindings.Cull.PHASE_RESET);
+            vkCmdPushConstants(
+                    commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
+            vkCmdDispatch(
+                    commandBuffer,
+                    (commands + ShaderBindings.Cull.WORKGROUP_SIZE - 1)
+                            / ShaderBindings.Cull.WORKGROUP_SIZE,
+                    1,
+                    1);
+            // Culling adds to the counts, and the draws read them if nothing is culled
+            final VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
+            barrier.get(0)
+                    .sType$Default()
+                    .srcStageMask(VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+                    .srcAccessMask(VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT)
+                    .dstStageMask(
+                            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
+                                    | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT)
+                    .dstAccessMask(
+                            VK_ACCESS_2_SHADER_STORAGE_READ_BIT
+                                    | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+                                    | VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT);
+            vkCmdPipelineBarrier2(
+                    commandBuffer,
+                    VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));
+        }
+    }
+
     @Override
     public void cleanup(@NonNull VulkanState state) {
         vkDestroyPipeline(state.device.logical, pipeline, null);
@@ -114,6 +178,9 @@ public class InstanceCull implements RenderStage {
             @NonNull VulkanState state,
             RenderConfig renderConfig) {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
+        if (phase == ShaderBindings.Cull.PHASE_EARLY) {
+            resetCounts(state, frameData);
+        }
         final int slots = frameData.instanceCount;
         if (slots == 0
                 || frameData.meshSlotCount + frameData.bakedSlotCount == 0

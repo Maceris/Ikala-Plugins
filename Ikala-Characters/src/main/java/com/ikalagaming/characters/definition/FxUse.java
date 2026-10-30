@@ -27,8 +27,11 @@ import java.util.function.BiFunction;
  * @param scale Its size and speed, times the effect's.
  * @param rate How many particles it spawns, times the effect's.
  * @param intensity How brightly it glows, times the effect's.
- * @param when When it shows: {@value #ALWAYS}, {@value #MOVING}, {@value #COMBAT}, or a toggle
- *     gameplay or the player controls.
+ * @param when When it shows: {@value #ALWAYS}, {@value #MOVING}, {@value #COMBAT}, {@value
+ *     #ACTING}, or a toggle gameplay or the player controls.
+ * @param to The other end of a line it spawns along, like a blade's tip, in the same space as the
+ *     offset, or null to spawn at a point.
+ * @param turn Whether its spawn area and direction turn with its bone.
  * @author Ches Burks
  */
 @Doc("An effect placed on a character: which effect, the bone or socket it follows, and tuning.")
@@ -57,7 +60,19 @@ public record FxUse(
                                 + " gameplay or the player controls, like \"wings\". Lowercase"
                                 + " words joined by dots, up to 32 letters.")
                 @Default("\"always\"")
-                String when) {
+                String when,
+        @Doc(
+                        "The other end of a line it spawns along, like a blade's tip, in the same"
+                                + " space as the offset and up to 1.27 m each way. Left out, it"
+                                + " spawns at a point.")
+                @Optional
+                Vec3 to,
+        @Doc(
+                        "Whether its spawn area and direction turn with its bone, like sparks"
+                                + " off a blade. Left out, they keep to the world, so flames"
+                                + " rise.")
+                @Default("false")
+                boolean turn) {
 
     /** The field for the effect. */
     public static final String FIELD_FX = "fx";
@@ -95,6 +110,12 @@ public record FxUse(
     /** Shown while the character fights. */
     public static final String COMBAT = "combat";
 
+    /** Shown while the character plays an action, like a swing. */
+    public static final String ACTING = "acting";
+
+    /** The field for the line's other end. */
+    public static final String FIELD_TO = "to";
+
     /** The longest a toggle's name is, so designs stay small. */
     public static final int MAX_WHEN_LENGTH = 32;
 
@@ -103,6 +124,32 @@ public record FxUse(
 
     /** The values the rate and intensity take. */
     public static final Range FACTORS = new Range(0, 4);
+
+    /**
+     * Whether a point is further than an offset can go.
+     *
+     * @param at The point.
+     * @return True if some axis is past {@link #MAX_OFFSET}.
+     */
+    private static boolean tooFar(Vec3 at) {
+        return Math.abs(at.x()) > MAX_OFFSET
+                || Math.abs(at.y()) > MAX_OFFSET
+                || Math.abs(at.z()) > MAX_OFFSET;
+    }
+
+    /**
+     * The same use on another socket, with its offset and line moved, for an effect on a held item
+     * moved onto the item's socket.
+     *
+     * @param newSocket The socket.
+     * @param newOffset The offset in the socket's space.
+     * @param newTo The line's other end in the socket's space, or null.
+     * @return The moved use.
+     */
+    public FxUse onSocket(@NonNull String newSocket, Vec3 newOffset, Vec3 newTo) {
+        return new FxUse(
+                fx, null, newSocket, newOffset, color, scale, rate, intensity, when, newTo, turn);
+    }
 
     /**
      * Whether it shows while some states hold.
@@ -121,7 +168,8 @@ public record FxUse(
      * @return The changed use.
      */
     public FxUse withWhen(@NonNull String newWhen) {
-        return new FxUse(fx, bone, socket, offset, color, scale, rate, intensity, newWhen);
+        return new FxUse(
+                fx, bone, socket, offset, color, scale, rate, intensity, newWhen, to, turn);
     }
 
     /**
@@ -148,9 +196,34 @@ public record FxUse(
             @NonNull BiFunction<Id, String, Fx> find,
             @NonNull Report report,
             @NonNull String path) {
+        check(body, rig, find, report, path, false);
+    }
+
+    /**
+     * Check it against the plan it is used on.
+     *
+     * @param body The plan.
+     * @param rig The plan's rig, or null if it is missing.
+     * @param find Finds an effect by ID, reporting it at the given path if it is missing.
+     * @param report Where problems go.
+     * @param path Where it is.
+     * @param onItem Whether it is on a held item, where it may leave out both bone and socket to
+     *     sit on the item, and its offsets may go further, being in the item's mesh's space.
+     */
+    public void check(
+            @NonNull BodyPlan body,
+            Rig rig,
+            @NonNull BiFunction<Id, String, Fx> find,
+            @NonNull Report report,
+            @NonNull String path,
+            boolean onItem) {
         find.apply(fx, JsonPath.field(path, FIELD_FX));
-        if ((bone == null) == (socket == null)) {
-            report.error(path, "An effect follows either a bone or a socket");
+        if (bone != null && socket != null || !onItem && bone == null && socket == null) {
+            report.error(
+                    path,
+                    onItem
+                            ? "An effect on an item follows a bone, a socket or the item"
+                            : "An effect follows either a bone or a socket");
         }
         if (bone != null && rig != null && rig.bone(bone) == null) {
             report.error(
@@ -160,13 +233,15 @@ public record FxUse(
             report.error(
                     JsonPath.field(path, FIELD_SOCKET), "The plan has no socket '" + socket + "'");
         }
-        Vec3 at = offsetOrZero();
-        if (Math.abs(at.x()) > MAX_OFFSET
-                || Math.abs(at.y()) > MAX_OFFSET
-                || Math.abs(at.z()) > MAX_OFFSET) {
+        // Items' effects aren't sent in designs, so only designs and parts keep to a byte
+        if (!onItem && tooFar(offsetOrZero())) {
             report.error(
                     JsonPath.field(path, FIELD_OFFSET),
                     "Offsets go up to " + MAX_OFFSET + " m each way");
+        }
+        if (!onItem && to != null && tooFar(to)) {
+            report.error(
+                    JsonPath.field(path, FIELD_TO), "Lines go up to " + MAX_OFFSET + " m each way");
         }
         if (color != null && !body.hasChannel(color)) {
             report.error(

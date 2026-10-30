@@ -17,7 +17,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/** How each culled list is divided between mesh slots and kinds of mesh. */
+/** How much room each mesh slot needs in the culled lists, and where the commands go. */
 class InstanceDrawLayoutTest {
 
     private static MeshData mesh(int slot) {
@@ -63,13 +63,13 @@ class InstanceDrawLayoutTest {
         Model tree = model("tree", mesh(1));
         int[][] first = room(5, 0);
         int total =
-                InstanceDrawUpdate.layoutVisible(
+                InstanceDrawUpdate.countVisible(
                         List.of(
                                 new InstanceTable.ModelCount(house, 4),
                                 new InstanceTable.ModelCount(tree, 10)),
                         first);
         // Slot 0: 4 houses, slot 1: 10 trees, slot 2: nothing, slot 3: 4 houses, slot 4: nothing
-        assertArrayEquals(new int[] {0, 4, 14, 14, 18}, first[MeshKind.STANDARD.ordinal()]);
+        assertArrayEquals(new int[] {4, 10, 0, 4, 0}, first[MeshKind.STANDARD.ordinal()]);
         assertEquals(18, total);
     }
 
@@ -80,12 +80,12 @@ class InstanceDrawLayoutTest {
         Model reused = model("reused", mesh(0));
         int[][] first = room(2, 0);
         int total =
-                InstanceDrawUpdate.layoutVisible(
+                InstanceDrawUpdate.countVisible(
                         List.of(
                                 new InstanceTable.ModelCount(old, 2),
                                 new InstanceTable.ModelCount(reused, 3)),
                         first);
-        assertArrayEquals(new int[] {0, 5}, first[MeshKind.STANDARD.ordinal()]);
+        assertArrayEquals(new int[] {5, 0}, first[MeshKind.STANDARD.ordinal()]);
         assertEquals(5, total);
     }
 
@@ -100,16 +100,16 @@ class InstanceDrawLayoutTest {
                         mesh(0, MeshKind.BAKED_TRANSLUCENT));
         int[][] first = room(1, 2);
         int total =
-                InstanceDrawUpdate.layoutVisible(
+                InstanceDrawUpdate.countVisible(
                         List.of(
                                 new InstanceTable.ModelCount(tree, 3),
                                 new InstanceTable.ModelCount(section, 1)),
                         first);
-        // Standard first, then each baked kind's slots in kind order
-        assertArrayEquals(new int[] {0}, first[MeshKind.STANDARD.ordinal()]);
-        assertArrayEquals(new int[] {3, 3}, first[MeshKind.BAKED_OPAQUE.ordinal()]);
-        assertArrayEquals(new int[] {4, 4}, first[MeshKind.BAKED_CUTOUT.ordinal()]);
-        assertArrayEquals(new int[] {4, 5}, first[MeshKind.BAKED_TRANSLUCENT.ordinal()]);
+        // Each in its kind's counts
+        assertArrayEquals(new int[] {3}, first[MeshKind.STANDARD.ordinal()]);
+        assertArrayEquals(new int[] {0, 1}, first[MeshKind.BAKED_OPAQUE.ordinal()]);
+        assertArrayEquals(new int[] {0, 0}, first[MeshKind.BAKED_CUTOUT.ordinal()]);
+        assertArrayEquals(new int[] {1, 0}, first[MeshKind.BAKED_TRANSLUCENT.ordinal()]);
         assertEquals(5, total);
     }
 

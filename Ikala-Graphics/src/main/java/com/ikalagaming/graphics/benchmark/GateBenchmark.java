@@ -586,6 +586,13 @@ public final class GateBenchmark {
     private double walkSpeed;
 
     /**
+     * Where the walk goes instead of along x, from the {@code .walkPath} option: x and z offsets
+     * from the start, in meters, each pair a waypoint, standing at the last; or null. Turning back
+     * crosses sections that streamed out and in again, and standing lets them settle.
+     */
+    private double[] walkPath;
+
+    /**
      * How many of the {@link #CHECK_SPOTS} the gate checks for cracks, the first so many: each
      * takes minutes at a large radius, and most runs only need some.
      */
@@ -777,6 +784,9 @@ public final class GateBenchmark {
 
     /** Values in the {@code .ripples} option. */
     private static final int RIPPLE_VALUES = 5;
+
+    /** Values in each waypoint of the {@code .walkPath} option: x and z. */
+    private static final int WALK_POINT_VALUES = 2;
 
     /** Values in the {@code .turnAt} option: x, y and z. */
     private static final int TURN_AT_VALUES = 3;
@@ -1421,6 +1431,7 @@ public final class GateBenchmark {
                         Boolean.getBoolean(PROPERTY + ".gate"));
                 current.digsLeft = Integer.getInteger(PROPERTY + ".digs", 0);
                 current.walkSpeed = Double.parseDouble(System.getProperty(PROPERTY + ".walk", "0"));
+                current.walkPath = parseWalkPath(System.getProperty(PROPERTY + ".walkPath"));
                 // Fewer crack checks, for runs that only need some: the first so many views, and
                 // whether the cut over the edits is checked; the edits are made and timed anyway
                 current.crackSpots =
@@ -2949,8 +2960,8 @@ public final class GateBenchmark {
     }
 
     /**
-     * Put the camera where it turns, walked along x for a while if it walks, facing part of the way
-     * around.
+     * Put the camera where it turns, walked along x or {@link #walkPath} for a while if it walks,
+     * facing part of the way around.
      *
      * @param scene The scene.
      * @param turns How far around, from 0 to 1.
@@ -2960,13 +2971,73 @@ public final class GateBenchmark {
         final Vector3d position = new Vector3d(cameraPosition);
         final SyntheticTerrain world = terrain;
         if (walkSpeed > 0 && world != null) {
-            position.x += walkSpeed * seconds;
+            if (walkPath == null) {
+                position.x += walkSpeed * seconds;
+            } else {
+                final double[] offset = walkOffset(walkPath, walkSpeed * seconds);
+                position.x += offset[0];
+                position.z += offset[1];
+            }
             final int x = (int) Math.floor(position.x);
             final int z = (int) Math.floor(position.z);
             position.y = Math.max(position.y, world.top(x, z) + 1 + WALK_CLEARANCE);
         }
         scene.getCamera().setPosition(position.x, position.y, position.z);
         scene.getCamera().setRotation(PITCH, (float) (2 * Math.PI * Math.min(1, turns)));
+    }
+
+    /**
+     * Read the {@code .walkPath} option: x,z waypoints separated by semicolons.
+     *
+     * @param value The option, or null.
+     * @return The offsets, x and z for each waypoint, or null if not given or not valid.
+     */
+    static double[] parseWalkPath(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        final String[] points = value.split(";");
+        final double[] path = new double[points.length * WALK_POINT_VALUES];
+        for (int i = 0; i < points.length; ++i) {
+            final String[] parts = points[i].split(",");
+            try {
+                if (parts.length != WALK_POINT_VALUES) {
+                    throw new NumberFormatException(points[i]);
+                }
+                path[WALK_POINT_VALUES * i] = Double.parseDouble(parts[0].trim());
+                path[WALK_POINT_VALUES * i + 1] = Double.parseDouble(parts[1].trim());
+            } catch (NumberFormatException e) {
+                log.warn("The benchmark's walkPath must be x,z;x,z;..., not {}", value);
+                return null;
+            }
+        }
+        return path;
+    }
+
+    /**
+     * How far along a walk path the camera is, from the start through each waypoint in turn,
+     * stopping at the last.
+     *
+     * @param path The waypoints' x and z offsets.
+     * @param distance How far it has walked, in meters.
+     * @return Its x and z offset from the start.
+     */
+    static double[] walkOffset(double @NonNull [] path, double distance) {
+        double x = 0;
+        double z = 0;
+        double left = distance;
+        for (int i = 0; i + 1 < path.length; i += WALK_POINT_VALUES) {
+            final double dx = path[i] - x;
+            final double dz = path[i + 1] - z;
+            final double length = Math.sqrt(dx * dx + dz * dz);
+            if (left < length) {
+                return new double[] {x + dx * left / length, z + dz * left / length};
+            }
+            left -= length;
+            x = path[i];
+            z = path[i + 1];
+        }
+        return new double[] {x, z};
     }
 
     /**
@@ -3916,8 +3987,8 @@ public final class GateBenchmark {
         log.info(
                 "Gate benchmark streaming at x {}: {} composed, {} empty, {} removed; backlog {}"
                         + " cells, {} sections waiting to be drawn; drawn after {} ms (median), {} (95th), {}"
-                        + " (most) for {} sections; LOD {} stale cells, {} batches waiting;"
-                        + " heap {} MiB",
+                        + " (most) for {} sections; LOD {} stale cells, {} batches waiting, {}"
+                        + " sections behind, {} taken out still shown; heap {} MiB",
                 String.format("%.0f", camera.x()),
                 stats.composed(),
                 stats.empty(),
@@ -3930,6 +4001,8 @@ public final class GateBenchmark {
                 stats.latencies().length,
                 live == null ? 0 : live.staleCells(),
                 live == null ? 0 : live.pendingBatches(),
+                renderer().getState().sections.getLodBehind(),
+                renderer().getState().sections.getLodRemovedWaiting(),
                 (runtime.totalMemory() - runtime.freeMemory()) / (long) BYTES_PER_MIB);
     }
 

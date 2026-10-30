@@ -27,6 +27,7 @@ import java.util.Set;
  * @param slots Its body slots.
  * @param layers Its clothing and armor layers.
  * @param sockets Its attach points.
+ * @param equipment Its equipment slots, which items go in.
  * @param extensions Its optional bone chains.
  * @param sliders The sliders it uses, by ID pattern.
  * @param channels Palette channels beyond the standard ones.
@@ -50,6 +51,11 @@ public record BodyPlan(
                 @Optional
                 List<Layer> layers,
         @Doc("Attach points for accessories and held items.") @Optional List<Socket> sockets,
+        @Doc(
+                        "Equipment slots, which gameplay items go in, each drawn in a layer or held"
+                                + " in a socket. Earlier slots' item styles come first.")
+                @Optional
+                List<EquipmentSlot> equipment,
         @Doc("Optional bone chains, like a tail, wings or a cape.") @Optional
                 List<Extension> extensions,
         @Doc(
@@ -90,6 +96,9 @@ public record BodyPlan(
 
     /** The field for the extension chains. */
     public static final String FIELD_EXTENSIONS = "extensions";
+
+    /** The field for the equipment slots. */
+    public static final String FIELD_EQUIPMENT = "equipment";
 
     /** The field for the slider patterns. */
     public static final String FIELD_SLIDERS = "sliders";
@@ -249,6 +258,29 @@ public record BodyPlan(
     }
 
     /**
+     * A gameplay equipment slot: where an item in it is drawn on this plan.
+     *
+     * @param id The slot's name.
+     * @param layer The layer items in it are drawn in, or null for held items.
+     * @param sockets The sockets or socket types items in it can be held in.
+     */
+    @Doc("An equipment slot, like \"head\" or \"mainHand\", and where its items are drawn.")
+    public record EquipmentSlot(
+            @Doc("The slot's name, like \"mainHand\".") String id,
+            @Doc("The layer items in it are drawn in, like \"helmet\".") @Optional String layer,
+            @Doc(
+                            "The sockets, or socket types, items in it can be held in, like"
+                                    + " \"grip.R\" or \"back.large\".")
+                    @Optional
+                    List<String> sockets) {
+        /** The field for the layer. */
+        public static final String FIELD_LAYER = "layer";
+
+        /** The field for the sockets. */
+        public static final String FIELD_SOCKETS = "sockets";
+    }
+
+    /**
      * An optional chain of bones.
      *
      * @param id The chain's name.
@@ -384,6 +416,30 @@ public record BodyPlan(
     }
 
     /**
+     * Find an equipment slot.
+     *
+     * @param name The slot's name.
+     * @return The slot, or null if there is none by that name.
+     */
+    public EquipmentSlot equipmentSlot(@NonNull String name) {
+        return equipment.stream().filter(e -> e.id().equals(name)).findFirst().orElse(null);
+    }
+
+    /**
+     * Find the sockets a name picks: the socket by that name, or every socket of that type.
+     *
+     * @param nameOrType A socket's name or a socket type.
+     * @return The sockets, maybe none.
+     */
+    public List<Socket> socketsFor(@NonNull String nameOrType) {
+        Socket named = socket(nameOrType);
+        if (named != null) {
+            return List.of(named);
+        }
+        return sockets.stream().filter(s -> nameOrType.equals(s.type())).toList();
+    }
+
+    /**
      * Find an extension chain.
      *
      * @param name The chain's name.
@@ -436,6 +492,7 @@ public record BodyPlan(
         Set<String> slotNames = checkSlots(checks, bones);
         checkLayers(checks, slotNames);
         checkSockets(checks, bones);
+        checkEquipment(checks);
         checkExtensions(checks, rigDefinition, bones);
         checkNames(checks);
 
@@ -630,6 +687,36 @@ public record BodyPlan(
                 checks.error(
                         JsonPath.field(path, Socket.FIELD_MAX),
                         "A socket must hold at least 1 item");
+            }
+        }
+    }
+
+    /**
+     * Check the equipment slots: unique names, and layers and sockets the plan has.
+     *
+     * @param checks Where problems go.
+     */
+    private void checkEquipment(Checks checks) {
+        Set<String> names = new HashSet<>();
+        for (int i = 0; i < equipment.size(); ++i) {
+            EquipmentSlot slot = equipment.get(i);
+            String path = JsonPath.at(FIELD_EQUIPMENT, i);
+            unique(checks, names, slot.id(), JsonPath.field(path, FIELD_ID), "equipment slot");
+            if (slot.layer() != null && layer(slot.layer()) == null) {
+                checks.error(
+                        JsonPath.field(path, EquipmentSlot.FIELD_LAYER),
+                        "The plan has no layer '" + slot.layer() + "'");
+            }
+            for (int s = 0; s < slot.sockets().size(); ++s) {
+                String socket = slot.sockets().get(s);
+                if (socketsFor(socket).isEmpty()) {
+                    checks.error(
+                            JsonPath.index(JsonPath.field(path, EquipmentSlot.FIELD_SOCKETS), s),
+                            "The plan has no socket or socket type '" + socket + "'");
+                }
+            }
+            if (slot.layer() == null && slot.sockets().isEmpty()) {
+                checks.error(path, "An equipment slot needs a layer or sockets");
             }
         }
     }

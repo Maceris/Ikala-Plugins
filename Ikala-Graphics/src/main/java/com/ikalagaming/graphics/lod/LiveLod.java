@@ -337,6 +337,15 @@ public final class LiveLod implements AutoCloseable {
     }
 
     /**
+     * The store, for tests to check batches against. Builder thread only, between steps.
+     *
+     * @return The store.
+     */
+    LodStore store() {
+        return store;
+    }
+
+    /**
      * Put in or replace a section's leaves. Safe from any thread.
      *
      * @param position The section.
@@ -504,21 +513,24 @@ public final class LiveLod implements AutoCloseable {
         for (LodStore.CellKey key : rebuilt.removed()) {
             cover(key, covered);
         }
+        // Cells whose sections all went before they were built: nothing to take out, but their
+        // removals are covered, or whoever waits on them waits for good
+        for (LodStore.CellKey key : rebuilt.emptied()) {
+            lastChange.remove(key);
+            cover(key, covered);
+        }
+        // Only the tops whose consumer may have changed: going through every cell's, as nearly
+        // every streaming batch rebuilds the root, was thousands a batch
         final List<Piece> tops = new ArrayList<>();
-        final boolean parentsBuilt = rebuilt.built().stream().anyMatch(key -> key.level() > 0);
-        if (parentsBuilt || rebuilt.removed().stream().anyMatch(key -> key.level() > 0)) {
-            final Set<LodStore.CellKey> built = new HashSet<>(rebuilt.built());
-            for (LodStore.CellKey key : store.cellKeys()) {
-                if (!built.contains(key)) {
-                    tops.add(
-                            new Piece(
-                                    key,
-                                    store.inputCount(key),
-                                    store.topParents(key),
-                                    List.of(),
-                                    List.of()));
-                }
-            }
+        for (Map.Entry<LodStore.CellKey, List<LodStore.PieceCluster>> entry :
+                store.changedTops(new HashSet<>(rebuilt.built()), rebuilt.removed()).entrySet()) {
+            tops.add(
+                    new Piece(
+                            entry.getKey(),
+                            store.inputCount(entry.getKey()),
+                            entry.getValue(),
+                            List.of(),
+                            List.of()));
         }
         long oldest = Long.MAX_VALUE;
         for (LodStore.SectionPos position : covered.keySet()) {

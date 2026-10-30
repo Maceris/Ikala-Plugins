@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.vulkan;
 
+import com.ikalagaming.graphics.lod.LongIntMap;
 import com.ikalagaming.graphics.scene.WaterTile;
 
 import lombok.NonNull;
@@ -129,8 +130,21 @@ public final class WaterMesh {
     /** The tiles being built. */
     private final List<WaterTile> tiles;
 
-    /** Each cell size's cells that hold water, by world cell. */
-    private final Map<Float, Map<Long, Cell>> cells = new HashMap<>();
+    /**
+     * Each cell size's cells that hold water, by world cell, as indices into {@link #cellList}: in
+     * primitive maps, since every corner looks around itself, and boxed keys were most of what
+     * building water allocated.
+     */
+    private final Map<Float, LongIntMap> cells = new HashMap<>();
+
+    /** The cells that hold water. */
+    private final List<Cell> cellList = new ArrayList<>();
+
+    /** The cells of the cell size of the tile being added, which {@link #cellAt} looks in. */
+    private LongIntMap sizeCells;
+
+    /** About how many cells a cell size's map starts out holding. */
+    private static final int EXPECTED_CELLS = 1024;
 
     /** The vertices so far. */
     private float[] vertices = new float[QUAD_VERTICES * VERTEX_FLOATS];
@@ -185,14 +199,15 @@ public final class WaterMesh {
     private void index() {
         for (int index = 0; index < tiles.size(); ++index) {
             final WaterTile tile = tiles.get(index);
-            final Map<Long, Cell> bySize =
-                    cells.computeIfAbsent(tile.cellSize(), s -> new HashMap<>());
+            final LongIntMap bySize =
+                    cells.computeIfAbsent(tile.cellSize(), s -> new LongIntMap(EXPECTED_CELLS));
             for (int z = 0; z < tile.cellsZ(); ++z) {
                 for (int x = 0; x < tile.cellsX(); ++x) {
                     if (tile.isWater(x, z)) {
                         bySize.put(
                                 key(worldCell(tile, x, true), worldCell(tile, z, false)),
-                                new Cell(index, x, z));
+                                cellList.size());
+                        cellList.add(new Cell(index, x, z));
                     }
                 }
             }
@@ -206,6 +221,7 @@ public final class WaterMesh {
      */
     private void addTile(int index) {
         final WaterTile tile = tiles.get(index);
+        sizeCells = cells.get(tile.cellSize());
         final int stride = tile.cellsX() + 1;
         cornerVertices = new int[stride * (tile.cellsZ() + 1)];
         Arrays.fill(cornerVertices, -1);
@@ -365,7 +381,7 @@ public final class WaterMesh {
 
     /**
      * The water cell at a place given in a tile's cells, which may be in another tile of the same
-     * cell size.
+     * cell size. Only for the tile being added, whose cell size's cells it looks in.
      *
      * @param tile The tile the place is given in.
      * @param x The cell along its x, perhaps outside it.
@@ -373,10 +389,58 @@ public final class WaterMesh {
      * @return The cell, or null where no water is.
      */
     private Cell cellAt(WaterTile tile, int x, int z) {
-        final Map<Long, Cell> bySize = cells.get(tile.cellSize());
-        return bySize == null
-                ? null
-                : bySize.get(key(worldCell(tile, x, true), worldCell(tile, z, false)));
+        if (sizeCells == null) {
+            return null;
+        }
+        final int at = sizeCells.get(key(worldCell(tile, x, true), worldCell(tile, z, false)));
+        return at == LongIntMap.MISSING ? null : cellList.get(at);
+    }
+
+    /**
+     * What each one meter cell water covers holds, see {@link #waterCellData}, looked up without
+     * boxing.
+     */
+    public static final class CellData {
+        /** None. */
+        public static final CellData EMPTY = new CellData(new LongIntMap(0), List.of());
+
+        /** Each cell's row in {@link #rows}, by {@link #worldKey}. */
+        private final LongIntMap index;
+
+        /** The cells' values, shared by cells alike. */
+        private final List<float[]> rows;
+
+        /**
+         * Hold some cells.
+         *
+         * @param index Each cell's row, by {@link #worldKey}.
+         * @param rows The values.
+         */
+        private CellData(@NonNull LongIntMap index, @NonNull List<float[]> rows) {
+            this.index = index;
+            this.rows = rows;
+        }
+
+        /**
+         * What a cell holds.
+         *
+         * @param x The cell along x.
+         * @param z Along z.
+         * @return Its values, or null where no water is.
+         */
+        public float[] get(long x, long z) {
+            final int at = index.get(worldKey(x, z));
+            return at == LongIntMap.MISSING ? null : rows.get(at);
+        }
+
+        /**
+         * How many cells hold water.
+         *
+         * @return The count.
+         */
+        public int size() {
+            return index.size();
+        }
     }
 
     /**
@@ -517,9 +581,10 @@ public final class WaterMesh {
      * @param climates Each tile's wind climate, -1 for none.
      * @return The cells' flows, depths and climates.
      */
-    public static Map<Long, float[]> waterCellData(
+    public static CellData waterCellData(
             @NonNull List<WaterTile> tiles, @NonNull List<Integer> climates) {
-        final Map<Long, float[]> covered = new HashMap<>();
+        final LongIntMap covered = new LongIntMap(EXPECTED_CELLS);
+        final List<float[]> rows = new ArrayList<>();
         for (int t = 0; t < tiles.size(); ++t) {
             final WaterTile tile = tiles.get(t);
             final int climate = t < climates.size() ? climates.get(t) : -1;
@@ -546,17 +611,21 @@ public final class WaterMesh {
                     }
                     final double minX = tile.origin().x() + x * size;
                     final double minZ = tile.origin().z() + z * size;
+                    final int row = rows.size();
+                    rows.add(data);
                     for (long wz = (long) Math.floor(minZ); wz < Math.ceil(minZ + size); ++wz) {
                         for (long wx = (long) Math.floor(minX); wx < Math.ceil(minX + size); ++wx) {
-                            covered.put(worldKey(wx, wz), data);
+                            covered.put(worldKey(wx, wz), row);
                         }
                     }
                 }
             }
         }
         // Falls: a neighbor's surface standing higher than a cell's pours onto it
-        final Map<Long, Float> surfaces = new HashMap<>();
-        final List<long[]> cells = new ArrayList<>();
+        final LongIntMap surfaceAt = new LongIntMap(EXPECTED_CELLS);
+        float[] surfaces = new float[EXPECTED_CELLS];
+        long[] cells = new long[2 * EXPECTED_CELLS];
+        int cellCount = 0;
         for (WaterTile tile : tiles) {
             for (int z = 0; z < tile.cellsZ(); ++z) {
                 for (int x = 0; x < tile.cellsX(); ++x) {
@@ -572,35 +641,53 @@ public final class WaterMesh {
                                             / CELL_CORNERS;
                     final long wx = (long) Math.floor(tile.origin().x() + x * tile.cellSize());
                     final long wz = (long) Math.floor(tile.origin().z() + z * tile.cellSize());
-                    surfaces.merge(worldKey(wx, wz), surface, Math::max);
-                    cells.add(new long[] {wx, wz});
+                    final long key = worldKey(wx, wz);
+                    final int known = surfaceAt.get(key);
+                    if (known != LongIntMap.MISSING) {
+                        surfaces[known] = Math.max(surfaces[known], surface);
+                    } else {
+                        final int slot = surfaceAt.size();
+                        if (slot == surfaces.length) {
+                            surfaces = Arrays.copyOf(surfaces, slot * 2);
+                        }
+                        surfaces[slot] = surface;
+                        surfaceAt.put(key, slot);
+                    }
+                    if (2 * cellCount + 1 >= cells.length) {
+                        cells = Arrays.copyOf(cells, cells.length * 2);
+                    }
+                    cells[2 * cellCount] = wx;
+                    cells[2 * cellCount + 1] = wz;
+                    ++cellCount;
                 }
             }
         }
-        for (long[] cell : cells) {
-            final long wx = cell[0];
-            final long wz = cell[1];
+        for (int c = 0; c < cellCount; ++c) {
+            final long wx = cells[2 * c];
+            final long wz = cells[2 * c + 1];
             final long key = worldKey(wx, wz);
-            final Float here = surfaces.get(key);
-            final float[] data = covered.get(key);
-            if (here == null || data == null) {
+            final int here = surfaceAt.get(key);
+            final int row = covered.get(key);
+            if (here == LongIntMap.MISSING || row == LongIntMap.MISSING) {
                 continue;
             }
+            final float[] data = rows.get(row);
             float drop = 0;
             for (int[] step : PLUNGE_NEIGHBORS) {
-                final Float above = surfaces.get(worldKey(wx + step[0], wz + step[1]));
-                if (above != null && above - here > LEVEL_STEP) {
-                    drop = Math.max(drop, above - here);
+                final int above = surfaceAt.get(worldKey(wx + step[0], wz + step[1]));
+                if (above != LongIntMap.MISSING && surfaces[above] - surfaces[here] > LEVEL_STEP) {
+                    drop = Math.max(drop, surfaces[above] - surfaces[here]);
                 }
             }
             if (drop > data[CELL_PLUNGE]) {
                 // Cells of one tile share their data array: give this one its own
                 final float[] own = data.clone();
                 own[CELL_PLUNGE] = drop;
-                covered.put(key, own);
+                covered.put(key, rows.size());
+                rows.add(own);
             }
         }
-        return covered;
+        return new CellData(covered, rows);
     }
 
     /** The four neighbors a cell's water can fall from. */
