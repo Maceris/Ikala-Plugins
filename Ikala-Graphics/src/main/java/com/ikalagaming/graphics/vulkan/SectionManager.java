@@ -620,7 +620,16 @@ public class SectionManager {
             sections.put(id, section);
             if (section.position != null) {
                 byPosition.put(section.position, section);
-                if (live.containsKey(owner)) {
+                final Live world = live.get(owner);
+                if (world != null) {
+                    // A section streamed back in goes on from where the one taken out there
+                    // stopped: starting again from the first generation, its bakes were older
+                    // than the removal, which then waited for ever and hid the level of detail
+                    // there near the observer
+                    final Long removedAt = world.removed().get(section.position);
+                    if (removedAt != null) {
+                        section.requested = removedAt;
+                    }
                     markBehind(section);
                 }
             }
