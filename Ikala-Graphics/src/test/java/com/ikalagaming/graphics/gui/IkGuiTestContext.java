@@ -263,6 +263,9 @@ class IkGuiTestContext implements TestEngineHooks {
 
     IkGuiTestContext() {
         context = IkGui.createContext();
+        // Dear ImGui's own style, whatever the Ikala presets become
+        IkGui.styleVariablesDearImGui();
+        IkGui.styleColorsDark();
         // Don't read or write an .ini file
         context.io.iniFilename = null;
         context.io.displaySize.set(1280, 800);

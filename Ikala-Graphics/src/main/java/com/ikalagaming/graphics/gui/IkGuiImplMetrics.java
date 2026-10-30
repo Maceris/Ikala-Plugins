@@ -2262,11 +2262,14 @@ class IkGuiImplMetrics {
         IkGui.text(String.format("Point Index: %d, Detail Index: %d", pointIndex, detailIndex));
         IkGui.text(
                 String.format(
-                        "Stroke: %f, Flags: 0x%X%s",
+                        "Stroke: %f, Flags: 0x%X%s%s",
                         stroke,
                         commandFlags,
                         (commandFlags & DrawList.COMMAND_FLAG_INVERT_EDGE_FADE) != 0
                                 ? " (invert edge fade)"
+                                : "",
+                        (commandFlags & DrawList.COMMAND_FLAG_FADE_TO_COLOR) != 0
+                                ? " (fade to color)"
                                 : ""));
         final ByteBuffer points = drawList.pointBuffer;
         // Coarsely clip the lines of points and details, since there can be many of them. Each

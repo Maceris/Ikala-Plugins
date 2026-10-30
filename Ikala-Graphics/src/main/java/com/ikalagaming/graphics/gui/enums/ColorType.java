@@ -64,4 +64,9 @@ public enum ColorType {
     TREE_LINES,
     UNSAVED_MARKER,
     WINDOW_BACKGROUND,
+    /**
+     * What a window's background, title bar and menu bar fade to over the window edge fade: at the
+     * fading edges, or in the middle when the fade is inverted. Not part of Dear ImGui.
+     */
+    WINDOW_BACKGROUND_SECONDARY,
 }

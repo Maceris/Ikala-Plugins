@@ -16,6 +16,7 @@ const int ELEMENT_STYLE_TEXTURE = 2;
 // Command flags
 const int COMMAND_FLAG_INVERT_EDGE_FADE = 1;
 const int COMMAND_FLAG_TEXTURE_VIEW = 2;
+const int COMMAND_FLAG_FADE_TO_COLOR = 4;
 
 // Texture view channels and options, see DrawList.TextureView
 const int VIEW_CHANNEL_RGBA = 0;
@@ -489,6 +490,18 @@ vec4 rectangleColor(Command command, vec2 posRelative, vec2 halfSize) {
     return mix(mix(topLeft, topRight, uv.x), mix(bottomLeft, bottomRight, uv.x), uv.y);
 }
 
+// A rectangle's color blended between its corners, from either their colors alone or their tints
+// alone, for rectangles that fade to the tints (COMMAND_FLAG_FADE_TO_COLOR).
+vec4 rectangleCornerColor(Command command, vec2 posRelative, vec2 halfSize, bool tints) {
+    vec4 corners[4];
+    for (int i = 0; i < 4; ++i) {
+        const PointDetail detail = pointDetails[command.detailIndex + i];
+        corners[i] = intToColor(uint(tints ? detail.tint : detail.colorOrTextureID));
+    }
+    const vec2 uv = clamp((posRelative + halfSize) / max(2 * halfSize, vec2(0.0001f)), 0.0f, 1.0f);
+    return mix(mix(corners[0], corners[1], uv.x), mix(corners[3], corners[2], uv.x), uv.y);
+}
+
 // Pick which of two opposite edges a pixel fades towards: whichever it is further into the fade
 // of. An edge with a fade of 0 never fades. Outputs the distance from the chosen edge and its fade
 // width, which is 0 if neither edge fades.
@@ -559,6 +572,8 @@ float rectangleEdgeFade(vec2 fragPos, vec2 fadeMin, vec2 fadeMax, vec4 fades, ve
 // Stroke: border thickness for the border style.
 // Flags: COMMAND_FLAG_INVERT_EDGE_FADE inverts the edge fade, so the edges are opaque instead.
 // COMMAND_FLAG_TEXTURE_VIEW shows a texture the way an image viewer does, with point 2.
+// COMMAND_FLAG_FADE_TO_COLOR makes a fill fade to its corners' tints rather than to transparent,
+// with the tints not added to the colors.
 void draw_rectangle(Command command, vec2 fragPos) {
     const bool textureView = command.style == ELEMENT_STYLE_TEXTURE
         && (command.flags & COMMAND_FLAG_TEXTURE_VIEW) != 0;
@@ -610,7 +625,12 @@ void draw_rectangle(Command command, vec2 fragPos) {
 
     switch (command.style) {
         case ELEMENT_STYLE_FILL:
-            if (filled) {
+            if (filled && (command.flags & COMMAND_FLAG_FADE_TO_COLOR) != 0) {
+                // Blend from the color the edges fade to, alpha and all
+                outColor = mix(rectangleCornerColor(command, posRelative, halfSize, true),
+                    rectangleCornerColor(command, posRelative, halfSize, false), fadeMul);
+            }
+            else if (filled) {
                 outColor = rectangleColor(command, posRelative, halfSize);
                 outColor.a *= fadeMul;
             }

@@ -324,6 +324,66 @@ class DrawListTest {
     }
 
     @Test
+    void testRectangleFadesToAColor() {
+        final int fadeColor = Color.rgba(10, 20, 30, 128);
+        Command[] commands =
+                draw(
+                        list -> {
+                            list.addRectFilledFaded(
+                                    0,
+                                    0,
+                                    200,
+                                    100,
+                                    Color.WHITE,
+                                    fadeColor,
+                                    4,
+                                    DrawFlags.ROUND_CORNERS_ALL,
+                                    new Vector4f(8, 8, 8, 8),
+                                    null,
+                                    true);
+                            // Nothing fades, so there is nothing to fade to
+                            list.addRectFilledFaded(
+                                    0,
+                                    0,
+                                    200,
+                                    100,
+                                    Color.WHITE,
+                                    fadeColor,
+                                    4,
+                                    DrawFlags.ROUND_CORNERS_ALL,
+                                    new Vector4f(0, 0, 0, 0),
+                                    null,
+                                    true);
+                        });
+        assertEquals(2, commands.length);
+
+        assertEquals(
+                DrawList.COMMAND_FLAG_INVERT_EDGE_FADE | DrawList.COMMAND_FLAG_FADE_TO_COLOR,
+                commands[0].flags());
+        // Each corner's tint is the color it fades to
+        for (int i = 0; i < 4; ++i) {
+            assertEquals(fadeColor, tintOf(commands[0], i));
+        }
+
+        assertEquals(0, commands[1].flags());
+        for (int i = 0; i < 4; ++i) {
+            assertEquals(Color.CLEAR, tintOf(commands[1], i));
+        }
+    }
+
+    /**
+     * Read the tint out of a point detail of a command.
+     *
+     * @param command The command.
+     * @param detail Which of the command's details to read.
+     * @return The tint.
+     */
+    private int tintOf(Command command, int detail) {
+        final int offset = (command.detailIndex() + detail) * DrawData.SIZE_OF_POINT_DETAIL;
+        return drawList.pointDetailBuffer.getInt(offset + 2 * Float.BYTES + Integer.BYTES);
+    }
+
+    @Test
     void testRectangleOutlineEdgeFade() {
         Command[] commands =
                 draw(

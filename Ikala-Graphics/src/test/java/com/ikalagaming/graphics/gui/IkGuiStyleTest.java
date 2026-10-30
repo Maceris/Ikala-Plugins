@@ -67,6 +67,7 @@ class IkGuiStyleTest {
     void testThemesSetEveryColor() {
         final Consumer<StyleColors>[] themes =
                 new Consumer[] {
+                    (Consumer<StyleColors>) StyleColors::setThemeIkala,
                     (Consumer<StyleColors>) StyleColors::setThemeDark,
                     (Consumer<StyleColors>) StyleColors::setThemeLight,
                     (Consumer<StyleColors>) StyleColors::setThemeClassic
@@ -82,6 +83,61 @@ class IkGuiStyleTest {
                 assertNotEquals(sentinel, colors.get(type), type + " was not set by the theme");
             }
         }
+    }
+
+    @Test
+    void testIkalaIsTheDefaultAndStartsAsDark() {
+        final StyleColors dark = new StyleColors();
+        StyleColors.setThemeDark(dark);
+        final StyleColors ikala = new StyleColors();
+        StyleColors.setThemeIkala(ikala);
+        final StyleColors fresh = new StyleColors();
+        for (ColorType type : ColorType.values()) {
+            assertEquals(ikala.get(type), fresh.get(type), type + " isn't the Ikala theme's");
+        }
+        assertEquals(dark.get(ColorType.WINDOW_BACKGROUND), ikala.get(ColorType.WINDOW_BACKGROUND));
+    }
+
+    @Test
+    void testSecondaryBackgroundIsTheTransparentBackgroundInDearImGuiThemes() {
+        // Dear ImGui's themes fade to transparent as they did; the Ikala theme picks its own
+        final Consumer<StyleColors>[] themes =
+                new Consumer[] {
+                    (Consumer<StyleColors>) StyleColors::setThemeDark,
+                    (Consumer<StyleColors>) StyleColors::setThemeLight,
+                    (Consumer<StyleColors>) StyleColors::setThemeClassic
+                };
+        for (Consumer<StyleColors> theme : themes) {
+            final StyleColors colors = new StyleColors();
+            theme.accept(colors);
+            assertEquals(
+                    colors.get(ColorType.WINDOW_BACKGROUND) & 0xFFFFFF00,
+                    colors.get(ColorType.WINDOW_BACKGROUND_SECONDARY),
+                    "Fades as it did to transparent");
+        }
+    }
+
+    @Test
+    void testVariablePresets() {
+        final StyleVariables ikala = new StyleVariables();
+        final StyleVariables dearImGui = new StyleVariables();
+        StyleVariables.setDearImGui(dearImGui);
+        // Dear ImGui's own defaults
+        assertEquals(8, dearImGui.windowPadding.x, 0.0f);
+        assertEquals(4, dearImGui.framePadding.x, 0.0f);
+        assertEquals(14, dearImGui.scrollbarSize, 0.0f);
+
+        // A preset sets every value, whatever was there
+        ikala.windowPadding.set(99, 99);
+        ikala.scrollbarSize = 99;
+        StyleVariables.setIkala(ikala);
+        final StyleVariables fresh = new StyleVariables();
+        assertEquals(fresh.windowPadding, ikala.windowPadding);
+        assertEquals(fresh.scrollbarSize, ikala.scrollbarSize, 0.0f);
+
+        IkGui.getStyle().variable.scrollbarSize = 99;
+        IkGui.styleVariablesDearImGui();
+        assertEquals(14, IkGui.getStyle().variable.scrollbarSize, 0.0f);
     }
 
     @Test

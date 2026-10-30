@@ -77,10 +77,11 @@ public class StyleColors {
     public int treeLines;
     public int unsavedMarker;
     public int windowBackground;
+    public int windowBackgroundSecondary;
 
-    /** Create colors with the dark theme. */
+    /** Create colors with the Ikala theme, the default. */
     public StyleColors() {
-        setThemeDark(this);
+        setThemeIkala(this);
     }
 
     /**
@@ -163,6 +164,7 @@ public class StyleColors {
             case TREE_LINES -> treeLines;
             case UNSAVED_MARKER -> unsavedMarker;
             case WINDOW_BACKGROUND -> windowBackground;
+            case WINDOW_BACKGROUND_SECONDARY -> windowBackgroundSecondary;
         };
     }
 
@@ -237,6 +239,7 @@ public class StyleColors {
             case TREE_LINES -> treeLines = color;
             case UNSAVED_MARKER -> unsavedMarker = color;
             case WINDOW_BACKGROUND -> windowBackground = color;
+            case WINDOW_BACKGROUND_SECONDARY -> windowBackgroundSecondary = color;
         }
     }
 
@@ -317,7 +320,100 @@ public class StyleColors {
     }
 
     /**
-     * Set the colors to the dark theme, which is the default.
+     * Set the colors to the Ikala theme, which is the default. It started as a copy of the dark
+     * theme.
+     *
+     * @param target The colors to modify.
+     */
+    public static void setThemeIkala(@NonNull StyleColors target) {
+        final Map<ColorType, float[]> c = new EnumMap<>(ColorType.class);
+        c.put(ColorType.TEXT, vec(1.00f, 1.00f, 1.00f, 1.00f));
+        c.put(ColorType.TEXT_DISABLED, vec(0.50f, 0.50f, 0.50f, 1.00f));
+        c.put(ColorType.WINDOW_BACKGROUND, vec(0.06f, 0.06f, 0.06f, 0.94f));
+        c.put(ColorType.CHILD_BACKGROUND, vec(0.00f, 0.00f, 0.00f, 0.00f));
+        c.put(ColorType.POPUP_BACKGROUND, vec(0.08f, 0.08f, 0.08f, 0.94f));
+        c.put(ColorType.BORDER, vec(0.43f, 0.43f, 0.50f, 0.50f));
+        c.put(ColorType.BORDER_SHADOW, vec(0.00f, 0.00f, 0.00f, 0.00f));
+        c.put(ColorType.FRAME_BACKGROUND, vec(0.16f, 0.29f, 0.48f, 0.54f));
+        c.put(ColorType.FRAME_BACKGROUND_HOVERED, vec(0.26f, 0.59f, 0.98f, 0.40f));
+        c.put(ColorType.FRAME_BACKGROUND_ACTIVE, vec(0.26f, 0.59f, 0.98f, 0.67f));
+        c.put(ColorType.TITLE_BACKGROUND, vec(0.04f, 0.04f, 0.04f, 1.00f));
+        c.put(ColorType.TITLE_BACKGROUND_ACTIVE, vec(0.16f, 0.29f, 0.48f, 1.00f));
+        c.put(ColorType.TITLE_BACKGROUND_COLLAPSED, vec(0.00f, 0.00f, 0.00f, 0.51f));
+        c.put(ColorType.MENU_BAR_BACKGROUND, vec(0.14f, 0.14f, 0.14f, 1.00f));
+        c.put(ColorType.SCROLLBAR_BACKGROUND, vec(0.02f, 0.02f, 0.02f, 0.53f));
+        c.put(ColorType.SCROLLBAR_GRAB, vec(0.31f, 0.31f, 0.31f, 1.00f));
+        c.put(ColorType.SCROLLBAR_GRAB_HOVERED, vec(0.41f, 0.41f, 0.41f, 1.00f));
+        c.put(ColorType.SCROLLBAR_GRAB_ACTIVE, vec(0.51f, 0.51f, 0.51f, 1.00f));
+        c.put(ColorType.CHECK_MARK, vec(0.26f, 0.59f, 0.98f, 1.00f));
+        c.put(
+                ColorType.CHECKBOX_SELECTED_BACKGROUND,
+                lerp(
+                        c.get(ColorType.FRAME_BACKGROUND),
+                        c.get(ColorType.FRAME_BACKGROUND_HOVERED),
+                        0.65f));
+        c.put(ColorType.SLIDER_GRAB, vec(0.24f, 0.52f, 0.88f, 1.00f));
+        c.put(ColorType.SLIDER_GRAB_ACTIVE, vec(0.26f, 0.59f, 0.98f, 1.00f));
+        c.put(ColorType.BUTTON, vec(0.26f, 0.59f, 0.98f, 0.40f));
+        c.put(ColorType.BUTTON_HOVERED, vec(0.26f, 0.59f, 0.98f, 1.00f));
+        c.put(ColorType.BUTTON_ACTIVE, vec(0.06f, 0.53f, 0.98f, 1.00f));
+        c.put(ColorType.HEADER, vec(0.26f, 0.59f, 0.98f, 0.31f));
+        c.put(ColorType.HEADER_HOVERED, vec(0.26f, 0.59f, 0.98f, 0.80f));
+        c.put(ColorType.HEADER_ACTIVE, vec(0.26f, 0.59f, 0.98f, 1.00f));
+        c.put(ColorType.SEPARATOR, c.get(ColorType.BORDER));
+        c.put(ColorType.SEPARATOR_HOVERED, vec(0.10f, 0.40f, 0.75f, 0.78f));
+        c.put(ColorType.SEPARATOR_ACTIVE, vec(0.10f, 0.40f, 0.75f, 1.00f));
+        c.put(ColorType.RESIZE_GRIP, vec(0.26f, 0.59f, 0.98f, 0.20f));
+        c.put(ColorType.RESIZE_GRIP_HOVERED, vec(0.26f, 0.59f, 0.98f, 0.67f));
+        c.put(ColorType.RESIZE_GRIP_ACTIVE, vec(0.26f, 0.59f, 0.98f, 0.95f));
+        c.put(ColorType.INPUT_TEXT_CURSOR, c.get(ColorType.TEXT));
+        c.put(ColorType.TAB_HOVERED, c.get(ColorType.HEADER_HOVERED));
+        c.put(
+                ColorType.TAB,
+                lerp(c.get(ColorType.HEADER), c.get(ColorType.TITLE_BACKGROUND_ACTIVE), 0.80f));
+        c.put(
+                ColorType.TAB_SELECTED,
+                lerp(
+                        c.get(ColorType.HEADER_ACTIVE),
+                        c.get(ColorType.TITLE_BACKGROUND_ACTIVE),
+                        0.60f));
+        c.put(ColorType.TAB_SELECTED_OVERLINE, c.get(ColorType.HEADER_ACTIVE));
+        c.put(
+                ColorType.TAB_DIMMED,
+                lerp(c.get(ColorType.TAB), c.get(ColorType.TITLE_BACKGROUND), 0.80f));
+        c.put(
+                ColorType.TAB_DIMMED_SELECTED,
+                lerp(c.get(ColorType.TAB_SELECTED), c.get(ColorType.TITLE_BACKGROUND), 0.40f));
+        c.put(ColorType.TAB_DIMMED_SELECTED_OVERLINE, vec(0.50f, 0.50f, 0.50f, 0.00f));
+        c.put(
+                ColorType.DOCKING_PREVIEW,
+                multiply(c.get(ColorType.HEADER_ACTIVE), vec(1.0f, 1.0f, 1.0f, 0.7f)));
+        c.put(ColorType.DOCKING_EMPTY_BACKGROUND, vec(0.20f, 0.20f, 0.20f, 1.00f));
+        c.put(ColorType.PLOT_LINES, vec(0.61f, 0.61f, 0.61f, 1.00f));
+        c.put(ColorType.PLOT_LINES_HOVERED, vec(1.00f, 0.43f, 0.35f, 1.00f));
+        c.put(ColorType.PLOT_HISTOGRAM, vec(0.90f, 0.70f, 0.00f, 1.00f));
+        c.put(ColorType.PLOT_HISTOGRAM_HOVERED, vec(1.00f, 0.60f, 0.00f, 1.00f));
+        c.put(ColorType.TABLE_HEADER_BACKGROUND, vec(0.19f, 0.19f, 0.20f, 1.00f));
+        c.put(ColorType.TABLE_BORDER_STRONG, vec(0.31f, 0.31f, 0.35f, 1.00f));
+        c.put(ColorType.TABLE_BORDER_LIGHT, vec(0.23f, 0.23f, 0.25f, 1.00f));
+        c.put(ColorType.TABLE_ROW_BACKGROUND, vec(0.00f, 0.00f, 0.00f, 0.00f));
+        c.put(ColorType.TABLE_ROW_BACKGROUND_ALT, vec(1.00f, 1.00f, 1.00f, 0.06f));
+        c.put(ColorType.TEXT_LINK, c.get(ColorType.HEADER_ACTIVE));
+        c.put(ColorType.TEXT_SELECTED_BACKGROUND, vec(0.26f, 0.59f, 0.98f, 0.35f));
+        c.put(ColorType.TREE_LINES, c.get(ColorType.BORDER));
+        c.put(ColorType.DRAG_DROP_TARGET, vec(1.00f, 1.00f, 0.00f, 0.90f));
+        c.put(ColorType.DRAG_DROP_TARGET_BACKGROUND, vec(0.00f, 0.00f, 0.00f, 0.00f));
+        c.put(ColorType.UNSAVED_MARKER, vec(1.00f, 1.00f, 1.00f, 1.00f));
+        c.put(ColorType.NAV_CURSOR, vec(0.26f, 0.59f, 0.98f, 1.00f));
+        c.put(ColorType.NAV_WINDOWING_HIGHLIGHT, vec(1.00f, 1.00f, 1.00f, 0.70f));
+        c.put(ColorType.NAV_WINDOWING_DIM_BACKGROUND, vec(0.80f, 0.80f, 0.80f, 0.20f));
+        c.put(ColorType.MODAL_WINDOWING_DIM_BACKGROUND, vec(0.80f, 0.80f, 0.80f, 0.35f));
+        c.put(ColorType.WINDOW_BACKGROUND_SECONDARY, vec(0.06f, 0.06f, 0.06f, 0.63f));
+        apply(target, c);
+    }
+
+    /**
+     * Set the colors to the dark theme.
      *
      * @param target The colors to modify.
      */
@@ -404,6 +500,9 @@ public class StyleColors {
         c.put(ColorType.NAV_WINDOWING_HIGHLIGHT, vec(1.00f, 1.00f, 1.00f, 0.70f));
         c.put(ColorType.NAV_WINDOWING_DIM_BACKGROUND, vec(0.80f, 0.80f, 0.80f, 0.20f));
         c.put(ColorType.MODAL_WINDOWING_DIM_BACKGROUND, vec(0.80f, 0.80f, 0.80f, 0.35f));
+        c.put(
+                ColorType.WINDOW_BACKGROUND_SECONDARY,
+                multiply(c.get(ColorType.WINDOW_BACKGROUND), vec(1.0f, 1.0f, 1.0f, 0.0f)));
         apply(target, c);
     }
 
@@ -495,6 +594,9 @@ public class StyleColors {
         c.put(ColorType.NAV_WINDOWING_HIGHLIGHT, vec(1.00f, 1.00f, 1.00f, 0.70f));
         c.put(ColorType.NAV_WINDOWING_DIM_BACKGROUND, vec(0.80f, 0.80f, 0.80f, 0.20f));
         c.put(ColorType.MODAL_WINDOWING_DIM_BACKGROUND, vec(0.20f, 0.20f, 0.20f, 0.35f));
+        c.put(
+                ColorType.WINDOW_BACKGROUND_SECONDARY,
+                multiply(c.get(ColorType.WINDOW_BACKGROUND), vec(1.0f, 1.0f, 1.0f, 0.0f)));
         apply(target, c);
     }
 
@@ -582,6 +684,9 @@ public class StyleColors {
         c.put(ColorType.NAV_WINDOWING_HIGHLIGHT, vec(0.70f, 0.70f, 0.70f, 0.70f));
         c.put(ColorType.NAV_WINDOWING_DIM_BACKGROUND, vec(0.20f, 0.20f, 0.20f, 0.20f));
         c.put(ColorType.MODAL_WINDOWING_DIM_BACKGROUND, vec(0.20f, 0.20f, 0.20f, 0.35f));
+        c.put(
+                ColorType.WINDOW_BACKGROUND_SECONDARY,
+                multiply(c.get(ColorType.WINDOW_BACKGROUND), vec(1.0f, 1.0f, 1.0f, 0.0f)));
         apply(target, c);
     }
 }

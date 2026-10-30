@@ -2956,9 +2956,9 @@ class IkGuiImplWindows {
         final float borderSize = window.borderSize;
         final int borderColor = IkGuiImplUtils.getColorWithGlobalAlpha(ColorType.BORDER);
         if (borderSize > 0.0f && (window.flags & WindowFlags.NO_BACKGROUND) == 0) {
-            // The border fades with the background, so edges that fade have no border (or only
-            // they have one, when the fade is inverted)
-            window.drawList.addRectFaded(
+            // The border is apart from the edge fade, so it stays whichever way the background
+            // fades
+            window.drawList.addRect(
                     window.position.x,
                     window.position.y,
                     window.position.x + window.size.x,
@@ -2966,10 +2966,7 @@ class IkGuiImplWindows {
                     borderColor,
                     window.rounding,
                     DrawFlags.ROUND_CORNERS_ALL,
-                    borderSize,
-                    window.edgeFade,
-                    null,
-                    window.edgeFadeInvert);
+                    borderSize);
         } else if (borderSize > 0.0f) {
             if ((window.flagsAsChildWindow & ChildFlags.RESIZE_X) != 0) {
                 renderWindowOuterSingleBorder(window, 1, borderColor, borderSize);
@@ -3005,17 +3002,12 @@ class IkGuiImplWindows {
                 && (window.flags & WindowFlags.NO_TITLE_BAR) == 0
                 && !window.dockIsActive) {
             final float y = window.position.y + window.titleBarHeight - 1;
-            window.drawList.addRectFilledFaded(
+            window.drawList.addRectFilled(
                     window.position.x + borderSize * 0.5f,
                     y,
                     window.position.x + window.size.x - borderSize * 0.5f,
                     y + frameBorderSize,
-                    borderColor,
-                    0.0f,
-                    DrawFlags.ROUND_CORNERS_NONE,
-                    window.edgeFade,
-                    window.getRect(),
-                    window.edgeFadeInvert);
+                    borderColor);
         }
     }
 
@@ -3050,8 +3042,11 @@ class IkGuiImplWindows {
         // reappearing frame.
         final float windowRounding = window.rounding;
         final float windowBorderSize = window.borderSize;
-        // The backgrounds fade at the edges of the whole window, so they fade as one shape
+        // The backgrounds fade at the edges of the whole window, so they fade as one shape, to the
+        // theme's fade color
         final RectFloat windowRect = window.getRect();
+        final int fadeColor =
+                IkGuiImplUtils.getColorWithGlobalAlpha(ColorType.WINDOW_BACKGROUND_SECONDARY);
         if (window.collapsed) {
             // Title bar only
             int titleBarColor =
@@ -3069,13 +3064,14 @@ class IkGuiImplWindows {
                     titleBarRect.getRight(),
                     titleBarRect.getBottom(),
                     titleBarColor,
+                    fadeColor,
                     windowRounding,
                     DrawFlags.ROUND_CORNERS_ALL,
                     window.edgeFade,
                     titleBarRect,
                     window.edgeFadeInvert);
             if (windowBorderSize > 0.0f) {
-                window.drawList.addRectFaded(
+                window.drawList.addRect(
                         titleBarRect.getLeft(),
                         titleBarRect.getTop(),
                         titleBarRect.getRight(),
@@ -3083,10 +3079,7 @@ class IkGuiImplWindows {
                         IkGuiImplUtils.getColorWithGlobalAlpha(ColorType.BORDER),
                         windowRounding,
                         DrawFlags.ROUND_CORNERS_ALL,
-                        windowBorderSize,
-                        window.edgeFade,
-                        titleBarRect,
-                        window.edgeFadeInvert);
+                        windowBorderSize);
             }
         } else {
             // Window background
@@ -3165,6 +3158,7 @@ class IkGuiImplWindows {
                             backgroundRect.getRight(),
                             backgroundRect.getBottom(),
                             backgroundColor,
+                            fadeColor,
                             windowRounding,
                             roundingFlags,
                             window.edgeFade,
@@ -3193,6 +3187,7 @@ class IkGuiImplWindows {
                         titleBarRect.getRight(),
                         titleBarRect.getBottom(),
                         titleBarColor,
+                        fadeColor,
                         windowRounding,
                         DrawFlags.ROUND_CORNERS_TOP,
                         window.edgeFade,
@@ -3213,6 +3208,7 @@ class IkGuiImplWindows {
                         menuBarRect.getRight(),
                         menuBarRect.getBottom(),
                         IkGuiImplUtils.getColorWithGlobalAlpha(ColorType.MENU_BAR_BACKGROUND),
+                        fadeColor,
                         (flags & WindowFlags.NO_TITLE_BAR) != 0 ? windowRounding : 0.0f,
                         DrawFlags.ROUND_CORNERS_TOP,
                         window.edgeFade,
@@ -3220,17 +3216,12 @@ class IkGuiImplWindows {
                         window.edgeFadeInvert);
                 if (style.frameBorderSize > 0.0f
                         && menuBarRect.getBottom() < window.position.y + window.size.y) {
-                    window.drawList.addRectFilledFaded(
+                    window.drawList.addRectFilled(
                             menuBarRect.getLeft() + windowBorderSize * 0.5f,
                             menuBarRect.getBottom(),
                             menuBarRect.getRight() - windowBorderSize * 0.5f,
                             menuBarRect.getBottom() + style.frameBorderSize,
-                            IkGuiImplUtils.getColorWithGlobalAlpha(ColorType.BORDER),
-                            0.0f,
-                            DrawFlags.ROUND_CORNERS_NONE,
-                            window.edgeFade,
-                            windowRect,
-                            window.edgeFadeInvert);
+                            IkGuiImplUtils.getColorWithGlobalAlpha(ColorType.BORDER));
                 }
             }
 

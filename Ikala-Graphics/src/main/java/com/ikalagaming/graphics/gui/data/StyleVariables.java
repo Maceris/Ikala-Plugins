@@ -259,78 +259,187 @@ public class StyleVariables {
      */
     public int hoverFlagsForTooltipNav;
 
+    /** Create style variables with the Ikala preset, the default. */
     public StyleVariables() {
-        alpha = 1.0f;
-        buttonTextAlign = new Vector2f(0.5f, 0.5f);
-        cellPadding = new Vector2f(4, 2);
-        menuItemRounding = 0;
-        selectableRounding = 0;
-        separatorSize = 1;
-        mouseCursorScale = 1;
-        colorMarkerSize = 3;
-        childBorderSize = 1;
-        childRounding = 0;
-        colorButtonPosition = ColorButtonPosition.RIGHT;
-        disabledAlpha = 0.6f;
-        dockingNodeHasCloseButton = true;
-        dockingSeparatorSize = 2;
-        dragDropTargetRounding = 0;
-        dragDropTargetBorderSize = 2;
-        dragDropTargetPadding = 3;
-        frameBorderSize = 0;
-        framePadding = new Vector2f(4, 3);
-        frameRounding = 0;
-        grabMinSize = 12;
-        grabRounding = 0;
-        indentSpacing = 21;
-        itemInnerSpacing = new Vector2f(4, 4);
-        itemSpacing = new Vector2f(8, 4);
-        logSliderDeadzone = 4;
-        popupBorderSize = 1;
-        popupRounding = 0;
-        scrollbarRounding = 9;
-        scrollbarSize = 14;
-        selectableTextAlign = new Vector2f(0.0f, 0.0f);
-        separatorTextBorderSize = 3;
-        separatorTextAlign = new Vector2f(0.0f, 0.5f);
-        separatorTextPadding = new Vector2f(20, 3);
-        tabBarBorderSize = 1;
-        tabBarOverlineSize = 1;
-        treeLinesFlags = TreeNodeFlags.DRAW_LINES_NONE;
-        treeLinesSize = 1;
-        treeLinesRounding = 0;
-        tabMinWidthBase = 1;
-        tabMinWidthShrink = 80;
-        tabCloseButtonMinWidthSelected = -1;
-        tabCloseButtonMinWidthUnselected = 0;
-        tabBorderSize = 0;
-        tableAngledHeadersAngle = 35;
-        tableAngledHeadersTextAlign = new Vector2f(0.5f, 0.0f);
-        tabRounding = 4;
-        touchExtraPadding = new Vector2f(0, 0);
-        windowBorderHoverPadding = 4;
-        windowBorderSize = 1;
-        windowEdgeFade = new Vector4f(0, 0, 0, 0);
-        windowEdgeFadeInvert = false;
-        windowMenuButtonPosition = WindowMenuButtonPosition.LEFT;
-        windowMinSize = new Vector2f(32, 32);
-        windowPadding = new Vector2f(8, 8);
-        windowRounding = 0;
-        windowTitleAlign = new Vector2f(0.0f, 0.5f);
-        displayWindowPadding = new Vector2f(19, 19);
-        imageBorderSize = 0;
-        imageRounding = 0;
-        inputTextCursorSize = 1;
-        displaySafeAreaPadding = new Vector2f(3, 3);
-        scrollbarPadding = 2;
-        hoverStationaryDelay = 150;
-        hoverDelayShort = 150;
-        hoverDelayNormal = 400;
-        hoverFlagsForTooltipMouse =
+        buttonTextAlign = new Vector2f();
+        cellPadding = new Vector2f();
+        framePadding = new Vector2f();
+        itemInnerSpacing = new Vector2f();
+        itemSpacing = new Vector2f();
+        selectableTextAlign = new Vector2f();
+        separatorTextAlign = new Vector2f();
+        separatorTextPadding = new Vector2f();
+        tableAngledHeadersTextAlign = new Vector2f();
+        touchExtraPadding = new Vector2f();
+        windowEdgeFade = new Vector4f();
+        windowMinSize = new Vector2f();
+        windowPadding = new Vector2f();
+        windowTitleAlign = new Vector2f();
+        displayWindowPadding = new Vector2f();
+        displaySafeAreaPadding = new Vector2f();
+        setIkala(this);
+    }
+
+    /**
+     * Set style variables to the Ikala preset, which is the default. It started as a copy of Dear
+     * ImGui's.
+     *
+     * @param target The variables to modify.
+     */
+    public static void setIkala(@NonNull StyleVariables target) {
+        target.alpha = 1.0f;
+        target.buttonTextAlign.set(0.5f, 0.5f);
+        target.cellPadding.set(4, 2);
+        target.menuItemRounding = 0;
+        target.selectableRounding = 0;
+        target.separatorSize = 1;
+        target.mouseCursorScale = 1;
+        target.colorMarkerSize = 3;
+        target.childBorderSize = 1;
+        target.childRounding = 0;
+        target.colorButtonPosition = ColorButtonPosition.RIGHT;
+        target.disabledAlpha = 0.6f;
+        target.dockingNodeHasCloseButton = true;
+        target.dockingSeparatorSize = 2;
+        target.dragDropTargetRounding = 0;
+        target.dragDropTargetBorderSize = 2;
+        target.dragDropTargetPadding = 3;
+        target.frameBorderSize = 0;
+        target.framePadding.set(4, 3);
+        target.frameRounding = 0;
+        target.grabMinSize = 12;
+        target.grabRounding = 0;
+        target.indentSpacing = 21;
+        target.itemInnerSpacing.set(4, 4);
+        target.itemSpacing.set(8, 4);
+        target.logSliderDeadzone = 4;
+        target.popupBorderSize = 1;
+        target.popupRounding = 0;
+        target.scrollbarRounding = 9;
+        target.scrollbarSize = 14;
+        target.selectableTextAlign.set(0.0f, 0.0f);
+        target.separatorTextBorderSize = 3;
+        target.separatorTextAlign.set(0.0f, 0.5f);
+        target.separatorTextPadding.set(20, 3);
+        target.tabBarBorderSize = 1;
+        target.tabBarOverlineSize = 1;
+        target.treeLinesFlags = TreeNodeFlags.DRAW_LINES_NONE;
+        target.treeLinesSize = 1;
+        target.treeLinesRounding = 0;
+        target.tabMinWidthBase = 1;
+        target.tabMinWidthShrink = 80;
+        target.tabCloseButtonMinWidthSelected = -1;
+        target.tabCloseButtonMinWidthUnselected = 0;
+        target.tabBorderSize = 0;
+        target.tableAngledHeadersAngle = 35;
+        target.tableAngledHeadersTextAlign.set(0.5f, 0.0f);
+        target.tabRounding = 4;
+        target.touchExtraPadding.set(0, 0);
+        target.windowBorderHoverPadding = 4;
+        target.windowBorderSize = 1;
+        target.windowEdgeFade.set(50, 50, 50, 50);
+        target.windowEdgeFadeInvert = true;
+        target.windowMenuButtonPosition = WindowMenuButtonPosition.LEFT;
+        target.windowMinSize.set(32, 32);
+        target.windowPadding.set(8, 8);
+        target.windowRounding = 0;
+        target.windowTitleAlign.set(0.0f, 0.5f);
+        target.displayWindowPadding.set(19, 19);
+        target.imageBorderSize = 0;
+        target.imageRounding = 0;
+        target.inputTextCursorSize = 1;
+        target.displaySafeAreaPadding.set(3, 3);
+        target.scrollbarPadding = 2;
+        target.hoverStationaryDelay = 150;
+        target.hoverDelayShort = 150;
+        target.hoverDelayNormal = 400;
+        target.hoverFlagsForTooltipMouse =
                 HoveredFlags.STATIONARY
                         | HoveredFlags.DELAY_SHORT
                         | HoveredFlags.ALLOW_WHEN_DISABLED;
-        hoverFlagsForTooltipNav =
+        target.hoverFlagsForTooltipNav =
+                HoveredFlags.NO_SHARED_DELAY
+                        | HoveredFlags.DELAY_NORMAL
+                        | HoveredFlags.ALLOW_WHEN_DISABLED;
+    }
+
+    /**
+     * Set style variables to Dear ImGui's defaults.
+     *
+     * @param target The variables to modify.
+     */
+    public static void setDearImGui(@NonNull StyleVariables target) {
+        target.alpha = 1.0f;
+        target.buttonTextAlign.set(0.5f, 0.5f);
+        target.cellPadding.set(4, 2);
+        target.menuItemRounding = 0;
+        target.selectableRounding = 0;
+        target.separatorSize = 1;
+        target.mouseCursorScale = 1;
+        target.colorMarkerSize = 3;
+        target.childBorderSize = 1;
+        target.childRounding = 0;
+        target.colorButtonPosition = ColorButtonPosition.RIGHT;
+        target.disabledAlpha = 0.6f;
+        target.dockingNodeHasCloseButton = true;
+        target.dockingSeparatorSize = 2;
+        target.dragDropTargetRounding = 0;
+        target.dragDropTargetBorderSize = 2;
+        target.dragDropTargetPadding = 3;
+        target.frameBorderSize = 0;
+        target.framePadding.set(4, 3);
+        target.frameRounding = 0;
+        target.grabMinSize = 12;
+        target.grabRounding = 0;
+        target.indentSpacing = 21;
+        target.itemInnerSpacing.set(4, 4);
+        target.itemSpacing.set(8, 4);
+        target.logSliderDeadzone = 4;
+        target.popupBorderSize = 1;
+        target.popupRounding = 0;
+        target.scrollbarRounding = 9;
+        target.scrollbarSize = 14;
+        target.selectableTextAlign.set(0.0f, 0.0f);
+        target.separatorTextBorderSize = 3;
+        target.separatorTextAlign.set(0.0f, 0.5f);
+        target.separatorTextPadding.set(20, 3);
+        target.tabBarBorderSize = 1;
+        target.tabBarOverlineSize = 1;
+        target.treeLinesFlags = TreeNodeFlags.DRAW_LINES_NONE;
+        target.treeLinesSize = 1;
+        target.treeLinesRounding = 0;
+        target.tabMinWidthBase = 1;
+        target.tabMinWidthShrink = 80;
+        target.tabCloseButtonMinWidthSelected = -1;
+        target.tabCloseButtonMinWidthUnselected = 0;
+        target.tabBorderSize = 0;
+        target.tableAngledHeadersAngle = 35;
+        target.tableAngledHeadersTextAlign.set(0.5f, 0.0f);
+        target.tabRounding = 4;
+        target.touchExtraPadding.set(0, 0);
+        target.windowBorderHoverPadding = 4;
+        target.windowBorderSize = 1;
+        target.windowEdgeFade.set(0, 0, 0, 0);
+        target.windowEdgeFadeInvert = false;
+        target.windowMenuButtonPosition = WindowMenuButtonPosition.LEFT;
+        target.windowMinSize.set(32, 32);
+        target.windowPadding.set(8, 8);
+        target.windowRounding = 0;
+        target.windowTitleAlign.set(0.0f, 0.5f);
+        target.displayWindowPadding.set(19, 19);
+        target.imageBorderSize = 0;
+        target.imageRounding = 0;
+        target.inputTextCursorSize = 1;
+        target.displaySafeAreaPadding.set(3, 3);
+        target.scrollbarPadding = 2;
+        target.hoverStationaryDelay = 150;
+        target.hoverDelayShort = 150;
+        target.hoverDelayNormal = 400;
+        target.hoverFlagsForTooltipMouse =
+                HoveredFlags.STATIONARY
+                        | HoveredFlags.DELAY_SHORT
+                        | HoveredFlags.ALLOW_WHEN_DISABLED;
+        target.hoverFlagsForTooltipNav =
                 HoveredFlags.NO_SHARED_DELAY
                         | HoveredFlags.DELAY_NORMAL
                         | HoveredFlags.ALLOW_WHEN_DISABLED;

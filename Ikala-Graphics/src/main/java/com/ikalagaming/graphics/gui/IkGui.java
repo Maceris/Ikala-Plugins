@@ -2314,7 +2314,25 @@ public class IkGui {
     }
 
     /**
-     * Set the current style to the dark color theme, which is the default.
+     * Set the current style to the Ikala color theme, which is the default.
+     *
+     * @see #styleColorsIkala(Style)
+     */
+    public static void styleColorsIkala() {
+        StyleColors.setThemeIkala(context.style.color);
+    }
+
+    /**
+     * Set a style to the Ikala color theme, which is the default.
+     *
+     * @param destination The style to modify.
+     */
+    public static void styleColorsIkala(@NonNull Style destination) {
+        StyleColors.setThemeIkala(destination.color);
+    }
+
+    /**
+     * Set the current style to the dark color theme.
      *
      * @see #styleColorsDark(Style)
      */
@@ -2323,7 +2341,7 @@ public class IkGui {
     }
 
     /**
-     * Set a style to the dark color theme, which is the default.
+     * Set a style to the dark color theme.
      *
      * @param destination The style to modify.
      */
@@ -2366,6 +2384,44 @@ public class IkGui {
      */
     public static void styleColorsClassic(@NonNull Style destination) {
         StyleColors.setThemeClassic(destination.color);
+    }
+
+    /**
+     * Set the current style's sizes and other variables to the Ikala preset, which is the default.
+     * Colors are set apart, by the color themes.
+     *
+     * @see #styleVariablesIkala(Style)
+     */
+    public static void styleVariablesIkala() {
+        StyleVariables.setIkala(context.style.variable);
+    }
+
+    /**
+     * Set a style's sizes and other variables to the Ikala preset, which is the default.
+     *
+     * @param destination The style to modify.
+     */
+    public static void styleVariablesIkala(@NonNull Style destination) {
+        StyleVariables.setIkala(destination.variable);
+    }
+
+    /**
+     * Set the current style's sizes and other variables to Dear ImGui's defaults. Colors are set
+     * apart, by the color themes.
+     *
+     * @see #styleVariablesDearImGui(Style)
+     */
+    public static void styleVariablesDearImGui() {
+        StyleVariables.setDearImGui(context.style.variable);
+    }
+
+    /**
+     * Set a style's sizes and other variables to Dear ImGui's defaults.
+     *
+     * @param destination The style to modify.
+     */
+    public static void styleVariablesDearImGui(@NonNull Style destination) {
+        StyleVariables.setDearImGui(destination.variable);
     }
 
     /**

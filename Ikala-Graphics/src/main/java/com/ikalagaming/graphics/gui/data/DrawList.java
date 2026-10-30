@@ -80,6 +80,13 @@ public class DrawList {
      */
     public static final int COMMAND_FLAG_TEXTURE_VIEW = 2;
 
+    /**
+     * Command flag for a filled rectangle that fades to another color rather than to transparent:
+     * each corner's tint is the color it fades to, rather than added to its color. Must line up
+     * with the shader.
+     */
+    public static final int COMMAND_FLAG_FADE_TO_COLOR = 4;
+
     /** Extra space around anti-aliased shapes, so the soft edge isn't clipped by the quad. */
     private static final float ANTI_ALIAS_PADDING = 1.0f;
 
@@ -138,8 +145,8 @@ public class DrawList {
 
     /**
      * int pointIndex, int detailIndex, int pointCount, int detailCount, int type, int style, float
-     * stroke (borders, line thickness), int flags (see COMMAND_FLAG_INVERT_EDGE_FADE and
-     * COMMAND_FLAG_TEXTURE_VIEW).
+     * stroke (borders, line thickness), int flags (see COMMAND_FLAG_INVERT_EDGE_FADE,
+     * COMMAND_FLAG_TEXTURE_VIEW and COMMAND_FLAG_FADE_TO_COLOR).
      */
     public ByteBuffer commandBuffer;
 
@@ -1055,7 +1062,9 @@ public class DrawList {
                 edgeFade,
                 edgeFade,
                 null,
-                false);
+                false,
+                false,
+                Color.CLEAR);
     }
 
     /**
@@ -1100,7 +1109,58 @@ public class DrawList {
                 edgeFade.z(),
                 edgeFade.w(),
                 fadeRect,
-                invertFade);
+                invertFade,
+                false,
+                Color.CLEAR);
+    }
+
+    /**
+     * Add a filled rectangle that blends towards another color near some of its edges, such as a
+     * window background fading to a theme color. Either color may be partly or wholly transparent.
+     *
+     * @param minX The left edge.
+     * @param minY The top edge.
+     * @param maxX The right edge.
+     * @param maxY The bottom edge.
+     * @param color The color away from the fading edges.
+     * @param fadeColor The color at the fading edges.
+     * @param rounding The radius of the rounded corners.
+     * @param drawFlagsRoundingCorners Which corners to round.
+     * @param edgeFade How far in from each edge, in pixels, the rectangle blends from the fade
+     *     color to its color, as (left, top, right, bottom). 0 means a hard edge.
+     * @param fadeRect The rectangle the fade is measured from, or null to use this rectangle.
+     * @param invertFade Whether to invert the fade, so the fading edges have the color and the fade
+     *     color is further in. This has no effect if no edges fade.
+     * @see DrawFlags
+     */
+    public void addRectFilledFaded(
+            float minX,
+            float minY,
+            float maxX,
+            float maxY,
+            int color,
+            int fadeColor,
+            float rounding,
+            int drawFlagsRoundingCorners,
+            @NonNull Vector4fc edgeFade,
+            RectFloat fadeRect,
+            boolean invertFade) {
+        addRectFilledFaded(
+                minX,
+                minY,
+                maxX,
+                maxY,
+                color,
+                rounding,
+                drawFlagsRoundingCorners,
+                edgeFade.x(),
+                edgeFade.y(),
+                edgeFade.z(),
+                edgeFade.w(),
+                fadeRect,
+                invertFade,
+                true,
+                fadeColor);
     }
 
     private void addRectFilledFaded(
@@ -1116,7 +1176,9 @@ public class DrawList {
             float fadeRight,
             float fadeBottom,
             RectFloat fadeRect,
-            boolean invertFade) {
+            boolean invertFade,
+            boolean toColor,
+            int fadeColor) {
 
         if (rounding < 0) {
             log.warn("Invalid rounding {} in addRectFilled", rounding);
@@ -1158,9 +1220,13 @@ public class DrawList {
                         fadeRight,
                         fadeBottom,
                         drawFlagsRoundingCorners,
-                        Color.CLEAR);
+                        fades && toColor ? fadeColor : Color.CLEAR);
         final int detailCount = detailsSince(detailIndex);
 
+        int commandFlags = fades && invertFade ? COMMAND_FLAG_INVERT_EDGE_FADE : 0;
+        if (fades && toColor) {
+            commandFlags |= COMMAND_FLAG_FADE_TO_COLOR;
+        }
         addCommand(
                 pointIndex,
                 detailIndex,
@@ -1169,7 +1235,7 @@ public class DrawList {
                 ElementType.RECTANGLE,
                 ElementStyle.FILL,
                 borderStroke,
-                fades && invertFade ? COMMAND_FLAG_INVERT_EDGE_FADE : 0);
+                commandFlags);
     }
 
     public void addRectFilledMultiColor(

@@ -734,6 +734,43 @@ class IkGuiDemo {
     /** The last style chosen in showStyleSelector(), or -1 for none. */
     private static int styleSelectorIndex = -1;
 
+    /** The last preset chosen in showSizesSelector(), or -1 for none. */
+    private static int sizesSelectorIndex = -1;
+
+    /**
+     * A combo to pick one of the presets for sizes and other style variables. Not part of Dear
+     * ImGui.
+     *
+     * @param label The label of the combo.
+     * @return True if a preset was picked.
+     */
+    static boolean showSizesSelector(String label) {
+        final String[] presetNames = {"Ikala", "Dear ImGui"};
+        boolean ret = false;
+        if (IkGui.beginCombo(
+                label,
+                sizesSelectorIndex >= 0 && sizesSelectorIndex < presetNames.length
+                        ? presetNames[sizesSelectorIndex]
+                        : "")) {
+            for (int n = 0; n < presetNames.length; ++n) {
+                if (IkGui.selectable(
+                        presetNames[n], sizesSelectorIndex == n, SelectableFlags.SELECT_ON_NAV)) {
+                    sizesSelectorIndex = n;
+                    ret = true;
+                    if (n == 0) {
+                        IkGui.styleVariablesIkala();
+                    } else {
+                        IkGui.styleVariablesDearImGui();
+                    }
+                } else if (sizesSelectorIndex == n) {
+                    IkGui.setItemDefaultFocus();
+                }
+            }
+            IkGui.endCombo();
+        }
+        return ret;
+    }
+
     /**
      * A combo to pick one of the default color themes.
      *
@@ -743,7 +780,7 @@ class IkGuiDemo {
     static boolean showStyleSelector(String label) {
         // Themes are functions, they don't register a name or the fact that one is active. So we
         // keep track of the last one picked here.
-        final String[] styleNames = {"Dark", "Light", "Classic"};
+        final String[] styleNames = {"Ikala", "Dark", "Light", "Classic"};
         boolean ret = false;
         if (IkGui.beginCombo(
                 label,
@@ -756,8 +793,9 @@ class IkGuiDemo {
                     styleSelectorIndex = n;
                     ret = true;
                     switch (n) {
-                        case 0 -> IkGui.styleColorsDark();
-                        case 1 -> IkGui.styleColorsLight();
+                        case 0 -> IkGui.styleColorsIkala();
+                        case 1 -> IkGui.styleColorsDark();
+                        case 2 -> IkGui.styleColorsLight();
                         default -> IkGui.styleColorsClassic();
                     }
                 } else if (styleSelectorIndex == n) {
@@ -921,6 +959,9 @@ class IkGuiDemo {
         // General
         IkGui.separatorText("General");
         if (showStyleSelector("Colors##Selector")) {
+            styleEditorSavedRef.set(style);
+        }
+        if (showSizesSelector("Sizes##Selector")) {
             styleEditorSavedRef.set(style);
         }
         IkGui.showFontSelector("Fonts##Selector");
@@ -1150,13 +1191,16 @@ class IkGuiDemo {
         }
         IkGui.sameLine();
         helpMarker(
-                "How far in from the left, top, right, and bottom edges the window background and"
-                        + " title bar fade from transparent. 0 is a hard edge. Widgets don't fade.");
+                "How far in from the left, top, right, and bottom edges the window background, title"
+                        + " bar and menu bar fade to the WindowBackgroundSecondary color. 0 is a hard edge."
+                        + " Borders and widgets don't fade.");
         if (IkGui.checkbox("WindowEdgeFadeInvert", vars.windowEdgeFadeInvert)) {
             vars.windowEdgeFadeInvert = !vars.windowEdgeFadeInvert;
         }
         IkGui.sameLine();
-        helpMarker("Inverts the fade, so the fading edges are opaque and fade to transparent.");
+        helpMarker(
+                "Inverts the fade, so the fading edges keep their colors and the middle takes the"
+                        + " WindowBackgroundSecondary color.");
 
         IkGui.separatorText("Widgets");
         vars.colorMarkerSize =
