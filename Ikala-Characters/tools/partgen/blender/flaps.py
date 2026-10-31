@@ -43,6 +43,9 @@ STRAIGHT_BLEND = 0.15
 # is on the fold, in meters
 CUT_SPLITS = 1
 FOLD = 1e-4
+# How far lapels are pressed toward their plane, and the least share of their lift they keep
+PRESS = 1.0
+PRESS_FLOOR = 0.5
 # How far a flap's turned-down outer edge comes back toward the garment, as a share of the lift
 RIM = 0.8
 # How far below the highest open edge the neck opening's top may be, in meters
@@ -166,6 +169,7 @@ def add_flap(obj, width, lift, at="neck"):
         obj.data.update()
     heights = np.array([v.co.z for v in opening])
     low, high = heights.min(), heights.max()
+    middle = float(np.mean([v.co.x for v in opening]))
     segments = opening_segments(mesh, opening)
     distance = opening_distances(np.array([v.co[:] for v in mesh.verts]), segments)
 
@@ -220,6 +224,10 @@ def add_flap(obj, width, lift, at="neck"):
     rise = np.clip(after_d / max(RISE * width, 1e-6), 0, 1)
     rise = rise * rise * (3 - 2 * rise)
     lifted = points + after_n * (lift * rise)[:, None]
+    if at == "neck":
+        lifted = flatten_lapels(lifted, points, after_n, lift * rise, rise,
+                                (points[:, 2] - low) / max(high - low, 1e-6),
+                                middle)
     piece.data.vertices.foreach_set("co", lifted.astype(np.float32).ravel())
     piece.data.update()
     turn_down(piece, after_d, after_n, lift * rise, RISE * width)
@@ -238,6 +246,28 @@ def add_flap(obj, width, lift, at="neck"):
     mesh.free()
     obj.data.update()
     return faces
+
+
+def flatten_lapels(lifted, under, normals, lifts, rise, t, middle):
+    """Press each lapel, below the notch, toward the plane that fits it best, as a tailored lapel
+    lies flat over the chest rather than hugging a bust, which made its edges look wavy. The
+    press grows with the lift (none at the fold), and no point comes nearer the garment than
+    PRESS_FLOOR of its lift. Gives the pressed points."""
+    out = lifted.copy()
+    for side in (1, -1):
+        own = (side * (lifted[:, 0] - middle) > 0) & (t < NOTCH_AT)
+        if own.sum() < 3:
+            continue
+        centre = lifted[own].mean(0)
+        _, _, axes = np.linalg.svd(lifted[own] - centre)
+        normal = axes[2]
+        pressed = lifted[own] - np.outer((lifted[own] - centre) @ normal, normal)
+        height = ((pressed - under[own]) * normals[own]).sum(1)
+        floor = PRESS_FLOOR * lifts[own]
+        pressed += normals[own] * np.maximum(floor - height, 0)[:, None]
+        weight = (PRESS * rise[own])[:, None]
+        out[own] = lifted[own] * (1 - weight) + pressed * weight
+    return out
 
 
 def turn_down(piece, distance, normals, lifts, near):
