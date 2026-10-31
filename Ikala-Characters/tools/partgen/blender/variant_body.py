@@ -1,6 +1,8 @@
 """Carry a baked body part fitted to the male mannequin (see bake_body.py) over to another body
 type, through the base mesh cages, as clothing is (variant_layer.py): the part follows the cage
-given the other body's shape, keeping its vertices, so its textures and tint mask fit.
+given the other body's shape, keeping its vertices, so its textures and tint mask fit. With
+--mirror it is first mirrored across the body onto the other side, as body parts are generated
+for the left side only; without the cages it stays on the male.
 
 Its welded seams can't just follow, though: each body's rings are its own, with different vertex
 counts (the female's shoulder has 13 where the male's has 10). So the carried part is cut short
@@ -9,8 +11,11 @@ bridge taking texture coordinates from the edge it starts at. It then takes the 
 weights (weight_body.py) and its caps are made again (add_caps.py) and dressed (bake_body.py).
 
     blender -b --python variant_body.py -- --baked <baked.glb> --body <female.blend>
-        --from-cage <male_cage.npz> --to-cage <female_cage.npz> --slots lowerArm.L
-        --name <id> --out <file.glb> --preview <folder> [--open wrist.L]
+        [--from-cage <male_cage.npz> --to-cage <female_cage.npz>] [--mirror]
+        --slots lowerArm.L --name <id> --out <file.glb> --preview <folder> [--open wrist.L]
+
+where the slots and open seams are the ones the result fills, on its side (lowerArm.R when
+mirrored).
 
 writes the part and its caps, skinned to the new body's rig, variant.json and renders
 preview_10.png and preview_11.png in the preview folder: the part on the new body from the front
@@ -74,9 +79,12 @@ def dress_bridges(part, rings):
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    for name in ("--baked", "--body", "--from-cage", "--to-cage", "--slots", "--name", "--out",
-                 "--preview"):
+    for name in ("--baked", "--body", "--slots", "--name", "--out", "--preview"):
         parser.add_argument(name, required=True)
+    parser.add_argument("--from-cage", help="The cage of the body the part was fitted to.")
+    parser.add_argument("--to-cage", help="The cage of the body it goes to.")
+    parser.add_argument("--mirror", action="store_true",
+                        help="Mirror it onto the other side first.")
     parser.add_argument("--open", default="", help="Comma-separated seams left open.")
     args = parser.parse_args(argv)
     names = [s for s in args.slots.split(",") if s]
@@ -97,18 +105,26 @@ def main():
     mesh = bmesh.new()
     mesh.from_mesh(part.data)
     bmesh.ops.remove_doubles(mesh, verts=mesh.verts, dist=WELD)
+    if args.mirror:
+        # Across the body's middle, x = 0 (Blender's x runs to the body's left), faces turned
+        # back to look out
+        for vertex in mesh.verts:
+            vertex.co.x = -vertex.co.x
+        bmesh.ops.reverse_faces(mesh, faces=mesh.faces)
     mesh.to_mesh(part.data)
     mesh.free()
-    start = np.array([part.matrix_world @ v.co for v in part.data.vertices])
-    start_normals = face_normals(part)
-    carry(part, np.load(args.from_cage), np.load(args.to_cage)["vertices"])
     folded = []
-    for _ in range(UNTANGLE_PASSES):
-        folded.append(untangle(part, start, start_normals))
-        if not folded[-1]:
-            break
+    if args.from_cage and args.to_cage:
+        start = np.array([part.matrix_world @ v.co for v in part.data.vertices])
+        start_normals = face_normals(part)
+        carry(part, np.load(args.from_cage), np.load(args.to_cage)["vertices"])
+        for _ in range(UNTANGLE_PASSES):
+            folded.append(untangle(part, start, start_normals))
+            if not folded[-1]:
+                break
 
-    # The male's rings went with the carry; each welded seam is cut and bridged to this body's
+    # The rings it was welded to went with the carry or the mirror; each welded seam is cut and
+    # bridged to this body's, on this side
     inside = np.mean([np.mean(segments[b], axis=0) for b in bones], axis=0)
     planes = {}
     for seam in outer_seams(names):

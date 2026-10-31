@@ -110,6 +110,8 @@ GUIDE_MODE = "depth"
 SKETCH_MODE = "hed/pidi/scribble/ted"
 # The palette channel a clothing tint group takes once its layers' own channels are used
 LAYER_EXTRA_CHANNEL = "accent"
+# The palette channel a body part's skin-like tint group takes
+SKIN_CHANNEL = "skin"
 # Body slots a layer's mask never grows into unless the layer covers them
 BARE_SLOTS = ("head", "hand.L", "hand.R", "foot.L", "foot.R")
 # Room left around a brief's painted area when the review page zooms in on it, as a share of its
@@ -1005,18 +1007,101 @@ def write_layer_part(config, batch, brief, out, rule):
     return part_id
 
 
+def other_side(name):
+    """A slot's, seam's or bone's name on the other side: .L for .R and the other way."""
+    for left, right in ((".L", ".R"), (".R", ".L")):
+        if name.endswith(left):
+            return name[:-len(left)] + right
+    return name
+
+
+def body_slot(name, defaults, skin, rule):
+    """A body part's material slot: its skin-like tint group takes the character's skin color,
+    its main other one the rule's palette channel, and any further ones the accent, each showing
+    the part's own color until the design colors that channel."""
+    slot = {"name": name, "template": TEMPLATE}
+    if defaults:
+        others = iter([rule.get("palette", LAYER_EXTRA_CHANNEL)])
+        slot["channels"] = {mask: SKIN_CHANNEL if mask == skin
+                            else next(others, LAYER_EXTRA_CHANNEL)
+                            for mask in sorted(defaults)}
+        slot["defaults"] = defaults
+    return slot
+
+
+def write_body_part(config, batch, brief, part, rule):
+    """Put a fitted body part in the content folder as two body parts, the left (as generated)
+    and the right (mirrored, re-welded to the right side's rings by blender/variant_body.py),
+    each with a male mesh, a female one and their tint masks, and their definitions. Gives the
+    parts' IDs, or None if a mesh failed."""
+    import shutil
+    folder = batch.brief_folder(brief["id"])
+    out = folder / "fit"
+    content = pathlib.Path(config["content"])
+    mannequins = pathlib.Path(config["mannequin"]).parent
+    bake = json.loads((out / "bake.json").read_text(encoding="utf8"))
+    cages = ["--from-cage", mannequins / ("%s_cage.npz" % GUIDE_VARIANT),
+             "--to-cage", mannequins / "female_cage.npz"]
+    ids = []
+    for side in ("l", "r"):
+        name = "%s_%s" % (brief["id"], side)
+        mirror = side == "r"
+        slots = [other_side(s) if mirror else s for s in part["covers"]]
+        seams = {other_side(s) if mirror else s: mode for s, mode in part["seams"].items()}
+        left_open = ",".join(s for s, mode in seams.items() if mode == "open")
+        meshes = {}
+        for variant, body, extra in ((GUIDE_VARIANT, GUIDE_VARIANT, []),
+                                     ("female", "female", cages)):
+            glb = "body/%s%s.glb" % (name, "" if variant == GUIDE_VARIANT else "_female")
+            target = content / glb
+            target.parent.mkdir(parents=True, exist_ok=True)
+            log = folder / ("variant_%s_%s.log" % (side, variant))
+            if not run_blender(config, "variant_body.py", log,
+                               "--baked", out / "baked.glb",
+                               "--body", mannequins / ("%s.blend" % body), *extra,
+                               *(["--mirror"] if mirror else []),
+                               "--slots", ",".join(slots), "--name", name, "--out", target,
+                               "--preview", out / ("%s_%s" % (side, variant)),
+                               *(["--open", left_open] if left_open else [])):
+                print("The %s %s mesh failed for %s; see %s" % (variant, side, brief["id"], log))
+                return None
+            masks = target.with_name(target.stem + "_masks")
+            shutil.rmtree(masks, ignore_errors=True)
+            shutil.copytree(out / (brief["id"] + "_masks"), masks)
+            meshes["*" if variant == GUIDE_VARIANT else variant] = "%s#%s" % (glb, name)
+        part_id = "%s:part/body/%s" % (config["namespace"], name)
+        definition = {
+            "id": part_id,
+            "plan": PLAN_ID,
+            "kind": "body",
+            "fills": slots,
+            "meshes": meshes,
+            "materialSlots": [body_slot(brief["id"], bake["defaults"], bake.get("skin"), rule)],
+            "tags": brief.get("tags", []),
+        }
+        if any(mode != "weld" for mode in seams.values()):
+            definition["seams"] = {s: mode for s, mode in seams.items() if mode != "weld"}
+        path = content / "part" / ("%s.json" % name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        header = ("// %s, %s side, batch %s, image %d\n"
+                  "// Written by Ikala-Characters/tools/partgen/partgen.py\n"
+                  % (brief["description"], "left" if side == "l" else "right", batch.name,
+                     brief["mesh"]["image"]))
+        path.write_text(header + json.dumps([definition], indent=2) + "\n", encoding="utf8")
+        ids.append(part_id)
+    return ids
+
+
 def fit_body_part(config, batch, brief):
     """Fit a body part's mesh to the mannequin: line it up and cut it out at its seams
     (blender/fit_body.py), shape it into a solid welded to its welded seams' rings
     (shape_body.py), weight it (weight_body.py) and bake its textures (bake_body.py), all in
-    the brief's fit folder, then carry it to the female body (variant_body.py). Gives the
-    reports, or None if a step failed."""
+    the brief's fit folder. Gives the reports, or None if a step failed."""
     part, rule = body_of(brief)
     folder = batch.brief_folder(brief["id"])
     out = folder / "fit"
     out.mkdir(exist_ok=True)
     body = pathlib.Path(config["mannequin"]).with_suffix(".blend")
-    mannequins = body.parent
     slots = ",".join(part["covers"])
     left_open = ",".join(seam for seam, mode in part["seams"].items() if mode == "open")
     steps = [
@@ -1034,12 +1119,6 @@ def fit_body_part(config, batch, brief):
           "--painted", painted_area(config, brief, out), "--guide",
           guides(config) / "guide.json", "--out", out, "--name", brief["id"],
           "--slots", slots]),
-        ("variant_body.py", "variant.json",
-         ["--baked", out / "baked.glb", "--body", mannequins / "female.blend",
-          "--from-cage", mannequins / ("%s_cage.npz" % GUIDE_VARIANT),
-          "--to-cage", mannequins / "female_cage.npz", "--slots", slots,
-          "--name", brief["id"], "--out", out / ("%s_female.glb" % brief["id"]),
-          "--preview", out] + (["--open", left_open] if left_open else [])),
     ]
     reports = {}
     for script, report, arguments in steps:
@@ -1063,9 +1142,17 @@ def command_fit(config, batch, args):
             fit_layer(config, batch, brief)
             continue
         if brief["kind"] == "body":
-            if fit_body_part(config, batch, brief) is not None:
-                print("%s is fitted and baked in %s; its part file comes in M5 B9"
-                      % (brief["id"], batch.brief_folder(brief["id"]) / "fit"))
+            if fit_body_part(config, batch, brief) is None:
+                continue
+            part, rule = body_of(brief)
+            ids = write_body_part(config, batch, brief, part, rule)
+            if ids is not None:
+                def record(entry, ids=ids):
+                    entry["part"] = ids[0]
+                    entry["review"]["part"] = None
+
+                batch.update(brief["id"], record)
+                print("part", " ".join(ids))
             continue
         folder = batch.brief_folder(brief["id"])
         socket, rule = socket_of(brief)
