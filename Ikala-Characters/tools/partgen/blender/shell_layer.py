@@ -17,7 +17,7 @@ rebuilt.glb), and the topology keeps the body's rings, which bend cleanly at the
     blender -b --python shell_layer.py -- --garment <garment.glb> --body <male.blend>
         --painted <painted.png> --painted-back <painted_back.png> --guide <guide.json>
         --slots torso,pelvis,... --out <folder> --gap 0.004 --triangles 2000 [--reach 0.012]
-        [--cut waist,above,-0.04] [--simplifier <jars>]
+        [--cut waist,above,-0.04] [--flap 0.07,0.006] [--simplifier <jars>]
 
 writes shaped.glb (replacing shape_layer.py's) and shell.json.
 """
@@ -44,6 +44,8 @@ CONFORM_REACH = 0.06
 CONFORM_OWN = 0.5
 # How many times the moves out are averaged with their neighbors', so the shell stays smooth
 CONFORM_ROUNDS = 6
+# How many times folded faces' vertices are drawn back halfway to the gap
+UNFOLD_ROUNDS = 8
 # How much of the painted area's edge is blurred before the cut, in image pixels (about 2 mm
 # each), so the cut line runs smoothly
 CUT_BLUR = 3
@@ -131,10 +133,29 @@ def conform(shell, figure, surface, gap, reach):
         out = np.maximum(gaps, (out + total / neighbors) / 2)
     if reach is not None:
         out = np.minimum(out, np.broadcast_to(np.asarray(reach, dtype=float), count))
-    moved = points + normals * out[:, None]
-    shell.data.vertices.foreach_set("co", moved.astype(np.float32).ravel())
-    shell.data.update()
+    # Moving out unevenly, like onto a shoulder pad, can fold faces over, a hole when drawn:
+    # those faces' vertices are drawn back toward the gap until none is folded
+    before = face_normals(shell)
+    faces = [list(p.vertices) for p in shell.data.polygons]
+    for _ in range(UNFOLD_ROUNDS):
+        moved = points + normals * out[:, None]
+        shell.data.vertices.foreach_set("co", moved.astype(np.float32).ravel())
+        shell.data.update()
+        folded = np.flatnonzero((face_normals(shell) * before).sum(1) < 0)
+        if not len(folded):
+            break
+        loose = np.zeros(count, dtype=bool)
+        loose[[v for k in folded for v in faces[k]]] = True
+        loose[edges[loose[edges].any(1)].ravel()] = True
+        out[loose] = (out[loose] + gaps[loose]) / 2
     return int(onto.sum())
+
+
+def face_normals(obj):
+    obj.data.update()
+    normals = np.empty(len(obj.data.polygons) * 3)
+    obj.data.polygons.foreach_get("normal", normals)
+    return normals.reshape(-1, 3)
 
 
 def blurred(mask, radius):
@@ -271,6 +292,8 @@ def main():
     parser.add_argument("--slots", required=True, help="Comma-separated body slots the layer "
                         "covers, which the shell is made of.")
     parser.add_argument("--bare", default="", help="Unused: the slots decide what is covered.")
+    parser.add_argument("--flap", help="width,lift: fold a flap back along the neck opening, "
+                        "like a jacket's lapels and collar (see flaps.py).")
     parser.add_argument("--simplifier", help="Classpath for reducing (see SimplifyMesh.java).")
     parser.add_argument("--java", default="java")
     args = parser.parse_args(argv)
@@ -279,13 +302,8 @@ def main():
     surface = tree(body, body_faces)
     armature = next(o for o in bpy.data.objects if o.type == "ARMATURE")
     shell = skin_shell(set(args.slots.split(",")) - set(BARE))
-    figure = import_figure(args.garment)
-    cut = shaping.parse_cut(args.cut, args.body)
-    points = shaping.points_of(shell)
-    gap, reach = shaping.tucked_band(points, cut, args.gap, args.reach)
-    onto = conform(shell, figure, surface, gap, reach)
-    bpy.data.objects.remove(figure)
-
+    # Where the image painted the garment is read on the skin, before the shell moves out: a
+    # jacket's shoulder pad pushes it past the painted outline, which cut a hole there
     with open(args.guide, encoding="utf-8") as file:
         guide = json.load(file)
     shell.data.update()
@@ -296,11 +314,22 @@ def main():
     field = painted_field(points, normals.reshape(-1, 3), front, back, guide)
     # Sleeves and legs are cut straight across at their hems instead
     field[limb_owned(points, armature)] = 1.0
+
+    figure = import_figure(args.garment)
+    cut = shaping.parse_cut(args.cut, args.body)
+    gap, reach = shaping.tucked_band(points, cut, args.gap, args.reach)
+    onto = conform(shell, figure, surface, gap, reach)
+    bpy.data.objects.remove(figure)
     unpainted = cut_by_field(shell, field)
     hems = cut_limbs(shell, armature, blurred(front | back, CUT_BLUR), guide)
     cut_faces = shaping.cut_at_seam(shell, armature, *cut) if cut is not None else 0
     crumbs = shaping.drop_crumbs(shell)
     relaxed = shaping.relax_edges(shell)
+    flap = 0
+    if args.flap:
+        import flaps
+        flap = flaps.add_flap(shell, *(float(x) for x in args.flap.split(",")))
+        shaping.relax_edges(shell)
     shell.data.calc_loop_triangles()
     built = len(shell.data.loop_triangles)
     triangles = built
@@ -319,6 +348,7 @@ def main():
         "hems_m": hems,
         "crumb_faces_dropped": crumbs,
         "relaxed_edge_vertices": relaxed,
+        "flap_faces": flap,
         "min_gap_mm": round(float(end.min()) * 1000, 1),
         "max_gap_mm": round(float(end.max()) * 1000, 1),
     }

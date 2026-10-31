@@ -118,6 +118,9 @@ REVIEW_MARGIN = 0.15
 # This computer's folders, not committed, and the template for it
 CONFIG = "config.json"
 CONFIG_EXAMPLE = "config.example.json"
+# How far a garment built from the mannequin's skin lets its baked normals lean, in degrees:
+# its smooth surface shows the crumples of TRELLIS's cloth as blotches past that
+SHELL_LEAN = 15
 # The seam rings of the mannequin the guides are rendered from, beside its glb
 SEAMS = "%s_seams.json"
 # The side body parts are generated on, as their slot names end; the other side is its mirror
@@ -865,6 +868,13 @@ def shell_slots(brief):
     return ",".join(slots)
 
 
+def flap_args(rule):
+    """shell_layer.py's and variant_layer.py's arguments for a layer's flap (see layers.json)."""
+    if "flap" not in rule:
+        return []
+    return ["--flap", "%s,%s" % (rule["flap"]["width"], rule["flap"]["lift"])]
+
+
 def cut_args(rule):
     """shape_layer.py's and variant_layer.py's arguments for a layer's cut (see layers.json)."""
     if "cut" not in rule:
@@ -940,7 +950,7 @@ def fit_layer(config, batch, brief):
             "--guide", guides(config) / "guide.json", "--slots", shell_slots(brief),
             "--gap", rule["gap"], "--triangles", rule["triangles"],
             *(["--reach", rule["reach"]] if "reach" in rule else []),
-            *cut_args(rule), *simplifier_args(config))
+            *cut_args(rule), *flap_args(rule), *simplifier_args(config))
         if not shelled or not (out / "shell.json").exists():
             print("Building the shell failed for %s; see %s" % (brief["id"],
                                                                folder / "shell.log"))
@@ -957,6 +967,7 @@ def fit_layer(config, batch, brief):
     baked = run_blender(config, "bake_layer.py", folder / "bake.log",
                         "--weighted", out / "weighted.blend", "--figure", out / "pushed.glb",
                         "--rebuilt", out / "rebuilt.glb",
+                        *(["--max-lean", SHELL_LEAN] if rule.get("shell") else []),
                         "--image", image, "--painted", painted,
                         "--guide", guides(config) / "guide.json", "--out", out,
                         "--name", brief["id"])
@@ -1019,7 +1030,8 @@ def write_layer_part(config, batch, brief, out, rule):
                              *cut_args(rule),
                              *(["--shell-slots", shell_slots(brief), "--masks",
                                 out / (name + "_masks") / (name + "_emit.png"),
-                                "--triangles", rule["triangles"], *simplifier_args(config)]
+                                "--triangles", rule["triangles"], *flap_args(rule),
+                                *simplifier_args(config)]
                                if rule.get("shell") else [])):
             print("The female mesh failed for %s; see %s" % (name, folder / "variant.log"))
             return None

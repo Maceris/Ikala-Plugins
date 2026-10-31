@@ -261,6 +261,10 @@ def shell_variant(args, carried, surface, armature, bodies, cut):
     cut_faces = shell_layer.shaping.cut_at_seam(shell, armature, *cut) if cut is not None else 0
     shell_layer.shaping.drop_crumbs(shell)
     shell_layer.shaping.relax_edges(shell)
+    if args.flap:
+        import flaps
+        flaps.add_flap(shell, *(float(x) for x in args.flap.split(",")))
+        shell_layer.shaping.relax_edges(shell)
     shell.data.calc_loop_triangles()
     if args.triangles and len(shell.data.loop_triangles) > args.triangles * (
             1 + shell_layer.OVER_BUDGET):
@@ -329,6 +333,7 @@ def main():
                         "these slots (see shell_variant), for a garment shell_layer.py built.")
     parser.add_argument("--masks", help="The tint mask image to bake onto a garment built afresh.")
     parser.add_argument("--triangles", type=int, help="The budget of a garment built afresh.")
+    parser.add_argument("--flap", help="width,lift of its flap (see flaps.py).")
     parser.add_argument("--simplifier", help="Classpath for reducing it (see SimplifyMesh.java).")
     parser.add_argument("--java", default="java")
     args = parser.parse_args(argv)

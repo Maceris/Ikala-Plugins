@@ -169,7 +169,7 @@ def paint_from_image(base_image, covered, position, normal, picked, painted, gui
     return int((facing > 0).sum()), int(on_image.sum())
 
 
-def face_out(normal_image):
+def face_out(normal_image, max_lean=MAX_LEAN):
     """Turn a baked normal map's texels that point into the surface back out, and lean none
     more than MAX_LEAN. TRELLIS's meshes are sheets with two sides, half their faces looking
     inward, and a bake ray that lands on one of those bakes its normal reversed, which shades
@@ -179,9 +179,9 @@ def face_out(normal_image):
     reversed_ = tangent[:, 2] < 0
     tangent[reversed_] = -tangent[reversed_]
     across = np.linalg.norm(tangent[:, :2], axis=1)
-    lean = np.arctan2(across, tangent[:, 2]) > np.radians(MAX_LEAN)
-    tangent[lean, :2] *= (np.sin(np.radians(MAX_LEAN)) / np.maximum(across[lean], 1e-6))[:, None]
-    tangent[lean, 2] = np.cos(np.radians(MAX_LEAN))
+    lean = np.arctan2(across, tangent[:, 2]) > np.radians(max_lean)
+    tangent[lean, :2] *= (np.sin(np.radians(max_lean)) / np.maximum(across[lean], 1e-6))[:, None]
+    tangent[lean, 2] = np.cos(np.radians(max_lean))
     pixels[:, :3] = (tangent + 1) / 2
     normal_image.pixels.foreach_set(pixels.ravel().astype(np.float32))
     # The bake packed the map already; pack it again so the export takes these pixels
@@ -264,6 +264,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     for name in ("--weighted", "--figure", "--image", "--painted", "--guide", "--out", "--name"):
         parser.add_argument(name, required=True)
+    parser.add_argument("--max-lean", type=float, default=MAX_LEAN, help="How far a baked "
+                        "normal may lean, in degrees: less for a garment built from the skin, "
+                        "whose smooth surface shows TRELLIS's crumples as blotches.")
     parser.add_argument("--rebuilt", help="The rebuilt garment (shape_layer.py's rebuilt.glb), "
                         "for normals where the figure has none.")
     parser.add_argument("--size", type=int, default=1024)
@@ -299,7 +302,7 @@ def main():
     if args.rebuilt:
         filled = fill_normals(bpy.data.images["%s_normal" % args.name], covered, low,
                               args.rebuilt, args.size)
-    reversed_ = face_out(bpy.data.images["%s_normal" % args.name])
+    reversed_ = face_out(bpy.data.images["%s_normal" % args.name], args.max_lean)
     occlusion = cloth_orm(bpy.data.images["%s_orm" % args.name], low, bodies + [high],
                           args.size)
     position, normal = surface_maps(low, args.size)
