@@ -74,6 +74,31 @@ class TestPartCategories {
         Assertions.assertEquals(2.05f, categories.max().y, 1e-6f);
     }
 
+    /** An outfit reaching the ankles in a slot of tops leaves the slot in the upper body. */
+    @Test
+    void testOutfitInSlot() {
+        List<ImportedCharacter.Part> parts = new ArrayList<>();
+        parts.add(part("human_body_default", 0, 2));
+        parts.add(part("human_shirt_1", 0.9f, 1.6f));
+        parts.add(part("human_shirt_2", 0.05f, 1.6f));
+        Rig rig =
+                new Rig(
+                        Id.parse("test:rig/one"),
+                        List.of(new Rig.Bone("root", null, Rig.BoneKind.DEFORM)));
+        ImportedCharacter character =
+                new ImportedCharacter(
+                        "test", rig, Map.of(), parts, List.of(), List.of(), List.of());
+        PartSlots slots = PartSlots.of(character);
+        PartCategories categories = PartCategories.of(character, slots);
+
+        // A box around both would put its middle at 0.825 m, under the upper body's 0.84 m
+        Assertions.assertEquals(
+                List.of(PartCategories.UPPER_BODY),
+                categories.categories().stream().map(PartCategories.Category::id).toList());
+        Assertions.assertEquals(
+                List.of("body", "shirt"), slotIds(slots, categories.categories().get(0)));
+    }
+
     /**
      * The IDs of a category's slots.
      *

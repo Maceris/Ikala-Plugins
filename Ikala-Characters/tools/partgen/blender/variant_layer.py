@@ -3,12 +3,13 @@ type, through the base mesh cages (see tools/blender/body_cages.py).
 
 The garment is bound to the male cage with a Surface Deform modifier, and the cage given the
 other body's shape, so the garment follows it, keeping its vertices and texture layout, so the
-same textures and tint mask fit. It is then pushed out from the new body to the gap, as
-shape_layer.py does, and takes that body's weights, as weight_layer.py does.
+same textures and tint mask fit. It is then pushed out from the new body to the gap, and in to
+the reach for a layer worn under others, as shape_layer.py does, without smoothing, and takes
+that body's weights, as weight_layer.py does.
 
     blender -b --python variant_layer.py -- --baked <baked.glb> --body <female.blend>
         --from-cage <male_cage.npz> --to-cage <female_cage.npz> --gap 0.004 --name <id>
-        --out <file.glb> --preview <folder>
+        --out <file.glb> --preview <folder> [--reach 0.012]
 
 writes the garment skinned to the new body's rig, variant.json and renders preview_10.png and
 preview_11.png in the preview folder: the garment on the new body from the front and back.
@@ -94,6 +95,8 @@ def main():
                  "--preview"):
         parser.add_argument(name, required=True)
     parser.add_argument("--gap", type=float, required=True)
+    parser.add_argument("--reach", type=float)
+    parser.add_argument("--bare", default="", help="Comma-separated bones the layer leaves bare.")
     args = parser.parse_args(argv)
 
     bpy.ops.wm.open_mainfile(filepath=os.path.abspath(args.body))
@@ -113,11 +116,11 @@ def main():
         offset += len(co)
     surface = tree(np.concatenate(surface_points), np.concatenate(surface_faces))
     _, before_push = nearest(world_vertices(garment)[0], surface)
-    pushed = shape(garment, surface, args.gap)
+    pushed = shape(garment, surface, args.gap, args.reach, rounds=0, armature=armature)
     _, after_push = nearest(world_vertices(garment)[0], surface)
 
     source = weight_source(bodies)
-    transfer_weights(garment, source, armature)
+    transfer_weights(garment, source, armature, [b for b in args.bare.split(",") if b])
     bpy.data.objects.remove(source)
     hat.export(args.out, garment, armature)
 
@@ -125,6 +128,7 @@ def main():
         "inside_before_pct": round(float((before_push < 0).mean()) * 100, 2),
         "pushed_pct": round(pushed / max(1, len(before_push)) * 100, 1),
         "min_gap_mm": round(float(after_push.min()) * 1000, 1),
+        "max_gap_mm": round(float(after_push.max()) * 1000, 1),
     }
     print("[variant_layer]", json.dumps(report))
     os.makedirs(args.preview, exist_ok=True)

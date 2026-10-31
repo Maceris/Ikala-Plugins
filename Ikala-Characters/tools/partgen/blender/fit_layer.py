@@ -52,6 +52,12 @@ MAX_TURN = 20
 CRUMB = 0.05
 # Vertices this close together are one, in the figure's own units
 WELD = 1e-5
+# Vertices whose normal points this little toward or away from the camera (its share along the
+# view) face sideways, and are seen edge on: the painted outline runs a little inside the
+# figure's own there, so they take the painted area grown by SIDE_GROW pixels (about 2 cm),
+# not so much as to bridge the gap between the legs
+SIDE = 0.35
+SIDE_GROW = 8
 
 
 def similarity(source, target):
@@ -195,6 +201,19 @@ def on_painted(points, painted, guide):
     return found
 
 
+def grown(mask, pixels):
+    """A mask grown outward by some pixels, square, by shifting it."""
+    out = mask.copy()
+    for _ in range(pixels):
+        step = out.copy()
+        step[1:] |= out[:-1]
+        step[:-1] |= out[1:]
+        step[:, 1:] |= out[:, :-1]
+        step[:, :-1] |= out[:, 1:]
+        out = step
+    return out
+
+
 def cut_garment(figure, keep):
     """A copy of the figure with only the faces most of whose corners are kept, less pieces
     much smaller than the biggest. Gives it and how many faces it has."""
@@ -275,11 +294,20 @@ def main():
         with open(args.guide, encoding="utf-8") as file:
             guide = json.load(file)
         # Where the lined-up figure's vertices are, by the mesh's own vertex order
-        keep = on_painted(points, read_mask(args.painted), guide)
+        painted = read_mask(args.painted)
+        keep = on_painted(points, painted, guide)
+        facing = normals(points, figure_faces)[:, 1]
         if args.painted_back:
-            # What faces away from the camera, as the body faces -Y
-            away = normals(points, figure_faces)[:, 1] > 0
+            # What faces away from the camera, as the body faces -Y, and lies behind the body
+            # from it: TRELLIS's surfaces are sheets with two sides, so the bare chest in a
+            # jacket's open front faces away too, on its inner side
+            away = facing > 0
+            away[away] = [surface.ray_cast(Vector(p), Vector((0, -1, 0)))[0] is not None
+                          for p in points[away]]
             keep[away] = on_painted(points[away], read_mask(args.painted_back), guide)
+        # Without this, legs and sleeves lose slits along their sides, which open into holes
+        side = np.abs(facing) < SIDE
+        keep[side] |= on_painted(points[side], grown(painted, SIDE_GROW), guide)
         garment, faces = cut_garment(figure, keep)
         report["garment_faces"] = faces
         report["garment_pct"] = round(faces / max(1, len(figure.data.polygons)) * 100, 1)

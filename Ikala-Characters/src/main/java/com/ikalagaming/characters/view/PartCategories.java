@@ -6,6 +6,7 @@ import lombok.NonNull;
 import org.joml.Vector3f;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
@@ -74,11 +75,8 @@ public record PartCategories(
         String[] labels = {"Head", "Upper Body", "Lower Body"};
         List<List<Integer>> members =
                 List.of(new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
-        Vector3f slotMin = new Vector3f();
-        Vector3f slotMax = new Vector3f();
         for (int s = 0; s < slots.slots().size(); ++s) {
-            bounds(character, allOptions(slots.slots().get(s)), slotMin, slotMax);
-            float middle = ((slotMin.y + slotMax.y) / 2 - min.y) / height;
+            float middle = (middle(character, slots.slots().get(s)) - min.y) / height;
             int category;
             if (middle >= HEAD_FROM) {
                 category = 0;
@@ -108,6 +106,31 @@ public record PartCategories(
                             categoryMax));
         }
         return new PartCategories(categories, min, max);
+    }
+
+    /**
+     * How high a slot sits: the median of its options' middles, so an outfit that also fills it,
+     * like coveralls in a shirt slot reaching down to the ankles, doesn't move it to another
+     * category the way a box around every option would.
+     *
+     * @param character The character.
+     * @param slot The slot.
+     * @return The height of its middle, in model space.
+     */
+    private static float middle(ImportedCharacter character, PartSlots.Slot slot) {
+        Vector3f min = new Vector3f();
+        Vector3f max = new Vector3f();
+        float[] middles = new float[slot.options().size()];
+        for (int o = 0; o < middles.length; ++o) {
+            bounds(character, slot.options().get(o), min, max);
+            middles[o] = (min.y + max.y) / 2;
+        }
+        if (middles.length == 0) {
+            return 0;
+        }
+        Arrays.sort(middles);
+        int half = middles.length / 2;
+        return middles.length % 2 == 1 ? middles[half] : (middles[half - 1] + middles[half]) / 2;
     }
 
     /**

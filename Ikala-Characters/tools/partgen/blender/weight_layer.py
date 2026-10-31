@@ -12,6 +12,7 @@ and measures, in each, how much of the body the garment covered at rest now show
 and how much of the garment ends up inside the body.
 
     blender -b --python weight_layer.py -- --garment <shaped.glb> --body <male.blend> --out <folder>
+        [--bare foot.L,foot.R]
 
 writes weighted.glb (the garment skinned to the rig, at rest), weighted.blend (the mannequin with
 the weighted garment on it, for the bake), weights.json and renders pose_0.png to pose_3.png of
@@ -71,9 +72,32 @@ def weight_source(bodies):
     return source
 
 
-def transfer_weights(garment, source, armature):
-    """Give the garment the body's weights, smoothed, at most INFLUENCES per vertex, and skin it
-    to the armature."""
+def lift_bare(garment, armature, bare):
+    """Hand the weights a garment took from bones it leaves bare, like the feet under a pair of
+    pants, and the bones under them, to the bone above: a hem lies nearest the top of the foot,
+    and would follow it up into a point whenever the foot turns."""
+    for root in bare:
+        if root not in armature.data.bones or armature.data.bones[root].parent is None:
+            continue
+        bone = armature.data.bones[root]
+        family = {root} | {b.name for b in bone.children_recursive}
+        groups = [garment.vertex_groups[n] for n in family if n in garment.vertex_groups]
+        if not groups:
+            continue
+        parent = (garment.vertex_groups.get(bone.parent.name)
+                  or garment.vertex_groups.new(name=bone.parent.name))
+        indices = {g.index for g in groups}
+        for vertex in garment.data.vertices:
+            moved = sum(e.weight for e in vertex.groups if e.group in indices)
+            if moved > 0:
+                parent.add([vertex.index], moved, "ADD")
+        for group in groups:
+            group.remove(list(range(len(garment.data.vertices))))
+
+
+def transfer_weights(garment, source, armature, bare=()):
+    """Give the garment the body's weights, at most INFLUENCES per vertex, none from the bones it
+    leaves bare, and skin it to the armature."""
     for group in source.vertex_groups:
         garment.vertex_groups.new(name=group.name)
     transfer = garment.modifiers.new("weights", "DATA_TRANSFER")
@@ -87,6 +111,7 @@ def transfer_weights(garment, source, armature):
     garment.select_set(True)
     bpy.context.view_layer.objects.active = garment
     bpy.ops.object.modifier_apply(modifier=transfer.name)
+    lift_bare(garment, armature, bare)
     bpy.ops.object.mode_set(mode="WEIGHT_PAINT")
     bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=INFLUENCES)
     bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL", lock_active=False)
@@ -161,6 +186,7 @@ def main():
     parser.add_argument("--garment", required=True)
     parser.add_argument("--body", required=True)
     parser.add_argument("--out", required=True)
+    parser.add_argument("--bare", default="", help="Comma-separated bones the layer leaves bare.")
     args = parser.parse_args(argv)
     os.makedirs(args.out, exist_ok=True)
 
@@ -178,7 +204,7 @@ def main():
     bpy.context.view_layer.objects.active = garment
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     source = weight_source(bodies)
-    transfer_weights(garment, source, armature)
+    transfer_weights(garment, source, armature, [b for b in args.bare.split(",") if b])
     bpy.data.objects.remove(source)
 
     body_points, body_faces, garment_points, body_tree, garment_tree = surfaces(bodies, garment)

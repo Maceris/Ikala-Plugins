@@ -56,8 +56,12 @@ python tools/test_content/clips_only.py rpg_export/rpg_male.glb ../../Ikala-Asse
 
 `tools/partgen` makes character parts in reviewed batches (see `partgen.py`), but
 its two models can be used on their own too. Run these from `tools/partgen` with
-TRELLIS.2's Python (`D:/Programs/AI/TRELLIS.2/.venv/Scripts/python.exe`); paths
-to ComfyUI, TRELLIS.2 and Blender come from `config.json`. Neither needs the
+TRELLIS.2's Python (`<trellis>/.venv/Scripts/python.exe`), or any Python with
+Pillow. Paths to ComfyUI, TRELLIS.2, Blender and the work folder come from
+`config.json`, which holds this computer's folders and isn't committed: copy
+`config.example.json` to it and fill it in. Blender can be named just `blender`
+when it is on the PATH. Below, `<trellis>` and `<work>` stand for those folders.
+Neither model needs the
 internet once the models are downloaded: ComfyUI is started with `--offline`, and
 `trellis_run.py` only loads models from Hugging Face's local cache unless given
 `--online` (needed once, to download them).
@@ -68,14 +72,14 @@ render, which TRELLIS.2 turns into a mesh best; `--sketch drawing.png` steers th
 shape with a drawing:
 
 ```
-python make_image.py "a red wooden treasure chest with iron bands" --style --count 4 --out D:/Programs/AI/partgen/scratch/chest
+python make_image.py "a red wooden treasure chest with iron bands" --style --count 4 --out <work>/scratch/chest
 ```
 
 More like them later, with the same prompt and settings from the folder's
 `prompt.json`, carrying on from the next seed (images are never overwritten):
 
 ```
-python make_image.py --more D:/Programs/AI/partgen/scratch/chest --count 4
+python make_image.py --more <work>/scratch/chest --count 4
 ```
 
 A textured mesh from an image, through TRELLIS.2 (about a minute to load, then
@@ -84,13 +88,13 @@ under a minute to a few minutes per image at the default `--type 512`;
 can follow, sharing one load:
 
 ```
-D:/Programs/AI/TRELLIS.2/.venv/Scripts/python.exe trellis_run.py --trellis D:/Programs/AI/TRELLIS.2 D:/Programs/AI/partgen/scratch/chest/2000.png D:/Programs/AI/partgen/scratch/chest/chest.glb
+<trellis>/.venv/Scripts/python.exe trellis_run.py --trellis <trellis> <work>/scratch/chest/2000.png <work>/scratch/chest/chest.glb
 ```
 
 Renders of a mesh from the front, a front corner and the back:
 
 ```
-blender -b --factory-startup --python blender/render_meshes.py -- D:/Programs/AI/partgen/scratch/chest/chest.glb D:/Programs/AI/partgen/scratch/chest/views
+blender -b --factory-startup --python blender/render_meshes.py -- <work>/scratch/chest/chest.glb <work>/scratch/chest/views
 ```
 
 ## Previewing characters

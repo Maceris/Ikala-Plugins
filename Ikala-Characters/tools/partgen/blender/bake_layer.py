@@ -156,6 +156,21 @@ def paint_from_image(base_image, covered, position, normal, picked, painted, gui
     return int((facing > 0).sum()), int(on_image.sum())
 
 
+def face_out(normal_image):
+    """Turn a baked normal map's texels that point into the surface back out. TRELLIS's meshes
+    are sheets with two sides, half their faces looking inward, and a bake ray that lands on one
+    of those bakes its normal reversed, which shades flat and pale, like a hole."""
+    pixels = np.array(normal_image.pixels[:]).reshape(-1, 4)
+    tangent = pixels[:, :3] * 2 - 1
+    reversed_ = tangent[:, 2] < 0
+    tangent[reversed_] = -tangent[reversed_]
+    pixels[:, :3] = (tangent + 1) / 2
+    normal_image.pixels.foreach_set(pixels.ravel().astype(np.float32))
+    # The bake packed the map already; pack it again so the export takes these pixels
+    normal_image.pack()
+    return int(reversed_.sum())
+
+
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -185,6 +200,7 @@ def main():
     hat.BAKE_REACH = BAKE_REACH
     high = import_figure(args.figure)
     base_image, covered = hat.bake(high, low, args.name, args.size, bodies)
+    reversed_ = face_out(bpy.data.images["%s_normal" % args.name])
     position, normal = surface_maps(low, args.size)
     with open(args.guide, encoding="utf-8") as file:
         guide = json.load(file)
@@ -196,8 +212,8 @@ def main():
     base_image.pack()
     bpy.data.objects.remove(high)
 
-    report = {"front_texels": front, "image_texels": replaced, "defaults": defaults,
-              "size": args.size}
+    report = {"front_texels": front, "image_texels": replaced, "reversed_normals": reversed_,
+              "defaults": defaults, "size": args.size}
     print("[bake_layer]", json.dumps(report))
     with open(out / "bake.json", "w", encoding="utf-8") as file:
         json.dump(report, file, indent=1)

@@ -18,7 +18,8 @@ between stages, so expensive steps only run on what was kept:
     python partgen.py status <batch>
 
 Every stage takes --only <id,...> to limit it, and --all to skip waiting for reviews. Paths come
-from config.json beside this file; batches live in <work>/<batch>/. A brief is:
+from config.json beside this file, which isn't committed: copy config.example.json to it and fill
+in this computer's folders. Batches live in <work>/<batch>/. A brief is:
 
     {"id": "adventurer_hat", "kind": "accessory", "socket": "head_top",
      "description": "wide-brimmed weathered brown leather adventurer hat with a dark band",
@@ -98,6 +99,11 @@ SKETCH_MODE = "hed/pidi/scribble/ted"
 LAYER_EXTRA_CHANNEL = "accent"
 # Body slots a layer's mask never grows into unless the layer covers them
 BARE_SLOTS = ("head", "hand.L", "hand.R", "foot.L", "foot.R")
+# This computer's folders, not committed, and the template for it
+CONFIG = "config.json"
+CONFIG_EXAMPLE = "config.example.json"
+# Each leg's slots, which a layer with "legGap" keeps the gap between
+LEG_SLOTS = (("upperLeg.L", "lowerLeg.L", "foot.L"), ("upperLeg.R", "lowerLeg.R", "foot.R"))
 
 SDXL_STEPS = 30
 SDXL_CFG = 6.0
@@ -133,7 +139,18 @@ BACK_CLOSE = 61
 
 
 def load_config():
-    return json.loads((TOOLS / "config.json").read_text(encoding="utf8"))
+    """This computer's folders and settings, from config.json beside this file."""
+    path = TOOLS / CONFIG
+    if not path.exists():
+        raise SystemExit("There is no %s: copy %s to it and fill in this computer's folders."
+                         % (path, CONFIG_EXAMPLE))
+    config = json.loads(path.read_text(encoding="utf8"))
+    config.pop("_comment", None)
+    unfilled = [key for key, value in config.items()
+                if isinstance(value, str) and value.startswith("<")]
+    if unfilled:
+        raise SystemExit("%s still has placeholders for %s." % (path, ", ".join(unfilled)))
+    return config
 
 
 def load_json_with_comments(path):
@@ -189,6 +206,11 @@ def layer_of(brief):
     rule["prompt"] = OUTFIT_PROMPT
     for key in ("maskGrow", "maskDown", "gap"):
         rule[key] = max(r.get(key, 0) for _, r in found)
+    rule["legGap"] = any(r.get("legGap", False) for _, r in found)
+    # An outfit stays within a reach only if every layer it stands for does
+    rule.pop("reach", None)
+    if all("reach" in r for _, r in found):
+        rule["reach"] = max(r["reach"] for _, r in found)
     rule["triangles"] = sum(r["triangles"] for _, r in found)
     return outfit, dict(rule, **brief.get("fit", {}))
 
@@ -421,6 +443,35 @@ def guides(config):
     return folder
 
 
+def bare_ends(layer):
+    """The head, hands and feet a layer leaves bare, which its collar, sleeves and legs must stop
+    short of."""
+    return [slot for slot in BARE_SLOTS if slot not in layer["covers"]]
+
+
+def leg_gap(folder, guide):
+    """The gap between the mannequin's legs below the crotch in its front render, as a boolean
+    array of its pixels: in each row, what lies between one leg and the other. Growing a mask
+    or closing gaps bridges it, and the image then draws legs joined down to the knees."""
+    from PIL import Image
+    import numpy as np
+    slots = np.asarray(Image.open(folder / "slots.png").getchannel("R"))
+    legs = [np.isin(slots, [guide["slots"].index(s) + 1 for s in leg if s in guide["slots"]])
+            for leg in LEG_SLOTS]
+    gap = np.zeros(slots.shape, dtype=bool)
+    columns = np.arange(slots.shape[1])
+    either = legs[0] | legs[1]
+    for row in range(slots.shape[0]):
+        a, b = (np.flatnonzero(leg[row]) for leg in legs)
+        if not len(a) or not len(b):
+            continue
+        # Between the legs' middles, wherever neither is drawn: a stray pixel of one leg's slot
+        # at the other's edge would hide the gap if it went from one's edge to the other's
+        low, high = sorted((np.median(a), np.median(b)))
+        gap[row] = (columns > low) & (columns < high) & ~either[row]
+    return gap
+
+
 def guide_inputs(config, layer, rule):
     """The images that paint a layer's clothing, in ComfyUI's input folder: the mannequin's
     render, its depth, and a mask of where the layer may paint. Gives their names there."""
@@ -447,6 +498,9 @@ def guide_inputs(config, layer, rule):
                  if slot in guide["slots"] and slot not in layer["covers"]}
     bare = slots.point(lambda v: 255 if v in kept_bare else 0)
     hang = ImageChops.subtract(hang, bare)
+    if rule.get("legGap"):
+        gap = Image.fromarray(leg_gap(folder, guide).astype("uint8") * 255)
+        hang = ImageChops.subtract(hang, gap)
     names["mask"] = "partgen_mask_%s_%s.png" % (GUIDE_VARIANT, layer["id"])
     hang.convert("RGB").save(inputs / names["mask"])
     return names
@@ -619,11 +673,21 @@ def painted_area(config, brief, out):
     bare = chroma < BARE_CHROMA
     if not colored:
         bare &= np.abs(image.mean(-1) - gray.mean(-1)) < BARE_LIGHTNESS
+    else:
+        # The mannequin is gray, so color is the garment's even where it is shaded about as
+        # dark as the render there, like a tan leg's inner side
+        differs |= ~bare
     differs &= ~bare
     differs &= np.asarray(Image.open(allowed).convert("L")) > 127
     mask = Image.fromarray(differs.astype(np.uint8) * 255).filter(ImageFilter.MedianFilter(5))
     mask = mask.filter(ImageFilter.MaxFilter(PAINT_CLOSE))
     mask = mask.filter(ImageFilter.MinFilter(PAINT_CLOSE))
+    # Closing bridges the gap between the legs again
+    gap = None
+    if rule.get("legGap"):
+        guide = json.loads((guides(config) / "guide.json").read_text(encoding="utf8"))
+        gap = leg_gap(guides(config), guide)
+        mask = Image.fromarray(np.where(gap, 0, np.asarray(mask)).astype(np.uint8))
     # Whatever a flood from the corner can't reach is inside the garment
     flood = mask.copy()
     ImageDraw.floodfill(flood, (0, 0), 128)
@@ -648,7 +712,10 @@ def painted_area(config, brief, out):
     # A garment's back is whole where its front is open, like a jacket's neckline: gaps are
     # closed further for what faces away from the camera
     back = Image.open(path).filter(ImageFilter.MaxFilter(BACK_CLOSE))
-    back.filter(ImageFilter.MinFilter(BACK_CLOSE)).save(out / "painted_back.png")
+    back = back.filter(ImageFilter.MinFilter(BACK_CLOSE))
+    if gap is not None:
+        back = Image.fromarray(np.where(gap, 0, np.asarray(back)).astype(np.uint8))
+    back.save(out / "painted_back.png")
     return path
 
 
@@ -690,14 +757,18 @@ def fit_layer(config, batch, brief):
             [config["blender"], "-b", "--factory-startup", "--python",
              str(TOOLS / "blender/shape_layer.py"), "--",
              "--garment", str(out / "garment.glb"), "--body", str(body), "--out", str(out),
-             "--gap", str(rule["gap"]), "--triangles", str(rule["triangles"])],
+             "--gap", str(rule["gap"]), "--triangles", str(rule["triangles"]),
+             "--bare", ",".join(bare_ends(layer_of(brief)[0])),
+             "--painted", str(painted), "--guide", str(guides(config) / "guide.json")]
+            + (["--reach", str(rule["reach"])] if "reach" in rule else []),
             stdout=stream, stderr=subprocess.STDOUT)
     if result.returncode != 0 or not (out / "shape.json").exists():
         print("Shaping failed for %s; see %s" % (brief["id"], folder / "shape.log"))
         return
     report["shape"] = json.loads((out / "shape.json").read_text(encoding="utf8"))
     weighted = run_blender(config, "weight_layer.py", folder / "weights.log",
-                           "--garment", out / "shaped.glb", "--body", body, "--out", out)
+                           "--garment", out / "shaped.glb", "--body", body, "--out", out,
+                           "--bare", ",".join(bare_ends(layer_of(brief)[0])))
     if not weighted or not (out / "weights.json").exists():
         print("Weighting failed for %s; see %s" % (brief["id"], folder / "weights.log"))
         return
@@ -761,7 +832,9 @@ def write_layer_part(config, batch, brief, out, rule):
                              "--baked", out / "baked.glb", "--body", mannequins / "female.blend",
                              "--from-cage", mannequins / ("%s_cage.npz" % GUIDE_VARIANT),
                              "--to-cage", mannequins / "female_cage.npz", "--gap", rule["gap"],
-                             "--name", name, "--out", target, "--preview", out):
+                             "--name", name, "--out", target, "--preview", out,
+                             "--bare", ",".join(bare_ends(layer_of(brief)[0])),
+                             *(["--reach", rule["reach"]] if "reach" in rule else [])):
             print("The female mesh failed for %s; see %s" % (name, folder / "variant.log"))
             return None
         masks = target.with_name(target.stem + "_masks")

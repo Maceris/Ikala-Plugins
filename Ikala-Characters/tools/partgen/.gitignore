@@ -1,0 +1,3 @@
+# This computer's folders; copy config.example.json to make it
+config.json
+__pycache__/
