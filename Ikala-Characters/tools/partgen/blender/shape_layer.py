@@ -152,7 +152,14 @@ def surface_samples(points, faces, steps=4):
     return np.concatenate([a + u * (b - a) + v * (c - a) for u, v in grid])
 
 
-def match_limbs(points, body, armature):
+def skin_distance(points, surface):
+    """The median distance of some points from a surface (a BVH tree), inside or out."""
+    if not len(points):
+        return 0.0
+    return float(np.median([surface.find_nearest(Vector(p))[3] for p in points]))
+
+
+def match_limbs(points, body, armature, surface=None):
     """Turn a garment's sleeves and legs onto the mannequin's limbs. TRELLIS holds the figure's
     arms its own way, bent at the elbow where the mannequin's are straight, which lining the
     whole figure up can't fix: sleeves then cross the arm at the elbow, and pushing them out of
@@ -160,8 +167,10 @@ def match_limbs(points, body, armature):
     points and the body's skin nearest them run, and turn the garment's (and those beyond, like
     a cuff over the hand) about the bone's head to run the way the skin does, blending in around
     the joint, then move them across the limb so they run around its middle, as a sleeve hung
-    off to one side passes through the arm too. Gives the moved points and each turn in
-    degrees."""
+    off to one side passes through the arm too. With the body's surface (a BVH tree), a turn is
+    kept only if it brings the bone's points nearer the skin, for figures whose limbs should lie
+    on it, like a body part's: a small turn from a noisy direction would only move a limb that
+    was already right. Gives the moved points and each turn in degrees, 0 for one not kept."""
     segments = bone_segments(armature)
     body_nearest = owners(body, segments)
     moved = points.copy()
@@ -191,7 +200,13 @@ def match_limbs(points, body, armature):
             weight = np.clip((share - BLEND_FROM) / (BLEND_TO - BLEND_FROM), 0, 1)
             weight[~np.isin(nearest, follows)] = 0
             turned = head + (moved - head) @ rotation.T - across
-            moved += weight[:, None] * (turned - moved)
+            candidate = moved + weight[:, None] * (turned - moved)
+            if surface is not None:
+                own = (nearest == name) & (share > SLICES[0][0]) & (share < SLICES[1][1])
+                if skin_distance(candidate[own], surface) >= skin_distance(moved[own], surface):
+                    turns[name] = 0.0
+                    continue
+            moved = candidate
             turns[name] = round(float(np.degrees(np.arccos(np.clip(garment[1] @ skin[1], -1,
                                                                    1)))), 1)
     return moved, turns
