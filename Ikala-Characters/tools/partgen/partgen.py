@@ -722,30 +722,39 @@ def command_images(config, batch, args):
 def command_meshes(config, batch, args):
     def wanted(b):
         return b["review"]["pick"] is not None and (
-            b["mesh"] is None or b["mesh"]["image"] != b["review"]["pick"]
+            args.redo or b["mesh"] is None or b["mesh"]["image"] != b["review"]["pick"]
             or b["mesh"]["type"] != args.type)
 
     briefs = ready(batch.load(), args, wanted)
     if not briefs:
         return
-    pairs, renders = [], []
+    pairs, renders, figures = [], [], []
     for brief in briefs:
         folder = batch.brief_folder(brief["id"])
         pick = brief["review"]["pick"]
         glb = folder / ("mesh_%d_%s.glb" % (pick, args.type))
-        pairs += [str(folder / "images" / ("%d.png" % pick)), str(glb)]
+        image = str(folder / "images" / ("%d.png" % pick))
+        pairs += [image, str(glb)]
         renders += [str(glb), str(folder / ("views_%d_%s" % (pick, args.type)))]
+        # Clothing and body parts are painted on the whole mannequin, so TRELLIS makes the
+        # figure, which it checks for curtains of streaks
+        if brief["kind"] in ("layer", "body"):
+            figures += ["--figure", image]
     trellis = pathlib.Path(config["trellis"])
     subprocess.run([str(trellis / ".venv/Scripts/python.exe"), str(TOOLS / "trellis_run.py"),
-                    "--trellis", str(trellis), "--type", args.type] + pairs, check=True)
+                    "--trellis", str(trellis), "--type", args.type] + figures + pairs,
+                   check=True)
     subprocess.run([config["blender"], "-b", "--factory-startup", "--python",
                     str(TOOLS / "blender/render_meshes.py"), "--"] + renders, check=True,
                    stdout=subprocess.DEVNULL)
     for brief in briefs:
         pick = brief["review"]["pick"]
 
-        def record(entry, pick=pick):
-            entry["mesh"] = {"image": pick, "type": args.type,
+        made = batch.brief_folder(brief["id"]) / ("mesh_%d_%s.glb.json" % (pick, args.type))
+        seed = json.loads(made.read_text(encoding="utf8"))["seed"] if made.exists() else 0
+
+        def record(entry, pick=pick, seed=seed):
+            entry["mesh"] = {"image": pick, "type": args.type, "seed": seed,
                              "file": "mesh_%d_%s.glb" % (pick, args.type),
                              "views": "views_%d_%s" % (pick, args.type)}
             entry["review"]["mesh"] = None
@@ -1171,6 +1180,8 @@ def main():
     images.add_argument("--more", action="store_true", help="Add images to briefs that have some.")
     meshes = stage("meshes", "Meshes from picked images.")
     meshes.add_argument("--type", default="512", choices=["512", "1024", "1024_cascade"])
+    meshes.add_argument("--redo", action="store_true",
+                        help="Make meshes again for briefs that have one from their pick.")
     fit = stage("fit", "Fit kept meshes onto the biped.")
     fit.add_argument("--redo", action="store_true", help="Fit again briefs that have a part.")
     status = commands.add_parser("status", help="What each brief has.")
