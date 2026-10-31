@@ -853,6 +853,15 @@ def painted_area(config, brief, out):
     return path
 
 
+def simplifier_args(config):
+    """shape_layer.py's arguments for reducing with Ikala-Graphics' simplifier, given the
+    config's "simplifier" jars, or none for Blender's decimation."""
+    jars = config.get("simplifier")
+    if not jars:
+        return []
+    return ["--simplifier", os.pathsep.join(jars), "--java", config.get("java", "java")]
+
+
 def run_blender(config, script, log, *arguments):
     """Run one of the blender/ scripts headless, its output in a log. Gives whether it worked."""
     with open(log, "w", encoding="utf8") as stream:
@@ -894,7 +903,8 @@ def fit_layer(config, batch, brief):
              "--gap", str(rule["gap"]), "--triangles", str(rule["triangles"]),
              "--bare", ",".join(bare_ends(layer_of(brief)[0])),
              "--painted", str(painted), "--guide", str(guides(config) / "guide.json")]
-            + (["--reach", str(rule["reach"])] if "reach" in rule else []),
+            + (["--reach", str(rule["reach"])] if "reach" in rule else [])
+            + simplifier_args(config),
             stdout=stream, stderr=subprocess.STDOUT)
     if result.returncode != 0 or not (out / "shape.json").exists():
         print("Shaping failed for %s; see %s" % (brief["id"], folder / "shape.log"))
