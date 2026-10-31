@@ -416,12 +416,22 @@ public final class CharacterEditor {
             ImportedCharacter character = assembled.character();
             boolean[] base = new boolean[character.parts().size()];
             boolean[] wearable = new boolean[character.parts().size()];
+            // Where each layer part stacks: the highest of the layers it fills, so an outfit
+            // filling a shirt and pants layer goes under a jacket
+            int[] order = new int[character.parts().size()];
             for (int p = 0; p < base.length; ++p) {
                 Part part = registry.get(Part.class, assembled.partIds().get(p));
                 base[p] = part.kind() == Part.PartKind.BODY;
                 wearable[p] = part.kind() == Part.PartKind.LAYER;
+                order[p] = Integer.MIN_VALUE;
+                for (String fill : part.fills()) {
+                    BodyPlan.Layer layer = plan.layer(fill);
+                    if (layer != null) {
+                        order[p] = Math.max(order[p], layer.order());
+                    }
+                }
             }
-            PartRegions regions = PartRegions.of(character, base, wearable);
+            PartRegions regions = PartRegions.of(character, base, wearable, order);
 
             List<String> all = plan.allChannels();
             Set<Integer> used = new TreeSet<>();

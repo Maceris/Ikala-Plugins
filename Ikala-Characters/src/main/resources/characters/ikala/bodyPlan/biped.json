@@ -31,7 +31,7 @@
     {"id": "hair", "covers": ["head"], "order": 10},
     {"id": "facialHair", "covers": ["head"], "order": 10},
     {"id": "shirt", "covers": ["torso", "upperArm.L", "upperArm.R", "lowerArm.L", "lowerArm.R"], "order": 10},
-    {"id": "pants", "covers": ["pelvis", "upperLeg.L", "upperLeg.R", "lowerLeg.L", "lowerLeg.R"], "order": 10},
+    {"id": "pants", "covers": ["pelvis", "upperLeg.L", "upperLeg.R", "lowerLeg.L", "lowerLeg.R"], "order": 15},
     {"id": "gloves", "covers": ["hand.L", "hand.R"], "order": 20},
     {"id": "boots", "covers": ["foot.L", "foot.R", "lowerLeg.L", "lowerLeg.R"], "order": 20},
     {"id": "jacket", "covers": ["torso", "upperArm.L", "upperArm.R", "lowerArm.L", "lowerArm.R"], "order": 20},

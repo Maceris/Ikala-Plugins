@@ -1,5 +1,5 @@
 {
-  "_comment": "Copy this file to config.json beside it (git ignores config.json) and fill in this computer's folders, with forward slashes. \"comfy\" is the ComfyUI folder, with the SDXL \"checkpoint\" in models/checkpoints and the depth \"controlnet\" (ControlNet Union ProMax) in models/controlnet; \"trellis\" is the TRELLIS.2 folder, with its own .venv; \"blender\" is Blender 5 or later, by name if it is on the PATH; \"mannequin\" is the male mannequin glb in Ikala-Asset-Editor's test_content, with its .blend beside it; \"work\" is any folder for batches, guides and scratch output; \"content\" is the character content folder parts are written to, under the \"namespace\" the editor loads it as.",
+  "_comment": "Copy this file to config.json beside it (git ignores config.json) and fill in this computer's folders, with forward slashes. \"comfy\" is the ComfyUI folder, with the SDXL \"checkpoint\" in models/checkpoints and the depth \"controlnet\" (ControlNet Union ProMax) in models/controlnet; \"trellis\" is the TRELLIS.2 folder, with its own .venv; \"blender\" is Blender 5 or later, by name if it is on the PATH; \"mannequin\" is the male mannequin glb in Ikala-Asset-Editor's test_content, with its .blend beside it; \"work\" is any folder for batches, guides and scratch output; \"content\" is the character content folder parts are written to, under the \"namespace\" the editor loads it as. \"simplifier\", if given, lists the Ikala-Graphics and Ikala-Core jars, built from Ikala-Asset-Editor, whose level of detail simplifier then reduces fitted clothing instead of Blender's decimation (see SimplifyMesh.java), run with \"java\" (21 or later).",
   "comfy": "<ComfyUI folder>",
   "comfyPort": 8188,
   "checkpoint": "sd_xl_base_1.0.safetensors",
@@ -9,5 +9,8 @@
   "mannequin": "<Ikala-Asset-Editor>/test_content/characters/mannequin/male.glb",
   "work": "<work folder>",
   "namespace": "gen",
-  "content": "<Ikala-Asset-Editor>/test_content/characters_gen"
+  "content": "<Ikala-Asset-Editor>/test_content/characters_gen",
+  "simplifier": ["<Ikala-Plugins>/Ikala-Graphics/build/libs/Ikala-Graphics-0.0.2.jar",
+                 "<Ikala-Core>/build/libs/Ikala-Core-0.6.0.jar"],
+  "java": "java"
 }
