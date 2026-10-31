@@ -33,9 +33,16 @@ from mathutils.bvhtree import BVHTree
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from bodies import body_meshes, world_vertices  # noqa: E402
 from fit_layer import import_figure, render  # noqa: E402
+from fit_body import plan_slots  # noqa: E402
+from shape_layer import LIMBS, bone_segments, owners, with_beyond  # noqa: E402
 
 # Bones each vertex may follow, as characters are drawn with
 INFLUENCES = 4
+# The least share of its weight a garment vertex nearest a limb must take from that limb (or the
+# bone it hangs from); less, and it takes the limb's skin's weights alone
+ON_LIMB = 0.5
+# The vertex group marking those while they take them again
+LIMB_FIX = "limb_fix"
 # How far out from the body a garment counts as covering it, in meters
 COVER_REACH = 0.05
 # The test poses: each bone turned about a world axis, in degrees. Blender space: Z up, the body
@@ -95,11 +102,9 @@ def lift_bare(garment, armature, bare):
             group.remove(list(range(len(garment.data.vertices))))
 
 
-def transfer_weights(garment, source, armature, bare=()):
-    """Give the garment the body's weights, at most INFLUENCES per vertex, none from the bones it
-    leaves bare, and skin it to the armature."""
-    for group in source.vertex_groups:
-        garment.vertex_groups.new(name=group.name)
+def copy_weights(garment, source, only=None):
+    """Copy a body's weights onto the garment from its nearest surface, onto every vertex or only
+    those in a vertex group."""
     transfer = garment.modifiers.new("weights", "DATA_TRANSFER")
     transfer.object = source
     transfer.use_vert_data = True
@@ -107,10 +112,61 @@ def transfer_weights(garment, source, armature, bare=()):
     transfer.vert_mapping = "POLYINTERP_NEAREST"
     transfer.layers_vgroup_select_src = "ALL"
     transfer.layers_vgroup_select_dst = "NAME"
+    if only is not None:
+        transfer.vertex_group = only
     bpy.ops.object.select_all(action="DESELECT")
     garment.select_set(True)
     bpy.context.view_layer.objects.active = garment
     bpy.ops.object.modifier_apply(modifier=transfer.name)
+
+
+def keep_limbs_whole(garment, bodies, armature):
+    """Give the garment's vertices nearest a limb that took their weights mostly off it (less than
+    ON_LIMB) the weights of that limb's skin alone. Weights come from the nearest skin, which for
+    a sleeve under the arm can be the chest (the bust, on the female body), or for a leg's inner
+    side the other leg: those stayed behind as the limb moved, tearing the sleeve. Gives how many
+    vertices took them again."""
+    segments = bone_segments(armature)
+    points = np.array([garment.matrix_world @ v.co for v in garment.data.vertices])
+    nearest = owners(points, segments)
+    slots = plan_slots()
+    fixed = 0
+    for chain in LIMBS:
+        root = chain[0]
+        if root not in armature.data.bones:
+            continue
+        limb = with_beyond(armature, [root])
+        parent = armature.data.bones[root].parent
+        allowed = {garment.vertex_groups[n].index for n in limb | {parent and parent.name}
+                   if n in garment.vertex_groups}
+        on = np.flatnonzero(np.isin(nearest, list(limb)))
+        wrong = [int(i) for i in on
+                 if sum(e.weight for e in garment.data.vertices[i].groups if e.group in allowed)
+                 < ON_LIMB * max(1e-6, sum(e.weight for e in garment.data.vertices[i].groups))]
+        names = [s for s, slot in slots.items() if set(slot["bones"]) & limb]
+        skin = [o for o in bodies if any(o.name.endswith("_" + name) for name in names)]
+        if not wrong or not skin:
+            continue
+        for group in garment.vertex_groups:
+            group.remove(wrong)
+        marked = garment.vertex_groups.new(name=LIMB_FIX)
+        marked.add(wrong, 1.0, "REPLACE")
+        source = weight_source(skin)
+        copy_weights(garment, source, LIMB_FIX)
+        bpy.data.objects.remove(source)
+        garment.vertex_groups.remove(garment.vertex_groups[LIMB_FIX])
+        fixed += len(wrong)
+    return fixed
+
+
+def transfer_weights(garment, source, armature, bare=(), bodies=()):
+    """Give the garment the body's weights, at most INFLUENCES per vertex, none from the bones it
+    leaves bare, its limbs' only from their limbs given the body's meshes (see keep_limbs_whole),
+    and skin it to the armature. Gives how many vertices took a limb's weights again."""
+    for group in source.vertex_groups:
+        garment.vertex_groups.new(name=group.name)
+    copy_weights(garment, source)
+    fixed = keep_limbs_whole(garment, bodies, armature) if bodies else 0
     lift_bare(garment, armature, bare)
     bpy.ops.object.mode_set(mode="WEIGHT_PAINT")
     bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=INFLUENCES)
@@ -120,6 +176,7 @@ def transfer_weights(garment, source, armature, bare=()):
     garment.parent = armature
     skin = garment.modifiers.new("Armature", "ARMATURE")
     skin.object = armature
+    return fixed
 
 
 def pose(armature, turns):
@@ -204,12 +261,14 @@ def main():
     bpy.context.view_layer.objects.active = garment
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     source = weight_source(bodies)
-    transfer_weights(garment, source, armature, [b for b in args.bare.split(",") if b])
+    limb_fixed = transfer_weights(garment, source, armature,
+                                  [b for b in args.bare.split(",") if b], bodies)
     bpy.data.objects.remove(source)
 
     body_points, body_faces, garment_points, body_tree, garment_tree = surfaces(bodies, garment)
     at_rest = covered(body_points, body_faces, garment_tree)
-    report = {"covered_body_vertices": int(at_rest.sum()), "poses": {}}
+    report = {"covered_body_vertices": int(at_rest.sum()), "limb_weights_fixed": limb_fixed,
+              "poses": {}}
 
     flat = bpy.data.materials.new("garment")
     flat.diffuse_color = GARMENT_COLOR

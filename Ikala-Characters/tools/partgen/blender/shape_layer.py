@@ -102,6 +102,10 @@ EDGE_ROUNDS = 12
 # cloth where TRELLIS's sleeves lay inside the arm. A garment's openings, its neck, cuffs, hems
 # and front, are all longer
 HOLE_PERIMETER = 0.15
+# Where a garment cut at a seam runs on past it, tucked under the layer beyond, like a shirt's
+# hem inside pants: how near the body it keeps, in meters, inside that layer's own gap
+TUCKED_GAP = 0.001
+TUCKED_REACH = 0.002
 EDGE_TOWARD = 0.5
 EDGE_BACK = -0.53
 GARMENT_COLOR = (0.85, 0.45, 0.15, 1)
@@ -265,6 +269,62 @@ def level_hems(obj, armature):
     return trims
 
 
+def seam_frame(seams, seam):
+    """A seam ring's middle and the normal of its plane, pointing up."""
+    ring = np.asarray(seams[seam])
+    _, _, axes = np.linalg.svd(ring - ring.mean(0))
+    return ring.mean(0), (axes[2] if axes[2][2] >= 0 else -axes[2])
+
+
+def parse_cut(text, body):
+    """A --cut argument, "seam,above|below,offset", with the seams of the body's .blend beside
+    it: (seams, seam, keep, offset), or None."""
+    if not text:
+        return None
+    seam, keep, offset = text.split(",")
+    with open(os.path.splitext(os.path.abspath(body))[0] + "_seams.json",
+              encoding="utf-8") as file:
+        return json.load(file)["seams"], seam, keep, float(offset)
+
+
+def tucked_band(points, cut, gap, reach):
+    """The gap and reach for each point of a garment cut at a seam (see parse_cut): what lies
+    past the seam itself, like a shirt's hem tucked into pants, keeps to TUCKED_GAP and
+    TUCKED_REACH, inside the layer beyond the seam; the rest keeps the garment's own."""
+    if cut is None:
+        return gap, reach
+    seams, seam, keep, _ = cut
+    middle, up = seam_frame(seams, seam)
+    side = (points - middle) @ up
+    past = side < 0 if keep == "above" else side > 0
+    return (np.where(past, TUCKED_GAP, gap),
+            None if reach is None else np.where(past, TUCKED_REACH, reach))
+
+
+def cut_at_seam(obj, armature, seams, seam, keep, offset):
+    """Cut a garment straight across at one of the mannequin's seam rings, moved up by an
+    offset, keeping what lies above or below it, so layers worn together meet at a firm line
+    (see layers.json's "cut"). The arms, hanging past the waist in the A pose, stay whole. Gives
+    how many faces went."""
+    middle, up = seam_frame(seams, seam)
+    middle = middle + np.array([0.0, 0.0, offset])
+    arms = list(with_beyond(armature, [chain[0] for chain in LIMBS if "arm" in chain[0]]))
+    segments = bone_segments(armature)
+    mesh = bmesh.new()
+    mesh.from_mesh(obj.data)
+    bmesh.ops.bisect_plane(mesh, geom=mesh.verts[:] + mesh.edges[:] + mesh.faces[:],
+                           plane_co=Vector(middle), plane_no=Vector(up))
+    middles = np.array([f.calc_center_median() for f in mesh.faces]).reshape(-1, 3)
+    on_arm = np.isin(owners(middles, segments), arms)
+    above = (middles - middle) @ up > 0
+    drop = ~above if keep == "above" else above
+    gone = [f for f, out in zip(mesh.faces, drop & ~on_arm) if out]
+    bmesh.ops.delete(mesh, geom=gone, context="FACES")
+    mesh.to_mesh(obj.data)
+    mesh.free()
+    return len(gone)
+
+
 def drop_stretched(obj, before):
     """Drop the faces whose edges limb matching stretched (see STRETCH), from the points before
     it. Gives how many were dropped."""
@@ -286,17 +346,22 @@ def drop_stretched(obj, before):
     return len(stretched)
 
 
-def recut(obj, painted, guide):
+def recut(obj, painted, guide, armature=None):
     """Drop the rebuilt garment's faces that look toward the front camera from where the picked
     image shows no garment (its painted area, grown a little for the outline): rebuilding joins
     specks the cut left, like bits of the bare chest in a jacket's open front, into a sheet
-    across it. Gives how many were dropped."""
+    across it. Sleeves and legs, given the armature, are left alone: match_limbs has turned them
+    off the image's, and the image's outline cut slits along their sides. Gives how many were
+    dropped."""
     allowed = grown(painted, SIDE_GROW)
     mesh = bmesh.new()
     mesh.from_mesh(obj.data)
     faces = [f for f in mesh.faces if f.normal.y < -SIDE]
     middles = np.array([f.calc_center_median() for f in faces]).reshape(-1, 3)
     outside = ~on_painted(middles, allowed, guide)
+    if armature is not None and len(middles):
+        limbs = with_beyond(armature, [chain[0] for chain in LIMBS])
+        outside &= ~np.isin(owners(middles, bone_segments(armature)), list(limbs))
     drop = [f for f, out in zip(faces, outside) if out]
     bmesh.ops.delete(mesh, geom=drop, context="FACES")
     mesh.to_mesh(obj.data)
@@ -651,6 +716,8 @@ def main():
     parser.add_argument("--simplifier", help="The classpath of Ikala-Graphics and Ikala-Core, "
                         "to reduce with their simplifier rather than Blender's decimation.")
     parser.add_argument("--java", default="java", help="The java to run it with.")
+    parser.add_argument("--cut", help="seam,above|below,offset: cut the garment straight across "
+                        "there (see layers.json).")
     args = parser.parse_args(argv)
     os.makedirs(args.out, exist_ok=True)
 
@@ -673,11 +740,16 @@ def main():
     bare = [b for b in args.bare.split(",") if b]
     dropped = drop_bare(garment, armature, bare) if bare else 0
     hems = level_hems(garment, armature)
+    cut_faces = 0
+    cut = parse_cut(args.cut, args.body)
+    if cut is not None:
+        cut_faces = cut_at_seam(garment, armature, *cut)
     crumbs = drop_crumbs(garment)
     garment.data.calc_loop_triangles()
     before = len(garment.data.loop_triangles)
     _, start = nearest(points_of(garment), surface)
-    moved = shape(garment, surface, args.gap, args.reach, armature=armature)
+    moved = shape(garment, surface, *tucked_band(points_of(garment), cut, args.gap, args.reach),
+                  armature=armature)
     # The pushed garment at full detail, which the bake takes normals and texture from: it lies
     # where the rebuilt one does, so bake rays find the right surface
     bpy.ops.object.select_all(action="DESELECT")
@@ -688,11 +760,13 @@ def main():
     recut_faces = 0
     if args.painted and args.guide:
         with open(args.guide, encoding="utf-8") as file:
-            recut_faces = recut(garment, read_mask(args.painted), json.load(file))
+            recut_faces = recut(garment, read_mask(args.painted), json.load(file),
+                                armature)
     holes = fill_holes(garment)
     relaxed = relax_edges(garment)
     triangles = reduce(garment, args.triangles, args.simplifier, args.java)
-    shape(garment, surface, args.gap, args.reach, rounds=0, armature=armature)
+    shape(garment, surface, *tucked_band(points_of(garment), cut, args.gap, args.reach),
+          rounds=0, armature=armature)
     _, end = nearest(points_of(garment), surface)
     report = {
         "triangles_before": before,
@@ -708,6 +782,7 @@ def main():
         "stretched_dropped": stretched,
         "crumb_faces_dropped": crumbs,
         "recut_faces": recut_faces,
+        "cut_faces": cut_faces,
         "holes_filled": holes,
         "relaxed_edge_vertices": relaxed,
         "reduced_by": "simplifier" if args.simplifier else "decimate",

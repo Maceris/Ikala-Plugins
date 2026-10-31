@@ -231,6 +231,8 @@ def layer_of(brief):
     outfit = {"id": "+".join(layer["id"] for layer, _ in found), "covers": covers}
     rule = dict(found[0][1])
     rule["prompt"] = OUTFIT_PROMPT
+    # An outfit runs across the lines its layers would stop at
+    rule.pop("cut", None)
     for key in ("maskGrow", "maskDown", "gap"):
         rule[key] = max(r.get(key, 0) for _, r in found)
     rule["legGap"] = any(r.get("legGap", False) for _, r in found)
@@ -853,6 +855,14 @@ def painted_area(config, brief, out):
     return path
 
 
+def cut_args(rule):
+    """shape_layer.py's and variant_layer.py's arguments for a layer's cut (see layers.json)."""
+    if "cut" not in rule:
+        return []
+    cut = rule["cut"]
+    return ["--cut", "%s,%s,%s" % (cut["seam"], cut["keep"], cut.get("offset", 0))]
+
+
 def simplifier_args(config):
     """shape_layer.py's arguments for reducing with Ikala-Graphics' simplifier, given the
     config's "simplifier" jars, or none for Blender's decimation."""
@@ -904,6 +914,7 @@ def fit_layer(config, batch, brief):
              "--bare", ",".join(bare_ends(layer_of(brief)[0])),
              "--painted", str(painted), "--guide", str(guides(config) / "guide.json")]
             + (["--reach", str(rule["reach"])] if "reach" in rule else [])
+            + cut_args(rule)
             + simplifier_args(config),
             stdout=stream, stderr=subprocess.STDOUT)
     if result.returncode != 0 or not (out / "shape.json").exists():
@@ -978,7 +989,8 @@ def write_layer_part(config, batch, brief, out, rule):
                              "--to-cage", mannequins / "female_cage.npz", "--gap", rule["gap"],
                              "--name", name, "--out", target, "--preview", out,
                              "--bare", ",".join(bare_ends(layer_of(brief)[0])),
-                             *(["--reach", rule["reach"]] if "reach" in rule else [])):
+                             *(["--reach", rule["reach"]] if "reach" in rule else []),
+                             *cut_args(rule)):
             print("The female mesh failed for %s; see %s" % (name, folder / "variant.log"))
             return None
         masks = target.with_name(target.stem + "_masks")

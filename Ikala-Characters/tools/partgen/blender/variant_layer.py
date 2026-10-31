@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fit_accessory as hat  # noqa: E402
 from bodies import body_meshes, nearest, tree, world_vertices  # noqa: E402
 from fit_layer import render  # noqa: E402
-from shape_layer import shape  # noqa: E402
+from shape_layer import parse_cut, points_of, shape, tucked_band  # noqa: E402
 from weight_layer import transfer_weights, weight_source  # noqa: E402
 
 # How many rings of neighbors around a folded face take their neighbors' move too
@@ -147,7 +147,10 @@ def main():
     parser.add_argument("--gap", type=float, required=True)
     parser.add_argument("--reach", type=float)
     parser.add_argument("--bare", default="", help="Comma-separated bones the layer leaves bare.")
+    parser.add_argument("--cut", help="The layer's cut (see shape_layer.py), to keep its tucked "
+                        "part tucked on this body.")
     args = parser.parse_args(argv)
+    cut = parse_cut(args.cut, args.body)
 
     bpy.ops.wm.open_mainfile(filepath=os.path.abspath(args.body))
     armature = next(o for o in bpy.data.objects if o.type == "ARMATURE")
@@ -171,14 +174,16 @@ def main():
     folded = []
     for _ in range(UNTANGLE_PASSES):
         folded.append(untangle(garment, start, start_normals))
-        pushed = shape(garment, surface, args.gap, args.reach, rounds=0, armature=armature)
+        gap, reach = tucked_band(points_of(garment), cut, args.gap, args.reach)
+        pushed = shape(garment, surface, gap, reach, rounds=0, armature=armature)
         if not folded[-1]:
             break
     left = int(((face_normals(garment) * start_normals).sum(1) < 0).sum())
     _, after_push = nearest(world_vertices(garment)[0], surface)
 
     source = weight_source(bodies)
-    transfer_weights(garment, source, armature, [b for b in args.bare.split(",") if b])
+    limb_fixed = transfer_weights(garment, source, armature,
+                                  [b for b in args.bare.split(",") if b], bodies)
     bpy.data.objects.remove(source)
     hat.export(args.out, garment, armature)
 
@@ -189,6 +194,7 @@ def main():
         "max_gap_mm": round(float(after_push.max()) * 1000, 1),
         "folded_faces": folded,
         "folded_left": left,
+        "limb_weights_fixed": limb_fixed,
     }
     print("[variant_layer]", json.dumps(report))
     os.makedirs(args.preview, exist_ok=True)
