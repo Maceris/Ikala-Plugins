@@ -43,6 +43,8 @@ COVER_ROUNDS = 2
 # How far bake rays reach from a garment built afresh to the carried one, as a share of its size:
 # the two lie apart where the cut or the conform differ, more than a reshaped garment does
 SHELL_BAKE_REACH = 0.03
+# How far below red and blue a baked texel's green may fall before it counts as missed
+MARKED = 0.15
 
 # How many rings of neighbors around a folded face take their neighbors' move too
 UNTANGLE_RINGS = 2
@@ -281,6 +283,11 @@ def shell_variant(args, carried, surface, armature, bodies, cut):
         if slot.material is not None:
             slot.material.name = args.name + "_carried"
     base, covered = hat.bake(carried, shell, args.name, SHELL_TEXTURE, bodies)
+    # The bake's padding blends the missed texels' marker into those beside them: a garment's
+    # recolorable base is near white, so a texel whose green falls well below its red and blue
+    # took some of the marker
+    color = np.array(base.pixels[:]).reshape(-1, 4)
+    covered &= ~((color[:, 0] - color[:, 1] > MARKED) & (color[:, 2] - color[:, 1] > MARKED))
     for image in (base, bpy.data.images["%s_normal" % args.name]):
         pixels = np.array(image.pixels[:]).reshape(-1, 4)
         fill_missed(pixels, covered)
