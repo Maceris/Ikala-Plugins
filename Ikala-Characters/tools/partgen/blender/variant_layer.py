@@ -43,6 +43,8 @@ COVER_ROUNDS = 2
 # How far bake rays reach from a garment built afresh to the carried one, as a share of its size:
 # the two lie apart where the cut or the conform differ, more than a reshaped garment does
 SHELL_BAKE_REACH = 0.03
+# How far its baked normals may lean, in degrees (see bake_layer.py's --max-lean)
+SHELL_LEAN = 15
 # How far below red and blue a baked texel's green may fall before it counts as missed
 MARKED = 0.15
 
@@ -302,7 +304,8 @@ def shell_variant(args, carried, surface, armature, bodies, cut):
         pixels = np.array(image.pixels[:]).reshape(-1, 4)
         fill_missed(pixels, covered)
         image.pixels.foreach_set(pixels.ravel().astype(np.float32))
-    bake_layer.face_out(bpy.data.images["%s_normal" % args.name])
+    bake_layer.face_out(bpy.data.images["%s_normal" % args.name], SHELL_LEAN)
+    bake_layer.flatten_flaps(shell, bpy.data.images["%s_normal" % args.name])
     bake_layer.cloth_orm(bpy.data.images["%s_orm" % args.name], shell, bodies + [carried],
                          SHELL_TEXTURE)
     base.pack()

@@ -60,6 +60,11 @@ MAX_LEAN = 40
 # the least share of its normal along the garment's. Less is TRELLIS's inner sheet, or cloth
 # folded over where pushing crumpled it, like sleeves that lay inside the arm
 SAME_WAY = 0.3
+# How far under a garment's face more of the garment may lie, in meters, for the face to be a
+# flap folded over it, and how many texels past a flap face's edges its flat normals reach
+FLAP_DEPTH = 0.03
+FLAP_MARGIN = 2
+FLAP_NEAR = 0.04
 
 
 def read_image(path):
@@ -229,11 +234,74 @@ def outer_faces(high, low):
     return len(drop)
 
 
+def flap_faces(low):
+    """The garment's faces lying over more of itself, within FLAP_DEPTH along their normals
+    (flaps folded back over it, like a jacket's lapels, see flaps.py), and those within
+    FLAP_NEAR of them."""
+    from mathutils.bvhtree import BVHTree
+    tree = BVHTree.FromPolygons([v.co for v in low.data.vertices],
+                                [tuple(p.vertices) for p in low.data.polygons])
+    found = []
+    for polygon in low.data.polygons:
+        start = polygon.center - polygon.normal * 1e-4
+        hit = tree.ray_cast(start, -polygon.normal, FLAP_DEPTH)
+        if hit[0] is not None and hit[2] != polygon.index:
+            found.append(polygon.index)
+    if not found:
+        return found
+    # And the garment around and under them, where the generated figure's crumpled lapels lay
+    from mathutils.kdtree import KDTree
+    near = KDTree(len(found))
+    for k, index in enumerate(found):
+        near.insert(low.data.polygons[index].center, k)
+    near.balance()
+    return [p.index for p in low.data.polygons
+            if near.find(p.center)[2] <= FLAP_NEAR]
+
+
+def flatten_flaps(low, normal_image):
+    """Give flaps folded over the garment flat baked normals: the bake finds the generated
+    figure's crumpled lapels under them, which shaded them in blotches, where a pressed lapel
+    is smooth. Gives how many texels were flattened."""
+    faces = set(flap_faces(low))
+    if not faces:
+        return 0
+    size = normal_image.size[0]
+    pixels = np.array(normal_image.pixels[:]).reshape(size, size, 4)
+    uv = low.data.uv_layers.active.data
+    low.data.calc_loop_triangles()
+    flat = np.zeros((size, size), dtype=bool)
+    for triangle in low.data.loop_triangles:
+        if triangle.polygon_index not in faces:
+            continue
+        corners = np.array([uv[k].uv[:] for k in triangle.loops]) * size
+        lo = np.floor(corners.min(0)).astype(int) - FLAP_MARGIN
+        hi = np.ceil(corners.max(0)).astype(int) + FLAP_MARGIN
+        lo, hi = np.clip(lo, 0, size - 1), np.clip(hi, 0, size - 1)
+        xs, ys = np.meshgrid(np.arange(lo[0], hi[0] + 1) + 0.5, np.arange(lo[1], hi[1] + 1) + 0.5)
+        a, b, c = corners
+        d = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
+        if abs(d) < 1e-12:
+            continue
+        w0 = ((b[1] - c[1]) * (xs - c[0]) + (c[0] - b[0]) * (ys - c[1])) / d
+        w1 = ((c[1] - a[1]) * (xs - c[0]) + (a[0] - c[0]) * (ys - c[1])) / d
+        # A little past the edges, so the padding the bake left around islands goes too
+        slack = FLAP_MARGIN / max(np.linalg.norm(b - a), np.linalg.norm(c - a), 1)
+        inside = (w0 >= -slack) & (w1 >= -slack) & (1 - w0 - w1 >= -slack)
+        flat[ys[inside].astype(int), xs[inside].astype(int)] = True
+    pixels[flat, :3] = hat.FLAT_NORMAL[:3]
+    normal_image.pixels.foreach_set(pixels.ravel().astype(np.float32))
+    normal_image.pack()
+    return int(flat.sum())
+
+
 def cloth_orm(orm_image, low, hidden, size):
     """Redo the ORM map's occlusion from the garment itself, and clear its metalness. TRELLIS's
     sheets have two sides a few millimeters apart, and an occlusion ray from the inner one finds
     the outer one right away: occlusion baked from pushed.glb came out black in patches. And a
-    garment is cloth, where TRELLIS's metalness (0.86 on a navy blazer) shades it as dark metal.
+    garment is cloth, where TRELLIS's metalness (0.86 on a navy blazer) shades it as dark metal,
+    and its roughness, which TRELLIS left in patches that shone as pale blotches, is one value:
+    the garment's median.
     Gives the mean occlusion over the garment's texels."""
     tree = low.data.materials[0].node_tree
     active = tree.nodes.active
@@ -253,6 +321,7 @@ def cloth_orm(orm_image, low, hidden, size):
     pixels = np.array(orm_image.pixels[:]).reshape(-1, 4)
     pixels[:, 0] = occlusion
     pixels[:, 2] = 0
+    pixels[:, 1] = np.median(pixels[occlusion < 1, 1]) if (occlusion < 1).any() else pixels[:, 1]
     orm_image.pixels.foreach_set(pixels.ravel().astype(np.float32))
     orm_image.pack()
     bpy.data.images.remove(image)
@@ -303,6 +372,7 @@ def main():
         filled = fill_normals(bpy.data.images["%s_normal" % args.name], covered, low,
                               args.rebuilt, args.size)
     reversed_ = face_out(bpy.data.images["%s_normal" % args.name], args.max_lean)
+    flattened = flatten_flaps(low, bpy.data.images["%s_normal" % args.name])
     occlusion = cloth_orm(bpy.data.images["%s_orm" % args.name], low, bodies + [high],
                           args.size)
     position, normal = surface_maps(low, args.size)
@@ -317,7 +387,7 @@ def main():
     bpy.data.objects.remove(high)
 
     report = {"front_texels": front, "image_texels": replaced, "reversed_normals": reversed_,
-              "inner_faces": inner, "rebuilt_normal_texels": filled, "baked_pct": round(float(covered.mean()) * 100, 1),
+              "inner_faces": inner, "flap_texels": flattened, "rebuilt_normal_texels": filled, "baked_pct": round(float(covered.mean()) * 100, 1),
               "occlusion": round(occlusion, 2), "defaults": defaults, "size": args.size}
     print("[bake_layer]", json.dumps(report))
     with open(out / "bake.json", "w", encoding="utf-8") as file:
