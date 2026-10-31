@@ -111,8 +111,8 @@ HOLE_PERIMETER = 0.15
 CRUMPLE_DEPTH = 0.006
 # Where a garment cut at a seam runs on past it, tucked under the layer beyond, like a shirt's
 # hem inside pants: how near the body it keeps, in meters, inside that layer's own gap
-TUCKED_GAP = 0.001
-TUCKED_REACH = 0.002
+TUCKED_GAP = 0.0025
+TUCKED_REACH = 0.0035
 EDGE_TOWARD = 0.5
 EDGE_BACK = -0.53
 GARMENT_COLOR = (0.85, 0.45, 0.15, 1)

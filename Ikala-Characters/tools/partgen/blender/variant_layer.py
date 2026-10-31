@@ -265,12 +265,18 @@ def shell_variant(args, carried, surface, armature, bodies, cut):
         import flaps
         flaps.add_flap(shell, *(float(x) for x in args.flap.split(",")))
         shell_layer.shaping.relax_edges(shell)
+    if args.cuffs:
+        import flaps
+        flaps.add_flap(shell, *(float(x) for x in args.cuffs.split(",")), at="cuffs")
+        shell_layer.shaping.relax_edges(shell)
     shell.data.calc_loop_triangles()
     if args.triangles and len(shell.data.loop_triangles) > args.triangles * (
             1 + shell_layer.OVER_BUDGET):
         shell_layer.shaping.reduce(shell, args.triangles, args.simplifier, args.java)
     gap, reach = tucked_band(points_of(shell), cut, args.gap, args.reach)
     shape(shell, surface, gap, reach, rounds=0, armature=armature)
+    gap, _ = tucked_band(points_of(shell), cut, args.gap, args.reach)
+    shell_layer.push_faces(shell, surface, gap)
     shell.name = args.name
     shell.data.name = args.name
     for polygon in shell.data.polygons:
@@ -334,6 +340,7 @@ def main():
     parser.add_argument("--masks", help="The tint mask image to bake onto a garment built afresh.")
     parser.add_argument("--triangles", type=int, help="The budget of a garment built afresh.")
     parser.add_argument("--flap", help="width,lift of its flap (see flaps.py).")
+    parser.add_argument("--cuffs", help="width,lift of its cuffs (see flaps.py).")
     parser.add_argument("--simplifier", help="Classpath for reducing it (see SimplifyMesh.java).")
     parser.add_argument("--java", default="java")
     args = parser.parse_args(argv)

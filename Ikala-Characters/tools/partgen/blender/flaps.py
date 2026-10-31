@@ -28,6 +28,8 @@ TAPER = 0.35
 RISE = 0.25
 # How far below the highest open edge the neck opening's top may be, in meters
 NECK_REACH = 0.1
+# The longest open loop that can be a sleeve's end, in meters
+CUFF_LENGTH = 0.45
 
 
 def neck_opening(mesh):
@@ -65,13 +67,30 @@ def surface_distances(mesh, sources, limit):
     return distance
 
 
-def add_flap(obj, width, lift):
-    """Fold a flap back over the garment along its neck opening (see the module's notes).
-    Gives how many faces the flap has."""
+def sleeve_ends(mesh):
+    """The open loops at the sleeves' ends, as one set of their vertices: on each side, the
+    loop reaching furthest out (the arms hang out to the sides in the A pose), if it is short
+    enough to be a cuff. Empty for none."""
+    ends = set()
+    for side in (1, -1):
+        loops = [loop for loop in shaping.open_loops(mesh)
+                 if sum(e.calc_length() for e in loop) < CUFF_LENGTH
+                 and side * np.mean([v.co.x for e in loop for v in e.verts]) > 0]
+        if loops:
+            best = max(loops, key=lambda loop: side * np.mean(
+                [v.co.x for e in loop for v in e.verts]))
+            ends |= {v for e in best for v in e.verts}
+    return ends
+
+
+def add_flap(obj, width, lift, at="neck"):
+    """Fold a flap back over the garment along its neck opening ("neck", see the module's
+    notes), or a band along its sleeves' ends ("cuffs"), the same width all round. Gives how
+    many faces the flap has."""
     mesh = bmesh.new()
     mesh.from_mesh(obj.data)
     mesh.verts.ensure_lookup_table()
-    opening = neck_opening(mesh)
+    opening = neck_opening(mesh) if at == "neck" else sleeve_ends(mesh)
     if not opening:
         mesh.free()
         return 0
@@ -79,7 +98,10 @@ def add_flap(obj, width, lift):
     low, high = heights.min(), heights.max()
     distance = surface_distances(mesh, opening, width * 1.5)
     z = np.array([v.co.z for v in mesh.verts])
-    widths = width * np.clip((z - low) / max(TAPER * (high - low), 1e-6), 0, 1)
+    if at == "neck":
+        widths = width * np.clip((z - low) / max(TAPER * (high - low), 1e-6), 0, 1)
+    else:
+        widths = np.full(len(z), width)
     # The faces a flap could cover, copied into a mesh of their own
     region = [f for f in mesh.faces if all(distance[v.index] <= width * 1.2 for v in f.verts)]
     if not region:

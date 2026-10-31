@@ -41,6 +41,8 @@ INFLUENCES = 4
 # The least share of its weight a garment vertex nearest a limb must take from that limb (or the
 # bone it hangs from); less, and it takes the limb's skin's weights alone
 ON_LIMB = 0.5
+# How far down a limb's first bone, as a share of it, the limb's own weights start to apply
+LIMB_FROM = 0.25
 # The vertex group marking those while they take them again
 LIMB_FIX = "limb_fix"
 # How far out from the body a garment counts as covering it, in meters
@@ -139,7 +141,12 @@ def keep_limbs_whole(garment, bodies, armature):
         parent = armature.data.bones[root].parent
         allowed = {garment.vertex_groups[n].index for n in limb | {parent and parent.name}
                    if n in garment.vertex_groups}
-        on = np.flatnonzero(np.isin(nearest, list(limb)))
+        # Past the joint with the body only: a shirt's hem at the hips lies nearest the thigh,
+        # and taking its weights alone swung it with the leg, tearing the waist into shards
+        head, tail = segments[root]
+        along = (points - head) @ (tail - head) / max(float(np.dot(tail - head, tail - head)),
+                                                        1e-9)
+        on = np.flatnonzero(np.isin(nearest, list(limb)) & (along > LIMB_FROM))
         wrong = [int(i) for i in on
                  if sum(e.weight for e in garment.data.vertices[i].groups if e.group in allowed)
                  < ON_LIMB * max(1e-6, sum(e.weight for e in garment.data.vertices[i].groups))]

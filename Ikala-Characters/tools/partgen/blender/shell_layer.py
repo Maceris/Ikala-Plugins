@@ -44,6 +44,12 @@ CONFORM_REACH = 0.06
 CONFORM_OWN = 0.5
 # How many times the moves out are averaged with their neighbors', so the shell stays smooth
 CONFORM_ROUNDS = 6
+# How many times faces that sag nearer the body than the gap are pushed out, and how little
+# they may fall short, in meters
+FACE_ROUNDS = 4
+FACE_SLACK = 0.0003
+# The furthest a vertex is pushed out for its faces' sake, in meters
+FACE_MAX = 0.006
 # How many times folded faces' vertices are drawn back halfway to the gap
 UNFOLD_ROUNDS = 8
 # How much of the painted area's edge is blurred before the cut, in image pixels (about 2 mm
@@ -149,6 +155,42 @@ def conform(shell, figure, surface, gap, reach):
         loose[edges[loose[edges].any(1)].ravel()] = True
         out[loose] = (out[loose] + gaps[loose]) / 2
     return int(onto.sum())
+
+
+def push_faces(obj, surface, gap):
+    """Push the garment's vertices out along their normals until points across its faces, not
+    only its corners, keep the gap (one for all vertices or one for each): a flat face spans
+    the body's curve, and between corners 4 mm out it sagged into a waist, where the body then
+    showed through. Gives how far the furthest vertex moved, in meters."""
+    weights = np.array([(1 / 3, 1 / 3, 1 / 3), (0.5, 0.5, 0), (0, 0.5, 0.5), (0.5, 0, 0.5)])
+    moved = np.zeros(len(obj.data.vertices))
+    for _ in range(FACE_ROUNDS):
+        obj.data.update()
+        obj.data.calc_loop_triangles()
+        points = shaping.points_of(obj)
+        normals = np.empty(len(points) * 3)
+        obj.data.vertices.foreach_get("normal", normals)
+        normals = normals.reshape(-1, 3)
+        tris = np.empty(len(obj.data.loop_triangles) * 3, dtype=np.int64)
+        obj.data.loop_triangles.foreach_get("vertices", tris)
+        tris = tris.reshape(-1, 3)
+        gaps = np.broadcast_to(np.asarray(gap, dtype=float), len(points))
+        need = np.zeros(len(points))
+        for w in weights:
+            samples = np.einsum("k,tkc->tc", w, points[tris])
+            _, signed = shaping.nearest(samples, surface)
+            deficit = gaps[tris].mean(1) - signed
+            for k in range(3):
+                np.maximum.at(need, tris[:, k], np.where(w[k] > 0, deficit, 0))
+        # Faces between two parts of the body, like an armpit's, can't keep the gap from both
+        need = np.clip(need, 0, FACE_MAX - moved)
+        if need.max() < FACE_SLACK:
+            break
+        obj.data.vertices.foreach_set("co", (points + normals * need[:, None]).astype(
+            np.float32).ravel())
+        moved += need
+    obj.data.update()
+    return float(moved.max())
 
 
 def face_normals(obj):
@@ -294,6 +336,7 @@ def main():
     parser.add_argument("--bare", default="", help="Unused: the slots decide what is covered.")
     parser.add_argument("--flap", help="width,lift: fold a flap back along the neck opening, "
                         "like a jacket's lapels and collar (see flaps.py).")
+    parser.add_argument("--cuffs", help="width,lift: a band folded back along the sleeves' ends.")
     parser.add_argument("--simplifier", help="Classpath for reducing (see SimplifyMesh.java).")
     parser.add_argument("--java", default="java")
     args = parser.parse_args(argv)
@@ -330,6 +373,10 @@ def main():
         import flaps
         flap = flaps.add_flap(shell, *(float(x) for x in args.flap.split(",")))
         shaping.relax_edges(shell)
+    if args.cuffs:
+        import flaps
+        flap += flaps.add_flap(shell, *(float(x) for x in args.cuffs.split(",")), at="cuffs")
+        shaping.relax_edges(shell)
     shell.data.calc_loop_triangles()
     built = len(shell.data.loop_triangles)
     triangles = built
@@ -337,6 +384,8 @@ def main():
         triangles = shaping.reduce(shell, args.triangles, args.simplifier, args.java)
     gap, reach = shaping.tucked_band(shaping.points_of(shell), cut, args.gap, args.reach)
     shaping.shape(shell, surface, gap, reach, rounds=0, armature=armature)
+    gap, _ = shaping.tucked_band(shaping.points_of(shell), cut, args.gap, args.reach)
+    sag = push_faces(shell, surface, gap)
     _, end = shaping.nearest(shaping.points_of(shell), surface)
 
     report = {
@@ -349,6 +398,7 @@ def main():
         "crumb_faces_dropped": crumbs,
         "relaxed_edge_vertices": relaxed,
         "flap_faces": flap,
+        "sag_pushed_mm": round(sag * 1000, 1),
         "min_gap_mm": round(float(end.min()) * 1000, 1),
         "max_gap_mm": round(float(end.max()) * 1000, 1),
     }

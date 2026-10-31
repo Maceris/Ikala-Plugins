@@ -869,10 +869,13 @@ def shell_slots(brief):
 
 
 def flap_args(rule):
-    """shell_layer.py's and variant_layer.py's arguments for a layer's flap (see layers.json)."""
-    if "flap" not in rule:
-        return []
-    return ["--flap", "%s,%s" % (rule["flap"]["width"], rule["flap"]["lift"])]
+    """shell_layer.py's and variant_layer.py's arguments for a layer's flap and cuffs (see
+    layers.json)."""
+    out = []
+    for key in ("flap", "cuffs"):
+        if key in rule:
+            out += ["--" + key, "%s,%s" % (rule[key]["width"], rule[key]["lift"])]
+    return out
 
 
 def cut_args(rule):
