@@ -163,6 +163,11 @@ BARE_LIGHTNESS = 28
 # A garment is colored when the median color (RGB max less min) of the pixels surely its own,
 # differing from the render by more than GARMENT_SURE, is at least this
 COLORED = 18
+# How wide, in pixels, a bare region inside a garment's painted area must be to be taken out of
+# it again (odd, for the image filters)
+BARE_OPEN = 9
+# The most color (max channel minus min, of 255) the mannequin's bare skin shows in an image
+NEUTRAL_CHROMA = 7
 GARMENT_SURE = 60
 # Gaps up to this wide in the painted area are closed for the garment's back, in pixels (odd)
 BACK_CLOSE = 61
@@ -846,6 +851,14 @@ def painted_area(config, brief, out):
     biggest = max(sizes.values(), default=0)
     keep = [k for k, size in sizes.items() if size >= biggest * PAINT_CRUMB]
     painted = np.isin(np.asarray(pieces), keep)
+    # Closing gaps and filling holes fills in bare body a garment frames, like the neck in a
+    # shirt's open collar, which a garment built from the skin then kept, ragged. The mannequin
+    # is neutral gray, and even an off-white garment has some color, so neutral regions wider
+    # than BARE_OPEN pixels come out again
+    neutral = Image.fromarray((chroma < NEUTRAL_CHROMA).astype(np.uint8) * 255)
+    neutral = neutral.filter(ImageFilter.MinFilter(BARE_OPEN))
+    neutral = neutral.filter(ImageFilter.MaxFilter(BARE_OPEN))
+    painted &= ~(np.asarray(neutral) > 127)
     path = out / "painted.png"
     Image.fromarray(painted.astype(np.uint8) * 255).save(path)
     # A garment's back is whole where its front is open, like a jacket's neckline: gaps are
