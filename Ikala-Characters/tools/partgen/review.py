@@ -1,6 +1,9 @@
 """The review page for a partgen batch: keep or drop briefs, pick a concept image, and keep or
 drop meshes and fitted parts. Every click is written to the batch's manifest straight away, where
 the next stage's command reads it. partgen.py review <batch> starts it; stop it with Ctrl+C.
+
+Clothing and body part images are shown zoomed in on where they were painted, from boxes
+partgen.py works out from their masks; the Zoom switch shows them whole.
 """
 import http.server
 import json
@@ -36,6 +39,12 @@ main { padding: 16px; display: grid; gap: 12px;
 .imgs.views { grid-template-columns: repeat(3, 1fr); }
 .imgs img { width: 100%; border-radius: 4px; border: 2px solid transparent; display: block;
             background: #ccc; }
+.zoom { position: relative; overflow: hidden; border-radius: 4px; border: 2px solid transparent;
+        background: #ccc; }
+.zoom img { position: absolute; border: 0; border-radius: 0; max-width: none; }
+.picked .zoom { border-color: var(--pick); }
+label.switch { margin-left: auto; color: var(--muted); display: flex; gap: 4px;
+               align-items: center; cursor: pointer; }
 .pickable img { cursor: pointer; } .picked img { border-color: var(--pick); }
 .buttons { display: flex; gap: 6px; margin-top: 8px; }
 button.mark { flex: 1; border: 1px solid var(--line); background: transparent; color: var(--text);
@@ -44,7 +53,8 @@ button.keep.on { background: var(--keep); color: #fff; border-color: var(--keep)
 button.drop.on { background: var(--drop); color: #fff; border-color: var(--drop); }
 .empty { color: var(--muted); }
 </style></head><body>
-<header><h1 id="title">Partgen</h1></header>
+<header><h1 id="title">Partgen</h1>
+<label class="switch"><input type="checkbox" id="zoom"> Zoom</label></header>
 <main id="cards"></main>
 <script>
 const STAGES = [
@@ -54,6 +64,26 @@ const STAGES = [
   ["parts", "Parts", b => b.part],
 ];
 let manifest = null, shown = "", stage = localStorage.getItem("partgen.stage") || "briefs";
+let zooms = {}, zoomed = localStorage.getItem("partgen.zoom") !== "off";
+const zoomSwitch = document.getElementById("zoom");
+zoomSwitch.checked = zoomed;
+zoomSwitch.onchange = () => {
+  zoomed = zoomSwitch.checked;
+  localStorage.setItem("partgen.zoom", zoomed ? "on" : "off");
+  render();
+};
+
+// An image cropped to a box of shares of it (left, top, right, bottom), keeping its shape
+function cropped(img, box) {
+  const [left, top, right, bottom] = box, width = right - left, height = bottom - top;
+  const frame = document.createElement("div"); frame.className = "zoom";
+  frame.style.aspectRatio = `${width} / ${height}`;
+  img.style.width = `${100 / width}%`;
+  img.style.left = `${-100 * left / width}%`;
+  img.style.top = `${-100 * top / height}%`;
+  frame.append(img);
+  return frame;
+}
 
 async function mark(id, field, value) {
   await fetch("/mark", {method: "POST", body: JSON.stringify({id, field, value})});
@@ -103,7 +133,8 @@ function card(b) {
     for (const seed of b.images) {
       const cell = document.createElement("div");
       cell.className = "pickable" + (b.review.pick === seed ? " picked" : "");
-      cell.append(image(`${b.id}/images/${seed}.png`, ""));
+      const img = image(`${b.id}/images/${seed}.png`, "");
+      cell.append(zoomed && zooms[b.id] ? cropped(img, zooms[b.id]) : img);
       const caption = document.createElement("div"); caption.className = "note";
       caption.textContent = seed + (notes[seed] ? " · " + notes[seed] : "");
       cell.append(caption);
@@ -146,14 +177,16 @@ async function load(force) {
   const text = await (await fetch("/manifest")).text();
   if (force || text !== shown) { shown = text; manifest = JSON.parse(text); render(); }
 }
-load(true);
+fetch("/zooms").then(r => r.json()).then(z => { zooms = z; load(true); });
 setInterval(load, 4000);
 </script></body></html>
 """
 
 
-def serve(batch, port):
+def serve(batch, port, zooms=None):
+    """Serve the review page for a batch; zooms are the boxes to crop each brief's images to."""
     folder = batch.folder.resolve()
+    zoom_body = json.dumps(zooms or {}).encode("utf8")
 
     class Handler(http.server.BaseHTTPRequestHandler):
         def send(self, code, body, kind):
@@ -167,6 +200,8 @@ def serve(batch, port):
             url = urllib.parse.urlparse(self.path)
             if url.path == "/":
                 self.send(200, PAGE.encode("utf8"), "text/html; charset=utf-8")
+            elif url.path == "/zooms":
+                self.send(200, zoom_body, "application/json")
             elif url.path == "/manifest":
                 self.send(200, batch.path.read_bytes(), "application/json")
             elif url.path == "/file":

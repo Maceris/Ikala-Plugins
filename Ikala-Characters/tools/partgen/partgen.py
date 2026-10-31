@@ -112,6 +112,9 @@ SKETCH_MODE = "hed/pidi/scribble/ted"
 LAYER_EXTRA_CHANNEL = "accent"
 # Body slots a layer's mask never grows into unless the layer covers them
 BARE_SLOTS = ("head", "hand.L", "hand.R", "foot.L", "foot.R")
+# Room left around a brief's painted area when the review page zooms in on it, as a share of its
+# size on each side
+REVIEW_MARGIN = 0.15
 # This computer's folders, not committed, and the template for it
 CONFIG = "config.json"
 CONFIG_EXAMPLE = "config.example.json"
@@ -1106,9 +1109,43 @@ def command_status(config, batch, args):
                                                   review["pick"] or "-", mesh, part))
 
 
+def zoom_boxes(config, batch):
+    """Where each clothing and body brief's images were painted, so the review page can show
+    just that: the box around its mask, with REVIEW_MARGIN around it, as shares of the image
+    (left, top, right, bottom). Accessories fill their images already."""
+    from PIL import Image
+    import numpy as np
+    boxes = {}
+    for brief in batch.load()["briefs"]:
+        if brief["kind"] not in ("layer", "body"):
+            continue
+        try:
+            layer, rule = rule_of(brief)
+            mask = (pathlib.Path(config["comfy"]) / "input"
+                    / guide_inputs(config, layer, rule)["mask"])
+        except SystemExit as error:
+            print("No zoom for %s: %s" % (brief["id"], error))
+            continue
+        painted = np.asarray(Image.open(mask).convert("L")) > 127
+        if not painted.any():
+            continue
+        rows, columns = np.flatnonzero(painted.any(1)), np.flatnonzero(painted.any(0))
+        height, width = painted.shape
+        top, bottom = rows[0] / height, (rows[-1] + 1) / height
+        left, right = columns[0] / width, (columns[-1] + 1) / width
+        # Square, so every brief's images are the same shape
+        side = min(1.0, max(bottom - top, right - left) * (1 + 2 * REVIEW_MARGIN))
+        middle_x, middle_y = (left + right) / 2, (top + bottom) / 2
+        left = min(max(middle_x - side / 2, 0.0), 1.0 - side)
+        top = min(max(middle_y - side / 2, 0.0), 1.0 - side)
+        boxes[brief["id"]] = [round(left, 4), round(top, 4), round(left + side, 4),
+                              round(top + side, 4)]
+    return boxes
+
+
 def command_review(config, batch, args):
     import review
-    review.serve(batch, args.port)
+    review.serve(batch, args.port, zoom_boxes(config, batch))
 
 
 def main():
