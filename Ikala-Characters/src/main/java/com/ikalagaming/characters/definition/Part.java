@@ -14,6 +14,8 @@ import lombok.NonNull;
 import org.joml.Matrix4f;
 import org.joml.Vector3fc;
 
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -38,6 +40,8 @@ import java.util.Set;
  * @param hidesLayers Layers it hides.
  * @param sockets Sockets it moves.
  * @param fx Effects it carries, gone when it is swapped.
+ * @param placement Where an accessory sits on its socket, by variant.
+ * @param seams How a body part meets its neighbors at its outer seams.
  * @author Ches Burks
  */
 @Doc(
@@ -87,7 +91,12 @@ public record Part(
                         "For accessories: where it sits on its socket, by variant name with \"*\""
                                 + " for any other variant, moved from where its mesh puts it.")
                 @Optional
-                Map<String, Placement> placement)
+                Map<String, Placement> placement,
+        @Doc(
+                        "For body parts: how it meets its neighbors at its outer seams, by seam"
+                                + " name. A seam left out welds.")
+                @Optional
+                Map<String, SeamMode> seams)
         implements Definition {
 
     /** The field for the plan. */
@@ -132,6 +141,9 @@ public record Part(
     /** The field for the effects. */
     public static final String FIELD_FX = "fx";
 
+    /** The field for the seam modes. */
+    public static final String FIELD_SEAMS = "seams";
+
     /** The tint mask channels a material slot maps to palette channels. */
     public static final Set<String> MASK_CHANNELS = Set.of("r", "g", "b", "a");
 
@@ -146,6 +158,54 @@ public record Part(
         LAYER,
         /** Attaches to a socket. */
         ACCESSORY
+    }
+
+    /** How a body part meets its neighbor at a seam. */
+    public enum SeamMode {
+        /** Its edge is the seam ring, vertex for vertex, so it joins its neighbor without a gap. */
+        WELD,
+        /**
+         * It ends in a shape of its own, like a skeleton arm's bone, and a welded neighbor closes
+         * its ring with a cap.
+         */
+        OPEN
+    }
+
+    /**
+     * The seams at the edges of the slots a body part fills that no other slot it fills shares:
+     * where it meets its neighbors. A whole arm's are the shoulder only.
+     *
+     * @param body The plan.
+     * @return The seams, in the order the slots list them.
+     */
+    public Set<String> outerSeams(@NonNull BodyPlan body) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        if (kind == PartKind.BODY) {
+            for (String name : fills) {
+                BodyPlan.Slot slot = body.slot(name);
+                if (slot != null) {
+                    slot.seams().forEach(seam -> counts.merge(seam, 1, Integer::sum));
+                }
+            }
+        }
+        Set<String> outer = new LinkedHashSet<>();
+        counts.forEach(
+                (seam, count) -> {
+                    if (count == 1) {
+                        outer.add(seam);
+                    }
+                });
+        return outer;
+    }
+
+    /**
+     * How this part meets its neighbor at a seam.
+     *
+     * @param seam The seam.
+     * @return Its mode there, welding if it names none.
+     */
+    public SeamMode seamMode(@NonNull String seam) {
+        return seams.getOrDefault(seam, SeamMode.WELD);
     }
 
     /**
@@ -306,6 +366,22 @@ public record Part(
         }
         if (mirror && kind != PartKind.BODY) {
             checks.error(JsonPath.at(FIELD_MIRROR), "Only body parts are mirrored");
+        }
+        if (!seams.isEmpty() && kind != PartKind.BODY) {
+            checks.error(JsonPath.at(FIELD_SEAMS), "Only body parts meet others at seams");
+        } else {
+            Set<String> outer = outerSeams(body);
+            for (String seam : seams.keySet()) {
+                if (!outer.contains(seam)) {
+                    checks.error(
+                            JsonPath.field(JsonPath.at(FIELD_SEAMS), seam),
+                            "'"
+                                    + seam
+                                    + "' isn't a seam where this part meets a neighbor; its"
+                                    + " outer seams are "
+                                    + outer);
+                }
+            }
         }
         for (int i = 0; i < fits.size(); ++i) {
             String fit = fits.get(i);

@@ -12,7 +12,8 @@ out to the shape bones (girth, muscle, bust, belly and the face) by zone, so the
 work. The female's bones point the male's way at rest, so clips retargeted onto the male's rest
 fit both. Each body is cut into the plan's body slots along seam planes; the two sides of a cut
 share its edge loop and normals exactly, and every loop is written down for fitting generated
-body parts to later. Two procedural clips, idle and walk, come with each.
+body parts to later, and capped (see add_caps.py) for parts that don't weld to it. Two
+procedural clips, idle and walk, come with each.
 
 Run it with Blender 5 or later, with the MPFB extension and the MakeHuman system asset pack:
 
@@ -38,6 +39,9 @@ from mathutils import Matrix, Quaternion, Vector
 from bl_ext.blender_org.mpfb.services.humanservice import HumanService
 from bl_ext.blender_org.mpfb.services.locationservice import LocationService
 from bl_ext.blender_org.mpfb.services.targetservice import TargetService
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from add_caps import add_caps, export  # noqa: E402
 
 # Frames per second for the clips.
 FPS = 30
@@ -233,25 +237,6 @@ def stash(armature, actions):
         track = data.nla_tracks.new()
         track.name = action.name
         track.strips.new(action.name, int(action.frame_range[0]), action)
-
-
-def export(path):
-    """Write everything as a binary glTF file, with all bones and every clip."""
-    options = {
-        "filepath": path,
-        "export_format": "GLB",
-        "export_yup": True,
-        "export_skins": True,
-        "export_def_bones": False,
-        "export_animations": True,
-        "export_nla_strips": True,
-        "export_force_sampling": True,
-        "export_frame_range": False,
-        "export_colors": False,
-        "export_extras": False,
-    }
-    known = {p.identifier for p in bpy.ops.export_scene.gltf.get_rna_type().properties}
-    bpy.ops.export_scene.gltf(**{key: value for key, value in options.items() if key in known})
 
 
 def macro(gender):
@@ -865,6 +850,8 @@ def build(gender_name, gender, proxy_name, rig_definition, plan, factor=None, di
 
     meshes, seams = cut_into_slots(proxy, eyes, plan, armature,
                                    seam_planes(bones, skin, scale))
+    # Closing each seam ring, for parts that don't weld to it
+    add_caps(meshes, seams, armature)
     armature.animation_data_create()
     stash(armature, [make_idle(armature), make_walk(armature)])
     pointing = {name: (Vector(b) - Vector(a)).normalized() for name, (a, b) in bones.items()}

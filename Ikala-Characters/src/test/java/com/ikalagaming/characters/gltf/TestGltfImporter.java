@@ -8,6 +8,7 @@ import com.ikalagaming.characters.pose.Proportions;
 import com.ikalagaming.characters.pose.Skeleton;
 import com.ikalagaming.characters.registry.BuiltInContent;
 import com.ikalagaming.characters.registry.CharacterRegistry;
+import com.ikalagaming.characters.view.PartAssembler;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -457,8 +458,14 @@ class TestGltfImporter {
             Path file = TEST_CONTENT.resolve("mannequin/" + body.getKey() + ".glb");
             Assumptions.assumeTrue(Files.exists(file), "No mannequin export in the test content");
             ImportedCharacter character = GltfImporter.read(file).onRig(biped);
-            // A part per slot, and the head's eyes, which have their own material
-            Assertions.assertEquals(16, character.parts().size(), body.getKey());
+            // A part per slot, the head's eyes, which have their own material, and a cap per
+            // slot per seam (two per seam: one from each side)
+            long caps =
+                    character.parts().stream()
+                            .filter(p -> p.name().contains(PartAssembler.CAP_INFIX))
+                            .count();
+            Assertions.assertEquals(16, character.parts().size() - caps, body.getKey());
+            Assertions.assertEquals(28, caps, body.getKey());
             Assertions.assertNotNull(character.clip("idle"));
             ImportedCharacter.ClipData walk = character.clip("walk");
             Assertions.assertEquals(1, walk.duration(), 0.05);

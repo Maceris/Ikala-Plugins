@@ -241,6 +241,16 @@
           },
           "description": "For accessories: where it sits on its socket, by variant name with \"*\" for any other variant, moved from where its mesh puts it."
         },
+        "seams": {
+          "type": "object",
+          "additionalProperties": {
+            "enum": [
+              "weld",
+              "open"
+            ]
+          },
+          "description": "For body parts: how it meets its neighbors at its outer seams, by seam name. A seam left out welds."
+        },
         "extends": {
           "type": "string",
           "description": "The ID of a definition of the same kind to start from. Fields written here replace the parent's, and objects merge field by field."

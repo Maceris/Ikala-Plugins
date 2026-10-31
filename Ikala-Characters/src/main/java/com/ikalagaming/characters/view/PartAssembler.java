@@ -42,6 +42,9 @@ public final class PartAssembler {
     /** A tint mask channel that takes no palette color. */
     public static final int NO_CHANNEL = -1;
 
+    /** What joins a body part's mesh name to a seam's in the name of its cap mesh. */
+    public static final String CAP_INFIX = "_cap_";
+
     /** Floats per vertex: position, normal, tangent, bitangent and texture coordinates. */
     private static final int VERTEX_FLOATS = 14;
 
@@ -90,6 +93,55 @@ public final class PartAssembler {
     }
 
     /**
+     * The name of the mesh that closes a body part's seam ring, shown where the neighbor across the
+     * seam is open, like a skeleton forearm below a regular upper arm.
+     *
+     * @param mesh The body part's mesh name.
+     * @param seam The seam.
+     * @return The cap mesh's name in the same file.
+     */
+    public static String capMesh(@NonNull String mesh, @NonNull String seam) {
+        return mesh + CAP_INFIX + seam;
+    }
+
+    /**
+     * The seams where each body part shows a cap: those it welds where the body part across is
+     * open. Seams inside a part that fills several slots aren't between parts, so have none.
+     *
+     * @param parts The parts.
+     * @param plan The plan.
+     * @return Each capped part's capped seams.
+     */
+    public static Map<Part, List<String>> cappedSeams(
+            @NonNull Collection<Part> parts, @NonNull BodyPlan plan) {
+        Map<String, List<Part>> bySeam = new HashMap<>();
+        for (Part part : parts) {
+            for (String seam : part.outerSeams(plan)) {
+                bySeam.computeIfAbsent(seam, s -> new ArrayList<>()).add(part);
+            }
+        }
+        Map<Part, List<String>> capped = new LinkedHashMap<>();
+        for (Part part : parts) {
+            for (String seam : part.outerSeams(plan)) {
+                if (part.seamMode(seam) != Part.SeamMode.WELD) {
+                    continue;
+                }
+                boolean openAcross =
+                        bySeam.get(seam).stream()
+                                .anyMatch(
+                                        other ->
+                                                other != part
+                                                        && other.seamMode(seam)
+                                                                == Part.SeamMode.OPEN);
+                if (openAcross) {
+                    capped.computeIfAbsent(part, p -> new ArrayList<>()).add(seam);
+                }
+            }
+        }
+        return capped;
+    }
+
+    /**
      * Build a character out of parts. Parts with no mesh for the variant, or whose file can't be
      * read, are left out with a warning.
      *
@@ -130,6 +182,7 @@ public final class PartAssembler {
             @NonNull Path reference,
             @NonNull Map<Path, ImportedCharacter> files) {
         List<String> channels = plan.allChannels();
+        Map<Part, List<String>> caps = cappedSeams(parts, plan);
         Merger merger = new Merger();
         // Placements turn about the sockets of the rig's reference body, read when first needed
         Skeleton referenceSkeleton = null;
@@ -165,6 +218,19 @@ public final class PartAssembler {
                     referenceSkeleton = body == null ? source.skeleton() : body.skeleton();
                 }
                 merger.add(source, part, meshName, channels, placement, referenceSkeleton);
+                for (String seam : caps.getOrDefault(part, List.of())) {
+                    if (meshName == null) {
+                        log.warn("{} has no mesh name to find its {} cap by", part.id(), seam);
+                        continue;
+                    }
+                    merger.add(
+                            source,
+                            part,
+                            capMesh(meshName, seam),
+                            channels,
+                            Part.Placement.NONE,
+                            null);
+                }
             }
         }
         return merger.result();
@@ -244,11 +310,13 @@ public final class PartAssembler {
             int materialStart = materialStarts.computeIfAbsent(source, this::addMaterials);
             boolean found = false;
             for (ImportedCharacter.Part piece : source.parts()) {
-                // A mesh with several materials comes in as name.0, name.1 and so on
+                // A mesh with several materials comes in as name.0, name.1 and so on; caps come
+                // only by name, where the neighbor across their seam is open
                 boolean matches =
                         meshName == null
-                                || piece.name().equals(meshName)
-                                || piece.name().startsWith(meshName + ".");
+                                ? !piece.name().contains(CAP_INFIX)
+                                : piece.name().equals(meshName)
+                                        || piece.name().startsWith(meshName + ".");
                 if (!matches) {
                     continue;
                 }
