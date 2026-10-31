@@ -58,6 +58,8 @@ BAKE_REACH = 0.08
 OCCLUSION_REACH = 0.15
 # What texels the bake doesn't reach hold
 UNBAKED = (1.0, 0.0, 1.0, 1.0)
+# A tangent-space normal map's flat normal, for texels the bake doesn't reach
+FLAT_NORMAL = (0.5, 0.5, 1.0, 1.0)
 # The node group the glTF exporter reads occlusion from
 GLTF_OUTPUT = "glTF Material Output"
 
@@ -501,6 +503,9 @@ def bake(high, low, name, size, hidden):
     bsdf = tree.nodes["Principled BSDF"]
     for obj in hidden:
         obj.hide_render = True
+    # Cycles clears each image to black before baking unless told not to, which would leave
+    # every texel looking baked, and the ones the bake misses black: no occlusion, no roughness
+    scene.render.bake.use_clear = False
 
     # Texels the bake doesn't reach keep this color, so they can be told apart
     base_image = new_image("%s_emit" % name, size, "sRGB", UNBAKED)
@@ -508,7 +513,8 @@ def bake(high, low, name, size, hidden):
     base = bake_into("EMIT", high, low, tree, base_image)
     covered = np.abs(np.array(base_image.pixels[:]).reshape(-1, 4)[:, :3]
                      - np.array(UNBAKED[:3])).max(1) > 1e-3
-    normals = bake_into("NORMAL", high, low, tree, new_image("%s_normal" % name, size, "Non-Color"))
+    normals = bake_into("NORMAL", high, low, tree,
+                        new_image("%s_normal" % name, size, "Non-Color", FLAT_NORMAL))
 
     metallic, roughness = average_metal_roughness(high)
     orm = np.empty((size * size, 4))
@@ -520,12 +526,12 @@ def bake(high, low, name, size, hidden):
             source).outputs["Color"])
         values = new_image("%s_mr" % name, size, "Non-Color")
         bake_into("EMIT", high, low, tree, values)
-        orm[:, 1:3] = np.array(values.pixels[:]).reshape(-1, 4)[:, 1:3]
+        orm[covered, 1:3] = np.array(values.pixels[:]).reshape(-1, 4)[covered, 1:3]
     scene.world = scene.world or bpy.data.worlds.new("bake")
     scene.world.light_settings.distance = max(low.dimensions) * OCCLUSION_REACH
     occlusion = new_image("%s_ao" % name, size, "Non-Color")
     bake_into("AO", high, low, tree, occlusion)
-    orm[:, 0] = np.array(occlusion.pixels[:]).reshape(-1, 4)[:, 0]
+    orm[covered, 0] = np.array(occlusion.pixels[:]).reshape(-1, 4)[covered, 0]
     orm_image = new_image("%s_orm" % name, size, "Non-Color")
     orm_image.pixels.foreach_set(orm.ravel().astype(np.float32))
     orm_image.pack()

@@ -4,7 +4,9 @@ The garment was rebuilt while being shaped, so it is unwrapped afresh and baked 
 (fit_accessory.py's bake: base color through emission, normals, and an ORM map of occlusion with
 the mannequin left out, roughness and metalness), from the garment pushed out at full detail:
 shape_layer.py's pushed.glb lies where the rebuilt garment does, where the cut figure, which
-doesn't, gave blotchy, jagged normals. TRELLIS.2's colors can't be trusted everywhere, though:
+doesn't, gave blotchy, jagged normals. Only its faces facing the garment's way bake, and the
+occlusion comes from the garment itself, since TRELLIS's sheets have an inner side; metalness
+is cleared, as garments are cloth (see cloth_orm). TRELLIS.2's colors can't be trusted everywhere, though:
 where the garment came from inside the figure's body, like sleeves over thin arms, TRELLIS
 painted the bare mannequin's gray, and it makes up its own colors for the back (a cream shirt
 came out tan behind). So the picked image colors the whole garment: what the front camera saw
@@ -29,8 +31,10 @@ import os
 import pathlib
 import sys
 
+import bmesh
 import bpy
 import numpy as np
+from mathutils.bvhtree import BVHTree
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fit_accessory as hat  # noqa: E402
@@ -48,6 +52,14 @@ BAKE_REACH = 0.01
 # How far outside the painted area a texel may land and still take the image's color, in image
 # pixels: shaping and TRELLIS's small errors move the garment's outline a little
 REACH = 20
+# How far a baked normal may lean from the garment's own, in degrees. Folds in the cloth lean
+# less; more comes from pushed.glb's crumpled patches, where TRELLIS's sleeves lay inside the
+# arm, and from rays at UV island edges finding the next surface over: dark, jagged marks
+MAX_LEAN = 40
+# A face of pushed.glb bakes only if it faces about the way the garment does where it lies:
+# the least share of its normal along the garment's. Less is TRELLIS's inner sheet, or cloth
+# folded over where pushing crumpled it, like sleeves that lay inside the arm
+SAME_WAY = 0.3
 
 
 def read_image(path):
@@ -132,7 +144,8 @@ def paint_from_image(base_image, covered, position, normal, picked, painted, gui
     column = np.floor((position[:, 0] / guide["view"] + 0.5) * size).astype(int)
     row = np.floor(((guide["middleHeight"] - position[:, 2]) / guide["view"] + 0.5) * size)
     row = row.astype(int)
-    on_image = covered & (column >= 0) & (column < size) & (row >= 0) & (row < size)
+    # Texels the bake from pushed.glb missed still have their place, baked from the garment itself
+    on_image = (column >= 0) & (column < size) & (row >= 0) & (row < size)
     near = grown(painted, REACH)
     on_image[on_image] &= near[row[on_image], column[on_image]]
     inside = np.zeros_like(on_image)
@@ -148,27 +161,83 @@ def paint_from_image(base_image, covered, position, normal, picked, painted, gui
     facing = np.clip((-normal[:, 1] - FRONT_START) / (FRONT_FULL - FRONT_START), 0, 1)
     facing[~inside] = 0
     # Texels too far outside the outline for the image to reach take the garment's typical
-    # color rather than the bake's, which is TRELLIS's and often dark there
+    # color rather than the bake's, which is TRELLIS's and often dark there, or missing
     typical = np.median(picked[painted], axis=0) if painted.any() else pixels[covered, :3].mean(0)
-    rest = np.where(on_image[:, None], soft, np.where(covered[:, None], typical, pixels[:, :3]))
+    rest = np.where(on_image[:, None], soft, typical)
     pixels[:, :3] = exact * facing[:, None] + rest * (1 - facing[:, None])
     base_image.pixels.foreach_set(pixels.ravel().astype(np.float32))
     return int((facing > 0).sum()), int(on_image.sum())
 
 
 def face_out(normal_image):
-    """Turn a baked normal map's texels that point into the surface back out. TRELLIS's meshes
-    are sheets with two sides, half their faces looking inward, and a bake ray that lands on one
-    of those bakes its normal reversed, which shades flat and pale, like a hole."""
+    """Turn a baked normal map's texels that point into the surface back out, and lean none
+    more than MAX_LEAN. TRELLIS's meshes are sheets with two sides, half their faces looking
+    inward, and a bake ray that lands on one of those bakes its normal reversed, which shades
+    flat and pale, like a hole. Gives how many texels were reversed."""
     pixels = np.array(normal_image.pixels[:]).reshape(-1, 4)
     tangent = pixels[:, :3] * 2 - 1
     reversed_ = tangent[:, 2] < 0
     tangent[reversed_] = -tangent[reversed_]
+    across = np.linalg.norm(tangent[:, :2], axis=1)
+    lean = np.arctan2(across, tangent[:, 2]) > np.radians(MAX_LEAN)
+    tangent[lean, :2] *= (np.sin(np.radians(MAX_LEAN)) / np.maximum(across[lean], 1e-6))[:, None]
+    tangent[lean, 2] = np.cos(np.radians(MAX_LEAN))
     pixels[:, :3] = (tangent + 1) / 2
     normal_image.pixels.foreach_set(pixels.ravel().astype(np.float32))
     # The bake packed the map already; pack it again so the export takes these pixels
     normal_image.pack()
     return int(reversed_.sum())
+
+
+def outer_faces(high, low):
+    """Keep only the faces of the figure baked from that face the way the garment does where they
+    lie (see SAME_WAY). Gives how many were dropped."""
+    garment = low.matrix_world
+    tree = BVHTree.FromPolygons([garment @ v.co for v in low.data.vertices],
+                                [tuple(p.vertices) for p in low.data.polygons])
+    mesh = bmesh.new()
+    mesh.from_mesh(high.data)
+    mesh.transform(high.matrix_world)
+    drop = []
+    for face in mesh.faces:
+        _, normal, _, _ = tree.find_nearest(face.calc_center_median())
+        if normal is not None and face.normal.dot(normal) < SAME_WAY:
+            drop.append(face)
+    bmesh.ops.delete(mesh, geom=drop, context="FACES")
+    mesh.transform(high.matrix_world.inverted())
+    mesh.to_mesh(high.data)
+    mesh.free()
+    return len(drop)
+
+
+def cloth_orm(orm_image, low, hidden, size):
+    """Redo the ORM map's occlusion from the garment itself, and clear its metalness. TRELLIS's
+    sheets have two sides a few millimeters apart, and an occlusion ray from the inner one finds
+    the outer one right away: occlusion baked from pushed.glb came out black in patches. And a
+    garment is cloth, where TRELLIS's metalness (0.86 on a navy blazer) shades it as dark metal.
+    Gives the mean occlusion over the garment's texels."""
+    tree = low.data.materials[0].node_tree
+    active = tree.nodes.active
+    image = hat.new_image(orm_image.name + "_low", size, "Non-Color", (1, 1, 1, 1))
+    node = tree.nodes.new("ShaderNodeTexImage")
+    node.image = image
+    tree.nodes.active = node
+    for obj in hidden:
+        obj.hide_render = True
+    hat.select_only(low)
+    bpy.ops.object.bake(type="AO", margin=8)
+    for obj in hidden:
+        obj.hide_render = False
+    tree.nodes.remove(node)
+    tree.nodes.active = active
+    occlusion = np.array(image.pixels[:]).reshape(-1, 4)[:, 0]
+    pixels = np.array(orm_image.pixels[:]).reshape(-1, 4)
+    pixels[:, 0] = occlusion
+    pixels[:, 2] = 0
+    orm_image.pixels.foreach_set(pixels.ravel().astype(np.float32))
+    orm_image.pack()
+    bpy.data.images.remove(image)
+    return float(occlusion[occlusion < 1].mean()) if (occlusion < 1).any() else 1.0
 
 
 def main():
@@ -182,6 +251,10 @@ def main():
 
     bpy.ops.wm.open_mainfile(filepath=os.path.abspath(args.weighted))
     armature = next(o for o in bpy.data.objects if o.type == "ARMATURE")
+    # The mannequin's saved pose lifts its root bone about 3 cm, which weight_layer.py's reset
+    # (rotations only) keeps. Posed, the garment would bake 3 cm from pushed.glb, past the bake
+    # rays' reach, and its texels would land 3 cm off in the image
+    armature.data.pose_position = "REST"
     low = bpy.data.objects["garment"]
     low.name = args.name
     # The part names its mesh by this, as file.glb#name
@@ -199,8 +272,11 @@ def main():
     # body, so bake rays reach only a little way, not the hat's share of the size
     hat.BAKE_REACH = BAKE_REACH
     high = import_figure(args.figure)
+    inner = outer_faces(high, low)
     base_image, covered = hat.bake(high, low, args.name, args.size, bodies)
     reversed_ = face_out(bpy.data.images["%s_normal" % args.name])
+    occlusion = cloth_orm(bpy.data.images["%s_orm" % args.name], low, bodies + [high],
+                          args.size)
     position, normal = surface_maps(low, args.size)
     with open(args.guide, encoding="utf-8") as file:
         guide = json.load(file)
@@ -213,7 +289,8 @@ def main():
     bpy.data.objects.remove(high)
 
     report = {"front_texels": front, "image_texels": replaced, "reversed_normals": reversed_,
-              "defaults": defaults, "size": args.size}
+              "inner_faces": inner, "baked_pct": round(float(covered.mean()) * 100, 1),
+              "occlusion": round(occlusion, 2), "defaults": defaults, "size": args.size}
     print("[bake_layer]", json.dumps(report))
     with open(out / "bake.json", "w", encoding="utf-8") as file:
         json.dump(report, file, indent=1)

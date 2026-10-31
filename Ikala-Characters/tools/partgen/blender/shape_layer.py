@@ -426,10 +426,11 @@ def shape(obj, surface, gap, reach=None, rounds=ROUNDS, armature=None):
     return int((total | pushed).sum())
 
 
-def rebuild(obj, surface, reach=None):
+def rebuild(obj, surface, reach=None, armature=None):
     """Rebuild a garment shell as a clean mesh: thickened inward, remeshed in voxels, and its
     faces that look toward the body or lie inside it dropped, and with a reach, those standing
-    further out than it by more than a voxel. Gives how many triangles it has."""
+    further out than it by more than a voxel, the reach eased at sleeves' and legs' ends as
+    shape() eases it given the armature. Gives how many triangles it has."""
     # TRELLIS's meshes are sheets with two sides, half their faces looking toward the body, and
     # thickening "inward" would thicken those outward, past the garment and into a garment's
     # surfaces lying close by, joining pants' legs between the thighs. Every face is turned to
@@ -457,7 +458,13 @@ def rebuild(obj, surface, reach=None):
     mesh = bmesh.new()
     mesh.from_mesh(obj.data)
     inner = []
-    for face in mesh.faces:
+    middles = np.array([face.calc_center_median() for face in mesh.faces]).reshape(-1, 3)
+    # Hems stand out further, by up to HEM_EASE: left at the plain reach, the back of a leg's
+    # hem was cut away above the heel
+    limits = None if reach is None else np.broadcast_to(
+        reach + VOXEL + (hem_ease(middles, armature) if armature is not None else 0.0),
+        len(middles))
+    for k, face in enumerate(mesh.faces):
         location, normal, _, distance = surface.find_nearest(face.calc_center_median())
         toward = location - face.calc_center_median()
         # A garment within a reach stands out less than the thickness, so its inner side ends
@@ -466,7 +473,7 @@ def rebuild(obj, surface, reach=None):
             inner.append(face)
         # Rebuilding joins a garment's surfaces lying close together, like pants' legs, with a
         # web between the thighs: nothing of a garment within a reach stands that far out
-        elif reach is not None and distance > reach + VOXEL:
+        elif limits is not None and distance > limits[k]:
             inner.append(face)
     bmesh.ops.delete(mesh, geom=inner, context="FACES")
     mesh.to_mesh(obj.data)
@@ -535,7 +542,7 @@ def main():
     garment.select_set(True)
     bpy.ops.export_scene.gltf(filepath=os.path.join(args.out, "pushed.glb"),
                               export_format="GLB", use_selection=True)
-    rebuilt = rebuild(garment, surface, args.reach)
+    rebuilt = rebuild(garment, surface, args.reach, armature)
     recut_faces = 0
     if args.painted and args.guide:
         with open(args.guide, encoding="utf-8") as file:

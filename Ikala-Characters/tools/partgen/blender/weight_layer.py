@@ -31,7 +31,7 @@ from mathutils import Matrix, Quaternion, Vector
 from mathutils.bvhtree import BVHTree
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from bodies import world_vertices  # noqa: E402
+from bodies import body_meshes, world_vertices  # noqa: E402
 from fit_layer import import_figure, render  # noqa: E402
 
 # Bones each vertex may follow, as characters are drawn with
@@ -196,7 +196,7 @@ def main():
     # The saved clips play through animation tracks, which would override the test poses
     armature.animation_data_clear()
     pose(armature, {})
-    bodies = [o for o in bpy.data.objects if o.type == "MESH" and "eye" not in o.name.lower()]
+    bodies = body_meshes()
     garment = import_figure(args.garment)
     garment.name = "garment"
     bpy.ops.object.select_all(action="DESELECT")

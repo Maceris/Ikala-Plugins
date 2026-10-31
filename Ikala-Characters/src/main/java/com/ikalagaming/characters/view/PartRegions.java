@@ -6,6 +6,7 @@ import lombok.NonNull;
 import org.joml.Vector3f;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -18,11 +19,16 @@ import java.util.Set;
  * Which parts of an imported character's body the wearable parts cover, so the body under them can
  * be hidden instead of poking through, until parts come from definitions with authored regions.
  *
- * <p>Parts in slots that are never empty, like the body, feet and hands, are the base. Each of
- * their triangles goes in a mask region named for the bone that moves it most. Each wearable part,
- * one in a slot that can be empty, hides the regions it covers: a region is covered when most of
- * its area has the part's surface just outside it, found by casting a short ray out from each
- * triangle. Regions are per triangle, so base vertices on the border between regions are split.
+ * <p>Parts in slots that are never empty, like the body, feet and hands, are the base. Wearable
+ * parts are those in slots that can be empty. A base triangle is covered by a wearable part when
+ * the part's surface lies just outside all of it, found by casting short rays out from its middle
+ * and near its corners. Triangles covered by the same wearable parts share a mask region, and each
+ * wearable part hides the regions it covers, so what a garment leaves open, like the chest in a
+ * jacket's open front or the body under a hole, stays shown, while hiding whole regions of the body
+ * by bone hid those too. There can be only {@link #MAX_REGIONS} regions: past that, the smallest
+ * are merged into ones covered by fewer of the same parts, which hide less, never more, and
+ * triangles nothing covers are never hidden. Regions are per triangle, so base vertices on the
+ * border between regions are split.
  *
  * @param character The character, with base parts' vertices split along region borders.
  * @param regions Each part's region per vertex, or null for parts that are never hidden.
@@ -39,8 +45,11 @@ public record PartRegions(
     /** The region for triangles that are never hidden. */
     static final int NEVER_HIDDEN = 255;
 
-    /** How much of a region's area must be covered to hide it. */
-    static final float COVERED_SHARE = 0.85f;
+    /**
+     * How far each corner ray starts from its corner toward the triangle's middle, as a share of
+     * the way, so rays along a triangle's edge don't graze a garment's edge.
+     */
+    static final float CORNER_INSET = 0.15f;
 
     /** How far inside the body a covering surface may be, in meters. */
     static final float INSIDE = 0.04f;
@@ -94,52 +103,68 @@ public record PartRegions(
             boolean @NonNull [] wearable) {
         List<ImportedCharacter.Part> parts = character.parts();
 
-        // Regions by bone, in the order they come
-        Map<Integer, Integer> boneRegions = new LinkedHashMap<>();
-        List<ImportedCharacter.Part> split = new ArrayList<>(parts);
-        List<int[]> regions = new ArrayList<>();
-        List<int[]> triangleRegions = new ArrayList<>();
+        // Which wearable parts cover each base triangle, and how much area each such set covers
+        List<BitSet[]> coverings = new ArrayList<>();
+        Map<BitSet, Float> areas = new LinkedHashMap<>();
         for (int p = 0; p < parts.size(); ++p) {
-            if (!base[p]) {
-                regions.add(null);
-                triangleRegions.add(null);
-                continue;
-            }
-            ImportedCharacter.Part part = parts.get(p);
-            int[] byTriangle = new int[part.indices().length / 3];
-            for (int t = 0; t < byTriangle.length; ++t) {
-                int bone = dominantBone(part, t);
-                Integer region = boneRegions.get(bone);
-                if (region == null && boneRegions.size() < MAX_REGIONS) {
-                    region = boneRegions.size();
-                    boneRegions.put(bone, region);
-                }
-                byTriangle[t] = region == null ? NEVER_HIDDEN : region;
-            }
-            triangleRegions.add(byTriangle);
-            Split result = split(part, byTriangle);
-            split.set(p, result.part());
-            regions.add(result.regions());
+            coverings.add(
+                    base[p] ? new BitSet[parts.get(p).indices().length / 3] : null);
         }
-
-        long[] hides = new long[parts.size()];
         for (int w = 0; w < parts.size(); ++w) {
             if (!wearable[w]) {
                 continue;
             }
             TriangleGrid grid = new TriangleGrid(parts.get(w));
-            float[] covered = new float[MAX_REGIONS];
-            float[] total = new float[MAX_REGIONS];
             for (int p = 0; p < parts.size(); ++p) {
                 if (base[p]) {
-                    measure(parts.get(p), triangleRegions.get(p), grid, covered, total);
+                    cover(parts.get(p), coverings.get(p), w, grid);
                 }
             }
-            for (int r = 0; r < MAX_REGIONS; ++r) {
-                if (total[r] > 0 && covered[r] >= COVERED_SHARE * total[r]) {
-                    hides[w] |= 1L << r;
-                }
+        }
+        for (int p = 0; p < parts.size(); ++p) {
+            BitSet[] byTriangle = coverings.get(p);
+            if (byTriangle == null) {
+                continue;
             }
+            for (int t = 0; t < byTriangle.length; ++t) {
+                if (byTriangle[t] == null) {
+                    byTriangle[t] = new BitSet();
+                }
+                areas.merge(byTriangle[t], area(parts.get(p), t), Float::sum);
+            }
+        }
+        Map<BitSet, BitSet> merged = merge(areas);
+
+        // Regions by the set of parts covering them, in the order they come
+        Map<BitSet, Integer> setRegions = new LinkedHashMap<>();
+        long[] hides = new long[parts.size()];
+        for (BitSet covering : areas.keySet()) {
+            if (covering.isEmpty() || merged.containsKey(covering)) {
+                continue;
+            }
+            int region = setRegions.size();
+            setRegions.put(covering, region);
+            for (int w = covering.nextSetBit(0); w >= 0; w = covering.nextSetBit(w + 1)) {
+                hides[w] |= 1L << region;
+            }
+        }
+
+        List<ImportedCharacter.Part> split = new ArrayList<>(parts);
+        List<int[]> regions = new ArrayList<>();
+        for (int p = 0; p < parts.size(); ++p) {
+            BitSet[] coveredBy = coverings.get(p);
+            if (coveredBy == null) {
+                regions.add(null);
+                continue;
+            }
+            int[] byTriangle = new int[coveredBy.length];
+            for (int t = 0; t < byTriangle.length; ++t) {
+                BitSet covering = merged.getOrDefault(coveredBy[t], coveredBy[t]);
+                byTriangle[t] = setRegions.getOrDefault(covering, NEVER_HIDDEN);
+            }
+            Split result = split(parts.get(p), byTriangle);
+            split.set(p, result.part());
+            regions.add(result.regions());
         }
         ImportedCharacter moved =
                 new ImportedCharacter(
@@ -168,32 +193,75 @@ public record PartRegions(
     }
 
     /**
-     * The bone that moves a triangle most, adding up its vertices' weights.
+     * Merge the least area's sets of covering parts into others until there are few enough to
+     * give each a region. A set merges into the biggest set among the rest that holds only parts
+     * it holds too, so its triangles hide while fewer parts are worn, never more, or into the
+     * empty set, never hidden.
+     *
+     * @param areas The area each set of covering parts covers.
+     * @return What each merged set merged into.
+     */
+    static Map<BitSet, BitSet> merge(Map<BitSet, Float> areas) {
+        Map<BitSet, Float> left = new LinkedHashMap<>();
+        areas.forEach(
+                (covering, area) -> {
+                    if (!covering.isEmpty()) {
+                        left.put(covering, area);
+                    }
+                });
+        Map<BitSet, BitSet> into = new HashMap<>();
+        while (left.size() > MAX_REGIONS) {
+            BitSet smallest = null;
+            for (Map.Entry<BitSet, Float> entry : left.entrySet()) {
+                if (smallest == null || entry.getValue() < left.get(smallest)) {
+                    smallest = entry.getKey();
+                }
+            }
+            float area = left.remove(smallest);
+            BitSet best = new BitSet();
+            for (BitSet other : left.keySet()) {
+                BitSet outside = (BitSet) other.clone();
+                outside.andNot(smallest);
+                boolean bigger =
+                        other.cardinality() > best.cardinality()
+                                || other.cardinality() == best.cardinality()
+                                        && !best.isEmpty()
+                                        && left.get(other) > left.get(best);
+                if (outside.isEmpty() && bigger) {
+                    best = other;
+                }
+            }
+            into.put(smallest, best);
+            if (!best.isEmpty()) {
+                left.merge(best, area, Float::sum);
+            }
+        }
+        Map<BitSet, BitSet> resolved = new HashMap<>();
+        for (BitSet covering : into.keySet()) {
+            BitSet to = into.get(covering);
+            while (into.containsKey(to)) {
+                to = into.get(to);
+            }
+            resolved.put(covering, to);
+        }
+        return resolved;
+    }
+
+    /**
+     * A triangle's area.
      *
      * @param part The part.
      * @param triangle The triangle's position.
-     * @return The bone's index.
+     * @return Its area.
      */
-    private static int dominantBone(ImportedCharacter.Part part, int triangle) {
-        Map<Integer, Float> weights = new HashMap<>();
-        for (int corner = 0; corner < 3; ++corner) {
-            int vertex = part.indices()[triangle * 3 + corner];
-            for (int i = 0; i < INFLUENCES; ++i) {
-                float weight = part.weights()[vertex * INFLUENCES + i];
-                if (weight > 0) {
-                    weights.merge(part.joints()[vertex * INFLUENCES + i], weight, Float::sum);
-                }
-            }
-        }
-        int best = 0;
-        float most = -1;
-        for (Map.Entry<Integer, Float> entry : weights.entrySet()) {
-            if (entry.getValue() > most) {
-                most = entry.getValue();
-                best = entry.getKey();
-            }
-        }
-        return best;
+    private static float area(ImportedCharacter.Part part, int triangle) {
+        Vector3f a = new Vector3f();
+        Vector3f b = new Vector3f();
+        Vector3f c = new Vector3f();
+        corner(part, triangle, 0, a);
+        corner(part, triangle, 1, b);
+        corner(part, triangle, 2, c);
+        return b.sub(a).cross(c.sub(a)).length() / 2;
     }
 
     /**
@@ -259,47 +327,52 @@ public record PartRegions(
     }
 
     /**
-     * Add up how much of each region's area a wearable part covers.
+     * Mark the base triangles a wearable part covers: the part's surface lies just outside the
+     * triangle's middle and each of its corners, inset a little (see {@link #CORNER_INSET}).
      *
      * @param part A base part.
-     * @param byTriangle Its triangles' regions.
+     * @param coveredBy The wearable parts covering each of its triangles, added to.
+     * @param wearable The wearable part's index.
      * @param grid The wearable part's triangles.
-     * @param covered Each region's covered area, added to.
-     * @param total Each region's area, added to.
      */
-    private static void measure(
-            ImportedCharacter.Part part,
-            int[] byTriangle,
-            TriangleGrid grid,
-            float[] covered,
-            float[] total) {
-        Vector3f a = new Vector3f();
-        Vector3f b = new Vector3f();
-        Vector3f c = new Vector3f();
+    private static void cover(
+            ImportedCharacter.Part part, BitSet[] coveredBy, int wearable, TriangleGrid grid) {
+        Vector3f[] corners = {new Vector3f(), new Vector3f(), new Vector3f()};
         Vector3f normal = new Vector3f();
+        Vector3f middle = new Vector3f();
+        Vector3f point = new Vector3f();
         Vector3f start = new Vector3f();
         Vector3f end = new Vector3f();
-        for (int t = 0; t < byTriangle.length; ++t) {
-            int region = byTriangle[t];
-            if (region == NEVER_HIDDEN) {
-                continue;
+        for (int t = 0; t < coveredBy.length; ++t) {
+            for (int k = 0; k < 3; ++k) {
+                corner(part, t, k, corners[k]);
             }
-            corner(part, t, 0, a);
-            corner(part, t, 1, b);
-            corner(part, t, 2, c);
-            new Vector3f(b).sub(a).cross(new Vector3f(c).sub(a), normal);
-            float area = normal.length() / 2;
-            if (area <= 0) {
+            new Vector3f(corners[1])
+                    .sub(corners[0])
+                    .cross(new Vector3f(corners[2]).sub(corners[0]), normal);
+            if (normal.lengthSquared() <= 0) {
                 continue;
             }
             normal.normalize();
-            total[region] += area;
-            // From just inside the triangle's middle to a little way out
-            Vector3f middle = new Vector3f(a).add(b).add(c).div(3);
-            middle.fma(-INSIDE, normal, start);
-            middle.fma(REACH, normal, end);
-            if (grid.hits(start, end)) {
-                covered[region] += area;
+            corners[0].add(corners[1], middle).add(corners[2]).div(3);
+            boolean covered = true;
+            // The middle, then each corner
+            for (int k = -1; k < 3 && covered; ++k) {
+                if (k < 0) {
+                    point.set(middle);
+                } else {
+                    corners[k].lerp(middle, CORNER_INSET, point);
+                }
+                // From just inside the body to a little way out
+                point.fma(-INSIDE, normal, start);
+                point.fma(REACH, normal, end);
+                covered = grid.hits(start, end);
+            }
+            if (covered) {
+                if (coveredBy[t] == null) {
+                    coveredBy[t] = new BitSet();
+                }
+                coveredBy[t].set(wearable);
             }
         }
     }

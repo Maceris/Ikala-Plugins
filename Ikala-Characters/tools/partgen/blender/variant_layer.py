@@ -3,7 +3,9 @@ type, through the base mesh cages (see tools/blender/body_cages.py).
 
 The garment is bound to the male cage with a Surface Deform modifier, and the cage given the
 other body's shape, so the garment follows it, keeping its vertices and texture layout, so the
-same textures and tint mask fit. It is then pushed out from the new body to the gap, and in to
+same textures and tint mask fit. Where the cage bunches up, like the armpits, the bust and the
+crotch, faces fold over, and a folded face is culled when drawn, a hole: around those, the
+garment takes its neighbors' move instead of its own (see untangle). It is then pushed out from the new body to the gap, and in to
 the reach for a layer worn under others, as shape_layer.py does, without smoothing, and takes
 that body's weights, as weight_layer.py does.
 
@@ -25,10 +27,17 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fit_accessory as hat  # noqa: E402
-from bodies import nearest, tree, world_vertices  # noqa: E402
+from bodies import body_meshes, nearest, tree, world_vertices  # noqa: E402
 from fit_layer import render  # noqa: E402
 from shape_layer import shape  # noqa: E402
 from weight_layer import transfer_weights, weight_source  # noqa: E402
+
+# How many rings of neighbors around a folded face take their neighbors' move too
+UNTANGLE_RINGS = 2
+# How many times the moves are averaged over those, and how many times folds are looked for
+# again after pushing (pushing can fold a face too)
+UNTANGLE_ROUNDS = 30
+UNTANGLE_PASSES = 8
 
 
 def cage(name, data):
@@ -88,6 +97,47 @@ def carry(garment, from_cage, to_cage):
     bpy.data.objects.remove(start)
 
 
+def face_normals(obj):
+    obj.data.update()
+    normals = np.empty(len(obj.data.polygons) * 3)
+    obj.data.polygons.foreach_get("normal", normals)
+    return normals.reshape(-1, 3)
+
+
+def untangle(obj, start, start_normals):
+    """Unfold the faces that turned over since the garment lay at the start points: their
+    vertices and some rings of neighbors (UNTANGLE_RINGS) move as their neighbors do, by
+    averaging how far each moved, the rest held where they are. A patch moved alike keeps the
+    start's shape, which had no folds. The glTF garment is split into separate vertices along
+    its UV seams; those lying together move as one, or the seams would open. Gives how many
+    faces were folded."""
+    folded = (face_normals(obj) * start_normals).sum(1) < 0
+    if not folded.any():
+        return 0
+    _, welded = np.unique(np.round(start, 6), axis=0, return_inverse=True)
+    welded = welded.ravel()
+    count = welded.max() + 1
+    edges = welded[np.array([e.vertices[:] for e in obj.data.edges])]
+    edges = np.unique(np.sort(edges[edges[:, 0] != edges[:, 1]], axis=1), axis=0)
+    loose = np.zeros(count, dtype=bool)
+    loose[welded[[v for k in np.flatnonzero(folded) for v in obj.data.polygons[k].vertices]]] = True
+    for _ in range(UNTANGLE_RINGS):
+        loose[edges[loose[edges].any(1)].ravel()] = True
+    points = np.empty(len(start) * 3)
+    obj.data.vertices.foreach_get("co", points)
+    move = np.zeros((count, 3))
+    move[welded] = points.reshape(-1, 3) - start
+    neighbors = np.bincount(edges.ravel(), minlength=count)[:, None]
+    for _ in range(UNTANGLE_ROUNDS):
+        total = np.zeros_like(move)
+        np.add.at(total, edges[:, 0], move[edges[:, 1]])
+        np.add.at(total, edges[:, 1], move[edges[:, 0]])
+        move[loose] = (total / np.maximum(neighbors, 1))[loose]
+    obj.data.vertices.foreach_set("co", (start + move[welded]).astype(np.float32).ravel())
+    obj.data.update()
+    return int(folded.sum())
+
+
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -103,8 +153,10 @@ def main():
     armature = next(o for o in bpy.data.objects if o.type == "ARMATURE")
     armature.animation_data_clear()
     armature.data.pose_position = "REST"
-    bodies = [o for o in bpy.data.objects if o.type == "MESH" and "eye" not in o.name.lower()]
+    bodies = body_meshes()
     garment = import_garment(args.baked, args.name)
+    start, _ = world_vertices(garment)
+    start_normals = face_normals(garment)
     carry(garment, np.load(args.from_cage), np.load(args.to_cage)["vertices"])
 
     surface_points, surface_faces = [], []
@@ -116,7 +168,13 @@ def main():
         offset += len(co)
     surface = tree(np.concatenate(surface_points), np.concatenate(surface_faces))
     _, before_push = nearest(world_vertices(garment)[0], surface)
-    pushed = shape(garment, surface, args.gap, args.reach, rounds=0, armature=armature)
+    folded = []
+    for _ in range(UNTANGLE_PASSES):
+        folded.append(untangle(garment, start, start_normals))
+        pushed = shape(garment, surface, args.gap, args.reach, rounds=0, armature=armature)
+        if not folded[-1]:
+            break
+    left = int(((face_normals(garment) * start_normals).sum(1) < 0).sum())
     _, after_push = nearest(world_vertices(garment)[0], surface)
 
     source = weight_source(bodies)
@@ -129,6 +187,8 @@ def main():
         "pushed_pct": round(pushed / max(1, len(before_push)) * 100, 1),
         "min_gap_mm": round(float(after_push.min()) * 1000, 1),
         "max_gap_mm": round(float(after_push.max()) * 1000, 1),
+        "folded_faces": folded,
+        "folded_left": left,
     }
     print("[variant_layer]", json.dumps(report))
     os.makedirs(args.preview, exist_ok=True)
