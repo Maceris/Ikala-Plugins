@@ -1,5 +1,5 @@
 {
-  "_comment": "How clothing is generated for each body plan layer. Its images are painted over a front render of the male mannequin at rest, in its A pose, only inside a mask of the body slots the layer covers, grown \"maskGrow\" pixels outward and drawn \"maskDown\" pixels down for clothing that hangs, and steered by the render's depth, so the bare body and the pose stay as they are and the garment can be cut out of the mesh. \"prompt\" fills in {description}; \"guideStrength\" and \"guideEnd\" are how hard the depth steers and for what share of the steps (a loose garment wants less); \"gap\" is how far outside the body the fitted garment must sit, in meters, and \"reach\", for a layer worn under others, the furthest out it may stand, so the layers over it, whose gap is more, cover it; \"triangles\" is the budget for the fitted mesh. A brief's \"fit\" replaces any of these. \"legGap\" keeps the gap between the legs below the crotch out of the mask and the cut, so pants come out as two legs rather than joined down to the knees (a skirt or a long coat leaves it off). \"palette\" is the palette channel the layer's main tint group takes, so layers worn together can differ in color; further groups take the accent. \"cut\" cuts the fitted garment straight across at one of the mannequin's seams (from <variant>_seams.json), keeping what lies \"above\" or \"below\" it, moved \"offset\" meters up: layers worn together then meet at a firm line, a shirt tucked a little way into pants that stop at the belt line (the waist seam), and the body plan's stacking order hides the tucked part. Arms are never cut. An outfit filling several layers isn't cut.",
+  "_comment": "How clothing is generated for each body plan layer. Its images are painted over a front render of the male mannequin at rest, in its A pose, only inside a mask of the body slots the layer covers, grown \"maskGrow\" pixels outward and drawn \"maskDown\" pixels down for clothing that hangs, and steered by the render's depth, so the bare body and the pose stay as they are and the garment can be cut out of the mesh. \"prompt\" fills in {description}; \"guideStrength\" and \"guideEnd\" are how hard the depth steers and for what share of the steps (a loose garment wants less); \"gap\" is how far outside the body the fitted garment must sit, in meters, and \"reach\", for a layer worn under others, the furthest out it may stand, so the layers over it, whose gap is more, cover it; \"triangles\" is the budget for the fitted mesh. A brief's \"fit\" replaces any of these. \"legGap\" keeps the gap between the legs below the crotch out of the mask and the cut, so pants come out as two legs rather than joined down to the knees (a skirt or a long coat leaves it off). \"palette\" is the palette channel the layer's main tint group takes, so layers worn together can differ in color; further groups take the accent. \"cut\" cuts the fitted garment straight across at one of the mannequin's seams (from <variant>_seams.json), keeping what lies \"above\" or \"below\" it, moved \"offset\" meters up: layers worn together then meet at a firm line, a shirt tucked a little way into pants that stop at the belt line (the waist seam), and the body plan's stacking order hides the tucked part. Arms are never cut. An outfit filling several layers isn't cut. \"shell\" builds the garment from the mannequin's own skin in the slots it covers, pushed out by the gap and onto the generated garment within the reach, and cut where the image painted it (see blender/shell_layer.py), instead of reshaping the generated garment itself: whole, with clean edges, its detail in the baked textures. \"flap\" folds a flap of a shell garment back over itself along its neck opening, \"width\" meters wide (tapering to nothing at the opening's lowest point) and lying \"lift\" meters off it: a jacket's lapels and collar, or a shirt's collar (see blender/flaps.py); \"cuffs\" folds a band back along the sleeves' ends the same way.",
   "shirt": {
     "prompt": "wearing only {description}, bare smooth gray legs",
     "guideStrength": 0.35,
@@ -10,6 +10,9 @@
     "maskGrow": 28,
     "maskDown": 24,
     "palette": "primary",
+    "shell": true,
+    "flap": {"width": 0.045, "lift": 0.004},
+    "cuffs": {"width": 0.06, "lift": 0.003},
     "cut": {"seam": "waist", "keep": "above", "offset": -0.04}
   },
   "jacket": {
@@ -20,7 +23,9 @@
     "triangles": 3000,
     "maskGrow": 48,
     "maskDown": 60,
-    "palette": "tertiary"
+    "palette": "tertiary",
+    "shell": true,
+    "flap": {"width": 0.09, "lift": 0.012}
   },
   "pants": {
     "prompt": "wearing only {description}, bare smooth gray chest and arms, bare gray feet",
@@ -33,6 +38,7 @@
     "maskDown": 0,
     "legGap": true,
     "palette": "secondary",
+    "shell": true,
     "cut": {"seam": "waist", "keep": "below", "offset": 0.0}
   }
 }

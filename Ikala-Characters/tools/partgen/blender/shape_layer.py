@@ -111,8 +111,8 @@ HOLE_PERIMETER = 0.15
 CRUMPLE_DEPTH = 0.006
 # Where a garment cut at a seam runs on past it, tucked under the layer beyond, like a shirt's
 # hem inside pants: how near the body it keeps, in meters, inside that layer's own gap
-TUCKED_GAP = 0.001
-TUCKED_REACH = 0.002
+TUCKED_GAP = 0.0025
+TUCKED_REACH = 0.0035
 EDGE_TOWARD = 0.5
 EDGE_BACK = -0.53
 GARMENT_COLOR = (0.85, 0.45, 0.15, 1)
@@ -332,14 +332,22 @@ def cut_at_seam(obj, armature, seams, seam, keep, offset):
     return len(gone)
 
 
-def drop_stretched(obj, before):
-    """Drop the faces whose edges limb matching stretched (see STRETCH), from the points before
-    it. Gives how many were dropped."""
+def drop_stretched(obj, before, armature=None):
+    """Drop the faces on the arms whose edges limb matching stretched (see STRETCH), from the
+    points before it: webs from a sleeve TRELLIS bent across the arm. Given the armature, only
+    there: a leg turns at the hip, and the cloth across the seat it stretches is the garment's
+    own, which dropped tore holes along the hip seams. Gives how many were dropped."""
     after = points_of(obj)
+    on_arm = None
+    if armature is not None:
+        arms = with_beyond(armature, [chain[0] for chain in LIMBS if "arm" in chain[0]])
+        on_arm = np.isin(owners(after, bone_segments(armature)), list(arms))
     mesh = bmesh.new()
     mesh.from_mesh(obj.data)
     stretched = []
     for face in mesh.faces:
+        if on_arm is not None and not any(on_arm[v.index] for v in face.verts):
+            continue
         for edge in face.edges:
             a, b = (v.index for v in edge.verts)
             was = np.linalg.norm(before[a] - before[b])
@@ -762,7 +770,7 @@ def main():
     unmatched = points_of(garment)
     matched, turns = match_limbs(unmatched, skin, armature)
     set_points(garment, matched)
-    stretched = drop_stretched(garment, unmatched)
+    stretched = drop_stretched(garment, unmatched, armature)
     bare = [b for b in args.bare.split(",") if b]
     dropped = drop_bare(garment, armature, bare) if bare else 0
     hems = level_hems(garment, armature)

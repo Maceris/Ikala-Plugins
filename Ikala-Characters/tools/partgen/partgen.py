@@ -118,6 +118,9 @@ REVIEW_MARGIN = 0.15
 # This computer's folders, not committed, and the template for it
 CONFIG = "config.json"
 CONFIG_EXAMPLE = "config.example.json"
+# How far a garment built from the mannequin's skin lets its baked normals lean, in degrees:
+# its smooth surface shows the crumples of TRELLIS's cloth as blotches past that
+SHELL_LEAN = 15
 # The seam rings of the mannequin the guides are rendered from, beside its glb
 SEAMS = "%s_seams.json"
 # The side body parts are generated on, as their slot names end; the other side is its mirror
@@ -160,6 +163,11 @@ BARE_LIGHTNESS = 28
 # A garment is colored when the median color (RGB max less min) of the pixels surely its own,
 # differing from the render by more than GARMENT_SURE, is at least this
 COLORED = 18
+# How wide, in pixels, a bare region inside a garment's painted area must be to be taken out of
+# it again (odd, for the image filters)
+BARE_OPEN = 9
+# The most color (max channel minus min, of 255) the mannequin's bare skin shows in an image
+NEUTRAL_CHROMA = 7
 GARMENT_SURE = 60
 # Gaps up to this wide in the painted area are closed for the garment's back, in pixels (odd)
 BACK_CLOSE = 61
@@ -843,6 +851,14 @@ def painted_area(config, brief, out):
     biggest = max(sizes.values(), default=0)
     keep = [k for k, size in sizes.items() if size >= biggest * PAINT_CRUMB]
     painted = np.isin(np.asarray(pieces), keep)
+    # Closing gaps and filling holes fills in bare body a garment frames, like the neck in a
+    # shirt's open collar, which a garment built from the skin then kept, ragged. The mannequin
+    # is neutral gray, and even an off-white garment has some color, so neutral regions wider
+    # than BARE_OPEN pixels come out again
+    neutral = Image.fromarray((chroma < NEUTRAL_CHROMA).astype(np.uint8) * 255)
+    neutral = neutral.filter(ImageFilter.MinFilter(BARE_OPEN))
+    neutral = neutral.filter(ImageFilter.MaxFilter(BARE_OPEN))
+    painted &= ~(np.asarray(neutral) > 127)
     path = out / "painted.png"
     Image.fromarray(painted.astype(np.uint8) * 255).save(path)
     # A garment's back is whole where its front is open, like a jacket's neckline: gaps are
@@ -853,6 +869,26 @@ def painted_area(config, brief, out):
         back = Image.fromarray(np.where(gap, 0, np.asarray(back)).astype(np.uint8))
     back.save(out / "painted_back.png")
     return path
+
+
+def shell_slots(brief):
+    """The body slots a garment built from the mannequin's skin is made of (see
+    blender/shell_layer.py): those its layers cover, and the pelvis for tops, which hang past
+    the waist."""
+    slots = list(layer_of(brief)[0]["covers"])
+    if "torso" in slots and "pelvis" not in slots:
+        slots.append("pelvis")
+    return ",".join(slots)
+
+
+def flap_args(rule):
+    """shell_layer.py's and variant_layer.py's arguments for a layer's flap and cuffs (see
+    layers.json)."""
+    out = []
+    for key in ("flap", "cuffs"):
+        if key in rule:
+            out += ["--" + key, "%s,%s" % (rule[key]["width"], rule[key]["lift"])]
+    return out
 
 
 def cut_args(rule):
@@ -921,6 +957,21 @@ def fit_layer(config, batch, brief):
         print("Shaping failed for %s; see %s" % (brief["id"], folder / "shape.log"))
         return
     report["shape"] = json.loads((out / "shape.json").read_text(encoding="utf8"))
+    if rule.get("shell"):
+        # The mannequin's skin, cut where the image painted, replaces the reshaped figure
+        shelled = run_blender(
+            config, "shell_layer.py", folder / "shell.log",
+            "--garment", out / "garment.glb", "--body", body, "--out", out,
+            "--painted", painted, "--painted-back", out / "painted_back.png",
+            "--guide", guides(config) / "guide.json", "--slots", shell_slots(brief),
+            "--gap", rule["gap"], "--triangles", rule["triangles"],
+            *(["--reach", rule["reach"]] if "reach" in rule else []),
+            *cut_args(rule), *flap_args(rule), *simplifier_args(config))
+        if not shelled or not (out / "shell.json").exists():
+            print("Building the shell failed for %s; see %s" % (brief["id"],
+                                                               folder / "shell.log"))
+            return
+        report["shell"] = json.loads((out / "shell.json").read_text(encoding="utf8"))
     weighted = run_blender(config, "weight_layer.py", folder / "weights.log",
                            "--garment", out / "shaped.glb", "--body", body, "--out", out,
                            "--bare", ",".join(bare_ends(layer_of(brief)[0])))
@@ -932,6 +983,7 @@ def fit_layer(config, batch, brief):
     baked = run_blender(config, "bake_layer.py", folder / "bake.log",
                         "--weighted", out / "weighted.blend", "--figure", out / "pushed.glb",
                         "--rebuilt", out / "rebuilt.glb",
+                        *(["--max-lean", SHELL_LEAN] if rule.get("shell") else []),
                         "--image", image, "--painted", painted,
                         "--guide", guides(config) / "guide.json", "--out", out,
                         "--name", brief["id"])
@@ -991,12 +1043,22 @@ def write_layer_part(config, batch, brief, out, rule):
                              "--name", name, "--out", target, "--preview", out,
                              "--bare", ",".join(bare_ends(layer_of(brief)[0])),
                              *(["--reach", rule["reach"]] if "reach" in rule else []),
-                             *cut_args(rule)):
+                             *cut_args(rule),
+                             *(["--shell-slots", shell_slots(brief), "--masks",
+                                out / (name + "_masks") / (name + "_emit.png"),
+                                "--triangles", rule["triangles"], *flap_args(rule),
+                                *simplifier_args(config)]
+                               if rule.get("shell") else [])):
             print("The female mesh failed for %s; see %s" % (name, folder / "variant.log"))
             return None
         masks = target.with_name(target.stem + "_masks")
         shutil.rmtree(masks, ignore_errors=True)
-        shutil.copytree(out / (name + "_masks"), masks)
+        # A variant built afresh bakes its own mask beside the fit; others share the guide's UVs
+        own = out / masks.name
+        if variant != GUIDE_VARIANT and own.exists():
+            shutil.copytree(own, masks)
+        else:
+            shutil.copytree(out / (name + "_masks"), masks)
         meshes["*" if variant == GUIDE_VARIANT else variant] = "%s#%s" % (glb, name)
     defaults = json.loads((out / "bake.json").read_text(encoding="utf8"))["defaults"]
     layers = layers_of(brief)
