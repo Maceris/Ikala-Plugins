@@ -27,7 +27,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fit_accessory as hat  # noqa: E402
-from bodies import nearest, tree, world_vertices  # noqa: E402
+from bodies import body_meshes, nearest, tree, world_vertices  # noqa: E402
 from fit_layer import render  # noqa: E402
 from shape_layer import shape  # noqa: E402
 from weight_layer import transfer_weights, weight_source  # noqa: E402
@@ -153,7 +153,7 @@ def main():
     armature = next(o for o in bpy.data.objects if o.type == "ARMATURE")
     armature.animation_data_clear()
     armature.data.pose_position = "REST"
-    bodies = [o for o in bpy.data.objects if o.type == "MESH" and "eye" not in o.name.lower()]
+    bodies = body_meshes()
     garment = import_garment(args.baked, args.name)
     start, _ = world_vertices(garment)
     start_normals = face_normals(garment)

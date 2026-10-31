@@ -3,11 +3,23 @@ world space, and how far points are from them. Blender space: Z up, the body fac
 """
 
 import os
+import sys
 
 import bpy
 import numpy as np
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "blender"))
+from add_caps import CAP_INFIX  # noqa: E402
+
+
+def body_meshes():
+    """The mannequin's skin: its meshes but the eyes and the caps closing its slots' seams
+    (see tools/blender/add_caps.py), which lie inside the body, across a shoulder or the waist:
+    fitting clothing to those pushed it about at every seam and tore holes along them."""
+    return [o for o in bpy.data.objects if o.type == "MESH" and "eye" not in o.name.lower()
+            and CAP_INFIX not in o.name]
 
 
 def world_vertices(obj):
@@ -45,7 +57,7 @@ def load_body(path, slots=()):
     bpy.ops.wm.open_mainfile(filepath=os.path.abspath(path))
     for armature in bpy.data.armatures:
         armature.pose_position = "REST"
-    bodies = [o for o in bpy.data.objects if o.type == "MESH" and "eye" not in o.name.lower()]
+    bodies = body_meshes()
     chosen = [o for o in bodies if any(s.lower() in o.name.lower() for s in slots)]
     return merged(bodies), (merged(chosen) if chosen else None)
 
