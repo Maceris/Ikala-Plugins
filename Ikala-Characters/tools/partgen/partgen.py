@@ -799,7 +799,7 @@ def painted_area(config, brief, out):
     (a garment shaded like the bare body leaves some) and crumbs dropped. Gives its path."""
     from PIL import Image, ImageDraw, ImageFilter
     import numpy as np
-    layer, rule = layer_of(brief)
+    layer, rule = rule_of(brief)
     allowed = pathlib.Path(config["comfy"]) / "input" / guide_inputs(config, layer, rule)["mask"]
     gray = np.asarray(Image.open(guides(config) / "gray.png").convert("RGB"), dtype=float)
     folder = out.parent
@@ -1008,8 +1008,8 @@ def write_layer_part(config, batch, brief, out, rule):
 def fit_body_part(config, batch, brief):
     """Fit a body part's mesh to the mannequin: line it up and cut it out at its seams
     (blender/fit_body.py), shape it into a solid welded to its welded seams' rings
-    (shape_body.py) and weight it (weight_body.py), all in the brief's fit folder. Gives the
-    reports, or None if a step failed."""
+    (shape_body.py), weight it (weight_body.py) and bake its textures (bake_body.py), all in
+    the brief's fit folder. Gives the reports, or None if a step failed."""
     part, rule = body_of(brief)
     folder = batch.brief_folder(brief["id"])
     out = folder / "fit"
@@ -1026,6 +1026,12 @@ def fit_body_part(config, batch, brief):
           "--triangles", rule["triangles"]] + (["--open", left_open] if left_open else [])),
         ("weight_body.py", "weights.json",
          ["--shaped", out / "shaped.blend", "--out", out, "--slots", slots]),
+        ("bake_body.py", "bake.json",
+         ["--weighted", out / "weighted.blend", "--figure", out / "part.glb",
+          "--image", folder / "images" / ("%d.png" % brief["review"]["pick"]),
+          "--painted", painted_area(config, brief, out), "--guide",
+          guides(config) / "guide.json", "--out", out, "--name", brief["id"],
+          "--slots", slots]),
     ]
     reports = {}
     for script, report, arguments in steps:
@@ -1050,7 +1056,7 @@ def command_fit(config, batch, args):
             continue
         if brief["kind"] == "body":
             if fit_body_part(config, batch, brief) is not None:
-                print("%s is fitted in %s; its texture and part file come in M5 B7-B9"
+                print("%s is fitted and baked in %s; its part file comes in M5 B9"
                       % (brief["id"], batch.brief_folder(brief["id"]) / "fit"))
             continue
         folder = batch.brief_folder(brief["id"])
