@@ -30,7 +30,11 @@ import java.util.Set;
  * triangles nothing covers are never hidden. Regions are per triangle, so base vertices on the
  * border between regions are split.
  *
- * @param character The character, with base parts' vertices split along region borders.
+ * <p>Given the order wearable parts stack in, wearable parts are hidden the same way where ones
+ * stacked over them cover them, like a shirt under a jacket, so nothing under a layer can poke
+ * through it, however close the two lie, while the shirt in the jacket's open front stays.
+ *
+ * @param character The character, with hidden parts' vertices split along region borders.
  * @param regions Each part's region per vertex, or null for parts that are never hidden.
  * @param hides The regions each part hides when worn, one bit per region.
  * @author Ches Burks
@@ -101,14 +105,35 @@ public record PartRegions(
             @NonNull ImportedCharacter character,
             boolean @NonNull [] base,
             boolean @NonNull [] wearable) {
+        return of(character, base, wearable, null);
+    }
+
+    /**
+     * Work out the regions for a character whose parts say what they are and how wearable parts
+     * stack: body parts are the base, layers are worn over it, and a layer also hides what it
+     * covers of the layers stacked under it.
+     *
+     * @param character The character.
+     * @param base Whether each part is part of the body, which wearable parts hide.
+     * @param wearable Whether each part is worn over the body.
+     * @param order Where each wearable part stacks, higher over lower; null for wearable parts
+     *     never hiding each other.
+     * @return The regions.
+     */
+    public static PartRegions of(
+            @NonNull ImportedCharacter character,
+            boolean @NonNull [] base,
+            boolean @NonNull [] wearable,
+            int[] order) {
         List<ImportedCharacter.Part> parts = character.parts();
 
-        // Which wearable parts cover each base triangle, and how much area each such set covers
+        // Which wearable parts cover each triangle that can be hidden, and how much area each
+        // such set covers
         List<BitSet[]> coverings = new ArrayList<>();
         Map<BitSet, Float> areas = new LinkedHashMap<>();
         for (int p = 0; p < parts.size(); ++p) {
-            coverings.add(
-                    base[p] ? new BitSet[parts.get(p).indices().length / 3] : null);
+            boolean hideable = base[p] || order != null && wearable[p];
+            coverings.add(hideable ? new BitSet[parts.get(p).indices().length / 3] : null);
         }
         for (int w = 0; w < parts.size(); ++w) {
             if (!wearable[w]) {
@@ -116,7 +141,8 @@ public record PartRegions(
             }
             TriangleGrid grid = new TriangleGrid(parts.get(w));
             for (int p = 0; p < parts.size(); ++p) {
-                if (base[p]) {
+                boolean under = base[p] || order != null && wearable[p] && order[w] > order[p];
+                if (under && coverings.get(p) != null) {
                     cover(parts.get(p), coverings.get(p), w, grid);
                 }
             }

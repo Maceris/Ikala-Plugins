@@ -188,6 +188,43 @@ class TestPartRegions {
     }
 
     /**
+     * Given how layers stack, a jacket hides the shirt under it where it covers it, so the shirt
+     * can't poke through, and leaves the shirt in its open front; nothing hides the jacket, and
+     * without an order, layers never hide each other.
+     */
+    @Test
+    void testLayerUnderLayer() {
+        List<ImportedCharacter.Part> parts =
+                List.of(
+                        squares("body", 0, 0, -3, -1, -1, 1, 1, 3),
+                        squares("shirt", 0.01f, 0, -3, -1, -1, 1, 1, 3),
+                        squares("jacket", 0.02f, 0, -3.5f, -1, 1, 3.5f));
+        boolean[] base = {true, false, false};
+        boolean[] wearable = {false, true, true};
+        int shirtOrder = 10;
+        int jacketOrder = 20;
+        PartRegions regions =
+                PartRegions.of(
+                        character(parts), base, wearable, new int[] {0, shirtOrder, jacketOrder});
+
+        int never = PartRegions.NEVER_HIDDEN;
+        int[] shirt = regions.regions().get(1);
+        Assertions.assertNotEquals(never, shirt[0]);
+        Assertions.assertEquals(never, shirt[4]);
+        Assertions.assertEquals(shirt[0], shirt[8]);
+        for (int region : regions.regions().get(2)) {
+            Assertions.assertEquals(never, region);
+        }
+        long jacketHides = regions.hidden(List.of(2));
+        Assertions.assertNotEquals(0L, jacketHides & (1L << shirt[0]));
+        // The shirt hides only the body
+        Assertions.assertEquals(0L, regions.hidden(List.of(1)) & (1L << shirt[0]));
+
+        PartRegions unordered = PartRegions.of(character(parts), base, wearable);
+        Assertions.assertNull(unordered.regions().get(1));
+    }
+
+    /**
      * Past the most regions there can be, the least area's sets of covering parts merge into
      * sets of fewer of the same parts, so they hide less, never more.
      */
