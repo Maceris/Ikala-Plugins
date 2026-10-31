@@ -15,7 +15,7 @@ seam open:
 - open: the solid keeps its own closed end, like a skeleton arm's bone at the shoulder.
 
     blender -b --python shape_body.py -- --part <part.glb> --body <male.blend> --out <folder>
-        --slots lowerArm.L --triangles 1500 [--open wrist.L,elbow.L]
+        --slots lowerArm.L --triangles 1500 [--open wrist.L,elbow.L] [--voxel 0.005]
 
 writes shaped.glb (the part and its caps, unskinned), shaped.blend (the mannequin with the part
 and its caps, the ring vertices in a "seam" vertex group with the ring's weights, for
@@ -262,6 +262,7 @@ def mark_rings(part, welded):
 
 
 def main():
+    global VOXEL
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--part", required=True)
@@ -270,7 +271,10 @@ def main():
     parser.add_argument("--slots", required=True, help="Comma-separated slots the part fills.")
     parser.add_argument("--triangles", type=int, required=True)
     parser.add_argument("--open", default="", help="Comma-separated seams left open.")
+    parser.add_argument("--voxel", type=float, default=VOXEL,
+                        help="The voxel size the part is rebuilt at, in meters.")
     args = parser.parse_args(argv)
+    VOXEL = args.voxel
     os.makedirs(args.out, exist_ok=True)
     names = [s for s in args.slots.split(",") if s]
     left_open = {s for s in args.open.split(",") if s}

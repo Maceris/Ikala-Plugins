@@ -1110,7 +1110,8 @@ def fit_body_part(config, batch, brief):
           "--slots", slots]),
         ("shape_body.py", "shape.json",
          ["--part", out / "part.glb", "--body", body, "--out", out, "--slots", slots,
-          "--triangles", rule["triangles"]] + (["--open", left_open] if left_open else [])),
+          "--triangles", rule["triangles"]] + (["--open", left_open] if left_open else [])
+         + (["--voxel", rule["voxel"]] if "voxel" in rule else [])),
         ("weight_body.py", "weights.json",
          ["--shaped", out / "shaped.blend", "--out", out, "--slots", slots]),
         ("bake_body.py", "bake.json",
