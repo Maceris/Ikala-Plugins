@@ -25,7 +25,7 @@
     "maskDown": 60,
     "palette": "tertiary",
     "shell": true,
-    "flap": {"width": 0.07, "lift": 0.006}
+    "flap": {"width": 0.09, "lift": 0.012}
   },
   "pants": {
     "prompt": "wearing only {description}, bare smooth gray chest and arms, bare gray feet",

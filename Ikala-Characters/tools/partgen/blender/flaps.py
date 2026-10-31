@@ -8,8 +8,11 @@ shell's surface within a width of its neck opening (the open loop reaching highe
 and, for an open jacket, its front), measured along the surface, copied, cut along the line at
 that width so its edge runs smoothly through faces, and lifted off the shell, by nothing at the
 fold, where it meets the opening's edge, to the lift a little way in. It tapers to nothing toward
-the opening's lowest point, where a jacket's lapels meet its top button. The flap is part of the
-garment's mesh, so it bakes, takes weights and tints with the rest.
+the opening's lowest point, where a jacket's lapels meet its top button, and, as tailored
+lapels do, narrows to a notch where the lapel meets the collar and stays narrower behind the neck.
+Its outer edge turns down to the garment, so it reads as cloth with some thickness rather than a
+line drawn on. The flap is part of the garment's mesh, so it bakes, takes weights and tints with
+the rest.
 """
 
 import heapq
@@ -17,6 +20,7 @@ import heapq
 import bmesh
 import bpy
 import numpy as np
+from mathutils import Vector
 
 import shape_layer as shaping
 import shell_layer
@@ -26,6 +30,15 @@ import shell_layer
 TAPER = 0.35
 # How far from the fold, as a share of the width, the flap rises to its full lift
 RISE = 0.25
+# Where along the opening's height, as a share from its lowest point, the lapel meets the
+# collar: the flap narrows to NOTCH_DEPTH less of its width there, over NOTCH_SPAN either side,
+# and above it, behind the neck, keeps COLLAR_SHARE of its width
+NOTCH_AT = 0.68
+NOTCH_DEPTH = 0.75
+NOTCH_SPAN = 0.05
+COLLAR_SHARE = 0.55
+# How far a flap's turned-down outer edge comes back toward the garment, as a share of the lift
+RIM = 0.8
 # How far below the highest open edge the neck opening's top may be, in meters
 NECK_REACH = 0.1
 # The longest open loop that can be a sleeve's end, in meters
@@ -99,7 +112,12 @@ def add_flap(obj, width, lift, at="neck"):
     distance = surface_distances(mesh, opening, width * 1.5)
     z = np.array([v.co.z for v in mesh.verts])
     if at == "neck":
-        widths = width * np.clip((z - low) / max(TAPER * (high - low), 1e-6), 0, 1)
+        t = (z - low) / max(high - low, 1e-6)
+        ramp = np.clip(t / TAPER, 0, 1)
+        ramp = ramp * ramp * (3 - 2 * ramp)
+        notch = 1 - NOTCH_DEPTH * np.exp(-((t - NOTCH_AT) / NOTCH_SPAN) ** 2)
+        collar = np.where(t > NOTCH_AT, COLLAR_SHARE, 1.0)
+        widths = width * ramp * np.minimum(notch, np.maximum(collar, notch * (t <= NOTCH_AT)))
     else:
         widths = np.full(len(z), width)
     # The faces a flap could cover, copied into a mesh of their own
@@ -142,6 +160,7 @@ def add_flap(obj, width, lift, at="neck"):
     lifted = points + after_n * (lift * rise)[:, None]
     piece.data.vertices.foreach_set("co", lifted.astype(np.float32).ravel())
     piece.data.update()
+    turn_down(piece, after_d, after_n, lift * rise, RISE * width)
     faces = len(piece.data.polygons)
 
     # Joined to the garment and welded along the fold
@@ -157,6 +176,45 @@ def add_flap(obj, width, lift, at="neck"):
     mesh.free()
     obj.data.update()
     return faces
+
+
+def turn_down(piece, distance, normals, lifts, near):
+    """Turn a flap's outer edge down toward the garment (see RIM): a strip of faces from each
+    open edge away from the fold, given each vertex's distance from the opening, the garment's
+    normal under it and how far it was lifted, facing away from the opening."""
+    mesh = bmesh.new()
+    mesh.from_mesh(piece.data)
+    mesh.verts.ensure_lookup_table()
+    outer = [e for e in mesh.edges if e.is_boundary
+             and all(distance[v.index] > near for v in e.verts)]
+    if not outer:
+        mesh.free()
+        return
+    made = bmesh.ops.extrude_edge_only(mesh, edges=outer)["geom"]
+    new_verts = [g for g in made if isinstance(g, bmesh.types.BMVert)]
+    rim_faces = [g for g in made if isinstance(g, bmesh.types.BMFace)]
+    # Each new vertex comes from the old one it was extruded from, at the same place
+    for vertex in new_verts:
+        source = min((e.other_vert(vertex) for e in vertex.link_edges
+                      if e.other_vert(vertex).index < len(distance)),
+                     key=lambda v: (v.co - vertex.co).length, default=None)
+        if source is None:
+            continue
+        i = source.index
+        vertex.co = vertex.co - Vector(normals[i]) * (lifts[i] * RIM)
+    for face in rim_faces:
+        face.normal_update()
+        middle = face.calc_center_median()
+        # Away from the opening: along the way the distance grows, which the rim's top edge's
+        # vertices show against the flap's faces behind them
+        inner = [f for e in face.edges for f in e.link_faces if f is not face]
+        if inner:
+            behind = sum((f.calc_center_median() for f in inner), Vector()) / len(inner)
+            if face.normal.dot(middle - behind) < 0:
+                face.normal_flip()
+    mesh.to_mesh(piece.data)
+    mesh.free()
+    piece.data.update()
 
 
 def _nearest_indices(points, targets):
