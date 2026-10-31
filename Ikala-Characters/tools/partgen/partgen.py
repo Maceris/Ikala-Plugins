@@ -1009,12 +1009,14 @@ def fit_body_part(config, batch, brief):
     """Fit a body part's mesh to the mannequin: line it up and cut it out at its seams
     (blender/fit_body.py), shape it into a solid welded to its welded seams' rings
     (shape_body.py), weight it (weight_body.py) and bake its textures (bake_body.py), all in
-    the brief's fit folder. Gives the reports, or None if a step failed."""
+    the brief's fit folder, then carry it to the female body (variant_body.py). Gives the
+    reports, or None if a step failed."""
     part, rule = body_of(brief)
     folder = batch.brief_folder(brief["id"])
     out = folder / "fit"
     out.mkdir(exist_ok=True)
     body = pathlib.Path(config["mannequin"]).with_suffix(".blend")
+    mannequins = body.parent
     slots = ",".join(part["covers"])
     left_open = ",".join(seam for seam, mode in part["seams"].items() if mode == "open")
     steps = [
@@ -1032,6 +1034,12 @@ def fit_body_part(config, batch, brief):
           "--painted", painted_area(config, brief, out), "--guide",
           guides(config) / "guide.json", "--out", out, "--name", brief["id"],
           "--slots", slots]),
+        ("variant_body.py", "variant.json",
+         ["--baked", out / "baked.glb", "--body", mannequins / "female.blend",
+          "--from-cage", mannequins / ("%s_cage.npz" % GUIDE_VARIANT),
+          "--to-cage", mannequins / "female_cage.npz", "--slots", slots,
+          "--name", brief["id"], "--out", out / ("%s_female.glb" % brief["id"]),
+          "--preview", out] + (["--open", left_open] if left_open else [])),
     ]
     reports = {}
     for script, report, arguments in steps:

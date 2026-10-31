@@ -148,31 +148,14 @@ def limited(weights):
     return out / np.maximum(out.sum(1, keepdims=True), 1e-12)
 
 
-def main():
-    argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--shaped", required=True)
-    parser.add_argument("--out", required=True)
-    parser.add_argument("--slots", required=True, help="Comma-separated slots the part fills.")
-    args = parser.parse_args(argv)
-    os.makedirs(args.out, exist_ok=True)
-    names = [s for s in args.slots.split(",") if s]
-
-    bpy.ops.wm.open_mainfile(filepath=os.path.abspath(args.shaped))
-    armature = next(o for o in bpy.data.objects if o.type == "ARMATURE")
-    armature.animation_data_clear()
-    armature.data.pose_position = "REST"
-    pose(armature, {})
-    bpy.context.view_layer.update()
+def skin_part(part, slot_objects, armature, own):
+    """Give a part the weights of the slot meshes it replaces (see the module's comment), its
+    ring vertices (in SEAM_GROUP) keeping theirs, and skin it to the armature; own are the slots'
+    bones, for pieces with no weights. Gives which vertices are the ring's, how many took their
+    weights from the skin or the ring, and which took their nearest bone."""
     segments = bone_segments(armature)
-    part = bpy.data.objects["part"]
-    caps = [o for o in bpy.data.objects if o.name.startswith("part" + CAP_INFIX)]
-    slots = plan_slots()
-    slot_objects = [bpy.data.objects[PREFIX + n] for n in names]
     bones = sorted({g.name for o in slot_objects for g in o.vertex_groups}
                    | {g.name for g in part.vertex_groups if g.name != SEAM_GROUP})
-    own = [b for n in names for b in slots[n]["bones"] if b in segments]
-
     # The ring vertices' weights, already on the part from the weld
     ring = np.zeros(len(part.data.vertices), dtype=bool)
     if SEAM_GROUP in part.vertex_groups:
@@ -217,7 +200,33 @@ def main():
     part.matrix_parent_inverse = armature.matrix_world.inverted()
     if not any(m.type == "ARMATURE" for m in part.modifiers):
         part.modifiers.new("Armature", "ARMATURE").object = armature
+    return ring, taken, empty
 
+
+def main():
+    argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--shaped", required=True)
+    parser.add_argument("--out", required=True)
+    parser.add_argument("--slots", required=True, help="Comma-separated slots the part fills.")
+    args = parser.parse_args(argv)
+    os.makedirs(args.out, exist_ok=True)
+    names = [s for s in args.slots.split(",") if s]
+
+    bpy.ops.wm.open_mainfile(filepath=os.path.abspath(args.shaped))
+    armature = next(o for o in bpy.data.objects if o.type == "ARMATURE")
+    armature.animation_data_clear()
+    armature.data.pose_position = "REST"
+    pose(armature, {})
+    bpy.context.view_layer.update()
+    segments = bone_segments(armature)
+    part = bpy.data.objects["part"]
+    caps = [o for o in bpy.data.objects if o.name.startswith("part" + CAP_INFIX)]
+    slots = plan_slots()
+    slot_objects = [bpy.data.objects[PREFIX + n] for n in names]
+    own = [b for n in names for b in slots[n]["bones"] if b in segments]
+
+    ring, taken, empty = skin_part(part, slot_objects, armature, own)
     # Each part ring vertex's twin on the neighbor across the seam, the same point at rest
     others = [o for o in bpy.data.objects
               if o.type == "MESH" and o.name.startswith(PREFIX) and CAP_INFIX not in o.name
@@ -247,8 +256,8 @@ def main():
         obj.data.materials.append(flat if obj is part or obj in caps else skin)
         obj.hide_render = obj in caps or CAP_INFIX in obj.name or obj in slot_objects
 
-    report = {"vertices": len(weights), "from_skin": taken - int(ring.sum()),
-              "ring": int(ring.sum()), "twins": len(twins), "filled": int((~known).sum()),
+    report = {"vertices": len(ring), "from_skin": taken - int(ring.sum()),
+              "ring": int(ring.sum()), "twins": len(twins), "filled": len(ring) - taken,
               "nearest_bone": int(empty.sum()), "poses": {}}
     armature.data.pose_position = "POSE"
     for k, (label, turns) in enumerate(POSES):
