@@ -22,8 +22,10 @@ can tuck some back in.
         --out <folder> --gap 0.004 --triangles 2000 [--reach 0.012]
         [--simplifier <Ikala-Graphics jar>;<Ikala-Core jar>] [--java java]
 
-writes shaped.glb, pushed.glb (the garment pushed out at full detail, before it is rebuilt, for
-the bake), shape.json and renders preview_6.png and preview_7.png: the garment on the
+writes shaped.glb, pushed.glb (the garment pushed out at full detail, before it is rebuilt,
+only the cloth that started outside the body), rebuilt.glb (rebuilt at full detail, before it
+is reduced; the bake takes normals from both), shape.json and renders preview_6.png and
+preview_7.png: the garment on the
 mannequin from the front and side, in a flat color until it is baked.
 """
 
@@ -102,6 +104,11 @@ EDGE_ROUNDS = 12
 # cloth where TRELLIS's sleeves lay inside the arm. A garment's openings, its neck, cuffs, hems
 # and front, are all longer
 HOLE_PERIMETER = 0.15
+# Cloth that started further inside the body than this, in meters, like TRELLIS's sleeves inside
+# the arms, is left out of pushed.glb: both sides of TRELLIS's sheet were pushed onto the same
+# surface there and interleave, which baked into blotches. The bake takes the rebuilt shell's
+# normals there instead
+CRUMPLE_DEPTH = 0.006
 # Where a garment cut at a seam runs on past it, tucked under the layer beyond, like a shirt's
 # hem inside pants: how near the body it keeps, in meters, inside that layer's own gap
 TUCKED_GAP = 0.001
@@ -482,6 +489,25 @@ def smooth(obj, which):
     mesh.free()
 
 
+def export_outside(obj, start, path):
+    """Export a copy of the garment without the faces of cloth that started deeper inside the
+    body than CRUMPLE_DEPTH, given each vertex's distance outside it before being pushed."""
+    copy = obj.copy()
+    copy.data = obj.data.copy()
+    bpy.context.scene.collection.objects.link(copy)
+    mesh = bmesh.new()
+    mesh.from_mesh(copy.data)
+    deep = start < -CRUMPLE_DEPTH
+    bmesh.ops.delete(mesh, geom=[f for f in mesh.faces if any(deep[v.index] for v in f.verts)],
+                     context="FACES")
+    mesh.to_mesh(copy.data)
+    mesh.free()
+    bpy.ops.object.select_all(action="DESELECT")
+    copy.select_set(True)
+    bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True)
+    bpy.data.meshes.remove(copy.data)
+
+
 def points_of(obj):
     co = np.empty(len(obj.data.vertices) * 3)
     obj.data.vertices.foreach_get("co", co)
@@ -750,12 +776,9 @@ def main():
     _, start = nearest(points_of(garment), surface)
     moved = shape(garment, surface, *tucked_band(points_of(garment), cut, args.gap, args.reach),
                   armature=armature)
-    # The pushed garment at full detail, which the bake takes normals and texture from: it lies
-    # where the rebuilt one does, so bake rays find the right surface
-    bpy.ops.object.select_all(action="DESELECT")
-    garment.select_set(True)
-    bpy.ops.export_scene.gltf(filepath=os.path.join(args.out, "pushed.glb"),
-                              export_format="GLB", use_selection=True)
+    # The pushed garment at full detail, which the bake takes normals from: it lies where the
+    # rebuilt one does, so bake rays find the right surface
+    export_outside(garment, start, os.path.join(args.out, "pushed.glb"))
     rebuilt = rebuild(garment, surface, args.reach, armature)
     recut_faces = 0
     if args.painted and args.guide:
@@ -763,6 +786,14 @@ def main():
             recut_faces = recut(garment, read_mask(args.painted), json.load(file),
                                 armature)
     holes = fill_holes(garment)
+    # The rebuilt garment at full detail, which the bake takes normals from: one clean shell
+    # within millimeters of the reduced one. pushed.glb keeps finer wrinkles, but where
+    # TRELLIS's two-sided sheet lay inside the body both sides were pushed onto the same
+    # surface and interleave there, which baked into blotches
+    bpy.ops.object.select_all(action="DESELECT")
+    garment.select_set(True)
+    bpy.ops.export_scene.gltf(filepath=os.path.join(args.out, "rebuilt.glb"),
+                              export_format="GLB", use_selection=True)
     relaxed = relax_edges(garment)
     triangles = reduce(garment, args.triangles, args.simplifier, args.java)
     shape(garment, surface, *tucked_band(points_of(garment), cut, args.gap, args.reach),

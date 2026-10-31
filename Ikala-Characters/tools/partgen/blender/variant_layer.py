@@ -22,6 +22,7 @@ import json
 import os
 import sys
 
+import bmesh
 import bpy
 import numpy as np
 
@@ -38,6 +39,9 @@ UNTANGLE_RINGS = 2
 # again after pushing (pushing can fold a face too)
 UNTANGLE_ROUNDS = 30
 UNTANGLE_PASSES = 8
+# Faces still folded after that, as pushing folds the same slivers again, are collapsed into
+# their shortest edge if smaller than this, in square meters
+FOLD_AREA = 4e-4
 
 
 def cage(name, data):
@@ -138,6 +142,28 @@ def untangle(obj, start, start_normals):
     return int(folded.sum())
 
 
+def collapse_folds(obj, start_normals):
+    """Collapse the faces still folded over against the start (see untangle) and smaller than
+    FOLD_AREA into their shortest edges, welding the glTF's UV-seam twins first so the seams
+    stay closed. Gives how many were collapsed and how many folded faces are left."""
+    folded = (face_normals(obj) * start_normals).sum(1) < 0
+    small = folded & (np.array([p.area for p in obj.data.polygons]) < FOLD_AREA)
+    if not small.any():
+        return 0, int(folded.sum())
+    mesh = bmesh.new()
+    mesh.from_mesh(obj.data)
+    mesh.faces.ensure_lookup_table()
+    shortest = {min(mesh.faces[i].edges, key=lambda e: e.calc_length())
+                for i in np.flatnonzero(small)}
+    bmesh.ops.remove_doubles(mesh, verts=mesh.verts[:], dist=1e-6)
+    shortest = [e for e in shortest if e.is_valid]
+    bmesh.ops.collapse(mesh, edges=shortest, uvs=True)
+    mesh.to_mesh(obj.data)
+    mesh.free()
+    obj.data.update()
+    return len(shortest), int(folded.sum() - small.sum())
+
+
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -178,7 +204,7 @@ def main():
         pushed = shape(garment, surface, gap, reach, rounds=0, armature=armature)
         if not folded[-1]:
             break
-    left = int(((face_normals(garment) * start_normals).sum(1) < 0).sum())
+    collapsed, left = collapse_folds(garment, start_normals)
     _, after_push = nearest(world_vertices(garment)[0], surface)
 
     source = weight_source(bodies)
@@ -193,6 +219,7 @@ def main():
         "min_gap_mm": round(float(after_push.min()) * 1000, 1),
         "max_gap_mm": round(float(after_push.max()) * 1000, 1),
         "folded_faces": folded,
+        "folds_collapsed": collapsed,
         "folded_left": left,
         "limb_weights_fixed": limb_fixed,
     }

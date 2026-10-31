@@ -189,6 +189,25 @@ def face_out(normal_image):
     return int(reversed_.sum())
 
 
+def fill_normals(normal_image, covered, low, path, size):
+    """Bake normals from the rebuilt garment into the texels the figure didn't cover, where
+    shape_layer.py left out cloth that started inside the body. Gives how many texels took
+    them."""
+    rebuilt = import_figure(path)
+    tree = low.data.materials[0].node_tree
+    active = tree.nodes.active
+    image = hat.new_image(normal_image.name + "_rebuilt", size, "Non-Color", hat.FLAT_NORMAL)
+    node = hat.bake_into("NORMAL", rebuilt, low, tree, image)
+    tree.nodes.remove(node)
+    tree.nodes.active = active
+    pixels = np.array(normal_image.pixels[:]).reshape(-1, 4)
+    pixels[~covered] = np.array(image.pixels[:]).reshape(-1, 4)[~covered]
+    normal_image.pixels.foreach_set(pixels.ravel().astype(np.float32))
+    bpy.data.images.remove(image)
+    bpy.data.objects.remove(rebuilt)
+    return int((~covered).sum())
+
+
 def outer_faces(high, low):
     """Keep only the faces of the figure baked from that face the way the garment does where they
     lie (see SAME_WAY). Gives how many were dropped."""
@@ -245,6 +264,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     for name in ("--weighted", "--figure", "--image", "--painted", "--guide", "--out", "--name"):
         parser.add_argument(name, required=True)
+    parser.add_argument("--rebuilt", help="The rebuilt garment (shape_layer.py's rebuilt.glb), "
+                        "for normals where the figure has none.")
     parser.add_argument("--size", type=int, default=1024)
     args = parser.parse_args(argv)
     out = pathlib.Path(args.out)
@@ -274,6 +295,10 @@ def main():
     high = import_figure(args.figure)
     inner = outer_faces(high, low)
     base_image, covered = hat.bake(high, low, args.name, args.size, bodies)
+    filled = 0
+    if args.rebuilt:
+        filled = fill_normals(bpy.data.images["%s_normal" % args.name], covered, low,
+                              args.rebuilt, args.size)
     reversed_ = face_out(bpy.data.images["%s_normal" % args.name])
     occlusion = cloth_orm(bpy.data.images["%s_orm" % args.name], low, bodies + [high],
                           args.size)
@@ -289,7 +314,7 @@ def main():
     bpy.data.objects.remove(high)
 
     report = {"front_texels": front, "image_texels": replaced, "reversed_normals": reversed_,
-              "inner_faces": inner, "baked_pct": round(float(covered.mean()) * 100, 1),
+              "inner_faces": inner, "rebuilt_normal_texels": filled, "baked_pct": round(float(covered.mean()) * 100, 1),
               "occlusion": round(occlusion, 2), "defaults": defaults, "size": args.size}
     print("[bake_layer]", json.dumps(report))
     with open(out / "bake.json", "w", encoding="utf-8") as file:
