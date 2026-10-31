@@ -855,6 +855,16 @@ def painted_area(config, brief, out):
     return path
 
 
+def shell_slots(brief):
+    """The body slots a garment built from the mannequin's skin is made of (see
+    blender/shell_layer.py): those its layers cover, and the pelvis for tops, which hang past
+    the waist."""
+    slots = list(layer_of(brief)[0]["covers"])
+    if "torso" in slots and "pelvis" not in slots:
+        slots.append("pelvis")
+    return ",".join(slots)
+
+
 def cut_args(rule):
     """shape_layer.py's and variant_layer.py's arguments for a layer's cut (see layers.json)."""
     if "cut" not in rule:
@@ -921,6 +931,21 @@ def fit_layer(config, batch, brief):
         print("Shaping failed for %s; see %s" % (brief["id"], folder / "shape.log"))
         return
     report["shape"] = json.loads((out / "shape.json").read_text(encoding="utf8"))
+    if rule.get("shell"):
+        # The mannequin's skin, cut where the image painted, replaces the reshaped figure
+        shelled = run_blender(
+            config, "shell_layer.py", folder / "shell.log",
+            "--garment", out / "garment.glb", "--body", body, "--out", out,
+            "--painted", painted, "--painted-back", out / "painted_back.png",
+            "--guide", guides(config) / "guide.json", "--slots", shell_slots(brief),
+            "--gap", rule["gap"], "--triangles", rule["triangles"],
+            *(["--reach", rule["reach"]] if "reach" in rule else []),
+            *cut_args(rule), *simplifier_args(config))
+        if not shelled or not (out / "shell.json").exists():
+            print("Building the shell failed for %s; see %s" % (brief["id"],
+                                                               folder / "shell.log"))
+            return
+        report["shell"] = json.loads((out / "shell.json").read_text(encoding="utf8"))
     weighted = run_blender(config, "weight_layer.py", folder / "weights.log",
                            "--garment", out / "shaped.glb", "--body", body, "--out", out,
                            "--bare", ",".join(bare_ends(layer_of(brief)[0])))
@@ -991,12 +1016,21 @@ def write_layer_part(config, batch, brief, out, rule):
                              "--name", name, "--out", target, "--preview", out,
                              "--bare", ",".join(bare_ends(layer_of(brief)[0])),
                              *(["--reach", rule["reach"]] if "reach" in rule else []),
-                             *cut_args(rule)):
+                             *cut_args(rule),
+                             *(["--shell-slots", shell_slots(brief), "--masks",
+                                out / (name + "_masks") / (name + "_emit.png"),
+                                "--triangles", rule["triangles"], *simplifier_args(config)]
+                               if rule.get("shell") else [])):
             print("The female mesh failed for %s; see %s" % (name, folder / "variant.log"))
             return None
         masks = target.with_name(target.stem + "_masks")
         shutil.rmtree(masks, ignore_errors=True)
-        shutil.copytree(out / (name + "_masks"), masks)
+        # A variant built afresh bakes its own mask beside the fit; others share the guide's UVs
+        own = out / masks.name
+        if variant != GUIDE_VARIANT and own.exists():
+            shutil.copytree(own, masks)
+        else:
+            shutil.copytree(out / (name + "_masks"), masks)
         meshes["*" if variant == GUIDE_VARIANT else variant] = "%s#%s" % (glb, name)
     defaults = json.loads((out / "bake.json").read_text(encoding="utf8"))["defaults"]
     layers = layers_of(brief)
