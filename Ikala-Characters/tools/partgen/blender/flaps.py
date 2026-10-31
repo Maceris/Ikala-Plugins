@@ -37,6 +37,8 @@ NOTCH_AT = 0.68
 NOTCH_DEPTH = 0.75
 NOTCH_SPAN = 0.05
 COLLAR_SHARE = 0.55
+# The share of the way up to the notch over which a straightened opening blends back
+STRAIGHT_BLEND = 0.15
 # How far a flap's turned-down outer edge comes back toward the garment, as a share of the lift
 RIM = 0.8
 # How far below the highest open edge the neck opening's top may be, in meters
@@ -55,6 +57,49 @@ def neck_opening(mesh):
     near = [loop for loop in loops if max(v.co.z for e in loop for v in e.verts) > top - NECK_REACH]
     best = max(near, key=lambda loop: sum(e.calc_length() for e in loop))
     return {v for e in best for v in e.verts}
+
+
+def straighten(mesh, opening):
+    """Straighten a front opening's sides, from its lowest point up to the notch (see NOTCH_AT),
+    as seen from the front: the image's outline wobbles there, and the lapels, which follow the
+    opening, came out lumpy. Each vertex moves across, at its height, onto the line from the
+    lowest point to the side's vertex nearest the notch, blended back to where it was over the
+    top STRAIGHT_BLEND of the way."""
+    verts = list(opening)
+    heights = np.array([v.co.z for v in verts])
+    low, high = heights.min(), heights.max()
+    bottom = verts[int(heights.argmin())].co.copy()
+    notch = low + NOTCH_AT * (high - low)
+    for side in (1, -1):
+        own = [v for v in verts if side * (v.co.x - bottom.x) > 0 and v.co.z <= notch]
+        if len(own) < 3:
+            continue
+        top = min(own, key=lambda v: abs(v.co.z - notch)).co.copy()
+        if top.z - bottom.z < 1e-3:
+            continue
+        for vertex in own:
+            share = (vertex.co.z - bottom.z) / (top.z - bottom.z)
+            line_x = bottom.x + share * (top.x - bottom.x)
+            keep = np.clip((share - (1 - STRAIGHT_BLEND)) / STRAIGHT_BLEND, 0, 1)
+            vertex.co.x = line_x * (1 - keep) + vertex.co.x * keep
+
+
+def opening_distances(mesh, opening):
+    """Each vertex's straight-line distance from the opening's open edges. Measured along the
+    mesh's edges instead, it zigzagged across the faces, and the flap's edge came out lumpy."""
+    edges = [e for e in mesh.edges if e.is_boundary and all(v in opening for v in e.verts)]
+    starts = np.array([e.verts[0].co[:] for e in edges])
+    ends = np.array([e.verts[1].co[:] for e in edges])
+    points = np.array([v.co[:] for v in mesh.verts])
+    span = ends - starts
+    length = np.maximum((span * span).sum(1), 1e-12)
+    best = np.full(len(points), np.inf)
+    for chunk in range(0, len(points), 512):
+        p = points[chunk:chunk + 512, None, :]
+        share = np.clip(((p - starts) * span).sum(2) / length, 0, 1)
+        nearest = starts + share[..., None] * span
+        best[chunk:chunk + 512] = np.sqrt(((p - nearest) ** 2).sum(2)).min(1)
+    return best
 
 
 def surface_distances(mesh, sources, limit):
@@ -107,14 +152,18 @@ def add_flap(obj, width, lift, at="neck"):
     if not opening:
         mesh.free()
         return 0
+    if at == "neck":
+        straighten(mesh, opening)
+        mesh.to_mesh(obj.data)
+        obj.data.update()
     heights = np.array([v.co.z for v in opening])
     low, high = heights.min(), heights.max()
-    distance = surface_distances(mesh, opening, width * 1.5)
+    distance = opening_distances(mesh, opening)
     z = np.array([v.co.z for v in mesh.verts])
     if at == "neck":
         t = (z - low) / max(high - low, 1e-6)
+        # Straight, as a lapel's edge runs from the top button
         ramp = np.clip(t / TAPER, 0, 1)
-        ramp = ramp * ramp * (3 - 2 * ramp)
         notch = 1 - NOTCH_DEPTH * np.exp(-((t - NOTCH_AT) / NOTCH_SPAN) ** 2)
         collar = np.where(t > NOTCH_AT, COLLAR_SHARE, 1.0)
         widths = width * ramp * np.minimum(notch, np.maximum(collar, notch * (t <= NOTCH_AT)))
