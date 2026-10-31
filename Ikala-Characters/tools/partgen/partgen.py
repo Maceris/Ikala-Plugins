@@ -993,6 +993,42 @@ def write_layer_part(config, batch, brief, out, rule):
     return part_id
 
 
+def fit_body_part(config, batch, brief):
+    """Fit a body part's mesh to the mannequin: line it up and cut it out at its seams
+    (blender/fit_body.py), shape it into a solid welded to its welded seams' rings
+    (shape_body.py) and weight it (weight_body.py), all in the brief's fit folder. Gives the
+    reports, or None if a step failed."""
+    part, rule = body_of(brief)
+    folder = batch.brief_folder(brief["id"])
+    out = folder / "fit"
+    out.mkdir(exist_ok=True)
+    body = pathlib.Path(config["mannequin"]).with_suffix(".blend")
+    slots = ",".join(part["covers"])
+    left_open = ",".join(seam for seam, mode in part["seams"].items() if mode == "open")
+    steps = [
+        ("fit_body.py", "fit.json",
+         ["--mesh", folder / brief["mesh"]["file"], "--body", body, "--out", out,
+          "--slots", slots]),
+        ("shape_body.py", "shape.json",
+         ["--part", out / "part.glb", "--body", body, "--out", out, "--slots", slots,
+          "--triangles", rule["triangles"]] + (["--open", left_open] if left_open else [])),
+        ("weight_body.py", "weights.json",
+         ["--shaped", out / "shaped.blend", "--out", out, "--slots", slots]),
+    ]
+    reports = {}
+    for script, report, arguments in steps:
+        log = folder / (pathlib.Path(script).stem + ".log")
+        if not run_blender(config, script, log, *arguments) or not (out / report).exists():
+            print("%s failed for %s; see %s" % (script, brief["id"], log))
+            return None
+        reports[pathlib.Path(report).stem] = json.loads((out / report).read_text(encoding="utf8"))
+    gaps = [p["seam_gap_mm"] for p in reports["weights"]["poses"].values()]
+    print("body %s: %d triangles, welded %s, open %s, seams move at most %.3f mm in poses"
+          % (brief["id"], reports["shape"]["triangles"], reports["shape"]["welded"] or "none",
+             reports["shape"]["open"] or "none", max(gaps, default=0)))
+    return reports
+
+
 def command_fit(config, batch, args):
     briefs = ready(batch.load(), args, lambda b: b["mesh"] is not None and kept(b, "mesh", args)
                    and (args.redo or b["part"] is None))
@@ -1001,7 +1037,9 @@ def command_fit(config, batch, args):
             fit_layer(config, batch, brief)
             continue
         if brief["kind"] == "body":
-            print("Fitting body parts is not built yet (M5 B2); %s keeps its mesh" % brief["id"])
+            if fit_body_part(config, batch, brief) is not None:
+                print("%s is fitted in %s; its texture and part file come in M5 B7-B9"
+                      % (brief["id"], batch.brief_folder(brief["id"]) / "fit"))
             continue
         folder = batch.brief_folder(brief["id"])
         socket, rule = socket_of(brief)
