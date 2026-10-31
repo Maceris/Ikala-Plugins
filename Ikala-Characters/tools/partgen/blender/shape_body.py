@@ -17,8 +17,9 @@ seam open:
     blender -b --python shape_body.py -- --part <part.glb> --body <male.blend> --out <folder>
         --slots lowerArm.L --triangles 1500 [--open wrist.L,elbow.L]
 
-writes shaped.glb (the part and its caps, unskinned, the ring vertices in a "seam" vertex group
-with the ring's weights), shape.json and renders preview_4.png and preview_5.png: the part on the
+writes shaped.glb (the part and its caps, unskinned), shaped.blend (the mannequin with the part
+and its caps, the ring vertices in a "seam" vertex group with the ring's weights, for
+weight_body.py), shape.json and renders preview_4.png and preview_5.png: the part on the
 mannequin from the front and side.
 """
 
@@ -351,6 +352,8 @@ def main():
         obj.select_set(True)
     bpy.ops.export_scene.gltf(filepath=os.path.join(args.out, "shaped.glb"),
                               export_format="GLB", use_selection=True)
+    # glTF keeps vertex groups only on skinned meshes, so the ring's weights go on in a .blend
+    bpy.ops.wm.save_as_mainfile(filepath=os.path.join(args.out, "shaped.blend"))
     flat = bpy.data.materials.new("part")
     flat.diffuse_color = PART_COLOR
     skin = bpy.data.materials.new("body")
