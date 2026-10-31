@@ -931,6 +931,7 @@ def fit_layer(config, batch, brief):
     image = folder / "images" / ("%d.png" % brief["review"]["pick"])
     baked = run_blender(config, "bake_layer.py", folder / "bake.log",
                         "--weighted", out / "weighted.blend", "--figure", out / "pushed.glb",
+                        "--rebuilt", out / "rebuilt.glb",
                         "--image", image, "--painted", painted,
                         "--guide", guides(config) / "guide.json", "--out", out,
                         "--name", brief["id"])
