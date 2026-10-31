@@ -1,0 +1,23 @@
+[
+  {"id": "mech_forearm", "kind": "body", "slots": ["lowerArm.L", "hand.L"],
+   "seams": {"elbow.L": "weld"},
+   "description": "a mechanical prosthetic of brushed steel plates, black rubber joints and exposed brass pistons, with a jointed robotic hand",
+   "tags": ["mechanical", "prosthetic"]},
+  {"id": "skeleton_arm", "kind": "body", "slots": ["upperArm.L", "lowerArm.L", "hand.L"],
+   "seams": {"shoulder.L": "open"},
+   "description": "a bare skeleton arm of old yellowed bone, with thin finger bones",
+   "tags": ["undead", "skeleton"]},
+  {"id": "clawed_hand", "kind": "body", "slots": ["hand.L"],
+   "description": "a clawed beast hand with long curved black claws and thick knuckles",
+   "tags": ["beast", "claws"]},
+  {"id": "hooved_leg", "kind": "body", "slots": ["lowerLeg.L", "foot.L"],
+   "description": "a goat leg covered in short brown fur, ending in a large black cloven hoof instead of a foot",
+   "tags": ["beast", "hoof"]},
+  {"id": "plated_shin", "kind": "body", "slots": ["lowerLeg.L"],
+   "description": "covered in overlapping dark gray scale plates like armored reptile hide",
+   "tags": ["beast", "scales"]},
+  {"id": "robot_leg", "kind": "body", "slots": ["upperLeg.L", "lowerLeg.L", "foot.L"],
+   "seams": {"hip.L": "open"},
+   "description": "a robot leg of white enameled armor panels and dark gray hydraulic joints, with a flat metal foot",
+   "tags": ["mechanical", "robot"]}
+]

@@ -44,6 +44,19 @@ background, any color; "sketchStrength" (default 0.7) is how hard, and "sketchEn
 the share of the steps it steers. Too strong and the image traces the drawing's lines instead of
 making a real object of them.
 
+A body part, like an alternative limb, names the body plan slots it fills instead, neighbors on
+the left side (the right side is the left's mirror, by the slots' "mirrorOf"):
+
+    {"id": "skeleton_arm", "kind": "body", "slots": ["upperArm.L", "lowerArm.L", "hand.L"],
+     "seams": {"shoulder.L": "open"},
+     "description": "a bare skeleton arm of old yellowed bone"}
+
+"seams" says, for each of its outer seams (those of its slots that no other of its slots shares),
+whether it welds to the mannequin's ring there ("weld", the default) or ends in its own closed
+shape ("open", for skeletal or mechanical ends), where the welded neighbor shows a cap. Its images
+are painted only over its slots, grown by the rule in bodyparts.json for its group of slots but
+never past an outer seam's line, so the neighboring body stays the mannequin's.
+
 Accessories can be fitted on head_top sockets so far. Clothing is lined up on the mannequin, cut
 out of its figure, shaped over the body, weighted to the rig, baked, carried over to the female
 body, and written as a layer part. Run it with any Python that has Pillow, such as TRELLIS.2's.
@@ -102,6 +115,17 @@ BARE_SLOTS = ("head", "hand.L", "hand.R", "foot.L", "foot.R")
 # This computer's folders, not committed, and the template for it
 CONFIG = "config.json"
 CONFIG_EXAMPLE = "config.example.json"
+# The seam rings of the mannequin the guides are rendered from, beside its glb
+SEAMS = "%s_seams.json"
+# The side body parts are generated on, as their slot names end; the other side is its mirror
+BODY_SIDE = ".L"
+# Body parts fill a small share of the image, so the style doesn't call the figure a mannequin:
+# asked for loudly, the gray body wins over the part, which comes out as plain gray limb
+BODY_STYLE = ("full body 3D render of a figure standing straight in an A pose, arms out and "
+              "down, seen from the front, {subject}, plain white background, soft even studio "
+              "light, clean readable shapes, distinct flat material colors, PBR")
+BODY_NEGATIVE = ("clothing, sleeve, glove, shoe, extra limbs, extra arms, extra fingers, "
+                 + LAYER_NEGATIVE)
 # Each leg's slots, which a layer with "legGap" keeps the gap between
 LEG_SLOTS = (("upperLeg.L", "lowerLeg.L", "foot.L"), ("upperLeg.R", "lowerLeg.R", "foot.R"))
 
@@ -215,13 +239,75 @@ def layer_of(brief):
     return outfit, dict(rule, **brief.get("fit", {}))
 
 
+def outer_seams(slots):
+    """The seams of the given body plan slots that only one of them has: where a part filling
+    them meets the rest of the body."""
+    seams = [seam for slot in slots for seam in slot["seams"]]
+    return [seam for seam in dict.fromkeys(seams) if seams.count(seam) == 1]
+
+
+def body_of(brief):
+    """Where the brief's body part goes, as the slots it fills with the modes of its outer seams
+    and the slots its images must leave alone, and its rule from bodyparts.json, picked by its
+    slots' names without the side."""
+    plan = load_json_with_comments(PLAN)
+    named = brief.get("slots")
+    if not named or not isinstance(named, list):
+        raise SystemExit("A body brief lists the body plan \"slots\" it fills: " + brief["id"])
+    slots = []
+    for slot_id in named:
+        slot = next((s for s in plan["slots"] if s["id"] == slot_id), None)
+        if slot is None:
+            raise SystemExit("The biped has no slot %s (in %s); its slots are %s"
+                             % (slot_id, brief["id"], ", ".join(s["id"] for s in plan["slots"])))
+        if not slot_id.endswith(BODY_SIDE):
+            raise SystemExit("%s fills %s: body parts are generated on the left side only, and "
+                             "the right side is mirrored from it through the slots' mirrorOf, so "
+                             "brief %s instead" % (brief["id"], slot_id,
+                                                   slot.get("mirrorOf", "the left side")))
+        if slot in slots:
+            raise SystemExit("%s lists the slot %s twice" % (brief["id"], slot_id))
+        slots.append(slot)
+    # The slots must hang together, each reached from the first through seams they share
+    joined = [slots[0]]
+    for slot in joined:
+        joined += [s for s in slots if s not in joined and set(s["seams"]) & set(slot["seams"])]
+    if len(joined) < len(slots):
+        raise SystemExit("The slots of %s aren't neighbors: %s shares no seam with %s"
+                         % (brief["id"], ", ".join(s["id"] for s in slots if s not in joined),
+                            ", ".join(s["id"] for s in joined)))
+    outer = outer_seams(slots)
+    seams = {seam: "weld" for seam in outer}
+    for seam, mode in brief.get("seams", {}).items():
+        if seam not in outer:
+            raise SystemExit("%s can't say how its seam %s joins: its outer seams are %s"
+                             % (brief["id"], seam, ", ".join(outer)))
+        if mode not in ("weld", "open"):
+            raise SystemExit("The seam %s of %s is \"weld\" or \"open\", not %s"
+                             % (seam, brief["id"], json.dumps(mode)))
+        seams[seam] = mode
+    rules = json.loads((TOOLS / "bodyparts.json").read_text(encoding="utf8"))
+    rules.pop("_comment", None)
+    sideless = sorted(slot_id[:-len(BODY_SIDE)] for slot_id in named)
+    group = next((name for name, rule in rules.items() if sorted(rule["slots"]) == sideless), None)
+    if group is None:
+        raise SystemExit("No body part rule fills %s yet (in %s); the rules fill %s"
+                         % (" + ".join(sideless), brief["id"],
+                            "; ".join(" + ".join(r["slots"]) for r in rules.values())))
+    part = {"id": "body_" + brief["id"], "group": group, "covers": named, "seams": seams,
+            "keepsOut": [s["id"] for s in plan["slots"] if s["id"] not in named]}
+    return part, dict(rules[group], **brief.get("fit", {}))
+
+
 def rule_of(brief):
     """Where the brief's part goes, and its rule, by its kind."""
     if brief["kind"] == "accessory":
         return socket_of(brief)
     if brief["kind"] == "layer":
         return layer_of(brief)
-    raise SystemExit("Briefs are accessories or layers, not " + brief["kind"])
+    if brief["kind"] == "body":
+        return body_of(brief)
+    raise SystemExit("Briefs are accessories, layers or body parts, not " + brief["kind"])
 
 
 class Batch:
@@ -472,9 +558,46 @@ def leg_gap(folder, guide):
     return gap
 
 
+def beyond_seams(config, folder, guide, part):
+    """What lies beyond a body part's outer seams in the guide's render, as a boolean array of its
+    pixels: for each seam, the half of the image on the far side of its ring's line from the
+    part's slot there. The rings are loops in Blender space, nearly flat, so each is seen from the
+    front as a line: the one through its middle along its plane, whose normal is the direction
+    the loop spreads least in."""
+    from PIL import Image
+    import numpy as np
+    rings = json.loads((pathlib.Path(config["mannequin"]).parent / (SEAMS % GUIDE_VARIANT))
+                       .read_text(encoding="utf8"))["seams"]
+    size, view, middle = guide["size"], guide["view"], guide["middleHeight"]
+    slots = np.asarray(Image.open(folder / "slots.png").getchannel("R"))
+    rows, columns = np.mgrid[0:slots.shape[0], 0:slots.shape[1]]
+    # Pixel centers in Blender's x and z, after guide.json's "pixel"
+    x = ((columns + 0.5) / size - 0.5) * view
+    z = middle - ((rows + 0.5) / size - 0.5) * view
+    beyond = np.zeros(slots.shape, dtype=bool)
+    plan = load_json_with_comments(PLAN)
+    for seam in part["seams"]:
+        if seam not in rings:
+            raise SystemExit("The mannequin has no ring for the seam " + seam)
+        ring = np.array(rings[seam], dtype=float)
+        center = ring.mean(0)
+        normal = np.linalg.svd(ring - center)[2][2]
+        line = np.array([normal[0], normal[2]])
+        if np.linalg.norm(line) < 0.1:
+            raise SystemExit("The ring of %s faces the camera, so it has no line to stop at"
+                             % seam)
+        line /= np.linalg.norm(line)
+        side = (x - center[0]) * line[0] + (z - center[2]) * line[1]
+        slot = next(s["id"] for s in plan["slots"]
+                    if s["id"] in part["covers"] and seam in s["seams"])
+        own = slots == guide["slots"].index(slot) + 1
+        beyond |= (side < 0) if side[own].mean() > 0 else (side > 0)
+    return beyond
+
+
 def guide_inputs(config, layer, rule):
-    """The images that paint a layer's clothing, in ComfyUI's input folder: the mannequin's
-    render, its depth, and a mask of where the layer may paint. Gives their names there."""
+    """The images that paint a layer's clothing or a body part, in ComfyUI's input folder: the
+    mannequin's render, its depth, and a mask of where it may paint. Gives their names there."""
     from PIL import Image, ImageChops, ImageFilter
     folder = guides(config)
     guide = json.loads((folder / "guide.json").read_text(encoding="utf8"))
@@ -493,11 +616,16 @@ def guide_inputs(config, layer, rule):
     for step in range(rule.get("maskDown", 0) // 8):
         hang = ImageChops.lighter(hang, ImageChops.offset(mask, 0, (step + 1) * 8))
     # Growing never reaches the head, hands or feet unless the layer covers them; repainted,
-    # they would differ from the render and be taken for clothing
-    kept_bare = {guide["slots"].index(slot) + 1 for slot in BARE_SLOTS
+    # they would differ from the render and be taken for clothing. A body part leaves all the
+    # rest of the body alone
+    kept_bare = {guide["slots"].index(slot) + 1 for slot in layer.get("keepsOut", BARE_SLOTS)
                  if slot in guide["slots"] and slot not in layer["covers"]}
     bare = slots.point(lambda v: 255 if v in kept_bare else 0)
     hang = ImageChops.subtract(hang, bare)
+    # Nor does it reach past its outer seams, so the body it joins there stays the mannequin's
+    if layer.get("seams"):
+        beyond = beyond_seams(config, folder, guide, layer)
+        hang = ImageChops.subtract(hang, Image.fromarray(beyond.astype("uint8") * 255))
     if rule.get("legGap"):
         gap = Image.fromarray(leg_gap(folder, guide).astype("uint8") * 255)
         hang = ImageChops.subtract(hang, gap)
@@ -509,7 +637,8 @@ def guide_inputs(config, layer, rule):
 def prompt_for(brief):
     where, rule = rule_of(brief)
     subject = rule["prompt"].format(description=brief["description"])
-    return (LAYER_STYLE if brief["kind"] == "layer" else STYLE).format(subject=subject)
+    style = {"layer": LAYER_STYLE, "body": BODY_STYLE}.get(brief["kind"], STYLE)
+    return style.format(subject=subject)
 
 
 def command_new(config, batch, args):
@@ -551,15 +680,17 @@ def command_images(config, batch, args):
     with Comfy(config) as comfy:
         for brief in briefs:
             prompt = prompt_for(brief)
-            negative = LAYER_NEGATIVE if brief["kind"] == "layer" else NEGATIVE
+            negative = {"layer": LAYER_NEGATIVE, "body": BODY_NEGATIVE}.get(brief["kind"],
+                                                                            NEGATIVE)
             folder = batch.brief_folder(brief["id"]) / "images"
             folder.mkdir(exist_ok=True)
             start = max(brief["images"], default=FIRST_SEED - 1) + 1
             seeds = list(range(start, start + args.count))
-            # Clothing follows the mannequin's guide; anything may follow a sketch instead
+            # Clothing and body parts follow the mannequin's guide; accessories may follow a
+            # sketch instead
             control, mode, strength, end, painted = None, None, None, None, None
-            if brief["kind"] == "layer":
-                layer, rule = layer_of(brief)
+            if brief["kind"] in ("layer", "body"):
+                layer, rule = rule_of(brief)
                 painted = guide_inputs(config, layer, rule)
                 control, mode = painted[GUIDE_MAP], GUIDE_MODE
                 strength, end = rule["guideStrength"], rule["guideEnd"]
@@ -868,6 +999,9 @@ def command_fit(config, batch, args):
     for brief in briefs:
         if brief["kind"] == "layer":
             fit_layer(config, batch, brief)
+            continue
+        if brief["kind"] == "body":
+            print("Fitting body parts is not built yet (M5 B2); %s keeps its mesh" % brief["id"])
             continue
         folder = batch.brief_folder(brief["id"])
         socket, rule = socket_of(brief)

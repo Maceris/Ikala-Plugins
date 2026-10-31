@@ -97,6 +97,38 @@ Renders of a mesh from the front, a front corner and the back:
 blender -b --factory-startup --python blender/render_meshes.py -- <work>/scratch/chest/chest.glb <work>/scratch/chest/views
 ```
 
+## Generated body parts
+
+partgen briefs can also ask for body parts that replace the mannequin's, like a
+mechanical forearm, a skeleton arm or a hooved leg (`tools/partgen/briefs/limbs_1.json`
+has a few). A body brief has `"kind": "body"` and lists the body plan `slots` it
+fills, which must be neighbors, such as `["upperArm.L", "lowerArm.L", "hand.L"]`
+for a whole arm or `["hand.L"]` for a hand. Only the left side is briefed; the
+right side will be its mirror, through the slots' `mirrorOf`.
+
+Its outer seams, those of its slots that no other slot in the brief shares, either
+weld to the mannequin's seam ring (the default) or are `open`, for a skeletal or
+mechanical end that closes on its own; the welded neighbor then shows a cap:
+
+```json
+{"id": "skeleton_arm", "kind": "body", "slots": ["upperArm.L", "lowerArm.L", "hand.L"],
+ "seams": {"shoulder.L": "open"}, "description": "a bare skeleton arm of old yellowed bone"}
+```
+
+`tools/partgen/bodyparts.json` has the rules for each group of slots (arm,
+forearm and hand, forearm, hand, leg, lower leg and foot, shin, foot): the prompt,
+how hard the mannequin's depth steers, how far the mask grows and the triangle
+budget; a brief's `fit` replaces any of them. The images are painted over the
+mannequin's render only inside the brief's slots, grown outward but kept off the
+rest of the body and cut at the line of each outer seam's ring (from
+`<variant>_seams.json` beside the mannequin), so the body the part joins stays as
+it is. Images and meshes work as for clothing; fitting body parts isn't built yet.
+
+```
+python partgen.py new limbs_1 briefs/limbs_1.json --keep
+python partgen.py images limbs_1 --all --count 2
+```
+
 ## Previewing characters
 
 In the editor, with a 3D scene open, `character show <file.glb> [clip]` reads a
