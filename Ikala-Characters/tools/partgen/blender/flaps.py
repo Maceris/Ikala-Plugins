@@ -39,6 +39,10 @@ NOTCH_SPAN = 0.05
 COLLAR_SHARE = 0.55
 # The share of the way up to the notch over which a straightened opening blends back
 STRAIGHT_BLEND = 0.15
+# How many times the flap's faces are split before it is cut, and how near the opening a vertex
+# is on the fold, in meters
+CUT_SPLITS = 1
+FOLD = 1e-4
 # How far a flap's turned-down outer edge comes back toward the garment, as a share of the lift
 RIM = 0.8
 # How far below the highest open edge the neck opening's top may be, in meters
@@ -84,13 +88,17 @@ def straighten(mesh, opening):
             vertex.co.x = line_x * (1 - keep) + vertex.co.x * keep
 
 
-def opening_distances(mesh, opening):
-    """Each vertex's straight-line distance from the opening's open edges. Measured along the
-    mesh's edges instead, it zigzagged across the faces, and the flap's edge came out lumpy."""
+def opening_segments(mesh, opening):
+    """The opening's open edges, as arrays of their start and end points."""
     edges = [e for e in mesh.edges if e.is_boundary and all(v in opening for v in e.verts)]
-    starts = np.array([e.verts[0].co[:] for e in edges])
-    ends = np.array([e.verts[1].co[:] for e in edges])
-    points = np.array([v.co[:] for v in mesh.verts])
+    return (np.array([e.verts[0].co[:] for e in edges]),
+            np.array([e.verts[1].co[:] for e in edges]))
+
+
+def opening_distances(points, segments):
+    """Each point's straight-line distance from the opening's open edges. Measured along the
+    mesh's edges instead, it zigzagged across the faces, and the flap's edge came out lumpy."""
+    starts, ends = segments
     span = ends - starts
     length = np.maximum((span * span).sum(1), 1e-12)
     best = np.full(len(points), np.inf)
@@ -158,17 +166,18 @@ def add_flap(obj, width, lift, at="neck"):
         obj.data.update()
     heights = np.array([v.co.z for v in opening])
     low, high = heights.min(), heights.max()
-    distance = opening_distances(mesh, opening)
-    z = np.array([v.co.z for v in mesh.verts])
-    if at == "neck":
+    segments = opening_segments(mesh, opening)
+    distance = opening_distances(np.array([v.co[:] for v in mesh.verts]), segments)
+
+    def widths_at(z):
+        if at != "neck":
+            return np.full(len(z), width)
         t = (z - low) / max(high - low, 1e-6)
         # Straight, as a lapel's edge runs from the top button
         ramp = np.clip(t / TAPER, 0, 1)
         notch = 1 - NOTCH_DEPTH * np.exp(-((t - NOTCH_AT) / NOTCH_SPAN) ** 2)
         collar = np.where(t > NOTCH_AT, COLLAR_SHARE, 1.0)
-        widths = width * ramp * np.minimum(notch, np.maximum(collar, notch * (t <= NOTCH_AT)))
-    else:
-        widths = np.full(len(z), width)
+        return width * ramp * np.minimum(notch, np.maximum(collar, notch * (t <= NOTCH_AT)))
     # The faces a flap could cover, copied into a mesh of their own
     region = [f for f in mesh.faces if all(distance[v.index] <= width * 1.2 for v in f.verts)]
     if not region:
@@ -181,9 +190,12 @@ def add_flap(obj, width, lift, at="neck"):
             if vertex.index not in copies:
                 copies[vertex.index] = flap.verts.new(vertex.co)
         flap.faces.new([copies[v.index] for v in face.verts])
-    flap.verts.index_update()
-    order = sorted(copies, key=lambda i: copies[i].index)
-    normals = np.array([mesh.verts[i].normal[:] for i in order])
+    # Finer faces for the cut to run through, so its line is smooth; the fold's edges stay
+    # whole, to weld to the garment's
+    source = {v: i for i, v in copies.items()}
+    inner = [e for e in flap.edges if not all(distance[source[v]] < FOLD for v in e.verts)]
+    bmesh.ops.subdivide_edges(flap, edges=inner, cuts=CUT_SPLITS, use_grid_fill=True)
+    bmesh.ops.triangulate(flap, faces=flap.faces[:])
     mesh.free()
 
     data = bpy.data.meshes.new("flap")
@@ -192,8 +204,9 @@ def add_flap(obj, width, lift, at="neck"):
     piece = bpy.data.objects.new("flap", data)
     bpy.context.scene.collection.objects.link(piece)
     # Kept where the distance from the opening is under the width, cut where it crosses
-    d = distance[order]
-    w = widths[order]
+    points = shaping.points_of(piece)
+    d = opening_distances(points, segments)
+    w = widths_at(points[:, 2])
     field = 0.5 + (w - d) / max(2 * width, 1e-6)
     field[w <= 0] = 0.0
     # The cut splits edges; the lift needs each vertex's distance and normal after it, so the
@@ -202,7 +215,7 @@ def add_flap(obj, width, lift, at="neck"):
     shaping.drop_crumbs(piece)
     points = shaping.points_of(piece)
     near = _nearest_indices(points, np.array([v.co[:] for v in obj.data.vertices]))
-    after_d = distance[near]
+    after_d = opening_distances(points, segments)
     after_n = np.array([obj.data.vertices[i].normal[:] for i in near])
     rise = np.clip(after_d / max(RISE * width, 1e-6), 0, 1)
     rise = rise * rise * (3 - 2 * rise)
