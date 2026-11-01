@@ -46,6 +46,7 @@ import com.ikalagaming.graphics.gui.data.Viewport;
 import com.ikalagaming.graphics.gui.enums.Condition;
 import com.ikalagaming.graphics.gui.enums.MouseButton;
 import com.ikalagaming.graphics.gui.flags.ColorEditFlags;
+import com.ikalagaming.graphics.gui.flags.HoveredFlags;
 import com.ikalagaming.graphics.gui.flags.SelectableFlags;
 import com.ikalagaming.graphics.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.scene.Camera;
@@ -203,6 +204,9 @@ public final class CharacterEditor {
     /** What an empty slot's dropdown says. */
     private static final String EMPTY_LABEL = "none";
 
+    /** The Costume tab's checkbox for putting pairs, like both claws, on together. */
+    private static final String BOTH_SIDES_LABEL = "Both sides##both-sides";
+
     /** How far the mouse must move with a button down to drag, in pixels. */
     private static final float DRAG_SLOP = 2;
 
@@ -317,6 +321,7 @@ public final class CharacterEditor {
      *     it first.
      * @param regions What the layers cover.
      * @param optionIds For each slot, the part each of its options is.
+     * @param optionParts For each slot, the definition of the part each of its options is.
      * @param fills For each slot, the places each of its options fills.
      * @param channels For each of the character's parts, the palette channel each tint mask channel
      *     takes, as a position in the plan's channels.
@@ -329,6 +334,7 @@ public final class CharacterEditor {
             PartSlots slots,
             PartRegions regions,
             List<List<Id>> optionIds,
+            List<List<Part>> optionParts,
             List<List<Set<String>>> fills,
             List<int[]> channels,
             List<String> channelNames) {
@@ -377,6 +383,7 @@ public final class CharacterEditor {
             plan.sockets().forEach(socket -> places.add(socket.id()));
             List<PartSlots.Slot> slots = new ArrayList<>();
             List<List<Id>> optionIds = new ArrayList<>();
+            List<List<Part>> optionParts = new ArrayList<>();
             List<List<Set<String>>> fills = new ArrayList<>();
             for (String place : places) {
                 Part.PartKind wanted =
@@ -388,6 +395,7 @@ public final class CharacterEditor {
                 List<List<Integer>> options = new ArrayList<>();
                 List<String> labels = new ArrayList<>();
                 List<Id> ids = new ArrayList<>();
+                List<Part> defined = new ArrayList<>();
                 List<Set<String>> optionFills = new ArrayList<>();
                 for (Part part :
                         candidates.stream().sorted(Comparator.comparing(Part::id)).toList()) {
@@ -400,6 +408,7 @@ public final class CharacterEditor {
                     options.add(meshes);
                     labels.add(label(part.id()));
                     ids.add(part.id());
+                    defined.add(part);
                     optionFills.add(Set.copyOf(part.fills()));
                 }
                 if (options.isEmpty()) {
@@ -410,6 +419,7 @@ public final class CharacterEditor {
                 boolean optional = wanted != Part.PartKind.BODY;
                 slots.add(new PartSlots.Slot(place, options, labels, optional, initial));
                 optionIds.add(ids);
+                optionParts.add(defined);
                 fills.add(optionFills);
             }
 
@@ -449,6 +459,7 @@ public final class CharacterEditor {
                     new PartSlots(slots),
                     regions,
                     optionIds,
+                    optionParts,
                     fills,
                     assembled.channels(),
                     used.stream().map(all::get).toList());
@@ -831,7 +842,13 @@ public final class CharacterEditor {
         List<Slider> found = findSliders(plan);
         look =
                 new CharacterLook(
-                        slots, found, plan.variants(), built.channelNames(), built.fills());
+                        slots,
+                        found,
+                        plan.variants(),
+                        built.channelNames(),
+                        built.fills(),
+                        built.optionParts(),
+                        plan);
         look.start(
                 plan.variants().indexOf(plan.variant(design.variant())),
                 sliderValues(design),
@@ -863,7 +880,13 @@ public final class CharacterEditor {
         if (!applySliders()) {
             look =
                     new CharacterLook(
-                            slots, List.of(), List.of(), built.channelNames(), built.fills());
+                            slots,
+                            List.of(),
+                            List.of(),
+                            built.channelNames(),
+                            built.fills(),
+                            built.optionParts(),
+                            plan);
             slidersTitle.set("No sliders: the skeleton lacks their bones");
         }
         openCategory = Math.min(openCategory, categories.categories().size() - 1);
@@ -1199,15 +1222,23 @@ public final class CharacterEditor {
     }
 
     /**
-     * Draw the Costume tab: the slot categories, one open at a time, with a dropdown and arrows for
-     * each slot that has a choice. The dropdown previews the hovered choice on the character.
+     * Draw the Costume tab: whether pairs go on together, then the slot categories, one open at a
+     * time, with a dropdown and arrows for each slot that has a choice. The dropdown previews the
+     * hovered choice on the character. Slots with nothing available for this body, and categories
+     * of only such slots, aren't shown.
      */
     private void drawCostume() {
         int previewSlot = CharacterLook.NO_PREVIEW;
         int previewChoice = 0;
+        if (IkGui.checkbox(BOTH_SIDES_LABEL, look.bothSides())) {
+            look.setBothSides(!look.bothSides());
+        }
         List<PartCategories.Category> list = categories.categories();
         for (int c = 0; c < list.size(); ++c) {
             PartCategories.Category category = list.get(c);
+            if (category.slots().stream().noneMatch(this::isShown)) {
+                continue;
+            }
             IkGui.setNextItemOpen(openCategory == c, Condition.ALWAYS);
             boolean open = IkGui.collapsingHeader(category.label() + "##" + category.id());
             if (open != (openCategory == c)) {
@@ -1218,6 +1249,9 @@ public final class CharacterEditor {
                 continue;
             }
             for (int slot : category.slots()) {
+                if (!isShown(slot)) {
+                    continue;
+                }
                 IkGui.pushID(slot);
                 int hovered = drawSlot(slot);
                 if (hovered != Integer.MIN_VALUE) {
@@ -1231,8 +1265,18 @@ public final class CharacterEditor {
     }
 
     /**
+     * Whether the Costume tab shows a slot: it holds something, or offers something for this body.
+     *
+     * @param slot The slot's position.
+     * @return True if it is shown.
+     */
+    private boolean isShown(int slot) {
+        return look.choice(slot) != CharacterLook.EMPTY || !look.available(slot).isEmpty();
+    }
+
+    /**
      * Draw one slot: its name, then what fills it, with arrows around a dropdown for slots with a
-     * choice.
+     * choice. A slot covered by another's part, or hidden by a worn part, says so instead.
      *
      * @param slot The slot's position.
      * @return The choice hovered in its open dropdown, or {@code Integer.MIN_VALUE} for none.
@@ -1251,6 +1295,14 @@ public final class CharacterEditor {
             IkGui.textDisabled("part of " + covering.labels().get(look.choice(cover)));
             return Integer.MIN_VALUE;
         }
+        Part hiding = look.hiddenBy(slot);
+        if (hiding != null) {
+            IkGui.textDisabled(
+                    (choice == CharacterLook.EMPTY ? "" : current + ", ")
+                            + "hidden by "
+                            + Prepared.label(hiding.id()));
+            return Integer.MIN_VALUE;
+        }
         if (look.isFixed(slot)) {
             IkGui.textUnformatted(current);
             return Integer.MIN_VALUE;
@@ -1265,8 +1317,12 @@ public final class CharacterEditor {
                 Math.max(arrow, IkGui.getContentRegionAvailableX() - arrow - ROW_SPACING));
         // Named after the slot, so tests and scripts can find each dropdown
         if (IkGui.beginCombo("##" + info.id(), current)) {
-            int first = info.optional() ? CharacterLook.EMPTY : 0;
-            for (int option = first; option < info.options().size(); ++option) {
+            List<Integer> shown = new ArrayList<>();
+            if (info.optional()) {
+                shown.add(CharacterLook.EMPTY);
+            }
+            shown.addAll(look.available(slot));
+            for (int option : shown) {
                 String text =
                         option == CharacterLook.EMPTY ? EMPTY_LABEL : info.labels().get(option);
                 boolean selected = option == choice;
@@ -1567,10 +1623,17 @@ public final class CharacterEditor {
             Range range = look.range(slider, SLIDER_CONTEXT);
             float[] value = look.values().get(slider.id());
             String label = Objects.requireNonNullElse(slider.label(), slider.id().toString());
+            // A full helmet locks the face's sliders, as there is no face to shape
+            Part locking = look.lockedBy(slider);
+            IkGui.beginDisabled(locking != null);
             if (slider.vector()) {
                 changed |= IkGui.sliderFloat3(label, value, range.min(), range.max());
             } else {
                 changed |= IkGui.sliderFloat(label, value, range.min(), range.max());
+            }
+            IkGui.endDisabled();
+            if (locking != null && IkGui.isItemHovered(HoveredFlags.ALLOW_WHEN_DISABLED)) {
+                IkGui.setTooltip("Locked by " + Prepared.label(locking.id()));
             }
         }
         if (changed) {
@@ -2569,6 +2632,36 @@ public final class CharacterEditor {
      */
     void showMarkers(boolean show) {
         stage.showDebug(show);
+    }
+
+    /**
+     * For scripts: the parts worn, as the game would show them. Call on the render thread.
+     *
+     * @return The part IDs, in slot order, or none if nothing is shown.
+     */
+    List<String> wornIds() {
+        List<String> ids = new ArrayList<>();
+        if (look == null || prepared == null) {
+            return ids;
+        }
+        for (int slot = 0; slot < look.slots().slots().size(); ++slot) {
+            int choice = look.choice(slot);
+            if (choice != CharacterLook.EMPTY && look.hiddenBy(slot) == null) {
+                ids.add(prepared.optionIds().get(slot).get(choice).toString());
+            }
+        }
+        return ids;
+    }
+
+    /**
+     * For scripts: put pairs on together, or choose sides alone. Call on the render thread.
+     *
+     * @param both Whether pairs go on together.
+     */
+    void setBothSides(boolean both) {
+        if (look != null) {
+            look.setBothSides(both);
+        }
     }
 
     /**

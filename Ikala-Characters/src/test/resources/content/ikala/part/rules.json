@@ -45,6 +45,12 @@
     "requires": ["ikala:part/biped/helmet_iron"]
   },
   {
+    "id": "ikala:part/biped/hair_short",
+    "plan": "ikala:biped",
+    "kind": "layer",
+    "fills": ["hair"]
+  },
+  {
     "id": "ikala:part/biped/claw_l",
     "plan": "ikala:biped",
     "kind": "body",
