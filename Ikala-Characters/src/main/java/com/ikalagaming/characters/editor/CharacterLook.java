@@ -131,6 +131,12 @@ final class CharacterLook {
     /** Whether parts with a pair are put on along with it. */
     private boolean bothSides = true;
 
+    /**
+     * For each slot, each option's meshes by clothing form, for layers with meshes for bulky body
+     * parts; null if there are none.
+     */
+    private final List<List<Map<String, List<Integer>>>> formMeshes;
+
     /** Counts changes, so callers can tell when the look changed. */
     private int version;
 
@@ -196,7 +202,7 @@ final class CharacterLook {
             @NonNull List<BodyPlan.Variant> variants,
             @NonNull List<String> channels,
             @NonNull List<List<Set<String>>> fills) {
-        this(slots, sliders, variants, channels, fills, null, null);
+        this(slots, sliders, variants, channels, fills, null, null, null);
     }
 
     /**
@@ -210,6 +216,7 @@ final class CharacterLook {
      * @param fills For each slot, the places each of its options fills, its own among them.
      * @param parts For each slot, the part behind each option, or null for no rules.
      * @param plan The body plan, or null with no parts.
+     * @param formMeshes For each slot, each option's meshes by clothing form, or null for none.
      */
     CharacterLook(
             @NonNull PartSlots slots,
@@ -218,8 +225,10 @@ final class CharacterLook {
             @NonNull List<String> channels,
             @NonNull List<List<Set<String>>> fills,
             List<List<Part>> parts,
-            BodyPlan plan) {
+            BodyPlan plan,
+            List<List<Map<String, List<Integer>>>> formMeshes) {
         this.parts = parts == null || plan == null ? null : parts;
+        this.formMeshes = this.parts == null ? null : formMeshes;
         this.plan = this.parts == null ? null : plan;
         if (this.parts != null) {
             for (int slot = 0; slot < this.parts.size(); ++slot) {
@@ -936,6 +945,13 @@ final class CharacterLook {
                 hiddenSockets.addAll(part.hidesSockets());
             }
         }
+        List<Part> wornParts = new ArrayList<>();
+        for (int i = 0; i < choices.length; ++i) {
+            Part part = part(i, i == previewSlot ? previewChoice : choices[i]);
+            if (part != null) {
+                wornParts.add(part);
+            }
+        }
         List<Integer> worn = new ArrayList<>();
         for (int i = 0; i < choices.length; ++i) {
             int choice = i == previewSlot ? previewChoice : choices[i];
@@ -948,9 +964,56 @@ final class CharacterLook {
                     || (socket != null && WearRules.hides(socket, hiddenSockets))) {
                 continue;
             }
-            worn.addAll(slots.slots().get(i).options().get(choice));
+            // A layer over bulky body parts shows its mesh for their form
+            String form = shownForm(i, choice, wornParts);
+            worn.addAll(
+                    form == null
+                            ? slots.slots().get(i).options().get(choice)
+                            : formMeshes.get(i).get(choice).get(form));
         }
         return worn;
+    }
+
+    /**
+     * The clothing form a slot's layer is shown in now.
+     *
+     * @param slot The slot.
+     * @return The form, or null for its plain mesh.
+     */
+    String formOf(int slot) {
+        List<Part> wornParts = new ArrayList<>();
+        for (int i = 0; i < choices.length; ++i) {
+            Part part = part(i, choices[i]);
+            if (part != null) {
+                wornParts.add(part);
+            }
+        }
+        return shownForm(slot, choices[slot], wornParts);
+    }
+
+    /**
+     * The clothing form a layer option shows: the thickest form among the worn body parts under
+     * it that the layer has a mesh for, or a thinner one it has.
+     *
+     * @param slot The slot.
+     * @param choice The option, or {@link #EMPTY}.
+     * @param wornParts The parts worn.
+     * @return The form, or null for its plain mesh.
+     */
+    private String shownForm(int slot, int choice, List<Part> wornParts) {
+        Part part = part(slot, choice);
+        if (part == null || part.kind() != Part.PartKind.LAYER || formMeshes == null) {
+            return null;
+        }
+        Map<String, List<Integer>> meshes = formMeshes.get(slot).get(choice);
+        String form = WearRules.formFor(plan, part, wornParts);
+        for (int index = form == null ? -1 : plan.formIndex(form); index > 0; --index) {
+            String id = plan.forms().get(index).id();
+            if (meshes.containsKey(id)) {
+                return id;
+            }
+        }
+        return null;
     }
 
     /**

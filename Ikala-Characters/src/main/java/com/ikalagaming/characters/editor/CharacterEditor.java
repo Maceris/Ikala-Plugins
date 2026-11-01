@@ -322,6 +322,8 @@ public final class CharacterEditor {
      * @param regions What the layers cover.
      * @param optionIds For each slot, the part each of its options is.
      * @param optionParts For each slot, the definition of the part each of its options is.
+     * @param formMeshes For each slot, each option's meshes by clothing form, for layers with
+     *     meshes for bulky body parts.
      * @param fills For each slot, the places each of its options fills.
      * @param channels For each of the character's parts, the palette channel each tint mask channel
      *     takes, as a position in the plan's channels.
@@ -335,6 +337,7 @@ public final class CharacterEditor {
             PartRegions regions,
             List<List<Id>> optionIds,
             List<List<Part>> optionParts,
+            List<List<Map<String, List<Integer>>>> formMeshes,
             List<List<Set<String>>> fills,
             List<int[]> channels,
             List<String> channelNames) {
@@ -371,8 +374,9 @@ public final class CharacterEditor {
                             .sorted(Comparator.comparing(part -> !wornIds.contains(part.id())))
                             .toList();
             PartAssembler.Assembled assembled =
+                    // Every clothing form's meshes too, which layers swap to over bulky parts
                     PartAssembler.assemble(
-                            candidates, plan, design.variant(), registry, reference, files);
+                            candidates, plan, design.variant(), registry, reference, files, true);
             if (assembled == null) {
                 throw new IllegalArgumentException("None of " + plan.id() + "'s parts loaded");
             }
@@ -384,6 +388,7 @@ public final class CharacterEditor {
             List<PartSlots.Slot> slots = new ArrayList<>();
             List<List<Id>> optionIds = new ArrayList<>();
             List<List<Part>> optionParts = new ArrayList<>();
+            List<List<Map<String, List<Integer>>>> formMeshes = new ArrayList<>();
             List<List<Set<String>>> fills = new ArrayList<>();
             for (String place : places) {
                 Part.PartKind wanted =
@@ -396,6 +401,7 @@ public final class CharacterEditor {
                 List<String> labels = new ArrayList<>();
                 List<Id> ids = new ArrayList<>();
                 List<Part> defined = new ArrayList<>();
+                List<Map<String, List<Integer>>> optionForms = new ArrayList<>();
                 List<Set<String>> optionFills = new ArrayList<>();
                 for (Part part :
                         candidates.stream().sorted(Comparator.comparing(Part::id)).toList()) {
@@ -409,6 +415,14 @@ public final class CharacterEditor {
                     labels.add(label(part.id()));
                     ids.add(part.id());
                     defined.add(part);
+                    Map<String, List<Integer>> byForm = new LinkedHashMap<>();
+                    for (String form : PartAssembler.formsOf(part, design.variant(), plan)) {
+                        List<Integer> formParts = assembled.partsOf(part.id(), form);
+                        if (!formParts.isEmpty()) {
+                            byForm.put(form, formParts);
+                        }
+                    }
+                    optionForms.add(byForm);
                     optionFills.add(Set.copyOf(part.fills()));
                 }
                 if (options.isEmpty()) {
@@ -420,6 +434,7 @@ public final class CharacterEditor {
                 slots.add(new PartSlots.Slot(place, options, labels, optional, initial));
                 optionIds.add(ids);
                 optionParts.add(defined);
+                formMeshes.add(optionForms);
                 fills.add(optionFills);
             }
 
@@ -460,6 +475,7 @@ public final class CharacterEditor {
                     regions,
                     optionIds,
                     optionParts,
+                    formMeshes,
                     fills,
                     assembled.channels(),
                     used.stream().map(all::get).toList());
@@ -848,7 +864,8 @@ public final class CharacterEditor {
                         built.channelNames(),
                         built.fills(),
                         built.optionParts(),
-                        plan);
+                        plan,
+                        built.formMeshes());
         look.start(
                 plan.variants().indexOf(plan.variant(design.variant())),
                 sliderValues(design),
@@ -886,7 +903,8 @@ public final class CharacterEditor {
                             built.channelNames(),
                             built.fills(),
                             built.optionParts(),
-                            plan);
+                            plan,
+                            built.formMeshes());
             slidersTitle.set("No sliders: the skeleton lacks their bones");
         }
         openCategory = Math.min(openCategory, categories.categories().size() - 1);
@@ -2647,7 +2665,10 @@ public final class CharacterEditor {
         for (int slot = 0; slot < look.slots().slots().size(); ++slot) {
             int choice = look.choice(slot);
             if (choice != CharacterLook.EMPTY && look.hiddenBy(slot) == null) {
-                ids.add(prepared.optionIds().get(slot).get(choice).toString());
+                String form = look.formOf(slot);
+                ids.add(
+                        prepared.optionIds().get(slot).get(choice)
+                                + (form == null ? "" : Part.FORM_SEPARATOR + form));
             }
         }
         return ids;

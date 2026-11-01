@@ -58,21 +58,35 @@ public final class PartAssembler {
      * @param partIds Which part definition each of the character's parts comes from.
      * @param channels For each of the character's parts, the palette channel each tint mask channel
      *     takes, as a position in {@link BodyPlan#allChannels()}, or {@link #NO_CHANNEL}.
+     * @param forms For each of the character's parts, the clothing form its mesh is for, or null
+     *     for the part's plain mesh.
      */
     public record Assembled(
             @NonNull ImportedCharacter character,
             @NonNull List<Id> partIds,
-            @NonNull List<int[]> channels) {
+            @NonNull List<int[]> channels,
+            @NonNull List<String> forms) {
         /**
-         * The character's parts that come from a part definition.
+         * The character's parts that come from a part definition's plain mesh.
          *
          * @param part The part definition's ID.
          * @return The indices of its meshes' parts.
          */
         public List<Integer> partsOf(@NonNull Id part) {
+            return partsOf(part, null);
+        }
+
+        /**
+         * The character's parts that come from a part definition's mesh for a clothing form.
+         *
+         * @param part The part definition's ID.
+         * @param form The form, or null for the plain mesh.
+         * @return The indices of its meshes' parts.
+         */
+        public List<Integer> partsOf(@NonNull Id part, String form) {
             List<Integer> indices = new ArrayList<>();
             for (int i = 0; i < partIds.size(); ++i) {
-                if (partIds.get(i).equals(part)) {
+                if (partIds.get(i).equals(part) && java.util.Objects.equals(forms.get(i), form)) {
                     indices.add(i);
                 }
             }
@@ -227,15 +241,82 @@ public final class PartAssembler {
             @NonNull CharacterRegistry registry,
             @NonNull Path reference,
             @NonNull Map<Path, ImportedCharacter> files) {
+        return assemble(parts, plan, variant, registry, reference, files, false);
+    }
+
+    /**
+     * Build a character out of parts as {@link #assemble(Collection, BodyPlan, String,
+     * CharacterRegistry, Path, Map)} does, and with every layer's meshes for each clothing form
+     * too, for an editor that switches between them as body parts change; see {@link
+     * Assembled#partsOf(Id, String)}.
+     *
+     * @param parts The parts, all for the plan.
+     * @param plan The plan.
+     * @param variant The variant, which picks each part's mesh.
+     * @param registry The loaded definitions, which find the parts' files.
+     * @param reference The rig's reference file, for moving characters from other rigs onto it.
+     * @param files Files read before, on the plan's rig, added to.
+     * @param allForms Whether to add each layer's meshes for every clothing form it has.
+     * @return The character, or null if no part could be loaded.
+     */
+    public static Assembled assemble(
+            @NonNull Collection<Part> parts,
+            @NonNull BodyPlan plan,
+            @NonNull String variant,
+            @NonNull CharacterRegistry registry,
+            @NonNull Path reference,
+            @NonNull Map<Path, ImportedCharacter> files,
+            boolean allForms) {
         List<String> channels = plan.allChannels();
         Map<Part, List<String>> caps = cappedSeams(parts, plan);
         Merger merger = new Merger();
         // Placements turn about the sockets of the rig's reference body, read when first needed
-        Skeleton referenceSkeleton = null;
+        Skeleton[] referenceSkeleton = {null};
         for (Part part : parts) {
-            String mesh = meshFor(part, variant);
+            addMesh(part, meshFor(part, variant), null, caps, plan, variant, registry, reference,
+                    files, merger, channels, referenceSkeleton);
+            if (allForms && part.kind() == Part.PartKind.LAYER) {
+                for (String form : formsOf(part, variant, plan)) {
+                    addMesh(part, meshFor(part, variant, form, plan), form, Map.of(), plan,
+                            variant, registry, reference, files, merger, channels,
+                            referenceSkeleton);
+                }
+            }
+        }
+        return merger.result();
+    }
+
+    /**
+     * Add one of a part's meshes, and its caps, to a character being built.
+     *
+     * @param part The part.
+     * @param mesh The mesh asset, or null to add nothing.
+     * @param form The clothing form the mesh is for, or null for the part's plain mesh.
+     * @param caps The seams where each part shows a cap.
+     * @param plan The plan.
+     * @param variant The variant.
+     * @param registry The loaded definitions.
+     * @param reference The rig's reference file.
+     * @param files Files read before, added to.
+     * @param merger Where the meshes go.
+     * @param channels The palette channels tints are numbered by.
+     * @param referenceSkeleton The reference body's skeleton, read when first needed, in [0].
+     */
+    private static void addMesh(
+            Part part,
+            String mesh,
+            String form,
+            Map<Part, List<String>> caps,
+            BodyPlan plan,
+            String variant,
+            CharacterRegistry registry,
+            Path reference,
+            Map<Path, ImportedCharacter> files,
+            Merger merger,
+            List<String> channels,
+            Skeleton[] referenceSkeleton) {
             if (mesh == null) {
-                continue;
+                return;
             }
             int split = mesh.indexOf(MESH_SEPARATOR);
             String fileName = split < 0 ? mesh : mesh.substring(0, split);
@@ -243,7 +324,7 @@ public final class PartAssembler {
             Path file = registry.asset(part.id().namespace(), fileName);
             if (file == null) {
                 log.warn("{} names {}, but its namespace has no folder on disk", part.id(), mesh);
-                continue;
+                return;
             }
             ImportedCharacter source = files.get(file);
             if (source == null && !files.containsKey(file)) {
@@ -255,15 +336,15 @@ public final class PartAssembler {
                         part.kind() == Part.PartKind.ACCESSORY
                                 ? part.placementFor(variant)
                                 : Part.Placement.NONE;
-                if (placement != Part.Placement.NONE && referenceSkeleton == null) {
+                if (placement != Part.Placement.NONE && referenceSkeleton[0] == null) {
                     ImportedCharacter body = files.get(reference);
                     if (body == null && !files.containsKey(reference)) {
                         body = read(reference, reference, registry, plan);
                         files.put(reference, body);
                     }
-                    referenceSkeleton = body == null ? source.skeleton() : body.skeleton();
+                    referenceSkeleton[0] = body == null ? source.skeleton() : body.skeleton();
                 }
-                merger.add(source, part, meshName, channels, placement, referenceSkeleton);
+                merger.add(source, part, meshName, channels, placement, referenceSkeleton[0], form);
                 for (String seam : caps.getOrDefault(part, List.of())) {
                     if (meshName == null) {
                         log.warn("{} has no mesh name to find its {} cap by", part.id(), seam);
@@ -275,11 +356,10 @@ public final class PartAssembler {
                             capMesh(meshName, seam),
                             channels,
                             Part.Placement.NONE,
+                            null,
                             null);
                 }
             }
-        }
-        return merger.result();
     }
 
     /**
@@ -317,6 +397,9 @@ public final class PartAssembler {
         /** Which part definition each merged part comes from. */
         private final List<Id> partIds = new ArrayList<>();
 
+        /** The clothing form each part's mesh is for, or null for a plain mesh. */
+        private final List<String> forms = new ArrayList<>();
+
         /** Each merged part's tint mask channels' palette channels. */
         private final List<int[]> channels = new ArrayList<>();
 
@@ -342,6 +425,7 @@ public final class PartAssembler {
          * @param placement Where an accessory's meshes move on their socket.
          * @param reference The rig's reference body, whose sockets placements turn about; null when
          *     there is no placement.
+         * @param form The clothing form the mesh is for, or null for the part's plain mesh.
          */
         void add(
                 ImportedCharacter source,
@@ -349,7 +433,8 @@ public final class PartAssembler {
                 String meshName,
                 List<String> channelNames,
                 Part.Placement placement,
-                Skeleton reference) {
+                Skeleton reference,
+                String form) {
             if (first == null) {
                 first = source;
             }
@@ -382,6 +467,7 @@ public final class PartAssembler {
                                 piece.min(),
                                 piece.max()));
                 partIds.add(part.id());
+                forms.add(form);
                 String materialName =
                         piece.material() < 0
                                 ? null
@@ -456,7 +542,7 @@ public final class PartAssembler {
                             new ArrayList<>(clips.values()),
                             materials,
                             images);
-            return new Assembled(merged, partIds, channels);
+            return new Assembled(merged, partIds, channels, forms);
         }
     }
 
