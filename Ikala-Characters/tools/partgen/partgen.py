@@ -138,6 +138,17 @@ BODY_STYLE = ("full body 3D render of a figure standing straight in an A pose, a
               "light, clean readable shapes, distinct flat material colors, PBR")
 BODY_NEGATIVE = ("clothing, sleeve, glove, shoe, extra limbs, extra arms, extra fingers, "
                  + LAYER_NEGATIVE)
+# An isolated body part (a rule's "isolated") is painted over a render of its slots alone, as an
+# object on its own, which TRELLIS meshes with all its detail rather than as a slice of a figure;
+# its rule's "piece" names what it is
+ISOLATED_STYLE = ("isolated 3D product render of {piece}, on its own, not attached to a body, "
+                  "made as ({subject}:1.4), seen from the front, one object only, plain white "
+                  "background, soft even studio light, clean readable shapes, distinct flat "
+                  "material colors, PBR")
+ISOLATED_NEGATIVE = ("person, body, torso, head, full figure, mannequin, clothing, sleeve, glove, "
+                     "extra limbs, extra fingers, sprite sheet, multiple views, several objects, "
+                     "cropped, text, watermark, logo, frame, border, busy background, scenery, "
+                     "floor, shadow, blurry, lowres, deformed")
 # Each leg's slots, which a layer with "legGap" keeps the gap between
 LEG_SLOTS = (("upperLeg.L", "lowerLeg.L", "foot.L"), ("upperLeg.R", "lowerLeg.R", "foot.R"))
 
@@ -313,9 +324,11 @@ def body_of(brief):
         raise SystemExit("No body part rule fills %s yet (in %s); the rules fill %s"
                          % (" + ".join(sideless), brief["id"],
                             "; ".join(" + ".join(r["slots"]) for r in rules.values())))
+    rule = dict(rules[group], **brief.get("fit", {}))
     part = {"id": "body_" + brief["id"], "group": group, "covers": named, "seams": seams,
-            "keepsOut": [s["id"] for s in plan["slots"] if s["id"] not in named]}
-    return part, dict(rules[group], **brief.get("fit", {}))
+            "keepsOut": [s["id"] for s in plan["slots"] if s["id"] not in named],
+            "isolated": bool(rule.get("isolated"))}
+    return part, rule
 
 
 def rule_of(brief):
@@ -539,17 +552,15 @@ def frame_chain(part):
     return list(part["covers"])
 
 
-def body_frame(config, part):
-    """A view framed on a body part's limb (see frame_chain), from the whole body's guide: the
-    square around it with FRAME_PAD meters to spare. A whole limb rather than the part alone, so
-    the body it hangs from shows too and holds the figure TRELLIS makes in its pose: an arm on
-    its own, it turns as it pleases. Gives its middle (x, z) and size, in meters."""
+def body_frame(config, framed):
+    """A view framed on some slots, from the whole body's guide: the square around them with
+    FRAME_PAD meters to spare. Gives its middle (x, z) and size, in meters."""
     from PIL import Image
     import numpy as np
     folder = guides(config)
     guide = json.loads((folder / "guide.json").read_text(encoding="utf8"))
     slots = np.asarray(Image.open(folder / "slots.png").getchannel("R"))
-    covered = np.isin(slots, [guide["slots"].index(s) + 1 for s in frame_chain(part)])
+    covered = np.isin(slots, [guide["slots"].index(s) + 1 for s in framed])
     rows, columns = np.flatnonzero(covered.any(1)), np.flatnonzero(covered.any(0))
     size, view = guide["size"], guide["view"]
     middle_x = guide.get("middleX", 0.0)
@@ -563,14 +574,19 @@ def body_frame(config, part):
 
 def guides(config, part=None):
     """The folder of guides rendered from the mannequin, rendered the first time: of the whole
-    body, or for a body part, framed on its slots (see body_frame), so the part fills much more
-    of the image, and of the figure TRELLIS makes from it."""
+    body, or for a body part, framed on its limb (see frame_chain and body_frame), so the part
+    fills much more of the image, and of the figure TRELLIS makes from it. A whole limb rather
+    than the part alone, so the body it hangs from shows too and holds the figure in its pose:
+    an arm on its own, TRELLIS turns as it pleases. An isolated part's guides show its own slots
+    and nothing else, framed on them; fit_body.py works out its turn instead."""
     name = GUIDE_VARIANT
-    frame = None
+    frame, only = None, None
     if part is not None and part.get("group"):
-        name = "%s_%s" % (GUIDE_VARIANT, re.sub(r"[^a-z0-9]+", "_",
-                                                 "_".join(frame_chain(part)).lower()))
-        frame = body_frame(config, part)
+        framed = part["covers"] if part.get("isolated") else frame_chain(part)
+        name = "%s_%s%s" % (GUIDE_VARIANT, "only_" if part.get("isolated") else "",
+                            re.sub(r"[^a-z0-9]+", "_", "_".join(framed).lower()))
+        frame = body_frame(config, framed)
+        only = framed if part.get("isolated") else None
     folder = pathlib.Path(config["work"]) / "guides" / name
     source = folder / "guide.json"
     if not source.exists():
@@ -579,7 +595,8 @@ def guides(config, part=None):
             [config["blender"], "-b", "--factory-startup", "--python",
              str(TOOLS / "blender" / "render_guides.py"), "--", "--body", str(body),
              "--out", str(folder), "--size", str(SDXL_SIZE)]
-            + (["--frame", "%.4f,%.4f,%.4f" % frame] if frame else []),
+            + (["--frame", "%.4f,%.4f,%.4f" % frame] if frame else [])
+            + (["--only", ",".join(only)] if only else []),
             capture_output=True, text=True)
         if result.returncode != 0 or not source.exists():
             raise SystemExit("Rendering the guides failed:\n" + result.stdout[-2000:]
@@ -692,11 +709,24 @@ def guide_inputs(config, layer, rule):
     return names
 
 
+def isolated(brief):
+    """Whether a brief is a body part painted and meshed on its own (see ISOLATED_STYLE)."""
+    return brief["kind"] == "body" and body_of(brief)[0]["isolated"]
+
+
 def prompt_for(brief):
     where, rule = rule_of(brief)
+    if isolated(brief):
+        return ISOLATED_STYLE.format(piece=rule["piece"], subject=brief["description"])
     subject = rule["prompt"].format(description=brief["description"])
     style = {"layer": LAYER_STYLE, "body": BODY_STYLE}.get(brief["kind"], STYLE)
     return style.format(subject=subject)
+
+
+def negative_for(brief):
+    if isolated(brief):
+        return ISOLATED_NEGATIVE
+    return {"layer": LAYER_NEGATIVE, "body": BODY_NEGATIVE}.get(brief["kind"], NEGATIVE)
 
 
 def command_new(config, batch, args):
@@ -738,8 +768,7 @@ def command_images(config, batch, args):
     with Comfy(config) as comfy:
         for brief in briefs:
             prompt = prompt_for(brief)
-            negative = {"layer": LAYER_NEGATIVE, "body": BODY_NEGATIVE}.get(brief["kind"],
-                                                                            NEGATIVE)
+            negative = negative_for(brief)
             folder = batch.brief_folder(brief["id"]) / "images"
             folder.mkdir(exist_ok=True)
             start = max(brief["images"], default=FIRST_SEED - 1) + 1
@@ -791,9 +820,9 @@ def command_meshes(config, batch, args):
         image = str(folder / "images" / ("%d.png" % pick))
         pairs += [image, str(glb)]
         renders += [str(glb), str(folder / ("views_%d_%s" % (pick, args.type)))]
-        # Clothing and body parts are painted on the whole mannequin, so TRELLIS makes the
-        # figure, which it checks for curtains of streaks
-        if brief["kind"] in ("layer", "body"):
+        # Clothing and body parts are painted on the mannequin, so TRELLIS makes the figure,
+        # which it checks for curtains of streaks; an isolated part is an object on its own
+        if brief["kind"] in ("layer", "body") and not isolated(brief):
             figures += ["--figure", image]
     trellis = pathlib.Path(config["trellis"])
     subprocess.run([str(trellis / ".venv/Scripts/python.exe"), str(TOOLS / "trellis_run.py"),
@@ -1237,7 +1266,8 @@ def fit_body_part(config, batch, brief):
         ("fit_body.py", "fit.json",
          ["--mesh", folder / brief["mesh"]["file"], "--body", body, "--out", out,
           "--slots", slots, "--guide", guides(config, part) / "guide.json",
-          "--image", folder / "images" / ("%d.png" % brief["review"]["pick"])]),
+          "--image", folder / "images" / ("%d.png" % brief["review"]["pick"])]
+         + (["--isolated"] if part["isolated"] else [])),
         ("shape_body.py", "shape.json",
          ["--part", out / "part.glb", "--body", body, "--out", out, "--slots", slots,
           "--triangles", rule["triangles"]] + (["--open", left_open] if left_open else [])

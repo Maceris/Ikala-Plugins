@@ -138,6 +138,8 @@ def main():
     for image_path, out in zip(args.pairs[0::2], args.pairs[1::2]):
         start = time.perf_counter()
         torch.cuda.reset_peak_memory_stats()
+        free = torch.cuda.mem_get_info()[0]
+        held = torch.cuda.memory_allocated()
         figure = os.path.abspath(image_path) in figures
         best = None
         for seed in range(args.seed, args.seed + (args.tries if figure else 1)):
@@ -173,6 +175,12 @@ def main():
         print("[trellis] %s in %.0f s, seed %d, peak %.2f GB" % (
             out, time.perf_counter() - start, seed, torch.cuda.max_memory_allocated() / 1024 ** 3),
             flush=True)
+        short = torch.cuda.max_memory_allocated() - held - free
+        if short > 0:
+            print("[trellis] %s needed %.1f GB more GPU memory than was free; other programs "
+                  "held some. Meshes made short of memory ran slowly and hung curtains of "
+                  "streaks even from good seeds: free the GPU and make it again"
+                  % (os.path.basename(image_path), short / 1024 ** 3), flush=True)
         torch.cuda.empty_cache()
 
 

@@ -4,9 +4,11 @@ the camera written down so meshes made from the images can be lined up with the 
 
 The camera is orthographic, so the body keeps its proportions in the image, and frames the
 whole body with its arms out. Depth and normals are traced straight through each pixel, so the
-maps match the render pixel for pixel.
+maps match the render pixel for pixel. --frame narrows the view onto part of the body, and
+--only leaves out all but some slots, for a body part painted as an object on its own.
 
     blender -b --python render_guides.py -- --body <male.blend> --out <folder> [--size 1024]
+        [--frame x,z,view] [--only <slot>,<slot>]
 
 writes gray.png, depth.png (near is white), normal.png (ControlNet's colors), slots.png (which
 body slot each pixel shows: the red channel is its place in guide.json's "slots" list plus one,
@@ -36,16 +38,21 @@ DEPTH_RANGE = 0.6
 GRAY = (0.62, 0.62, 0.64, 1)
 
 
-def body_mesh():
-    """The mannequin's skin and eyes at rest, merged, in world space, with each object's name
-    and where its triangles start."""
+def slot_of(obj):
+    """The body slot a mannequin mesh is, by its name, like mannequin_torso."""
+    return obj.name.replace("mannequin_", "", 1)
+
+
+def body_mesh(only=None):
+    """The mannequin's skin and eyes at rest, or only some slots of it, merged, in world space,
+    with each object's name and where its triangles start."""
     for armature in bpy.data.armatures:
         armature.pose_position = "REST"
     depsgraph = bpy.context.evaluated_depsgraph_get()
     points, faces, offset = [], [], 0
     names, starts, face_count = [], [], 0
     for obj in bpy.data.objects:
-        if obj.type != "MESH":
+        if obj.type != "MESH" or (only and slot_of(obj) not in only):
             continue
         evaluated = obj.evaluated_get(depsgraph)
         mesh = evaluated.to_mesh()
@@ -111,13 +118,14 @@ def save(path, array):
     image.save()
 
 
-def render_gray(path, size):
-    """A plain studio render from the guide camera, gray body on white."""
+def render_gray(path, size, only=None):
+    """A plain studio render from the guide camera, gray body (or some slots of it) on white."""
     scene = bpy.context.scene
     material = bpy.data.materials.new("guide")
     material.diffuse_color = GRAY
     for obj in bpy.data.objects:
         if obj.type == "MESH":
+            obj.hide_render = bool(only) and slot_of(obj) not in only
             obj.data.materials.clear()
             obj.data.materials.append(material)
             obj.data.polygons.foreach_set("use_smooth", [True] * len(obj.data.polygons))
@@ -150,17 +158,19 @@ def main():
     parser.add_argument("--size", type=int, default=1024)
     parser.add_argument("--frame", help="x,z,view: the middle and size of a view framed on part "
                                         "of the body, in meters, instead of the whole body.")
+    parser.add_argument("--only", help="Comma-separated slots to render on their own, the rest "
+                                       "of the body left out, like a forearm and hand.")
     args = parser.parse_args(argv)
+    only = set(args.only.split(",")) if args.only else None
     global MIDDLE_X, MIDDLE_HEIGHT, VIEW
     if args.frame:
         MIDDLE_X, MIDDLE_HEIGHT, VIEW = (float(v) for v in args.frame.split(","))
     os.makedirs(args.out, exist_ok=True)
     bpy.ops.wm.open_mainfile(filepath=os.path.abspath(args.body))
 
-    points, faces, names, starts = body_mesh()
+    points, faces, names, starts = body_mesh(only)
     depth, normal, face = trace(points, faces, args.size)
-    # Mesh names are the mannequin's slots, like mannequin_torso
-    slots = [name.replace("mannequin_", "", 1) for name in names]
+    slots = [slot_of(bpy.data.objects[name]) for name in names]
     owner = np.searchsorted(starts, face, side="right")
     save(os.path.join(args.out, "slots.png"), np.where(face >= 0, owner / 255.0, 0))
     hit = ~np.isnan(depth)
@@ -173,7 +183,7 @@ def main():
     n = np.stack([normal[..., 0], normal[..., 2], -normal[..., 1]], axis=-1)
     normal_image = np.where(hit[..., None], n * 0.5 + 0.5, np.array([0.5, 0.5, 1.0]))
     save(os.path.join(args.out, "normal.png"), normal_image)
-    render_gray(os.path.join(args.out, "gray.png"), args.size)
+    render_gray(os.path.join(args.out, "gray.png"), args.size, only)
 
     with open(os.path.join(args.out, "guide.json"), "w", encoding="utf-8") as file:
         json.dump({
@@ -185,6 +195,7 @@ def main():
                      "((row + 0.5) / size - 0.5) * view",
             "covered": float(hit.mean()),
             "slots": slots,
+            "only": sorted(only) if only else None,
         }, file, indent=1)
     print("[guides] wrote %s: body covers %.0f%% of the image" % (args.out, hit.mean() * 100))
 
