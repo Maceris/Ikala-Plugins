@@ -463,7 +463,9 @@ def main():
 
     lined_up = points_of(figure)
     before = {name: slot_fit(lined_up, surface, segments, bones) for name, bones in slots.items()}
-    matched, turns = match_limbs(lined_up, surface_samples(body, body_faces), armature, surface)
+    matched, turns = match_limbs(lined_up, surface_samples(body, body_faces), armature, surface,
+                                 [b for bones in slots.values() for b in bones]
+                                 if args.isolated else None)
     set_points(figure, matched)
     after = {name: slot_fit(matched, surface, segments, bones) for name, bones in slots.items()}
 

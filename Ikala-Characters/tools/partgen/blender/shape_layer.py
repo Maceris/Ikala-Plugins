@@ -188,7 +188,7 @@ def skin_distance(points, surface):
     return float(np.median([surface.find_nearest(Vector(p))[3] for p in points]))
 
 
-def match_limbs(points, body, armature, surface=None):
+def match_limbs(points, body, armature, surface=None, bones=None):
     """Turn a garment's sleeves and legs onto the mannequin's limbs. TRELLIS holds the figure's
     arms its own way, bent at the elbow where the mannequin's are straight, which lining the
     whole figure up can't fix: sleeves then cross the arm at the elbow, and pushing them out of
@@ -199,8 +199,13 @@ def match_limbs(points, body, armature, surface=None):
     off to one side passes through the arm too. With the body's surface (a BVH tree), a turn is
     kept only if it brings the bone's points nearer the skin, for figures whose limbs should lie
     on it, like a body part's: a small turn from a noisy direction would only move a limb that
-    was already right. Gives the moved points and each turn in degrees, 0 for one not kept."""
+    was already right. With bones, only those (and the bones under them) own the figure's points,
+    as a body part's slots' do: the root bone on the floor between the feet would otherwise keep
+    a hoof's sole behind while the rest of it turns with the shin, stretching a sheet between
+    them. Gives the moved points and each turn in degrees, 0 for one not kept."""
     segments = bone_segments(armature)
+    owning = segments if bones is None else {
+        name: ends for name, ends in segments.items() if name in with_beyond(armature, bones)}
     body_nearest = owners(body, segments)
     moved = points.copy()
     turns = {}
@@ -211,7 +216,7 @@ def match_limbs(points, body, armature, surface=None):
             head, tail = segments[name]
             length = np.linalg.norm(tail - head)
             along = (tail - head) / length
-            nearest = owners(moved, segments)
+            nearest = owners(moved, owning)
             share = (moved - head) @ along / length
             garment = limb_axis(moved, nearest, name, share)
             skin = limb_axis(body, body_nearest, name, (body - head) @ along / length)
