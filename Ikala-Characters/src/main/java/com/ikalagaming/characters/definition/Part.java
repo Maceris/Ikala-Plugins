@@ -45,6 +45,7 @@ import java.util.Set;
  * @param pair The part for the other side, put on with this one.
  * @param locksSliders Sliders it locks while worn, by ID or editor group.
  * @param hidesSockets Sockets it covers, by name or type.
+ * @param form For body parts, the plan's thinnest clothing form its surface fits in.
  * @author Ches Burks
  */
 @Doc(
@@ -115,7 +116,13 @@ public record Part(
                         "Sockets this covers, by name or type, like \"face\" for a full helmet:"
                                 + " accessories and effects there aren't shown.")
                 @Optional
-                List<String> hidesSockets)
+                List<String> hidesSockets,
+        @Doc(
+                        "For body parts: the plan's thinnest clothing form its surface fits in, like"
+                                + " \"bulky\" for a robot leg, so layers over it show their mesh for"
+                                + " that form. Left out, it is the plan's first, the bare body's.")
+                @Optional
+                String form)
         implements Definition {
 
     /** The field for the plan. */
@@ -171,6 +178,12 @@ public record Part(
 
     /** The field for hidden sockets. */
     public static final String FIELD_HIDES_SOCKETS = "hidesSockets";
+
+    /** The field for the clothing form. */
+    public static final String FIELD_FORM = "form";
+
+    /** Joins a variant and a clothing form in a mesh key, like "female@bulky". */
+    public static final String FORM_SEPARATOR = "@";
 
     /** The tint mask channels a material slot maps to palette channels. */
     public static final Set<String> MASK_CHANNELS = Set.of("r", "g", "b", "a");
@@ -426,11 +439,22 @@ public record Part(
             checks.error(
                     JsonPath.at(FIELD_EXTENSION), "The plan has no extension '" + extension + "'");
         }
-        for (String variant : meshes.keySet()) {
+        for (String key : meshes.keySet()) {
+            int at = key.indexOf(FORM_SEPARATOR);
+            String variant = at < 0 ? key : key.substring(0, at);
+            String path = JsonPath.field(JsonPath.at(FIELD_MESHES), key);
             if (!ANY_VARIANT.equals(variant) && body.variant(variant) == null) {
-                checks.error(
-                        JsonPath.field(JsonPath.at(FIELD_MESHES), variant),
-                        "The plan has no variant '" + variant + "'");
+                checks.error(path, "The plan has no variant '" + variant + "'");
+            }
+            if (at >= 0 && body.formIndex(key.substring(at + 1)) < 0) {
+                checks.error(path, "The plan has no form '" + key.substring(at + 1) + "'");
+            }
+        }
+        if (form != null) {
+            if (kind != PartKind.BODY) {
+                checks.error(JsonPath.at(FIELD_FORM), "Only body parts have a clothing form");
+            } else if (body.formIndex(form) < 0) {
+                checks.error(JsonPath.at(FIELD_FORM), "The plan has no form '" + form + "'");
             }
         }
         for (int i = 0; i < hidesRegions.size(); ++i) {

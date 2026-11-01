@@ -22,6 +22,7 @@
     { "id": "cape", "covers": ["torso"], "order": 40 }
   ],
   "exclusiveTags": ["cloth", "backDetail"],
+  "forms": [ { "id": "tight", "offset": 0 }, { "id": "padded", "offset": 0.02 }, { "id": "bulky", "offset": 0.06 } ],
   "sockets": [
     { "id": "back", "bone": "socket.back", "type": "back.large" },
     { "id": "grip.R", "bone": "hand.R", "type": "grip.1h" },

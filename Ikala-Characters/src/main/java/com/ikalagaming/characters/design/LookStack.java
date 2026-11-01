@@ -68,6 +68,8 @@ public final class LookStack {
      * @param styles The styles to move in, the first winning.
      * @param fx The effects the items carry, after the design's own.
      * @param dyes Dye colors for worn items' parts, by part.
+     * @param forms The clothing form each worn layer is shown in, by the place it is listed
+     *     under; layers shown on the bare body's form are left out.
      */
     public record Shown(
             @NonNull Map<String, Id> worn,
@@ -75,7 +77,8 @@ public final class LookStack {
             @NonNull List<Held> held,
             @NonNull List<Id> styles,
             @NonNull List<FxUse> fx,
-            @NonNull Map<Id, Map<String, Color>> dyes) {}
+            @NonNull Map<Id, Map<String, Color>> dyes,
+            @NonNull Map<String, String> forms) {}
 
     /**
      * Work out what a character shows.
@@ -184,7 +187,19 @@ public final class LookStack {
                     BodyPlan.Socket socket = use.socket() == null ? null : plan.socket(use.socket());
                     return socket != null && WearRules.hides(socket, hiddenSockets);
                 });
-        return new Shown(settled, hiddenRegions, held, styles, fx, dyes);
+        // Layers over bulky body parts show their mesh for the thickest form under them
+        Map<String, String> forms = new LinkedHashMap<>();
+        settled.forEach(
+                (place, partId) -> {
+                    Part part = registry.get(Part.class, partId);
+                    if (part != null && part.kind() == Part.PartKind.LAYER) {
+                        String form = WearRules.formFor(plan, part, wornParts);
+                        if (form != null) {
+                            forms.put(place, form);
+                        }
+                    }
+                });
+        return new Shown(settled, hiddenRegions, held, styles, fx, dyes, forms);
     }
 
     /**

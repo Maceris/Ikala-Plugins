@@ -122,6 +122,36 @@ public final class WearRules {
     }
 
     /**
+     * The clothing form a layer is shown in: the thickest form among worn body parts that fill a
+     * slot the layer covers.
+     *
+     * @param plan The plan.
+     * @param layer The layer part.
+     * @param worn The parts worn.
+     * @return The form's name, or null for the bare body's, when no body part under it has a
+     *     thicker one.
+     */
+    public static String formFor(
+            @NonNull BodyPlan plan, @NonNull Part layer, @NonNull Collection<Part> worn) {
+        Set<String> covered = new HashSet<>();
+        for (String fill : layer.fills()) {
+            BodyPlan.Layer place = plan.layer(fill);
+            if (place != null) {
+                covered.addAll(place.covers());
+            }
+        }
+        int thickest = 0;
+        for (Part part : worn) {
+            if (part.kind() == Part.PartKind.BODY
+                    && part.form() != null
+                    && part.fills().stream().anyMatch(covered::contains)) {
+                thickest = Math.max(thickest, plan.formIndex(part.form()));
+            }
+        }
+        return thickest > 0 ? plan.forms().get(thickest).id() : null;
+    }
+
+    /**
      * The layers some worn parts hide.
      *
      * @param worn The parts.

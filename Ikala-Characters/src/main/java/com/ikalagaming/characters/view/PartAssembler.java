@@ -93,6 +93,52 @@ public final class PartAssembler {
     }
 
     /**
+     * A layer's mesh for a variant and clothing form: the form's own mesh for the variant, else
+     * for any variant, else the same for each thinner form, else the plain mesh for the variant.
+     *
+     * @param part The part.
+     * @param variant The variant.
+     * @param form The clothing form, or null for the plain mesh.
+     * @param plan The plan, whose forms go thinnest first.
+     * @return The mesh asset, or null if the part has none for the variant.
+     */
+    public static String meshFor(
+            @NonNull Part part, @NonNull String variant, String form, @NonNull BodyPlan plan) {
+        for (int index = form == null ? -1 : plan.formIndex(form); index >= 0; --index) {
+            String suffix = Part.FORM_SEPARATOR + plan.forms().get(index).id();
+            String mesh = part.meshes().get(variant + suffix);
+            if (mesh == null) {
+                mesh = part.meshes().get(Part.ANY_VARIANT + suffix);
+            }
+            if (mesh != null) {
+                return mesh;
+            }
+        }
+        return meshFor(part, variant);
+    }
+
+    /**
+     * The clothing forms a part has meshes of its own for, for a variant.
+     *
+     * @param part The part.
+     * @param variant The variant.
+     * @param plan The plan.
+     * @return The forms' names, thinnest first.
+     */
+    public static List<String> formsOf(
+            @NonNull Part part, @NonNull String variant, @NonNull BodyPlan plan) {
+        List<String> found = new ArrayList<>();
+        for (BodyPlan.Form form : plan.forms()) {
+            String suffix = Part.FORM_SEPARATOR + form.id();
+            if (part.meshes().containsKey(variant + suffix)
+                    || part.meshes().containsKey(Part.ANY_VARIANT + suffix)) {
+                found.add(form.id());
+            }
+        }
+        return found;
+    }
+
+    /**
      * The name of the mesh that closes a body part's seam ring, shown where the neighbor across the
      * seam is open, like a skeleton forearm below a regular upper arm.
      *

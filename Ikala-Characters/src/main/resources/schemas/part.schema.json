@@ -270,6 +270,10 @@
           },
           "description": "Sockets this covers, by name or type, like \"face\" for a full helmet: accessories and effects there aren't shown."
         },
+        "form": {
+          "type": "string",
+          "description": "For body parts: the plan's thinnest clothing form its surface fits in, like \"bulky\" for a robot leg, so layers over it show their mesh for that form. Left out, it is the plan's first, the bare body's."
+        },
         "extends": {
           "type": "string",
           "description": "The ID of a definition of the same kind to start from. Fields written here replace the parent's, and objects merge field by field."

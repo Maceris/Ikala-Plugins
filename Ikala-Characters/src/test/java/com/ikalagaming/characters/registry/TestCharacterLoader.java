@@ -96,7 +96,7 @@ class TestCharacterLoader {
         CharacterRegistry registry = result.registry();
         Assertions.assertEquals(1, registry.all(Rig.class).size());
         Assertions.assertEquals(2, registry.all(Slider.class).size());
-        Assertions.assertEquals(14, registry.all(Part.class).size());
+        Assertions.assertEquals(15, registry.all(Part.class).size());
         BodyPlan biped = registry.get(BodyPlan.class, Id.parse("ikala:biped"));
         Assertions.assertNotNull(biped);
         Assertions.assertEquals(2, biped.matchingSliders(registry.all(Slider.class)).size());

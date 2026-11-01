@@ -32,6 +32,7 @@ import java.util.Set;
  * @param sliders The sliders it uses, by ID pattern.
  * @param channels Palette channels beyond the standard ones.
  * @param exclusiveTags Tags a character wears at most one part of each.
+ * @param forms Shapes clothing is fitted to, thinnest first.
  * @param regions Mask region names.
  * @param boneGroups Named sets of bones, for animation masks.
  * @param ik IK setup.
@@ -77,6 +78,13 @@ public record BodyPlan(
                 @Optional
                 List<String> exclusiveTags,
         @Doc(
+                        "Shapes clothing is fitted to, thinnest first: shells over the body at an"
+                                + " offset, like \"tight\" at 0 and \"bulky\" at 0.06 m. A body"
+                                + " part names the thinnest its surface fits in, and a layer shows"
+                                + " its mesh for the thickest form among the body parts under it.")
+                @Optional
+                List<Form> forms,
+        @Doc(
                         "Mask region names that body meshes tag their triangles with, so layers"
                                 + " can hide them. At most 64.")
                 @Optional
@@ -113,6 +121,9 @@ public record BodyPlan(
 
     /** The field for the extra palette channels. */
     public static final String FIELD_CHANNELS = "channels";
+
+    /** The field for the clothing forms. */
+    public static final String FIELD_FORMS = "forms";
 
     /** The field for the exclusive tags. */
     public static final String FIELD_EXCLUSIVE_TAGS = "exclusiveTags";
@@ -289,6 +300,35 @@ public record BodyPlan(
 
         /** The field for the sockets. */
         public static final String FIELD_SOCKETS = "sockets";
+    }
+
+    /**
+     * A shape clothing is fitted to: a shell over the body at an offset.
+     *
+     * @param id The form's name, like "bulky".
+     * @param offset How far out from the body the shell is, in meters.
+     */
+    @Doc("A shape clothing is fitted to: a shell over the body at an offset.")
+    public record Form(
+            @Doc("The form's name, like \"bulky\".") String id,
+            @Doc("How far out from the body its shell is, in meters.") float offset) {
+        /** The field for the offset. */
+        public static final String FIELD_OFFSET = "offset";
+    }
+
+    /**
+     * Where a form comes in the plan's forms, thinnest first.
+     *
+     * @param id The form's name.
+     * @return Its position, or -1 if the plan has no such form.
+     */
+    public int formIndex(String id) {
+        for (int i = 0; i < forms.size(); ++i) {
+            if (forms.get(i).id().equals(id)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /**
@@ -521,6 +561,7 @@ public record BodyPlan(
         checkSockets(checks, bones);
         checkEquipment(checks);
         checkExtensions(checks, rigDefinition, bones);
+        checkForms(checks);
         checkNames(checks);
 
         String groupsPath = JsonPath.at(FIELD_BONE_GROUPS);
@@ -539,6 +580,26 @@ public record BodyPlan(
             checkCollision(checks, bones);
         }
         checkSliders(checks, rigDefinition);
+    }
+
+    /**
+     * Check that forms have unique names and grow thicker in order.
+     *
+     * @param checks Where problems go.
+     */
+    private void checkForms(Checks checks) {
+        Set<String> names = new HashSet<>();
+        for (int i = 0; i < forms.size(); ++i) {
+            Form form = forms.get(i);
+            String path = JsonPath.at(FIELD_FORMS, i);
+            unique(checks, names, form.id(), JsonPath.field(path, FIELD_ID), "form");
+            boolean thicker = i == 0 ? form.offset() >= 0 : form.offset() > forms.get(i - 1).offset();
+            if (!thicker) {
+                checks.error(
+                        JsonPath.field(path, Form.FIELD_OFFSET),
+                        "Forms go from thinnest to thickest, starting at 0 or more");
+            }
+        }
     }
 
     /**
