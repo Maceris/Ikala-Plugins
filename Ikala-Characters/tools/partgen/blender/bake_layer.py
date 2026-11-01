@@ -146,7 +146,8 @@ def paint_from_image(base_image, covered, position, normal, picked, painted, gui
     exactly, and how many took it at all."""
     pixels = np.array(base_image.pixels[:]).reshape(-1, 4)
     size = guide["size"]
-    column = np.floor((position[:, 0] / guide["view"] + 0.5) * size).astype(int)
+    column = np.floor(((position[:, 0] - guide.get("middleX", 0.0)) / guide["view"] + 0.5)
+                      * size).astype(int)
     row = np.floor(((guide["middleHeight"] - position[:, 2]) / guide["view"] + 0.5) * size)
     row = row.astype(int)
     # Texels the bake from pushed.glb missed still have their place, baked from the garment itself
