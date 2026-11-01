@@ -124,9 +124,10 @@ rest of the body and cut at the line of each outer seam's ring (from
 `<variant>_seams.json` beside the mannequin), so the body the part joins stays as
 it is. Images and meshes work as for clothing.
 
-A brief with `"fit": {"isolated": true}` is painted over a render of its slots
-alone, as an object on its own (the rule's `piece` names it), so TRELLIS.2 meshes
-the part with all its detail instead of as a slice of a whole figure. TRELLIS
+By default (each rule's `isolated`) a body part is painted over a render of its
+slots alone, as an object on its own (the rule's `piece` names it), so TRELLIS.2
+meshes the part with all its detail instead of as a slice of a whole figure; a
+brief's `"fit": {"isolated": false}` paints it over the whole limb instead. TRELLIS
 turns such an object however it likes, so the fit tries it turned many ways along
 the slots' long axis, keeps the turn whose front outline best matches the image,
 and slides it along the limb until it reaches its outer seams.
