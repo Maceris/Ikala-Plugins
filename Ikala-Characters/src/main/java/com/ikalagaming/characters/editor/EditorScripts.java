@@ -29,6 +29,7 @@ import java.util.function.Function;
  * characters.wear("gen:part/body/robot_leg_l");
  * characters.still(true);
  * characters.frame(null, 0.1, 0);
+ * converter.log(characters.worn());
  * await(ui.test().saveFrame("shots/front.png"));
  * </pre>
  *
@@ -160,6 +161,34 @@ public final class EditorScripts {
         if (!call(editor -> editor.wear(partId))) {
             throw new IllegalStateException("The shown design offers no part " + partId);
         }
+    }
+
+    /**
+     * The parts worn, as the game would show them, for checks.
+     *
+     * @return The part IDs in slot order, joined by commas, or an empty string.
+     */
+    public static String worn() {
+        String[] found = {""};
+        call(
+                editor -> {
+                    found[0] = String.join(",", editor.wornIds());
+                    return true;
+                });
+        return found[0];
+    }
+
+    /**
+     * Put pairs, like both claws, on together, or choose sides alone.
+     *
+     * @param both Whether pairs go on together.
+     */
+    public static void bothSides(boolean both) {
+        call(
+                editor -> {
+                    editor.setBothSides(both);
+                    return true;
+                });
     }
 
     /**

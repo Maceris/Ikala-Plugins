@@ -38,8 +38,12 @@
     {"id": "belt", "covers": ["pelvis"], "order": 25},
     {"id": "shoulderPads.L", "covers": ["upperArm.L"], "order": 30},
     {"id": "shoulderPads.R", "covers": ["upperArm.R"], "order": 30},
-    {"id": "helmet", "covers": ["head"], "order": 30}
+    {"id": "helmet", "covers": ["head"], "order": 30},
+    // Added later, so they come last and designs keep their layer positions
+    {"id": "cape", "covers": ["torso"], "order": 40},
+    {"id": "skirt", "covers": ["pelvis", "upperLeg.L", "upperLeg.R"], "order": 18}
   ],
+  "exclusiveTags": ["cloth", "backDetail"],
   "sockets": [
     {"id": "head_top", "bone": "socket.head_top", "type": "head_top"},
     {"id": "face", "bone": "socket.face", "type": "face"},

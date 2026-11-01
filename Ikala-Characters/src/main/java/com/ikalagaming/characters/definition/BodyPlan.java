@@ -31,6 +31,7 @@ import java.util.Set;
  * @param extensions Its optional bone chains.
  * @param sliders The sliders it uses, by ID pattern.
  * @param channels Palette channels beyond the standard ones.
+ * @param exclusiveTags Tags a character wears at most one part of each.
  * @param regions Mask region names.
  * @param boneGroups Named sets of bones, for animation masks.
  * @param ik IK setup.
@@ -69,6 +70,13 @@ public record BodyPlan(
                 @Optional
                 List<String> channels,
         @Doc(
+                        "Tags a character wears at most one part of each, like \"cloth\" for"
+                                + " long coats, capes and robes, or \"backDetail\" for wings,"
+                                + " jetpacks and backpacks. The last one put on takes the others"
+                                + " off.")
+                @Optional
+                List<String> exclusiveTags,
+        @Doc(
                         "Mask region names that body meshes tag their triangles with, so layers"
                                 + " can hide them. At most 64.")
                 @Optional
@@ -105,6 +113,9 @@ public record BodyPlan(
 
     /** The field for the extra palette channels. */
     public static final String FIELD_CHANNELS = "channels";
+
+    /** The field for the exclusive tags. */
+    public static final String FIELD_EXCLUSIVE_TAGS = "exclusiveTags";
 
     /** The field for the mask regions. */
     public static final String FIELD_REGIONS = "regions";
@@ -437,6 +448,22 @@ public record BodyPlan(
             return List.of(named);
         }
         return sockets.stream().filter(s -> nameOrType.equals(s.type())).toList();
+    }
+
+    /**
+     * An exclusive tag two parts share, of which a character wears at most one part.
+     *
+     * @param a One part.
+     * @param b The other.
+     * @return The first such tag in this plan's order, or null if they share none.
+     */
+    public String sharedExclusiveTag(@NonNull Part a, @NonNull Part b) {
+        for (String tag : exclusiveTags) {
+            if (a.tags().contains(tag) && b.tags().contains(tag)) {
+                return tag;
+            }
+        }
+        return null;
     }
 
     /**

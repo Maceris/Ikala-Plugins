@@ -42,6 +42,9 @@ import java.util.Set;
  * @param fx Effects it carries, gone when it is swapped.
  * @param placement Where an accessory sits on its socket, by variant.
  * @param seams How a body part meets its neighbors at its outer seams.
+ * @param pair The part for the other side, put on with this one.
+ * @param locksSliders Sliders it locks while worn, by ID or editor group.
+ * @param hidesSockets Sockets it covers, by name or type.
  * @author Ches Burks
  */
 @Doc(
@@ -96,7 +99,23 @@ public record Part(
                         "For body parts: how it meets its neighbors at its outer seams, by seam"
                                 + " name. A seam left out welds.")
                 @Optional
-                Map<String, SeamMode> seams)
+                Map<String, SeamMode> seams,
+        @Doc(
+                        "The part for the other side, like the right arm of a left arm, which"
+                                + " editors put on along with this one unless sides are chosen"
+                                + " alone.")
+                @Optional
+                Id pair,
+        @Doc(
+                        "Sliders this locks while worn, by slider ID or editor group, like"
+                                + " \"face\" for a full helmet.")
+                @Optional
+                List<String> locksSliders,
+        @Doc(
+                        "Sockets this covers, by name or type, like \"face\" for a full helmet:"
+                                + " accessories and effects there aren't shown.")
+                @Optional
+                List<String> hidesSockets)
         implements Definition {
 
     /** The field for the plan. */
@@ -143,6 +162,15 @@ public record Part(
 
     /** The field for the seam modes. */
     public static final String FIELD_SEAMS = "seams";
+
+    /** The field for the other side's part. */
+    public static final String FIELD_PAIR = "pair";
+
+    /** The field for locked sliders. */
+    public static final String FIELD_LOCKS_SLIDERS = "locksSliders";
+
+    /** The field for hidden sockets. */
+    public static final String FIELD_HIDES_SOCKETS = "hidesSockets";
 
     /** The tint mask channels a material slot maps to palette channels. */
     public static final Set<String> MASK_CHANNELS = Set.of("r", "g", "b", "a");
@@ -433,6 +461,28 @@ public record Part(
                 });
         checkRelated(checks, conflicts, FIELD_CONFLICTS);
         checkRelated(checks, requires, FIELD_REQUIRES);
+        checkPair(checks, body);
+        List<Slider> allSliders = checks.all(Slider.class);
+        for (int i = 0; i < locksSliders.size(); ++i) {
+            String name = locksSliders.get(i);
+            boolean known =
+                    allSliders.stream()
+                            .anyMatch(s -> name.equals(s.group()) || s.id().toString().equals(name));
+            if (!known) {
+                checks.error(
+                        JsonPath.at(FIELD_LOCKS_SLIDERS, i),
+                        "There is no slider or slider group '" + name + "'");
+            }
+        }
+        for (int i = 0; i < hidesSockets.size(); ++i) {
+            String hidden = hidesSockets.get(i);
+            if (body.sockets().stream()
+                    .noneMatch(s -> s.id().equals(hidden) || hidden.equals(s.type()))) {
+                checks.error(
+                        JsonPath.at(FIELD_HIDES_SOCKETS, i),
+                        "The plan has no socket or socket type '" + hidden + "'");
+            }
+        }
         for (int i = 0; i < fx.size(); ++i) {
             fx.get(i)
                     .check(
@@ -535,6 +585,71 @@ public record Part(
                 }
             }
         }
+    }
+
+    /**
+     * Check that the other side's part exists, is the same kind for the same plan, names this one
+     * back if it names any, and goes in the mirrored places.
+     *
+     * @param checks Where problems go.
+     * @param body The plan.
+     */
+    private void checkPair(Checks checks, BodyPlan body) {
+        if (pair == null) {
+            return;
+        }
+        String path = JsonPath.at(FIELD_PAIR);
+        if (pair.equals(id)) {
+            checks.error(path, "A part can't be its own pair");
+            return;
+        }
+        Part other = checks.require(Part.class, pair, path);
+        if (other == null) {
+            return;
+        }
+        if (other.kind() != kind || !other.plan().equals(plan)) {
+            checks.error(path, "'" + pair + "' isn't the same kind of part for the same plan");
+            return;
+        }
+        if (other.pair() != null && !other.pair().equals(id)) {
+            checks.error(path, "'" + pair + "' pairs with " + other.pair() + " instead");
+        }
+        List<String> places = kind == PartKind.ACCESSORY ? fits : fills;
+        List<String> otherPlaces = kind == PartKind.ACCESSORY ? other.fits() : other.fills();
+        Set<String> expected = new LinkedHashSet<>();
+        places.forEach(place -> expected.add(mirrored(body, place)));
+        if (!expected.equals(new LinkedHashSet<>(otherPlaces))) {
+            checks.error(
+                    path,
+                    "'"
+                            + pair
+                            + "' should go in the other side's places "
+                            + expected
+                            + ", not "
+                            + otherPlaces);
+        }
+    }
+
+    /**
+     * The place on the other side: a slot's mirror, else the name with .L and .R swapped, else
+     * the place itself, for places in the middle.
+     *
+     * @param body The plan.
+     * @param place A slot, layer or socket name or type.
+     * @return The mirrored place.
+     */
+    public static String mirrored(@NonNull BodyPlan body, @NonNull String place) {
+        BodyPlan.Slot slot = body.slot(place);
+        if (slot != null && slot.mirrorOf() != null) {
+            return slot.mirrorOf();
+        }
+        if (place.endsWith(".L")) {
+            return place.substring(0, place.length() - 2) + ".R";
+        }
+        if (place.endsWith(".R")) {
+            return place.substring(0, place.length() - 2) + ".L";
+        }
+        return place;
     }
 
     /**

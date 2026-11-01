@@ -1271,6 +1271,9 @@ def write_body_part(config, batch, brief, part, rule):
             "meshes": meshes,
             "materialSlots": [body_slot(brief["id"], bake["defaults"], bake.get("skin"), rule)],
             "tags": brief.get("tags", []),
+            # The other side's part, which the editor puts on along with this one
+            "pair": "%s:part/body/%s_%s" % (config["namespace"], brief["id"],
+                                          "r" if side == "l" else "l"),
         }
         if any(mode != "weld" for mode in seams.values()):
             definition["seams"] = {s: mode for s, mode in seams.items() if mode != "weld"}

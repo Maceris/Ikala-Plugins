@@ -219,11 +219,13 @@ public record Design(
         Map<String, String> filledBy = new HashMap<>();
         checkParts(lookup, report, body, chosen, parts, FIELD_PARTS, true, used, filledBy);
         checkParts(lookup, report, body, chosen, layers, FIELD_LAYERS, false, used, filledBy);
+        List<Map.Entry<Part, String>> found = new ArrayList<>();
         for (Map.Entry<Id, String> entry : used.entrySet()) {
             Part part = lookup.find(Part.class, entry.getKey(), entry.getValue());
             if (part == null) {
                 continue;
             }
+            found.add(Map.entry(part, entry.getValue()));
             for (Id other : part.conflicts()) {
                 if (used.containsKey(other)) {
                     report.error(entry.getValue(), entry.getKey() + " can't be used with " + other);
@@ -235,6 +237,7 @@ public record Design(
                 }
             }
         }
+        checkExclusive(report, body, found);
 
         checkSliders(lookup, report, body, chosen, context);
         String colorsPath = JsonPath.at(FIELD_COLORS);
@@ -381,6 +384,34 @@ public record Design(
                         }
                     }
                 });
+    }
+
+    /**
+     * Report parts that share one of the plan's exclusive tags, of which only one can be worn.
+     *
+     * @param report Where problems go.
+     * @param body The plan.
+     * @param parts The parts used, with the path each is listed at.
+     */
+    private static void checkExclusive(
+            Report report, BodyPlan body, List<Map.Entry<Part, String>> parts) {
+        for (int i = 0; i < parts.size(); ++i) {
+            for (int j = i + 1; j < parts.size(); ++j) {
+                Part a = parts.get(i).getKey();
+                Part b = parts.get(j).getKey();
+                String tag = body.sharedExclusiveTag(a, b);
+                if (tag != null) {
+                    report.error(
+                            parts.get(j).getValue(),
+                            b.id()
+                                    + " and "
+                                    + a.id()
+                                    + " are both '"
+                                    + tag
+                                    + "', and only one of those can be worn");
+                }
+            }
+        }
     }
 
     /**

@@ -1,0 +1,67 @@
+// Parts for the wear rules: exclusive tags, requirements, pairs and what a full helm covers
+[
+  {
+    "id": "ikala:part/biped/coat_long",
+    "plan": "ikala:biped",
+    "kind": "layer",
+    "fills": ["jacket", "cape"],
+    "tags": ["cloth"]
+  },
+  {
+    "id": "ikala:part/biped/cape_cloth",
+    "plan": "ikala:biped",
+    "kind": "layer",
+    "fills": ["cape"],
+    "tags": ["cloth"]
+  },
+  {
+    "id": "ikala:part/biped/jetpack",
+    "plan": "ikala:biped",
+    "kind": "accessory",
+    "fits": ["back.large"],
+    "tags": ["backDetail"]
+  },
+  {
+    "id": "ikala:part/biped/wings",
+    "plan": "ikala:biped",
+    "kind": "accessory",
+    "fits": ["back.large"],
+    "tags": ["backDetail"]
+  },
+  {
+    "id": "ikala:part/biped/full_helm",
+    "plan": "ikala:biped",
+    "kind": "layer",
+    "fills": ["helmet"],
+    "hidesLayers": ["hair"],
+    "hidesSockets": ["face"],
+    "locksSliders": ["face"]
+  },
+  {
+    "id": "ikala:part/biped/visor",
+    "plan": "ikala:biped",
+    "kind": "accessory",
+    "fits": ["face"],
+    "requires": ["ikala:part/biped/helmet_iron"]
+  },
+  {
+    "id": "ikala:part/biped/hair_short",
+    "plan": "ikala:biped",
+    "kind": "layer",
+    "fills": ["hair"]
+  },
+  {
+    "id": "ikala:part/biped/claw_l",
+    "plan": "ikala:biped",
+    "kind": "body",
+    "fills": ["hand.L"],
+    "pair": "ikala:part/biped/claw_r"
+  },
+  {
+    "id": "ikala:part/biped/claw_r",
+    "plan": "ikala:biped",
+    "kind": "body",
+    "fills": ["hand.R"],
+    "pair": "ikala:part/biped/claw_l"
+  }
+]

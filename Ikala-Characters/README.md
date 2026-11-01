@@ -151,8 +151,8 @@ python partgen.py capture limbs_1
 The same works for any check: `-Dikala.headless=true` (or a size like
 `-Dikala.headless=1024x1024`) renders without a window, `ui.test().saveFrame(path)`
 saves the scene without the GUI, and the `characters` script global drives the
-editor (`showDesign`, `settle`, `bare`, `wear`, `still`, `frame`, `markers`; see
-`EditorScripts`).
+editor (`showDesign`, `settle`, `bare`, `wear`, `bothSides`, `still`, `frame`,
+`markers`, `worn`; see `EditorScripts`).
 
 ## Previewing characters
 
@@ -169,6 +169,24 @@ closes it from the console. It shows a character on its own floor, with an orbit
 camera (left drag turns, middle drag pans, the wheel zooms), a part panel, a
 slider panel and a clip bar. Its panels are UI specs in
 `src/main/resources/ui/character-editor`.
+
+Choosing parts follows the wear rules (`design/WearRules`), which the shown look
+in game follows too, so a design made in the editor is always valid:
+
+- The last part put on wins: it takes off what it overlaps, what lists it (or it
+  lists) in `conflicts`, and parts sharing one of the plan's `exclusiveTags`, like
+  two `cloth` pieces (long coats, capes) or two `backDetail` pieces (wings,
+  jetpacks).
+- It puts on what it `requires`, and taking that off takes it off too.
+- With **Both sides** on, a part's `pair` (the other side's part) goes on and off
+  with it; off, sides are chosen alone.
+- What a choice took off comes back once nothing is in its way, so switching a
+  skeleton arm back to the mannequin's arm restores the forearm and hand.
+- Options the body variant's tags don't allow, or whose required parts aren't
+  offered, aren't listed. Slots with nothing to offer aren't shown.
+- Worn parts hide the layers in `hidesLayers` and the sockets in `hidesSockets`
+  (accessories and effects there), and grey out the sliders in `locksSliders`, by
+  slider ID or editor group, like a full helmet's `["face"]`.
 
 It switches between the glTF files listed under `editor.characters` in the config,
 putting each on a loaded rig: straight on if a rig has its bones, else moved

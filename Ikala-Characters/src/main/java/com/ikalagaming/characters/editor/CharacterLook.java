@@ -5,7 +5,9 @@ import com.ikalagaming.characters.data.Range;
 import com.ikalagaming.characters.definition.BodyPlan;
 import com.ikalagaming.characters.definition.FxUse;
 import com.ikalagaming.characters.definition.Palette;
+import com.ikalagaming.characters.definition.Part;
 import com.ikalagaming.characters.definition.Slider;
+import com.ikalagaming.characters.design.WearRules;
 import com.ikalagaming.characters.view.PartSlots;
 import com.ikalagaming.random.SeededRandom;
 
@@ -16,6 +18,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +29,13 @@ import java.util.Set;
 /**
  * What a character in the editor looks like: the part in each slot and each slider's value, with a
  * history to undo changes. Not thread safe; the editor uses it on the render thread.
+ *
+ * <p>Given the parts behind the options, choosing follows the wear rules ({@link WearRules}): the
+ * last part put on takes off what it clashes with, puts on what it requires and, with both sides
+ * on, its pair; taking a part off takes off what needs it. What a choice took off is remembered
+ * under its slot and comes back once nothing is in its way, so switching back restores earlier
+ * picks. Options the variant doesn't allow, or whose required parts aren't offered, aren't
+ * available, and worn parts hide the layers and sockets they cover.
  *
  * @author Ches Burks
  */
@@ -53,6 +64,8 @@ final class CharacterLook {
      * @param colors Each palette channel's color code, for the channels colored.
      * @param fx The effects the design wears.
      * @param style The way it moves, or null for the plan's own.
+     * @param displaced What each slot's choice took off, by slot, to put back later.
+     * @param bothSides Whether parts with a pair are put on along with it.
      */
     record Snapshot(
             int[] choices,
@@ -60,7 +73,9 @@ final class CharacterLook {
             int variant,
             Map<String, Integer> colors,
             List<FxUse> fx,
-            Id style) {}
+            Id style,
+            Map<Integer, Map<Integer, Integer>> displaced,
+            boolean bothSides) {}
 
     /** The slots. */
     private final PartSlots slots;
@@ -97,6 +112,24 @@ final class CharacterLook {
 
     /** Earlier looks, the latest first. */
     private final Deque<Snapshot> history = new ArrayDeque<>();
+
+    /** The part behind each slot's options, or null if the look has no rules to follow. */
+    private final List<List<Part>> parts;
+
+    /** The body plan, for exclusive tags and sockets, or null with {@link #parts}. */
+    private final BodyPlan plan;
+
+    /** Where each part is offered: its slot and option positions. */
+    private final Map<Id, int[]> offered = new HashMap<>();
+
+    /**
+     * What each slot's choice took off, by that slot: the slots emptied and what they held, to put
+     * back once nothing is in the way.
+     */
+    private final Map<Integer, Map<Integer, Integer>> displaced = new LinkedHashMap<>();
+
+    /** Whether parts with a pair are put on along with it. */
+    private boolean bothSides = true;
 
     /** Counts changes, so callers can tell when the look changed. */
     private int version;
@@ -163,6 +196,39 @@ final class CharacterLook {
             @NonNull List<BodyPlan.Variant> variants,
             @NonNull List<String> channels,
             @NonNull List<List<Set<String>>> fills) {
+        this(slots, sliders, variants, channels, fills, null, null);
+    }
+
+    /**
+     * Start a look as {@link #CharacterLook(PartSlots, List, List, List, List)} does, following
+     * the wear rules of the parts behind the options.
+     *
+     * @param slots The slots.
+     * @param sliders The sliders.
+     * @param variants The body plan's variants, which may be none.
+     * @param channels The palette channels to offer, in the order editors list them.
+     * @param fills For each slot, the places each of its options fills, its own among them.
+     * @param parts For each slot, the part behind each option, or null for no rules.
+     * @param plan The body plan, or null with no parts.
+     */
+    CharacterLook(
+            @NonNull PartSlots slots,
+            @NonNull List<Slider> sliders,
+            @NonNull List<BodyPlan.Variant> variants,
+            @NonNull List<String> channels,
+            @NonNull List<List<Set<String>>> fills,
+            List<List<Part>> parts,
+            BodyPlan plan) {
+        this.parts = parts == null || plan == null ? null : parts;
+        this.plan = this.parts == null ? null : plan;
+        if (this.parts != null) {
+            for (int slot = 0; slot < this.parts.size(); ++slot) {
+                List<Part> options = this.parts.get(slot);
+                for (int option = 0; option < options.size(); ++option) {
+                    offered.putIfAbsent(options.get(option).id(), new int[] {slot, option});
+                }
+            }
+        }
         this.slots = slots;
         this.sliders = List.copyOf(sliders);
         this.variants = List.copyOf(variants);
@@ -247,6 +313,12 @@ final class CharacterLook {
         remember();
         variant = chosen;
         startSliders();
+        for (int slot = 0; slot < choices.length; ++slot) {
+            if (choices[slot] != EMPTY && !isAvailable(slot, choices[slot])) {
+                choices[slot] = fallback(slot);
+            }
+        }
+        settle(Set.of());
         ++version;
     }
 
@@ -491,13 +563,64 @@ final class CharacterLook {
             return;
         }
         remember();
-        choices[slot] = choice;
-        uncover(slot);
+        Set<Integer> changed = new HashSet<>();
+        put(slot, choice, changed);
+        settle(changed);
         ++version;
     }
 
     /**
-     * Empty the slots a slot's choice covers or overlaps.
+     * Fill a slot, then take off what is in the way of what it now holds and put on what that
+     * needs, and its pair with both sides on. The user decided this slot, so nothing remembered
+     * for it is put back.
+     *
+     * @param slot The slot.
+     * @param choice The position in its options, or {@link #EMPTY}.
+     * @param changed The slots set so far by this change, added to.
+     */
+    private void put(int slot, int choice, Set<Integer> changed) {
+        if (!changed.add(slot)) {
+            return;
+        }
+        int before = choices[slot];
+        choices[slot] = choice;
+        displaced.values().forEach(taken -> taken.remove(slot));
+        uncover(slot);
+        Part part = part(slot, choice);
+        if (part != null) {
+            for (int other = 0; other < choices.length; ++other) {
+                Part worn = part(other, choices[other]);
+                if (other != slot && worn != null && WearRules.clash(plan, part, worn)) {
+                    takeOff(slot, other);
+                }
+            }
+            for (Id needed : part.requires()) {
+                int[] where = offered.get(needed);
+                if (where != null && choices[where[0]] != where[1]) {
+                    put(where[0], where[1], changed);
+                }
+            }
+        }
+        if (!bothSides) {
+            return;
+        }
+        Part was = part(slot, before);
+        if (part != null && part.pair() != null) {
+            int[] where = offered.get(part.pair());
+            if (where != null && choices[where[0]] != where[1]) {
+                put(where[0], where[1], changed);
+            }
+        } else if (was != null && was.pair() != null) {
+            // Taking one side off takes off the other, where it can be taken off
+            int[] where = offered.get(was.pair());
+            if (where != null && choices[where[0]] == where[1]) {
+                put(where[0], fallback(where[0]), changed);
+            }
+        }
+    }
+
+    /**
+     * Empty the slots a slot's choice covers or overlaps, remembering what they held.
      *
      * @param slot The slot just filled.
      */
@@ -509,9 +632,243 @@ final class CharacterLook {
             }
             boolean covered = filled.contains(slots.slots().get(other).id());
             boolean overlaps = filled(other).stream().anyMatch(filled::contains);
-            if (covered || overlaps) {
+            if ((covered || overlaps) && choices[other] != EMPTY) {
+                displaced.computeIfAbsent(slot, s -> new LinkedHashMap<>()).put(other, choices[other]);
                 choices[other] = EMPTY;
             }
+        }
+    }
+
+    /**
+     * Take what a slot holds off because another slot's choice clashes with it, remembering it
+     * under that slot. A slot that can't be empty goes back to what it starts with, unless that
+     * clashes too.
+     *
+     * @param by The slot whose choice is in the way.
+     * @param slot The slot to empty.
+     */
+    private void takeOff(int by, int slot) {
+        displaced.computeIfAbsent(by, s -> new LinkedHashMap<>()).put(slot, choices[slot]);
+        int start = fallback(slot);
+        Part starting = part(slot, start);
+        Part blocking = part(by, choices[by]);
+        boolean clashes =
+                starting != null && blocking != null && WearRules.clash(plan, starting, blocking);
+        choices[slot] = clashes ? EMPTY : start;
+    }
+
+    /**
+     * What a slot holds when what it held has to go: nothing if it can be empty, else what it
+     * starts with if that is available, else its first available option.
+     *
+     * @param slot The slot.
+     * @return The position in its options, or {@link #EMPTY}.
+     */
+    private int fallback(int slot) {
+        PartSlots.Slot info = slots.slots().get(slot);
+        if (info.optional()) {
+            return EMPTY;
+        }
+        if (info.initial() != EMPTY && isAvailable(slot, info.initial())) {
+            return info.initial();
+        }
+        List<Integer> shown = available(slot);
+        return shown.isEmpty() ? info.initial() : shown.get(0);
+    }
+
+    /**
+     * After a change: take off parts whose required parts are gone, then put back what was taken
+     * off where nothing is in its way any more. Slots the change set are left as they are.
+     *
+     * @param changed The slots the change set.
+     */
+    private void settle(Set<Integer> changed) {
+        if (parts == null) {
+            return;
+        }
+        boolean dropped = true;
+        while (dropped) {
+            dropped = false;
+            Set<Id> worn = new HashSet<>();
+            for (int slot = 0; slot < choices.length; ++slot) {
+                Part part = part(slot, choices[slot]);
+                if (part != null) {
+                    worn.add(part.id());
+                }
+            }
+            for (int slot = 0; slot < choices.length; ++slot) {
+                Part part = part(slot, choices[slot]);
+                if (part != null && !worn.containsAll(part.requires())) {
+                    int replacement = fallback(slot);
+                    dropped = replacement != choices[slot];
+                    choices[slot] = replacement;
+                    if (dropped) {
+                        break;
+                    }
+                }
+            }
+        }
+        for (Map.Entry<Integer, Map<Integer, Integer>> entry : displaced.entrySet()) {
+            entry.getValue()
+                    .entrySet()
+                    .removeIf(
+                            taken -> {
+                                int slot = taken.getKey();
+                                if (changed.contains(slot)
+                                        || (choices[slot] != EMPTY && choices[slot] != fallback(slot))
+                                        || !fits(slot, taken.getValue())) {
+                                    return false;
+                                }
+                                choices[slot] = taken.getValue();
+                                return true;
+                            });
+        }
+        displaced.values().removeIf(Map::isEmpty);
+    }
+
+    /**
+     * Whether an option could go back in its slot without anything else changing: it is
+     * available, no other choice covers or overlaps it, and it clashes with nothing worn.
+     *
+     * @param slot The slot.
+     * @param choice The position in its options.
+     * @return True if it fits.
+     */
+    private boolean fits(int slot, int choice) {
+        if (choice == EMPTY || choice >= slots.slots().get(slot).options().size()) {
+            return false;
+        }
+        if (!isAvailable(slot, choice)) {
+            return false;
+        }
+        String place = slots.slots().get(slot).id();
+        Set<String> wouldFill = fills.get(slot).get(choice);
+        Part part = part(slot, choice);
+        for (int other = 0; other < choices.length; ++other) {
+            if (other == slot || choices[other] == EMPTY) {
+                continue;
+            }
+            Set<String> filledThere = filled(other);
+            if (filledThere.contains(place) || filledThere.stream().anyMatch(wouldFill::contains)) {
+                return false;
+            }
+            Part worn = part(other, choices[other]);
+            if (part != null && worn != null && WearRules.clash(plan, part, worn)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The part behind an option.
+     *
+     * @param slot The slot.
+     * @param choice The position in its options, or {@link #EMPTY}.
+     * @return The part, or null if it is empty or the look has no rules.
+     */
+    Part part(int slot, int choice) {
+        if (parts == null || choice == EMPTY) {
+            return null;
+        }
+        return parts.get(slot).get(choice);
+    }
+
+    /**
+     * Whether an option can be chosen: the variant allows its part, and the parts it requires are
+     * offered.
+     *
+     * @param slot The slot.
+     * @param choice The position in its options.
+     * @return True if it can.
+     */
+    boolean isAvailable(int slot, int choice) {
+        Part part = part(slot, choice);
+        if (part == null) {
+            return true;
+        }
+        if (variant >= 0 && !variants.get(variant).allows(part)) {
+            return false;
+        }
+        return part.requires().stream().allMatch(offered::containsKey);
+    }
+
+    /**
+     * The options of a slot that can be chosen.
+     *
+     * @param slot The slot.
+     * @return Their positions, in order.
+     */
+    List<Integer> available(int slot) {
+        List<Integer> shown = new ArrayList<>();
+        for (int option = 0; option < slots.slots().get(slot).options().size(); ++option) {
+            if (isAvailable(slot, option)) {
+                shown.add(option);
+            }
+        }
+        return shown;
+    }
+
+    /**
+     * The worn part that hides a slot: a layer it hides, or the socket an accessory goes on.
+     *
+     * @param slot The slot.
+     * @return The part, or null if nothing hides it.
+     */
+    Part hiddenBy(int slot) {
+        if (parts == null) {
+            return null;
+        }
+        String place = slots.slots().get(slot).id();
+        BodyPlan.Socket socket = plan.socket(place);
+        for (int other = 0; other < choices.length; ++other) {
+            Part worn = part(other, choices[other]);
+            if (other == slot || worn == null) {
+                continue;
+            }
+            if (worn.hidesLayers().contains(place)
+                    || (socket != null && WearRules.hides(socket, Set.copyOf(worn.hidesSockets())))) {
+                return worn;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The worn part that locks a slider.
+     *
+     * @param slider The slider.
+     * @return The part, or null if none locks it.
+     */
+    Part lockedBy(@NonNull Slider slider) {
+        for (int slot = 0; slot < choices.length; ++slot) {
+            Part worn = part(slot, choices[slot]);
+            if (worn != null && WearRules.locks(worn, slider)) {
+                return worn;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Whether parts with a pair are put on along with it.
+     *
+     * @return True if they are.
+     */
+    boolean bothSides() {
+        return bothSides;
+    }
+
+    /**
+     * Put parts with a pair on along with it, or choose sides alone.
+     *
+     * @param both Whether to put pairs on together.
+     */
+    void setBothSides(boolean both) {
+        if (both != bothSides) {
+            remember();
+            bothSides = both;
+            ++version;
         }
     }
 
@@ -549,9 +906,16 @@ final class CharacterLook {
      */
     void step(int slot, int step) {
         PartSlots.Slot info = slots.slots().get(slot);
-        int first = info.optional() ? EMPTY : 0;
-        int count = info.options().size() - first;
-        choose(slot, Math.floorMod(choices[slot] - first + step, count) + first);
+        List<Integer> shown = new ArrayList<>();
+        if (info.optional()) {
+            shown.add(EMPTY);
+        }
+        shown.addAll(available(slot));
+        if (shown.isEmpty()) {
+            return;
+        }
+        int at = shown.indexOf(choices[slot]);
+        choose(slot, shown.get(Math.floorMod((at < 0 ? 0 : at) + step, shown.size())));
     }
 
     /**
@@ -562,12 +926,29 @@ final class CharacterLook {
      * @return The indices of the parts.
      */
     List<Integer> worn(int previewSlot, int previewChoice) {
+        // What worn parts cover shows nothing: hidden layers, accessories on covered sockets
+        Set<String> hiddenLayers = new HashSet<>();
+        Set<String> hiddenSockets = new HashSet<>();
+        for (int i = 0; i < choices.length; ++i) {
+            Part part = part(i, i == previewSlot ? previewChoice : choices[i]);
+            if (part != null) {
+                hiddenLayers.addAll(part.hidesLayers());
+                hiddenSockets.addAll(part.hidesSockets());
+            }
+        }
         List<Integer> worn = new ArrayList<>();
         for (int i = 0; i < choices.length; ++i) {
             int choice = i == previewSlot ? previewChoice : choices[i];
-            if (choice != EMPTY) {
-                worn.addAll(slots.slots().get(i).options().get(choice));
+            if (choice == EMPTY) {
+                continue;
             }
+            String place = slots.slots().get(i).id();
+            BodyPlan.Socket socket = plan == null ? null : plan.socket(place);
+            if (hiddenLayers.contains(place)
+                    || (socket != null && WearRules.hides(socket, hiddenSockets))) {
+                continue;
+            }
+            worn.addAll(slots.slots().get(i).options().get(choice));
         }
         return worn;
     }
@@ -603,13 +984,17 @@ final class CharacterLook {
     Snapshot snapshot() {
         Map<Id, float[]> copied = new LinkedHashMap<>();
         values.forEach((id, value) -> copied.put(id, value.clone()));
+        Map<Integer, Map<Integer, Integer>> taken = new LinkedHashMap<>();
+        displaced.forEach((slot, emptied) -> taken.put(slot, new LinkedHashMap<>(emptied)));
         return new Snapshot(
                 choices.clone(),
                 copied,
                 variant,
                 new LinkedHashMap<>(colors),
                 List.copyOf(fx),
-                style);
+                style,
+                taken,
+                bothSides);
     }
 
     /** Remember the look now, to undo the next change. */
@@ -656,6 +1041,9 @@ final class CharacterLook {
         fx.clear();
         fx.addAll(last.fx());
         style = last.style();
+        displaced.clear();
+        last.displaced().forEach((slot, emptied) -> displaced.put(slot, new LinkedHashMap<>(emptied)));
+        bothSides = last.bothSides();
         ++version;
         return true;
     }
@@ -673,8 +1061,9 @@ final class CharacterLook {
                 continue;
             }
             PartSlots.Slot slot = slots.slots().get(i);
-            boolean empty = slot.optional() && random.nextBoolean(EMPTY_CHANCE);
-            choices[i] = empty ? EMPTY : random.nextInt(slot.options().size());
+            List<Integer> shown = available(i);
+            boolean empty = shown.isEmpty() || (slot.optional() && random.nextBoolean(EMPTY_CHANCE));
+            choices[i] = empty ? fallback(i) : shown.get(random.nextInt(shown.size()));
         }
         for (Slider slider : sliders) {
             Range range = range(slider, context);
@@ -689,14 +1078,25 @@ final class CharacterLook {
         for (String channel : channels) {
             colors.put(channel, Swatches.random(channel, random));
         }
-        // Earlier slots win where random choices overlap
+        // Earlier slots win where random choices overlap or clash
+        displaced.clear();
         for (int i = 0; i < choices.length; ++i) {
             if (choices[i] != EMPTY && coveredBy(i) >= 0 && coveredBy(i) < i) {
                 choices[i] = EMPTY;
             } else if (choices[i] != EMPTY) {
                 uncover(i);
+                Part part = part(i, choices[i]);
+                for (int other = i + 1; part != null && other < choices.length; ++other) {
+                    Part worn = part(other, choices[other]);
+                    if (worn != null && WearRules.clash(plan, part, worn)) {
+                        choices[other] = fallback(other);
+                    }
+                }
             }
         }
+        displaced.clear();
+        settle(Set.of());
+        displaced.clear();
         ++version;
     }
 
@@ -707,6 +1107,7 @@ final class CharacterLook {
             PartSlots.Slot slot = slots.slots().get(i);
             choices[i] = slot.optional() ? EMPTY : slot.initial();
         }
+        displaced.clear();
         fx.clear();
         ++version;
     }

@@ -53,6 +53,10 @@ def read_meshes(path):
     return meshes
 
 
+# How seam cap meshes are named: <mesh>_cap_<seam>, see tools/blender/add_caps.py
+CAP_INFIX = "_cap_"
+
+
 def material_slots(names, channels):
     """Material slots for some material names, all tinted the same way."""
     return [{"name": name, "template": TEMPLATE, "channels": channels} for name in names]
@@ -64,6 +68,9 @@ def mannequin_parts(root):
     palette color."""
     parts = []
     for mesh, materials in read_meshes(root / MANNEQUIN_FILES["male"]):
+        # Seam caps go with their slot's part (PartAssembler's CAP_INFIX), not parts of their own
+        if CAP_INFIX in mesh:
+            continue
         slot = mesh.removeprefix("mannequin_")
         meshes = {variant: f"{file}#{mesh}" for variant, file in MANNEQUIN_FILES.items()}
         meshes["*"] = meshes["male"]
@@ -78,6 +85,10 @@ def mannequin_parts(root):
                               for name in materials],
             "tags": ["mannequin"],
         })
+        # Left and right limbs go on together in the editor unless sides are chosen alone
+        if slot.endswith((".L", ".R")):
+            other = slot[:-2] + (".R" if slot.endswith(".L") else ".L")
+            parts[-1]["pair"] = f"{NAMESPACE}:part/mannequin/{other.lower()}"
     return parts
 
 
