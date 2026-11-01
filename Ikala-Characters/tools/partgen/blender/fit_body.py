@@ -45,6 +45,13 @@ from shape_layer import (bone_segments, match_limbs, owners, points_of, set_poin
 # The body plan, for each slot's bones
 PLAN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "src", "main",
                     "resources", "characters", "ikala", "bodyPlan", "biped.json")
+# A guide view narrower than this, in meters, is framed on part of the body, not the whole of it
+WHOLE_VIEW = 2.0
+# Pixels lighter than this, out of 255, are a framed image's white background
+BACKGROUND = 245
+# The share, in percent, of a framed image's figure pixels and a mesh's points left out at each
+# end when measuring how far they reach
+OUTLIER = 0.5
 # How far a figure's point may be from a slot's bones, in meters, to count as the slot's: the
 # slot's own limb, not what hangs near it
 SLOT_REACH = 0.15
@@ -121,6 +128,43 @@ def cut_part(figure, names, seams, segments):
     return part, faces, planes
 
 
+def framed_guess(points, guide, image_path, body):
+    """A first guess at where a figure made from a framed image (one showing part of the body)
+    goes: its front outline (x across, z up) scaled to the image's figure, by the mean of the two
+    ways, and moved onto it, as deep as the body there. The whole-body guess stands the figure on
+    its feet, which a framed one doesn't show."""
+    image = bpy.data.images.load(os.path.abspath(image_path))
+    width, height = image.size
+    pixels = np.empty(width * height * 4, dtype=np.float32)
+    image.pixels.foreach_get(pixels)
+    # Blender's images start at the bottom row
+    rgb = np.flipud(pixels.reshape(height, width, 4)[..., :3])
+    shown = rgb.mean(-1) * 255 < BACKGROUND
+    # Extents by percentiles, so specks the image or the mesh has, away from the figure, don't
+    # stretch them
+    rows, columns = np.nonzero(shown)
+    first_row, last_row = np.percentile(rows, [OUTLIER, 100 - OUTLIER])
+    first_column, last_column = np.percentile(columns, [OUTLIER, 100 - OUTLIER])
+    size, view = guide["size"], guide["view"]
+    middle_x = guide.get("middleX", 0.0)
+    left = middle_x + (first_column / size - 0.5) * view
+    right = middle_x + ((last_column + 1) / size - 0.5) * view
+    top = guide["middleHeight"] - (first_row / size - 0.5) * view
+    bottom = guide["middleHeight"] - ((last_row + 1) / size - 0.5) * view
+    low = np.percentile(points, OUTLIER, axis=0)
+    high = np.percentile(points, 100 - OUTLIER, axis=0)
+    span = high - low
+    scale = ((right - left) / max(span[0], 1e-9) + (top - bottom) / max(span[2], 1e-9)) / 2
+    inside = (body[:, 0] > left) & (body[:, 0] < right) & (body[:, 2] > bottom) \
+        & (body[:, 2] < top)
+    depth = float(np.median(body[inside, 1])) if inside.any() else 0.0
+    target = np.array([(left + right) / 2, depth, (top + bottom) / 2])
+    m = np.eye(4)
+    m[:3, :3] *= scale
+    m[:3, 3] = target - scale * (low + high) / 2
+    return m
+
+
 def slot_fit(points, surface, segments, bones):
     """How far the figure's points nearest a slot's bones lie from the skin: the median and the
     90th percentile, in millimeters, and how many there are."""
@@ -144,6 +188,9 @@ def main():
     parser.add_argument("--body", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--slots", required=True, help="Comma-separated slots the part fills.")
+    parser.add_argument("--guide", help="The guide the image was painted over, when framed on "
+                                        "part of the body (see render_guides.py's --frame).")
+    parser.add_argument("--image", help="The picked image, with --guide.")
     args = parser.parse_args(argv)
     os.makedirs(args.out, exist_ok=True)
     slots = slot_bones([s for s in args.slots.split(",") if s])
@@ -155,8 +202,18 @@ def main():
     figure = import_figure(args.mesh)
     points, _ = world_vertices(figure)
 
-    m = first_guess(points, body)
-    m, rounds, residual = icp(points, surface, m)
+    guide = None
+    if args.guide:
+        with open(args.guide, encoding="utf-8") as file:
+            guide = json.load(file)
+    framed = guide is not None and guide["view"] < WHOLE_VIEW
+    if framed:
+        m = framed_guess(points, guide, args.image, body)
+    else:
+        m = first_guess(points, body)
+    # A framed figure's size comes from its image; trimmed ICP left to scale it shrinks it onto
+    # whatever bit of the arm it fits best
+    m, rounds, residual = icp(points, surface, m, scaled=not framed)
     turn = turn_degrees(m)
     figure.matrix_world = Matrix(m.tolist()) @ figure.matrix_world
     bpy.ops.object.select_all(action="DESELECT")

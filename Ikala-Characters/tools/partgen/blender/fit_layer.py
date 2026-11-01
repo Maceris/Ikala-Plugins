@@ -60,9 +60,9 @@ SIDE = 0.35
 SIDE_GROW = 8
 
 
-def similarity(source, target):
+def similarity(source, target, scaled=True):
     """The scale, rotation and translation that best take source points onto target points
-    (Umeyama), as a 4x4 matrix."""
+    (Umeyama), as a 4x4 matrix; without scaled, only the rotation and translation."""
     mu_s, mu_t = source.mean(0), target.mean(0)
     s, t = source - mu_s, target - mu_t
     covariance = t.T @ s / len(source)
@@ -71,7 +71,7 @@ def similarity(source, target):
     if np.linalg.det(u) * np.linalg.det(vt) < 0:
         flip[2, 2] = -1
     rotation = u @ flip @ vt
-    scale = np.trace(np.diag(d) @ flip) / (s ** 2).sum(1).mean()
+    scale = np.trace(np.diag(d) @ flip) / (s ** 2).sum(1).mean() if scaled else 1.0
     m = np.eye(4)
     m[:3, :3] = scale * rotation
     m[:3, 3] = mu_t - scale * rotation @ mu_s
@@ -96,9 +96,9 @@ def first_guess(points, body):
     return m
 
 
-def icp(points, surface, m):
-    """Refine a fit by trimmed ICP. Gives the fit, the rounds taken and the fitted share's
-    median distance."""
+def icp(points, surface, m, scaled=True):
+    """Refine a fit by trimmed ICP, scaling it too unless told not to. Gives the fit, the rounds
+    taken and the fitted share's median distance."""
     rng = np.random.default_rng(0)
     sample = points[rng.choice(len(points), min(SAMPLES, len(points)), replace=False)]
     for rounds in range(1, ROUNDS + 1):
@@ -106,7 +106,7 @@ def icp(points, surface, m):
         closest, signed = nearest(moved, surface)
         distance = np.abs(signed)
         keep = distance <= np.quantile(distance, TRIM)
-        step = similarity(moved[keep], closest[keep])
+        step = similarity(moved[keep], closest[keep], scaled)
         m = step @ m
         if np.abs(apply(step, moved[keep]) - moved[keep]).max() < SETTLED:
             break
@@ -192,7 +192,8 @@ def read_mask(path):
 def on_painted(points, painted, guide):
     """Whether each point, seen straight on from the front, falls on a painted pixel."""
     size = guide["size"]
-    column = np.floor((points[:, 0] / guide["view"] + 0.5) * size).astype(int)
+    column = np.floor(((points[:, 0] - guide.get("middleX", 0.0)) / guide["view"] + 0.5)
+                      * size).astype(int)
     row = np.floor(((guide["middleHeight"] - points[:, 2]) / guide["view"] + 0.5) * size)
     row = row.astype(int)
     inside = (column >= 0) & (column < size) & (row >= 0) & (row < size)

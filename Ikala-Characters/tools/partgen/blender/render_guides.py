@@ -27,6 +27,8 @@ from mathutils.bvhtree import BVHTree
 # How much of the image's height and width the view covers, in meters, and where its middle is
 VIEW = 2.3
 MIDDLE_HEIGHT = 1.02
+# Across the body, the view's middle; --frame moves and narrows it onto part of the body
+MIDDLE_X = 0.0
 # The camera stands this far in front of the body, looking along +Y (the body faces -Y)
 DISTANCE = 6.0
 # Depth is spread over this range in front of the body's nearest point, in meters
@@ -66,7 +68,7 @@ def body_mesh():
 
 def pixel_to_world(i, j, size):
     """Where the middle of pixel (column i, row j) is on the image plane: world x and z."""
-    x = ((i + 0.5) / size - 0.5) * VIEW
+    x = MIDDLE_X + ((i + 0.5) / size - 0.5) * VIEW
     z = MIDDLE_HEIGHT - ((j + 0.5) / size - 0.5) * VIEW
     return x, z
 
@@ -133,7 +135,7 @@ def render_gray(path, size):
     scene.collection.objects.link(camera)
     camera.data.type = "ORTHO"
     camera.data.ortho_scale = VIEW
-    camera.location = (0, -DISTANCE, MIDDLE_HEIGHT)
+    camera.location = (MIDDLE_X, -DISTANCE, MIDDLE_HEIGHT)
     camera.rotation_euler = (math.pi / 2, 0, 0)
     scene.camera = camera
     scene.render.filepath = path
@@ -146,7 +148,12 @@ def main():
     parser.add_argument("--body", required=True, help="The mannequin's .blend file.")
     parser.add_argument("--out", required=True)
     parser.add_argument("--size", type=int, default=1024)
+    parser.add_argument("--frame", help="x,z,view: the middle and size of a view framed on part "
+                                        "of the body, in meters, instead of the whole body.")
     args = parser.parse_args(argv)
+    global MIDDLE_X, MIDDLE_HEIGHT, VIEW
+    if args.frame:
+        MIDDLE_X, MIDDLE_HEIGHT, VIEW = (float(v) for v in args.frame.split(","))
     os.makedirs(args.out, exist_ok=True)
     bpy.ops.wm.open_mainfile(filepath=os.path.abspath(args.body))
 
@@ -173,7 +180,8 @@ def main():
             "body": os.path.abspath(args.body),
             "note": "Blender space: Z up, the body faces -Y; an orthographic front view",
             "size": args.size, "view": VIEW, "middleHeight": MIDDLE_HEIGHT,
-            "pixel": "x = (column + 0.5) / size - 0.5) * view; z = middleHeight - "
+            "middleX": MIDDLE_X,
+            "pixel": "x = middleX + ((column + 0.5) / size - 0.5) * view; z = middleHeight - "
                      "((row + 0.5) / size - 0.5) * view",
             "covered": float(hit.mean()),
             "slots": slots,

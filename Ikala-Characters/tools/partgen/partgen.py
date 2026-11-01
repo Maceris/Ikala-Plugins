@@ -117,6 +117,10 @@ BARE_SLOTS = ("head", "hand.L", "hand.R", "foot.L", "foot.R")
 # Room left around a brief's painted area when the review page zooms in on it, as a share of its
 # size on each side
 REVIEW_MARGIN = 0.15
+# A body part's guides are framed on its slots with this much to spare around them, in meters
+FRAME_PAD = 0.15
+# The limbs a body part's guides are framed on whole
+LIMB_CHAINS = (("upperArm.L", "lowerArm.L", "hand.L"), ("upperLeg.L", "lowerLeg.L", "foot.L"))
 # This computer's folders, not committed, and the template for it
 CONFIG = "config.json"
 CONFIG_EXAMPLE = "config.example.json"
@@ -527,16 +531,55 @@ def prepare_sketch(config, batch, brief):
     return name
 
 
-def guides(config):
-    """The folder of guides rendered from the mannequin, rendered the first time."""
-    folder = pathlib.Path(config["work"]) / "guides" / GUIDE_VARIANT
+def frame_chain(part):
+    """The limb a body part's slots belong to (see LIMB_CHAINS), or its own slots if none."""
+    for chain in LIMB_CHAINS:
+        if set(part["covers"]) <= set(chain):
+            return list(chain)
+    return list(part["covers"])
+
+
+def body_frame(config, part):
+    """A view framed on a body part's limb (see frame_chain), from the whole body's guide: the
+    square around it with FRAME_PAD meters to spare. A whole limb rather than the part alone, so
+    the body it hangs from shows too and holds the figure TRELLIS makes in its pose: an arm on
+    its own, it turns as it pleases. Gives its middle (x, z) and size, in meters."""
+    from PIL import Image
+    import numpy as np
+    folder = guides(config)
+    guide = json.loads((folder / "guide.json").read_text(encoding="utf8"))
+    slots = np.asarray(Image.open(folder / "slots.png").getchannel("R"))
+    covered = np.isin(slots, [guide["slots"].index(s) + 1 for s in frame_chain(part)])
+    rows, columns = np.flatnonzero(covered.any(1)), np.flatnonzero(covered.any(0))
+    size, view = guide["size"], guide["view"]
+    middle_x = guide.get("middleX", 0.0)
+    left = middle_x + (columns[0] / size - 0.5) * view
+    right = middle_x + ((columns[-1] + 1) / size - 0.5) * view
+    top = guide["middleHeight"] - (rows[0] / size - 0.5) * view
+    bottom = guide["middleHeight"] - ((rows[-1] + 1) / size - 0.5) * view
+    side = max(right - left, top - bottom) + 2 * FRAME_PAD
+    return (left + right) / 2, (top + bottom) / 2, side
+
+
+def guides(config, part=None):
+    """The folder of guides rendered from the mannequin, rendered the first time: of the whole
+    body, or for a body part, framed on its slots (see body_frame), so the part fills much more
+    of the image, and of the figure TRELLIS makes from it."""
+    name = GUIDE_VARIANT
+    frame = None
+    if part is not None and part.get("group"):
+        name = "%s_%s" % (GUIDE_VARIANT, re.sub(r"[^a-z0-9]+", "_",
+                                                 "_".join(frame_chain(part)).lower()))
+        frame = body_frame(config, part)
+    folder = pathlib.Path(config["work"]) / "guides" / name
     source = folder / "guide.json"
     if not source.exists():
         body = pathlib.Path(config["mannequin"]).with_suffix(".blend")
         result = subprocess.run(
             [config["blender"], "-b", "--factory-startup", "--python",
              str(TOOLS / "blender" / "render_guides.py"), "--", "--body", str(body),
-             "--out", str(folder), "--size", str(SDXL_SIZE)],
+             "--out", str(folder), "--size", str(SDXL_SIZE)]
+            + (["--frame", "%.4f,%.4f,%.4f" % frame] if frame else []),
             capture_output=True, text=True)
         if result.returncode != 0 or not source.exists():
             raise SystemExit("Rendering the guides failed:\n" + result.stdout[-2000:]
@@ -587,7 +630,7 @@ def beyond_seams(config, folder, guide, part):
     slots = np.asarray(Image.open(folder / "slots.png").getchannel("R"))
     rows, columns = np.mgrid[0:slots.shape[0], 0:slots.shape[1]]
     # Pixel centers in Blender's x and z, after guide.json's "pixel"
-    x = ((columns + 0.5) / size - 0.5) * view
+    x = guide.get("middleX", 0.0) + ((columns + 0.5) / size - 0.5) * view
     z = middle - ((rows + 0.5) / size - 0.5) * view
     beyond = np.zeros(slots.shape, dtype=bool)
     plan = load_json_with_comments(PLAN)
@@ -614,12 +657,12 @@ def guide_inputs(config, layer, rule):
     """The images that paint a layer's clothing or a body part, in ComfyUI's input folder: the
     mannequin's render, its depth, and a mask of where it may paint. Gives their names there."""
     from PIL import Image, ImageChops, ImageFilter
-    folder = guides(config)
+    folder = guides(config, layer)
     guide = json.loads((folder / "guide.json").read_text(encoding="utf8"))
     inputs = pathlib.Path(config["comfy"]) / "input"
     names = {}
     for kind in ("gray", GUIDE_MAP):
-        names[kind] = "partgen_guide_%s_%s.png" % (GUIDE_VARIANT, kind)
+        names[kind] = "partgen_guide_%s_%s.png" % (folder.name, kind)
         Image.open(folder / (kind + ".png")).convert("RGB").save(inputs / names[kind])
     # The slots the layer covers, grown outward, then drawn down for clothing that hangs
     covered = {guide["slots"].index(slot) + 1 for slot in layer["covers"]}
@@ -813,7 +856,8 @@ def painted_area(config, brief, out):
     import numpy as np
     layer, rule = rule_of(brief)
     allowed = pathlib.Path(config["comfy"]) / "input" / guide_inputs(config, layer, rule)["mask"]
-    gray = np.asarray(Image.open(guides(config) / "gray.png").convert("RGB"), dtype=float)
+    gray = np.asarray(Image.open(guides(config, layer) / "gray.png").convert("RGB"),
+                      dtype=float)
     folder = out.parent
     image = np.asarray(Image.open(folder / "images" / ("%d.png" % brief["review"]["pick"]))
                        .convert("RGB"), dtype=float)
@@ -840,8 +884,8 @@ def painted_area(config, brief, out):
     # Closing bridges the gap between the legs again
     gap = None
     if rule.get("legGap"):
-        guide = json.loads((guides(config) / "guide.json").read_text(encoding="utf8"))
-        gap = leg_gap(guides(config), guide)
+        guide = json.loads((guides(config, layer) / "guide.json").read_text(encoding="utf8"))
+        gap = leg_gap(guides(config, layer), guide)
         mask = Image.fromarray(np.where(gap, 0, np.asarray(mask)).astype(np.uint8))
     # Whatever a flood from the corner can't reach is inside the garment
     flood = mask.copy()
@@ -1192,7 +1236,8 @@ def fit_body_part(config, batch, brief):
     steps = [
         ("fit_body.py", "fit.json",
          ["--mesh", folder / brief["mesh"]["file"], "--body", body, "--out", out,
-          "--slots", slots]),
+          "--slots", slots, "--guide", guides(config, part) / "guide.json",
+          "--image", folder / "images" / ("%d.png" % brief["review"]["pick"])]),
         ("shape_body.py", "shape.json",
          ["--part", out / "part.glb", "--body", body, "--out", out, "--slots", slots,
           "--triangles", rule["triangles"]] + (["--open", left_open] if left_open else [])
@@ -1203,7 +1248,7 @@ def fit_body_part(config, batch, brief):
          ["--weighted", out / "weighted.blend", "--figure", out / "part.glb",
           "--image", folder / "images" / ("%d.png" % brief["review"]["pick"]),
           "--painted", painted_area(config, brief, out), "--guide",
-          guides(config) / "guide.json", "--out", out, "--name", brief["id"],
+          guides(config, part) / "guide.json", "--out", out, "--name", brief["id"],
           "--slots", slots]),
     ]
     reports = {}
