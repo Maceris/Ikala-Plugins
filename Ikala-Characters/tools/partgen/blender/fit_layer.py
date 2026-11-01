@@ -189,13 +189,23 @@ def read_mask(path):
     return np.flipud(pixels.reshape(height, width, 4)[..., 0] > 0.5)
 
 
+def guide_pixels(points, guide, size=None):
+    """Where points fall, seen straight on from the front, in a guide's image, or in a grid
+    over its view size cells across: their columns and rows, as floats (guide.json's "pixel"
+    the other way round)."""
+    size = size or guide["size"]
+    x = points[:, 0] - guide.get("middleX", 0.0)
+    z = points[:, 2] - guide["middleHeight"]
+    roll = math.radians(guide.get("roll", 0.0))
+    across = x * math.cos(roll) - z * math.sin(roll)
+    up = x * math.sin(roll) + z * math.cos(roll)
+    return (across / guide["view"] + 0.5) * size, (0.5 - up / guide["view"]) * size
+
+
 def on_painted(points, painted, guide):
     """Whether each point, seen straight on from the front, falls on a painted pixel."""
     size = guide["size"]
-    column = np.floor(((points[:, 0] - guide.get("middleX", 0.0)) / guide["view"] + 0.5)
-                      * size).astype(int)
-    row = np.floor(((guide["middleHeight"] - points[:, 2]) / guide["view"] + 0.5) * size)
-    row = row.astype(int)
+    column, row = (np.floor(v).astype(int) for v in guide_pixels(points, guide))
     inside = (column >= 0) & (column < size) & (row >= 0) & (row < size)
     found = np.zeros(len(points), dtype=bool)
     found[inside] = painted[row[inside], column[inside]]

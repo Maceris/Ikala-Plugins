@@ -38,7 +38,7 @@ from mathutils import Matrix, Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from bodies import load_body, nearest, tree, world_vertices  # noqa: E402
-from fit_layer import (MAX_TURN, apply, cut_garment, first_guess, icp,  # noqa: E402
+from fit_layer import (MAX_TURN, apply, cut_garment, first_guess, guide_pixels, icp,  # noqa: E402
                        import_figure, render, turn_degrees)
 from shape_layer import (bone_segments, match_limbs, owners, points_of, set_points,  # noqa: E402
                          surface_samples)
@@ -210,8 +210,7 @@ def front_outline(points, guide):
     """Which cells of an OUTLINE_GRID grid over the guide's view points fall in, seen from the
     front, grown a cell so a mesh's vertices cover its outline."""
     cells = np.zeros((OUTLINE_GRID, OUTLINE_GRID), dtype=bool)
-    column = ((points[:, 0] - guide.get("middleX", 0.0)) / guide["view"] + 0.5) * OUTLINE_GRID
-    row = ((guide["middleHeight"] - points[:, 2]) / guide["view"] + 0.5) * OUTLINE_GRID
+    column, row = guide_pixels(points, guide, OUTLINE_GRID)
     inside = (column >= 0) & (column < OUTLINE_GRID) & (row >= 0) & (row < OUTLINE_GRID)
     cells[row[inside].astype(int), column[inside].astype(int)] = True
     grown = cells.copy()

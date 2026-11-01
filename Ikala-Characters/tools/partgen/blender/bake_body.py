@@ -42,7 +42,7 @@ import fit_accessory as hat  # noqa: E402
 from add_caps import CAP_INFIX  # noqa: E402
 from bake_layer import (FRONT_FULL, FRONT_START, face_out, outer_faces, read_image,  # noqa: E402
                         surface_maps)
-from fit_layer import import_figure, render  # noqa: E402
+from fit_layer import guide_pixels, import_figure, render  # noqa: E402
 
 # How far bake rays reach, as a share of the part's size: about 3 cm on a 50 cm forearm. Unlike a
 # garment, a body part isn't pushed onto the figure's surface, so the solid it was rebuilt into
@@ -140,10 +140,7 @@ def paint_front(base_image, covered, position, normal, picked, painted, guide):
     took it."""
     pixels = np.array(base_image.pixels[:]).reshape(-1, 4)
     size = guide["size"]
-    column = np.floor(((position[:, 0] - guide.get("middleX", 0.0)) / guide["view"] + 0.5)
-                      * size).astype(int)
-    row = np.floor(((guide["middleHeight"] - position[:, 2]) / guide["view"] + 0.5)
-                   * size).astype(int)
+    column, row = (np.floor(v).astype(int) for v in guide_pixels(position, guide))
     on_image = covered & (column >= 0) & (column < size) & (row >= 0) & (row < size)
     inside = np.zeros_like(on_image)
     inside[on_image] = painted[row[on_image], column[on_image]]

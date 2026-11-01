@@ -328,7 +328,7 @@ def body_of(brief):
     rule = dict(rules[group], **brief.get("fit", {}))
     part = {"id": "body_" + brief["id"], "group": group, "covers": named, "seams": seams,
             "keepsOut": [s["id"] for s in plan["slots"] if s["id"] not in named],
-            "isolated": bool(rule.get("isolated"))}
+            "isolated": bool(rule.get("isolated")), "roll": rule.get("roll", 0)}
     return part, rule
 
 
@@ -553,24 +553,31 @@ def frame_chain(part):
     return list(part["covers"])
 
 
-def body_frame(config, framed):
+def body_frame(config, framed, roll=0.0):
     """A view framed on some slots, from the whole body's guide: the square around them with
-    FRAME_PAD meters to spare. Gives its middle (x, z) and size, in meters."""
+    FRAME_PAD meters to spare, for a camera turned roll degrees about its view. Gives its
+    middle (x, z) and size, in meters."""
     from PIL import Image
     import numpy as np
     folder = guides(config)
     guide = json.loads((folder / "guide.json").read_text(encoding="utf8"))
     slots = np.asarray(Image.open(folder / "slots.png").getchannel("R"))
-    covered = np.isin(slots, [guide["slots"].index(s) + 1 for s in framed])
-    rows, columns = np.flatnonzero(covered.any(1)), np.flatnonzero(covered.any(0))
+    rows, columns = np.nonzero(np.isin(slots, [guide["slots"].index(s) + 1 for s in framed]))
     size, view = guide["size"], guide["view"]
-    middle_x = guide.get("middleX", 0.0)
-    left = middle_x + (columns[0] / size - 0.5) * view
-    right = middle_x + ((columns[-1] + 1) / size - 0.5) * view
-    top = guide["middleHeight"] - (rows[0] / size - 0.5) * view
-    bottom = guide["middleHeight"] - ((rows[-1] + 1) / size - 0.5) * view
-    side = max(right - left, top - bottom) + 2 * FRAME_PAD
-    return (left + right) / 2, (top + bottom) / 2, side
+    # The covered pixels' corners in Blender's x and z, after guide.json's "pixel"
+    x = np.concatenate([guide.get("middleX", 0.0) + ((columns + c) / size - 0.5) * view
+                        for c in (0, 1)])
+    z = np.concatenate([guide["middleHeight"] - ((rows + r) / size - 0.5) * view
+                        for r in (0, 1)])
+    # Across and up the turned view
+    turn = np.radians(roll)
+    across = x * np.cos(turn) - z * np.sin(turn)
+    up = x * np.sin(turn) + z * np.cos(turn)
+    middle_across = (across.min() + across.max()) / 2
+    middle_up = (up.min() + up.max()) / 2
+    side = max(np.ptp(across), np.ptp(up)) + 2 * FRAME_PAD
+    return (float(middle_across * np.cos(turn) + middle_up * np.sin(turn)),
+            float(-middle_across * np.sin(turn) + middle_up * np.cos(turn)), float(side))
 
 
 def guides(config, part=None):
@@ -581,12 +588,14 @@ def guides(config, part=None):
     an arm on its own, TRELLIS turns as it pleases. An isolated part's guides show its own slots
     and nothing else, framed on them; fit_body.py works out its turn instead."""
     name = GUIDE_VARIANT
-    frame, only = None, None
+    frame, only, roll = None, None, 0
     if part is not None and part.get("group"):
         framed = part["covers"] if part.get("isolated") else frame_chain(part)
-        name = "%s_%s%s" % (GUIDE_VARIANT, "only_" if part.get("isolated") else "",
-                            re.sub(r"[^a-z0-9]+", "_", "_".join(framed).lower()))
-        frame = body_frame(config, framed)
+        roll = part.get("roll", 0) if part.get("isolated") else 0
+        name = "%s_%s%s%s" % (GUIDE_VARIANT, "only_" if part.get("isolated") else "",
+                              re.sub(r"[^a-z0-9]+", "_", "_".join(framed).lower()),
+                              "_roll%g" % roll if roll else "")
+        frame = body_frame(config, framed, roll)
         only = framed if part.get("isolated") else None
     folder = pathlib.Path(config["work"]) / "guides" / name
     source = folder / "guide.json"
@@ -597,7 +606,8 @@ def guides(config, part=None):
              str(TOOLS / "blender" / "render_guides.py"), "--", "--body", str(body),
              "--out", str(folder), "--size", str(SDXL_SIZE)]
             + (["--frame", "%.4f,%.4f,%.4f" % frame] if frame else [])
-            + (["--only", ",".join(only)] if only else []),
+            + (["--only", ",".join(only)] if only else [])
+            + (["--roll", str(roll)] if roll else []),
             capture_output=True, text=True)
         if result.returncode != 0 or not source.exists():
             raise SystemExit("Rendering the guides failed:\n" + result.stdout[-2000:]
@@ -648,8 +658,11 @@ def beyond_seams(config, folder, guide, part):
     slots = np.asarray(Image.open(folder / "slots.png").getchannel("R"))
     rows, columns = np.mgrid[0:slots.shape[0], 0:slots.shape[1]]
     # Pixel centers in Blender's x and z, after guide.json's "pixel"
-    x = guide.get("middleX", 0.0) + ((columns + 0.5) / size - 0.5) * view
-    z = middle - ((rows + 0.5) / size - 0.5) * view
+    across = ((columns + 0.5) / size - 0.5) * view
+    up = (0.5 - (rows + 0.5) / size) * view
+    roll = np.radians(guide.get("roll", 0.0))
+    x = guide.get("middleX", 0.0) + across * np.cos(roll) + up * np.sin(roll)
+    z = middle - across * np.sin(roll) + up * np.cos(roll)
     beyond = np.zeros(slots.shape, dtype=bool)
     plan = load_json_with_comments(PLAN)
     for seam in part["seams"]:
