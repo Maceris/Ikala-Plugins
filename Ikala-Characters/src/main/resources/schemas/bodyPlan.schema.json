@@ -84,6 +84,13 @@
           },
           "description": "Palette channels beyond the standard ones (skin, eyes, hair, primary, secondary, tertiary, accent), like \"fur\"."
         },
+        "exclusiveTags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Tags a character wears at most one part of each, like \"cloth\" for long coats, capes and robes, or \"backDetail\" for wings, jetpacks and backpacks. The last one put on takes the others off."
+        },
         "regions": {
           "type": "array",
           "items": {

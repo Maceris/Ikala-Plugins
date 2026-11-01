@@ -28,7 +28,8 @@ import java.util.Set;
  * parts in their layers, held items go to sockets their slots allow, items and parts hide the
  * layers and regions they say, and items' styles come before the design's, in the order of the
  * plan's equipment slots. The real item picks the style; a look shown in its place only changes
- * what is drawn. Hidden items show nothing, so what is under them shows.
+ * what is drawn. Hidden items show nothing, so what is under them shows. Parts that can't be worn
+ * together are settled by {@link WearRules}, and sockets worn parts cover show nothing.
  *
  * @author Ches Burks
  */
@@ -148,21 +149,42 @@ public final class LookStack {
         if (design.style() != null) {
             styles.add(design.style());
         }
-        for (Id partId : worn.values()) {
+        // What can't be worn together goes, the later winning, so worn items beat the design
+        Map<String, Id> settled =
+                new LinkedHashMap<>(
+                        WearRules.settle(plan, worn, partId -> registry.get(Part.class, partId)));
+        List<Part> wornParts = new ArrayList<>();
+        for (Id partId : settled.values()) {
             Part part = registry.get(Part.class, partId);
             if (part != null) {
-                hiddenLayers.addAll(part.hidesLayers());
+                wornParts.add(part);
             }
         }
-        worn.entrySet()
+        hiddenLayers.addAll(WearRules.hiddenLayers(wornParts));
+        Set<String> hiddenSockets = WearRules.hiddenSockets(wornParts);
+        settled.entrySet()
                 .removeIf(
                         entry -> {
                             Part part = registry.get(Part.class, entry.getValue());
-                            return part != null
-                                    && part.kind() == Part.PartKind.LAYER
-                                    && part.fills().stream().anyMatch(hiddenLayers::contains);
+                            if (part == null) {
+                                return false;
+                            }
+                            if (part.kind() == Part.PartKind.LAYER) {
+                                return part.fills().stream().anyMatch(hiddenLayers::contains);
+                            }
+                            BodyPlan.Socket socket = plan.socket(entry.getKey());
+                            return part.kind() == Part.PartKind.ACCESSORY
+                                    && socket != null
+                                    && WearRules.hides(socket, hiddenSockets);
                         });
-        return new Shown(worn, hiddenRegions, held, styles, fx, dyes);
+        // Covered sockets show nothing: no held items, no effects
+        held.removeIf(item -> WearRules.hides(item.socket(), hiddenSockets));
+        fx.removeIf(
+                use -> {
+                    BodyPlan.Socket socket = use.socket() == null ? null : plan.socket(use.socket());
+                    return socket != null && WearRules.hides(socket, hiddenSockets);
+                });
+        return new Shown(settled, hiddenRegions, held, styles, fx, dyes);
     }
 
     /**

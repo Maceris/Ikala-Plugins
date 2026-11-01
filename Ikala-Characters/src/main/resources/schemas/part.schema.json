@@ -251,6 +251,25 @@
           },
           "description": "For body parts: how it meets its neighbors at its outer seams, by seam name. A seam left out welds."
         },
+        "pair": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "The part for the other side, like the right arm of a left arm, which editors put on along with this one unless sides are chosen alone."
+        },
+        "locksSliders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Sliders this locks while worn, by slider ID or editor group, like \"face\" for a full helmet."
+        },
+        "hidesSockets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Sockets this covers, by name or type, like \"face\" for a full helmet: accessories and effects there aren't shown."
+        },
         "extends": {
           "type": "string",
           "description": "The ID of a definition of the same kind to start from. Fields written here replace the parent's, and objects merge field by field."

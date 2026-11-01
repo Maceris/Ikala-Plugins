@@ -17,12 +17,16 @@
   "layers": [
     { "id": "gloves", "covers": ["hand.L", "hand.R"], "order": 20 },
     { "id": "hair", "covers": ["head"] },
-    { "id": "helmet", "covers": ["head"], "order": 30 }
+    { "id": "helmet", "covers": ["head"], "order": 30 },
+    { "id": "jacket", "covers": ["torso"], "order": 20 },
+    { "id": "cape", "covers": ["torso"], "order": 40 }
   ],
+  "exclusiveTags": ["cloth", "backDetail"],
   "sockets": [
     { "id": "back", "bone": "socket.back", "type": "back.large" },
     { "id": "grip.R", "bone": "hand.R", "type": "grip.1h" },
-    { "id": "grip.L", "bone": "hand.L", "type": "grip.1h" }
+    { "id": "grip.L", "bone": "hand.L", "type": "grip.1h" },
+    { "id": "face", "bone": "head", "type": "face" }
   ],
   "equipment": [
     { "id": "mainHand", "sockets": ["grip.R", "back"] },
