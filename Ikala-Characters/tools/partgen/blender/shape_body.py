@@ -15,7 +15,7 @@ seam open:
 - open: the solid keeps its own closed end, like a skeleton arm's bone at the shoulder.
 
     blender -b --python shape_body.py -- --part <part.glb> --body <male.blend> --out <folder>
-        --slots lowerArm.L --triangles 1500 [--open wrist.L,elbow.L]
+        --slots lowerArm.L --triangles 1500 [--open wrist.L,elbow.L] [--voxel 0.005]
 
 writes shaped.glb (the part and its caps, unskinned), shaped.blend (the mannequin with the part
 and its caps, the ring vertices in a "seam" vertex group with the ring's weights, for
@@ -246,7 +246,23 @@ def bridge(obj, seam, plane, ring):
     return [indices[list(ring_order).index(k)] for k in range(len(ring))]
 
 
+def mark_rings(part, welded):
+    """Put the welded rings' vertices in the SEAM_GROUP vertex group, with the rings' weights
+    and normals, from (indices, ring) pairs, each ring's entries in its indices' order."""
+    seam_group = part.vertex_groups.get(SEAM_GROUP) or part.vertex_groups.new(name=SEAM_GROUP)
+    normals = [Vector(n) for n in np.array([v.normal for v in part.data.vertices])]
+    for indices, ring in welded:
+        seam_group.add(indices, 1.0, "REPLACE")
+        for index, entry in zip(indices, ring):
+            normals[index] = Vector(entry["normal"])
+            for bone, weight in entry["weights"].items():
+                group = part.vertex_groups.get(bone) or part.vertex_groups.new(name=bone)
+                group.add([index], weight, "REPLACE")
+    part.data.normals_split_custom_set_from_vertices(normals)
+
+
 def main():
+    global VOXEL
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--part", required=True)
@@ -255,7 +271,10 @@ def main():
     parser.add_argument("--slots", required=True, help="Comma-separated slots the part fills.")
     parser.add_argument("--triangles", type=int, required=True)
     parser.add_argument("--open", default="", help="Comma-separated seams left open.")
+    parser.add_argument("--voxel", type=float, default=VOXEL,
+                        help="The voxel size the part is rebuilt at, in meters.")
     args = parser.parse_args(argv)
+    VOXEL = args.voxel
     os.makedirs(args.out, exist_ok=True)
     names = [s for s in args.slots.split(",") if s]
     left_open = {s for s in args.open.split(",") if s}
@@ -307,16 +326,7 @@ def main():
     mesh.free()
     for polygon in part.data.polygons:
         polygon.use_smooth = True
-    seam_group = part.vertex_groups.new(name=SEAM_GROUP)
-    normals = [Vector(n) for n in np.array([v.normal for v in part.data.vertices])]
-    for indices, ring in welded.values():
-        seam_group.add(indices, 1.0, "REPLACE")
-        for index, entry in zip(indices, ring):
-            normals[index] = Vector(entry["normal"])
-            for bone, weight in entry["weights"].items():
-                group = part.vertex_groups.get(bone) or part.vertex_groups.new(name=bone)
-                group.add([index], weight, "REPLACE")
-    part.data.normals_split_custom_set_from_vertices(normals)
+    mark_rings(part, welded.values())
 
     caps = []
     for seam, (indices, _) in welded.items():

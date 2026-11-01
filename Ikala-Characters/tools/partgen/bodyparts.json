@@ -1,12 +1,13 @@
 {
-  "_comment": "How body parts, like alternative limbs, are generated for each group of body plan slots they may fill. A brief's \"slots\" pick the group by their names without the side (\".L\"); only the left side is generated, and the right is its mirror. Its images are painted over a front render of the male mannequin at rest, in its A pose, only inside a mask of the brief's slots grown \"maskGrow\" pixels outward (a mechanical limb may be bulkier than the arm), never into the rest of the body and never past the line of each outer seam, so the neighboring body stays the mannequin's and the part can join its ring; steered by the render's depth. \"prompt\" fills in {description} and keeps the rest of the body bare and gray; \"guideStrength\" and \"guideEnd\" are how hard the depth steers and for what share of the steps (less lets a part's shape stray further from the arm's); \"triangles\" is the budget for the fitted mesh. A brief's \"fit\" replaces any of these. Skin-like areas will tint with the character's skin channel; \"palette\" is the channel the part's main other tint group takes, like metal or plates, and further groups take the accent.",
+  "_comment": "How body parts, like alternative limbs, are generated for each group of body plan slots they may fill. A brief's \"slots\" pick the group by their names without the side (\".L\"); only the left side is generated, and the right is its mirror. Its images are painted over a front render of the male mannequin at rest, in its A pose, only inside a mask of the brief's slots grown \"maskGrow\" pixels outward (a mechanical limb may be bulkier than the arm), never into the rest of the body and never past the line of each outer seam, so the neighboring body stays the mannequin's and the part can join its ring; steered by the render's depth. \"prompt\" fills in {description} and keeps the rest of the body bare and gray; \"guideStrength\" and \"guideEnd\" are how hard the depth steers and for what share of the steps (less lets a part's shape stray further from the arm's); \"triangles\" is the budget for the fitted mesh, and \"voxel\" the size, in meters, it is rebuilt at before being reduced to it (finer than clothing's 5 mm, so gaps between bones, plates and fingers survive). A brief's \"fit\" replaces any of these. Skin-like areas will tint with the character's skin channel; \"palette\" is the channel the part's main other tint group takes, like metal or plates, and further groups take the accent.",
   "arm": {
     "slots": ["upperArm", "lowerArm", "hand"],
     "prompt": "its left arm, from the shoulder to the fingertips, is ({description}:1.4), the rest of its body bare smooth gray skin",
     "guideStrength": 0.35,
     "guideEnd": 0.4,
     "maskGrow": 24,
-    "triangles": 1500,
+    "triangles": 3000,
+    "voxel": 0.003,
     "palette": "primary"
   },
   "forearm and hand": {
@@ -15,7 +16,8 @@
     "guideStrength": 0.35,
     "guideEnd": 0.4,
     "maskGrow": 24,
-    "triangles": 1100,
+    "triangles": 2400,
+    "voxel": 0.003,
     "palette": "primary"
   },
   "forearm": {
@@ -24,7 +26,8 @@
     "guideStrength": 0.4,
     "guideEnd": 0.4,
     "maskGrow": 20,
-    "triangles": 600,
+    "triangles": 1200,
+    "voxel": 0.003,
     "palette": "primary"
   },
   "hand": {
@@ -33,7 +36,8 @@
     "guideStrength": 0.4,
     "guideEnd": 0.4,
     "maskGrow": 20,
-    "triangles": 600,
+    "triangles": 1400,
+    "voxel": 0.003,
     "palette": "primary"
   },
   "leg": {
@@ -42,7 +46,8 @@
     "guideStrength": 0.4,
     "guideEnd": 0.4,
     "maskGrow": 24,
-    "triangles": 1800,
+    "triangles": 3600,
+    "voxel": 0.003,
     "palette": "secondary"
   },
   "lower leg and foot": {
@@ -51,7 +56,8 @@
     "guideStrength": 0.3,
     "guideEnd": 0.35,
     "maskGrow": 24,
-    "triangles": 1200,
+    "triangles": 2400,
+    "voxel": 0.003,
     "palette": "secondary"
   },
   "shin": {
@@ -60,7 +66,8 @@
     "guideStrength": 0.45,
     "guideEnd": 0.4,
     "maskGrow": 20,
-    "triangles": 800,
+    "triangles": 1400,
+    "voxel": 0.003,
     "palette": "secondary"
   },
   "foot": {
@@ -69,7 +76,8 @@
     "guideStrength": 0.3,
     "guideEnd": 0.35,
     "maskGrow": 20,
-    "triangles": 600,
+    "triangles": 1000,
+    "voxel": 0.003,
     "palette": "secondary"
   }
 }

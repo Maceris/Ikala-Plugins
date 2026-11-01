@@ -4,7 +4,7 @@ Run it with TRELLIS.2's own Python, which partgen.py does:
 
     <trellis>/.venv/Scripts/python.exe trellis_run.py --trellis <trellis folder>
         [--type 512] [--seed 0] [--faces 200000] [--texture 2048] [--online]
-        <image> <out.glb> [<image> <out.glb>...]
+        [--figure <image> ...] [--tries 4] <image> <out.glb> [<image> <out.glb>...]
 
 It runs offline: the models load from Hugging Face's local cache without asking Hugging Face for
 newer versions, which by default it would on every run, sending any stored login token. Pass
@@ -12,12 +12,66 @@ newer versions, which by default it would on every run, sending any stored login
 
 Images with transparency skip background removal. Others go through BiRefNet with the MIT
 ZhengPeng7 weights, not the RMBG-2.0 weights TRELLIS.2's config names (non-commercial, gated).
-Each glb comes out in TRELLIS.2's space: a 1 m box around the origin, +Y up, facing +Z.
+Each glb comes out in TRELLIS.2's space: a 1 m box around the origin, +Y up, facing +Z, with
+<out>.json beside it giving the seed it was made with.
+
+Some seeds hang curtains of long thin streaks off a figure, from its arms and body or from the
+top of TRELLIS.2's volume. On a whole figure (images named with --figure, like partgen's clothing
+and body parts, painted on the mannequin) they show as outline the image doesn't have: seen from
+the front, a clean figure's outline matches the image's, while curtains fill in the space under
+the arms and between the legs. Such a mesh is made again with the next seed, up to --tries times,
+and the one with the least extra outline kept. Objects on their own, like hats, aren't checked.
 """
 import argparse
+import json
 import os
+
+import numpy as np
+from PIL import Image, ImageFilter
 import sys
 import time
+
+
+# The size of the grid outlines are compared on
+GRID = 128
+# How much outline a figure's mesh may have beyond its image's, as a share of the image's, before
+# it counts as curtains: clean figures measure about 0.5 (the two outlines are scaled a little
+# differently), curtained ones 1 or more
+CURTAINS = 0.8
+# Seeds tried at most for a figure with curtains
+TRIES = 4
+
+
+def square(mask):
+    """A mask cropped to what it holds and padded square, as a GRID by GRID mask."""
+    rows, columns = np.flatnonzero(mask.any(1)), np.flatnonzero(mask.any(0))
+    crop = mask[rows[0]:rows[-1] + 1, columns[0]:columns[-1] + 1]
+    side = max(crop.shape)
+    padded = np.zeros((side, side), dtype=np.uint8)
+    top, left = (side - crop.shape[0]) // 2, (side - crop.shape[1]) // 2
+    padded[top:top + crop.shape[0], left:left + crop.shape[1]] = crop * 255
+    return np.asarray(Image.fromarray(padded).resize((GRID, GRID), Image.BILINEAR)) > 64
+
+
+def grown(mask, pixels):
+    """A mask grown by some pixels each way."""
+    image = Image.fromarray(mask.astype(np.uint8) * 255)
+    return np.asarray(image.filter(ImageFilter.MaxFilter(2 * pixels + 1))) > 0
+
+
+def extra_outline(vertices, image):
+    """How much of a figure mesh's front outline lies beyond its image's, as a share of the
+    image's. The mesh is +Y up and faces +Z, so its x runs across the image and y up it; the
+    image's figure is what isn't its white background."""
+    picture = square(np.asarray(image.convert("L")) < 240)
+    x, y = vertices[:, 0], vertices[:, 1]
+    width, height = np.ptp(x), np.ptp(y)
+    size = 1024
+    scale = (size - 1) / max(width, height, 1e-9)
+    grid = np.zeros((int(height * scale) + 1, int(width * scale) + 1), dtype=bool)
+    grid[((y.max() - y) * scale).astype(int), ((x - x.min()) * scale).astype(int)] = True
+    mesh = square(grown(grid, 2))
+    return float((mesh & ~grown(picture, 3)).sum() / max(picture.sum(), 1))
 
 
 def main():
@@ -30,6 +84,10 @@ def main():
     parser.add_argument("--online", action="store_true",
                         help="Let Hugging Face download or update models, rather than only use "
                              "the local cache.")
+    parser.add_argument("--figure", action="append", default=[],
+                        help="An image of a whole figure, checked for curtains; may repeat.")
+    parser.add_argument("--tries", type=int, default=TRIES,
+                        help="Seeds tried at most for a figure with curtains.")
     parser.add_argument("pairs", nargs="+", help="Image and glb paths, in pairs.")
     args = parser.parse_args()
     if len(args.pairs) % 2:
@@ -61,20 +119,42 @@ def main():
     pipeline.cuda()
     print("[trellis] loaded in %.0f s" % (time.perf_counter() - start), flush=True)
 
+    figures = {os.path.abspath(f) for f in args.figure}
     for image_path, out in zip(args.pairs[0::2], args.pairs[1::2]):
         start = time.perf_counter()
         torch.cuda.reset_peak_memory_stats()
-        mesh = pipeline.run(Image.open(image_path), seed=args.seed, pipeline_type=args.type)[0]
-        mesh.simplify(16777216)  # nvdiffrast's limit
-        glb = o_voxel.postprocess.to_glb(
-            vertices=mesh.vertices, faces=mesh.faces, attr_volume=mesh.attrs, coords=mesh.coords,
-            attr_layout=mesh.layout, voxel_size=mesh.voxel_size,
-            aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]], decimation_target=args.faces,
-            texture_size=args.texture, remesh=True, remesh_band=1, remesh_project=0, verbose=False)
+        figure = os.path.abspath(image_path) in figures
+        best = None
+        for seed in range(args.seed, args.seed + (args.tries if figure else 1)):
+            mesh = pipeline.run(Image.open(image_path), seed=seed, pipeline_type=args.type)[0]
+            mesh.simplify(16777216)  # nvdiffrast's limit
+            glb = o_voxel.postprocess.to_glb(
+                vertices=mesh.vertices, faces=mesh.faces, attr_volume=mesh.attrs,
+                coords=mesh.coords, attr_layout=mesh.layout, voxel_size=mesh.voxel_size,
+                aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]], decimation_target=args.faces,
+                texture_size=args.texture, remesh=True, remesh_band=1, remesh_project=0,
+                verbose=False)
+            share = extra_outline(np.asarray(glb.vertices), Image.open(image_path)) \
+                if figure else None
+            if best is None or (share is not None and share < best[2]):
+                best = (glb, seed, share)
+            if share is None or share <= CURTAINS:
+                break
+            print("[trellis] %s: seed %d hung curtains (outline %.2f beyond the image's); "
+                  "trying the next" % (os.path.basename(image_path), seed, share), flush=True)
+            del mesh
+            torch.cuda.empty_cache()
+        glb, seed, share = best
+        if share is not None and share > CURTAINS:
+            print("[trellis] %s: every seed tried hung curtains; keeping seed %d's"
+                  % (os.path.basename(image_path), seed), flush=True)
         os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
         glb.export(out)
-        print("[trellis] %s in %.0f s, peak %.2f GB" % (
-            out, time.perf_counter() - start, torch.cuda.max_memory_allocated() / 1024 ** 3), flush=True)
+        with open(out + ".json", "w", encoding="utf-8") as file:
+            json.dump({"seed": seed, "type": args.type, "extraOutline": share}, file)
+        print("[trellis] %s in %.0f s, seed %d, peak %.2f GB" % (
+            out, time.perf_counter() - start, seed, torch.cuda.max_memory_allocated() / 1024 ** 3),
+            flush=True)
         torch.cuda.empty_cache()
 
 
