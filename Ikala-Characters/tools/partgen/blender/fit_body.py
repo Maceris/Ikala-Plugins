@@ -60,9 +60,11 @@ TURN_SAMPLES = 2000
 # Candidate turns fitting the slots' skin up to this many times worse than the best still count
 # when the image's outline chooses among them
 TURN_SLACK = 1.5
-# How far toward the camera, as the cosine of the angle, a candidate turn must keep the mesh's
-# own front to be preferred
-MIN_FACING = 0.3
+# How far toward the image's up, as the cosine of the angle, a candidate turn must keep the
+# mesh's own up to count, if any do
+MIN_UPRIGHT = 0.3
+# Candidates whose outline overlaps the image's within this much of the best count as as good
+OVERLAP_SLACK = 0.03
 # The grid, in cells per side, a mesh's front outline is compared with its image's on
 OUTLINE_GRID = 128
 # How much an isolated part's front outline must overlap its image's, as a share of both
@@ -232,11 +234,15 @@ def image_outline(image_path):
 def solve_turn(points, slot_points, slot_surface, guide, image_path):
     """Where an isolated part's mesh goes: TRELLIS turns an object on its own as it pleases, so
     its long axis is laid along that of the mannequin's slots, scaled to their length, and turned
-    ROLLS ways about it, each way round end to end. Each is refined by ICP onto the slots' skin;
-    of those fitting nearly as well as the best (within TURN_SLACK), and keeping the mesh's own
-    front (which TRELLIS takes from the image) toward the camera if any do, the one whose front
-    outline best overlaps the image's wins, the image having been painted over the slots from
-    the front.
+    ROLLS ways about it, each way round end to end. Each is refined by ICP onto the slots' skin.
+    Of those fitting nearly as well as the best (within TURN_SLACK), those keeping the mesh's own
+    up (+Z) along the image's count, if any do: TRELLIS keeps the image's up, though it turns
+    the mesh about it as it pleases (an arm painted slanting across comes out slanting front to
+    back). Of those, the ones whose front outline overlaps the image's (painted over the slots
+    from the front) about as well as the best are as good, and the one keeping the mesh's up
+    and front (glTF +Z, which TRELLIS often takes from the image's front) the most toward the
+    image's wins: a tube like a hoofed leg has the same outline end to end, and a shin turned
+    round.
     Gives the fit and each candidate's residual and overlap."""
     rng = np.random.default_rng(0)
     sample = points[rng.choice(len(points), min(TURN_SAMPLES, len(points)), replace=False)]
@@ -258,16 +264,22 @@ def solve_turn(points, slot_points, slot_surface, guide, image_path):
             m, _, residual = icp(sample, slot_surface, m, scaled=False)
             outline = front_outline(apply(m, sample), guide)
             overlap = (outline & picture).sum() / max((outline | picture).sum(), 1)
-            # TRELLIS keeps the image's front as the mesh's (glTF +Z, Blender -Y once
-            # imported); the camera looks at the body's front, along +Y
+            # The mesh's front (glTF +Z, Blender -Y once imported) toward the camera, which looks
+            # at the body's front along +Y
             facing = float(-(m[:3, :3] @ np.array([0.0, -1.0, 0.0]))[1] / scale)
-            candidates.append((m, residual, float(overlap), facing))
+            # Its up along the image's, turned by the guide's roll
+            roll = math.radians(guide.get("roll", 0.0))
+            upright = float((m[:3, :3] @ np.array([0.0, 0.0, 1.0]))
+                            @ np.array([math.sin(roll), 0.0, math.cos(roll)]) / scale)
+            candidates.append((m, residual, float(overlap), facing, upright))
     best = min(c[1] for c in candidates)
     fitting = [c for c in candidates if c[1] <= best * TURN_SLACK]
-    # A part seen from the front often has the same outline turned round, like a shin
-    m = max([c for c in fitting if c[3] >= MIN_FACING] or fitting, key=lambda c: c[2])[0]
+    fitting = [c for c in fitting if c[4] >= MIN_UPRIGHT] or fitting
+    widest = max(c[2] for c in fitting)
+    m = max((c for c in fitting if c[2] >= widest - OVERLAP_SLACK),
+            key=lambda c: c[3] + c[4])[0]
     return m, [{"residual_mm": round(c[1] * 1000, 1), "overlap": round(c[2], 3),
-                "facing": round(c[3], 2)} for c in candidates]
+                "facing": round(c[3], 2), "upright": round(c[4], 2)} for c in candidates]
 
 
 def seam_reach(moved, plane):

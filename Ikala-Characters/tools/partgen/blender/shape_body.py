@@ -82,6 +82,33 @@ def face_out(mesh, segments, bones):
     bmesh.ops.reverse_faces(mesh, faces=inward)
 
 
+def orient_out(mesh, segments, bones):
+    """Turn a solid's faces all one way round, then outward: each connected piece whose faces
+    mostly look toward the nearest of some bones, by area, is turned over. face_out() would turn
+    each face on its own, and so turn over the faces of every hollow, like the back of a knee,
+    between plates or under a hoof: their back faces then show as holes and folds."""
+    bmesh.ops.recalc_face_normals(mesh, faces=mesh.faces)
+    seen = set()
+    for start in mesh.faces:
+        if start.index in seen:
+            continue
+        piece, stack = [], [start]
+        seen.add(start.index)
+        while stack:
+            face = stack.pop()
+            piece.append(face)
+            for edge in face.edges:
+                for other in edge.link_faces:
+                    if other.index not in seen:
+                        seen.add(other.index)
+                        stack.append(other)
+        middles = np.array([f.calc_center_median() for f in piece])
+        feet = nearest_on_bones(middles, segments, bones)
+        normals = np.array([f.normal * f.calc_area() for f in piece])
+        if np.einsum("ij,ij->", normals, middles - feet) < 0:
+            bmesh.ops.reverse_faces(mesh, faces=piece)
+
+
 def solidify(obj, segments, bones):
     """Rebuild the part as a closed voxel solid, keeping its outer surface. Gives how many
     triangles it has."""
@@ -346,7 +373,7 @@ def main():
     # Turn the faces out again, the bridges among them, then copy the rings' normals and weights
     mesh = bmesh.new()
     mesh.from_mesh(part.data)
-    face_out(mesh, segments, bones)
+    orient_out(mesh, segments, bones)
     mesh.to_mesh(part.data)
     mesh.free()
     for polygon in part.data.polygons:
