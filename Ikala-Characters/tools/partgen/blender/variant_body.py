@@ -38,7 +38,8 @@ from add_caps import CAP_INFIX, make_cap, open_loops  # noqa: E402
 from bake_body import dress_caps  # noqa: E402
 from fit_body import outer_seams, plan_slots, seam_plane  # noqa: E402
 from fit_layer import render  # noqa: E402
-from shape_body import bridge, mannequin_ring, mark_rings, orient_out, trim  # noqa: E402
+from shape_body import (bridge, close_strays, mannequin_ring, mark_rings, orient_out,  # noqa: E402
+                        trim)
 from shape_layer import bone_segments  # noqa: E402
 from variant_layer import carry, face_normals, import_garment, untangle  # noqa: E402
 from weight_body import PREFIX, skin_part  # noqa: E402
@@ -139,6 +140,7 @@ def main():
         ring = mannequin_ring(bpy.data.objects[PREFIX + slot], plane["middle"])
         welded[seam] = (bridge(part, seam, plane, ring, plane["inset"]), ring)
     dress_bridges(part, [indices for indices, _ in welded.values()])
+    close_strays(part, [indices for indices, _ in welded.values()])
     mesh = bmesh.new()
     mesh.from_mesh(part.data)
     orient_out(mesh, segments, bones)

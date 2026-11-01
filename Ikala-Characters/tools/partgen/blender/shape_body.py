@@ -236,15 +236,23 @@ def cut_loops(data, plane, inset):
 
 def trim(obj, plane):
     """Cut the part short of a seam's plane, dropping what lies past it, by the first of
-    WELD_INSETS that leaves an edge going round the seam's axis (or the last). Gives the inset,
-    which bridge() needs."""
+    WELD_INSETS that leaves one edge, going round the seam's axis; else by the first that leaves
+    one going round among others (or the last). A part already welded, carried to another body
+    by variant_body.py, has a band bridging it to its old ring, folded where a wide cut met a
+    narrow ring: a cut across the band may meet it twice, and the loop that doesn't go round
+    stayed open. Gives the inset, which bridge() needs."""
+    clean, rounds = None, None
     for inset in WELD_INSETS:
         trial = obj.data.copy()
         cut_short(trial, plane, inset)
-        found = any(way is not None for _, way in cut_loops(trial, plane, inset))
+        loops = cut_loops(trial, plane, inset)
         bpy.data.meshes.remove(trial)
-        if found:
-            break
+        if any(way is not None for _, way in loops):
+            rounds = inset if rounds is None else rounds
+            if len(loops) == 1:
+                clean = inset
+                break
+    inset = clean or rounds or WELD_INSETS[-1]
     cut_short(obj.data, plane, inset)
     return inset
 
@@ -296,6 +304,26 @@ def bridge(obj, seam, plane, ring, inset):
     mesh.to_mesh(obj.data)
     mesh.free()
     return [indices[list(ring_order).index(k)] for k in range(len(ring))]
+
+
+def close_strays(obj, rings):
+    """Fill every opening the part has but its welded rings. A cut across a band that a carry
+    to another body folded meets it more than once, and filling those other loops as the cut
+    is bridged leaves some open while the bridge is still being built. Gives how many were
+    filled."""
+    kept = [set(indices) for indices in rings]
+    strays = [loop for loop in open_loops(obj.data) if set(loop) not in kept]
+    if not strays:
+        return 0
+    mesh = bmesh.new()
+    mesh.from_mesh(obj.data)
+    mesh.verts.ensure_lookup_table()
+    verts = {mesh.verts[i] for loop in strays for i in loop}
+    edges = [e for e in mesh.edges if e.is_boundary and all(v in verts for v in e.verts)]
+    bmesh.ops.holes_fill(mesh, edges=edges, sides=0)
+    mesh.to_mesh(obj.data)
+    mesh.free()
+    return len(strays)
 
 
 def mark_rings(part, welded):
@@ -369,6 +397,7 @@ def main():
         slot = next(n for n in names if seam in slots[n].get("seams", []))
         ring = mannequin_ring(bpy.data.objects["mannequin_" + slot], plane["middle"])
         welded[seam] = (bridge(part, seam, plane, ring, plane["inset"]), ring)
+    close_strays(part, [indices for indices, _ in welded.values()])
 
     # Turn the faces out again, the bridges among them, then copy the rings' normals and weights
     mesh = bmesh.new()
