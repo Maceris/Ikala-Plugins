@@ -153,7 +153,7 @@ public record PartCategories(
      * @param min Where to put the minimum corner.
      * @param max Where to put the maximum corner.
      */
-    static void bounds(
+    public static void bounds(
             ImportedCharacter character, Collection<Integer> parts, Vector3f min, Vector3f max) {
         min.set(Float.POSITIVE_INFINITY);
         max.set(Float.NEGATIVE_INFINITY);

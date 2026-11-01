@@ -37,6 +37,7 @@ main { padding: 16px; display: grid; gap: 12px;
 .note { font-size: 12px; color: var(--muted); font-style: italic; }
 .imgs { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 6px; }
 .imgs.views { grid-template-columns: repeat(3, 1fr); }
+.imgs.shots { grid-template-columns: repeat(4, 1fr); }
 .imgs img { width: 100%; border-radius: 4px; border: 2px solid transparent; display: block;
             background: #ccc; }
 .zoom { position: relative; overflow: hidden; border-radius: 4px; border: 2px solid transparent;
@@ -149,6 +150,14 @@ function card(b) {
                                      : image(`${b.id}/fit/preview_${i}.png`, b.part));
     }
     div.append(grid);
+    // The part in the editor, on each mannequin, from partgen capture
+    for (const [variant, shots] of Object.entries(stage === "parts" && b.captures || {})) {
+      const label = document.createElement("div"); label.className = "note";
+      label.textContent = "In the editor, " + variant;
+      const row = document.createElement("div"); row.className = "imgs shots";
+      for (const shot of shots) row.append(image(`${b.id}/${shot}`, b.capturedAt || ""));
+      div.append(label, row);
+    }
   }
   if (field) div.append(buttons(b, field));
   return div;

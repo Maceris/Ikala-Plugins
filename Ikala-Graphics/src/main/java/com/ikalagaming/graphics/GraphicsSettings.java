@@ -2,6 +2,8 @@ package com.ikalagaming.graphics;
 
 import lombok.NonNull;
 
+import java.util.Locale;
+
 public class GraphicsSettings {
 
     /** The general rendering quality. */
@@ -32,6 +34,60 @@ public class GraphicsSettings {
 
     /** The width of the window in pixels. Only respected if greater than 0. */
     public int requestedWindowWidth = 0;
+
+    /**
+     * Whether to render without showing anything, for frame captures: the main window is hidden
+     * and gets no swapchain, the GUI runs but isn't drawn, and the scene is only kept for {@link
+     * com.ikalagaming.graphics.vulkan.VulkanInstance#saveFrame}. Read when graphics start; see
+     * {@link #applyHeadless(String)}.
+     */
+    public boolean headless = false;
+
+    /** The scene's size when headless and no size was asked for. */
+    public static final int HEADLESS_WIDTH = 1280;
+
+    /** The scene's size when headless and no size was asked for. */
+    public static final int HEADLESS_HEIGHT = 720;
+
+    /**
+     * Turn headless rendering on from a setting like the {@code ikala.headless} system property:
+     * {@code true} for the default size, or a size like {@code 1024x1024}. Anything else, or null,
+     * leaves the settings alone. Headless rendering has no GUI viewports, and doesn't save the GUI
+     * layout, so a capture run doesn't change the user's.
+     *
+     * @param value The setting.
+     * @return True if headless rendering was turned on.
+     * @throws IllegalArgumentException If the size isn't two positive numbers.
+     */
+    public boolean applyHeadless(String value) {
+        if (value == null || value.isBlank() || "false".equalsIgnoreCase(value.trim())) {
+            return false;
+        }
+        int width = HEADLESS_WIDTH;
+        int height = HEADLESS_HEIGHT;
+        if (!"true".equalsIgnoreCase(value.trim())) {
+            String[] parts = value.trim().toLowerCase(Locale.ROOT).split("x");
+            try {
+                if (parts.length != 2) {
+                    throw new NumberFormatException(value);
+                }
+                width = Integer.parseInt(parts[0].trim());
+                height = Integer.parseInt(parts[1].trim());
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException(
+                        "A headless size is like 1024x1024, not '" + value + "'", e);
+            }
+            if (width <= 0 || height <= 0) {
+                throw new IllegalArgumentException("A headless size must be positive: " + value);
+            }
+        }
+        headless = true;
+        requestedWindowWidth = width;
+        requestedWindowHeight = height;
+        guiViewports = false;
+        guiLayoutFile = null;
+        return true;
+    }
 
     /**
      * Whether GUI windows can be dragged out of the main window into windows of their own, using

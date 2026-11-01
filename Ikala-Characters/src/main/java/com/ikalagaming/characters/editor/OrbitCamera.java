@@ -118,6 +118,8 @@ public class OrbitCamera {
             double newDistance) {
         target.set(point);
         distance = Math.clamp(newDistance, MIN_DISTANCE, MAX_DISTANCE);
+        // Looking somewhere on purpose ends a glide that was going elsewhere
+        gliding = false;
         place(camera, pitch, yaw);
     }
 
@@ -177,12 +179,19 @@ public class OrbitCamera {
      */
     public void glideTo(@NonNull Vector3dc center, double radius) {
         goal.set(center);
-        goalDistance =
-                Math.clamp(
-                        radius / Math.sin(FIELD_OF_VIEW / 2) * FRAME_MARGIN,
-                        MIN_DISTANCE,
-                        MAX_DISTANCE);
+        goalDistance = frameDistance(radius);
         gliding = true;
+    }
+
+    /**
+     * How far away to be to see a sphere whole, with a margin.
+     *
+     * @param radius The sphere's radius.
+     * @return The distance, within the camera's limits.
+     */
+    public static double frameDistance(double radius) {
+        return Math.clamp(
+                radius / Math.sin(FIELD_OF_VIEW / 2) * FRAME_MARGIN, MIN_DISTANCE, MAX_DISTANCE);
     }
 
     /**

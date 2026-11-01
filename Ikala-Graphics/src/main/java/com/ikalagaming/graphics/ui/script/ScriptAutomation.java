@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.ui.script;
 
 import com.ikalagaming.graphics.GraphicsContext;
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.gui.enums.Key;
 import com.ikalagaming.graphics.gui.enums.MouseButton;
 import com.ikalagaming.graphics.ui.UiManager;
@@ -11,6 +12,7 @@ import com.ikalagaming.scripting.interpreter.ScriptRuntime;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import java.nio.file.Path;
 import java.util.Locale;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -31,6 +33,7 @@ import java.util.function.Supplier;
  * await(ui.test().mouseDrag(640, 360, 700, 360));
  * await(ui.test().clickItem("tools//lod", "Show cells"));
  * await(ui.test().typeItem("tools//materials", "Roughness", "0.5", true));
+ * await(ui.test().saveFrame("shots/front.png"));
  * </pre>
  *
  * <p>Selectors are written as for {@link com.ikalagaming.graphics.ui.automation.Selector}.
@@ -426,6 +429,46 @@ public final class ScriptAutomation {
     }
 
     /**
+     * Save the next frame that draws the scene to a PNG file, without the GUI over it. The window
+     * doesn't have to be in front, but a minimized window draws nothing to save.
+     *
+     * @param path Where the file goes; folders are made as needed.
+     * @return The tag to await, which resumes once the file is written.
+     */
+    public String saveFrame(@NonNull String path) {
+        final ScriptRuntime runtime = currentRuntime();
+        final String tag = TAG_PREFIX + NEXT_TAG.incrementAndGet();
+        GraphicsManager.getRenderInstance()
+                .saveFrame(Path.of(path))
+                .whenComplete(
+                        (saved, error) -> {
+                            if (error == null) {
+                                ScriptManager.resume(runtime, tag, true);
+                                return;
+                            }
+                            log.warn(
+                                    "Saving a frame to {} failed in a script from {}, stopping it:"
+                                            + " {}",
+                                    path,
+                                    owner.getOwner(),
+                                    error.getMessage());
+                            ScriptManager.terminate(runtime);
+                        });
+        return tag;
+    }
+
+    /**
+     * The script calling, for steps that resume it.
+     *
+     * @return The script's runtime.
+     * @throws IllegalStateException If not called from a script.
+     */
+    private static ScriptRuntime currentRuntime() {
+        return ScriptRuntime.current()
+                .orElseThrow(() -> new IllegalStateException("ui.test() is only for scripts"));
+    }
+
+    /**
      * Read a mouse button name.
      *
      * @param name {@code left}, {@code right} or {@code middle}, in any case.
@@ -482,10 +525,7 @@ public final class ScriptAutomation {
      * @throws IllegalStateException If not called from a script.
      */
     private String start(Consumer<Steps> build, Supplier<Object> result) {
-        final ScriptRuntime runtime =
-                ScriptRuntime.current()
-                        .orElseThrow(
-                                () -> new IllegalStateException("ui.test() is only for scripts"));
+        final ScriptRuntime runtime = currentRuntime();
         final String tag = TAG_PREFIX + NEXT_TAG.incrementAndGet();
         manager.get()
                 .getAutomation()

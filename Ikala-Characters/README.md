@@ -137,6 +137,23 @@ python partgen.py new limbs_1 briefs/limbs_1.json --keep
 python partgen.py images limbs_1 --all --count 2
 ```
 
+Once parts are fitted, `capture` shows each in the real renderer, on both bare
+mannequins: front, side, back and a close-up framed on the part, in
+`<batch>/<id>/editor/`, beside its Blender previews on the review page. It runs the
+asset editor named by `editor` in `config.json` headless, on a script it writes
+(`<batch>/captures.iks`), so no window opens; that editor's Ikala-Characters config
+must load the content folder under the namespace parts are written to.
+
+```
+python partgen.py capture limbs_1
+```
+
+The same works for any check: `-Dikala.headless=true` (or a size like
+`-Dikala.headless=1024x1024`) renders without a window, `ui.test().saveFrame(path)`
+saves the scene without the GUI, and the `characters` script global drives the
+editor (`showDesign`, `settle`, `bare`, `wear`, `still`, `frame`, `markers`; see
+`EditorScripts`).
+
 ## Previewing characters
 
 In the editor, with a 3D scene open, `character show <file.glb> [clip]` reads a

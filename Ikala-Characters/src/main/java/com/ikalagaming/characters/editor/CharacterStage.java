@@ -136,6 +136,18 @@ public final class CharacterStage {
     }
 
     /**
+     * Draw the debug stage, with the Align tab's markers and other debug shapes, or not, as for
+     * clean captures. Only while entered.
+     *
+     * @param show Whether to draw them.
+     */
+    public void showDebug(boolean show) {
+        if (entered) {
+            GraphicsManager.swapPipeline(RenderConfig.WORLD.withDebug(show));
+        }
+    }
+
+    /**
      * A flat square facing up, with normals, tangents and texture coordinates.
      *
      * @return The mesh.

@@ -43,17 +43,18 @@ public record WindowOptions(
             @NonNull String title, @NonNull GraphicsSettings settings) {
         final boolean sized =
                 settings.requestedWindowWidth > 0 && settings.requestedWindowHeight > 0;
+        // Headless, it stays hidden, and its size is the scene's
         return new WindowOptions(
                 title,
                 sized ? settings.requestedWindowWidth : 0,
                 sized ? settings.requestedWindowHeight : 0,
                 true,
-                true,
+                !settings.headless,
                 false,
+                !settings.headless,
                 true,
                 true,
-                true,
-                true);
+                !settings.headless);
     }
 
     /**

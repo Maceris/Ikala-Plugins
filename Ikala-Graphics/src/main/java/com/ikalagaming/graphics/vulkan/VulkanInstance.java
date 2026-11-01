@@ -43,11 +43,13 @@ import org.lwjgl.vulkan.*;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 public class VulkanInstance {
@@ -246,6 +248,9 @@ public class VulkanInstance {
     /** Tracks the state and handles. */
     private final VulkanState state = new VulkanState();
 
+    /** Whether frames are rendered without windows, only for frame captures. */
+    private boolean headless;
+
     private RenderConfig renderConfig;
     private PipelineVulkan pipeline;
     private TextureLoaderVulkan textureLoader;
@@ -319,6 +324,34 @@ public class VulkanInstance {
         return result;
     }
 
+    /**
+     * Render without windows from now on: the scene window gets no swapchain, and frames are only
+     * kept for {@link #saveFrame}. Call before the scene window would get its presentation.
+     */
+    public void setHeadless() {
+        headless = true;
+    }
+
+    /**
+     * Whether frames are rendered without windows, see {@link #setHeadless()}.
+     *
+     * @return True if headless.
+     */
+    public boolean isHeadless() {
+        return headless;
+    }
+
+    /**
+     * Save the next frame that draws the scene to a PNG file, without the GUI over it.
+     *
+     * @param path Where the file goes; folders are made as needed.
+     * @return Completed with the path once the file is written, or cancelled if the renderer
+     *     stops first.
+     */
+    public CompletableFuture<Path> saveFrame(@NonNull Path path) {
+        return state.frameCapture.request(path);
+    }
+
     /** Clean up all the rendering resources. */
     public void cleanup() {
         checkError(vkDeviceWaitIdle(state.device.logical));
@@ -384,6 +417,7 @@ public class VulkanInstance {
             vkDestroyCommandPool(state.device.logical, state.commandPoolTransfer, null);
             state.commandPoolTransfer = VK_NULL_HANDLE;
         }
+        state.frameCapture.cleanup(state);
         vmaDestroyAllocator(state.vmaAllocator);
         state.vmaAllocator = VK_NULL_HANDLE;
         vkDestroyDevice(state.device.logical, null);
@@ -1919,8 +1953,13 @@ public class VulkanInstance {
         checkError(vkWaitForFences(state.device.logical, longOutput, true, Long.MAX_VALUE));
         // The GPU is done with this frame index, so nothing can be using these anymore
         state.runDeferredFrees(state.frameIndex);
+        state.frameCapture.collect(state.frameIndex);
         // What only some scenes need, once a frame needed it
         pipelineManager.createWhenNeeded(state);
+        if (headless) {
+            renderHeadless(scene, sceneWindow);
+            return;
+        }
 
         // Resizing or minimized windows wait until they have a swapchain that fits
         List<Presentation> acquired = new ArrayList<>(state.presentations.size());
@@ -1958,7 +1997,11 @@ public class VulkanInstance {
         state.recordingFrame = true;
 
         if (drawScene) {
-            recordScene(scene, sceneTarget, commandBuffer);
+            final Window window = sceneTarget.getWindow();
+            recordScene(
+                    scene,
+                    new SceneTarget(window.getWidth(), window.getHeight(), sceneTarget),
+                    commandBuffer);
         }
         final boolean sceneCopied =
                 drawScene && PipelineManagerVulkan.drawsFinalImage(renderConfig);
@@ -1993,20 +2036,60 @@ public class VulkanInstance {
     }
 
     /**
-     * Record the uploads and the scene pipeline, which ends by copying the scene into the scene
-     * window's swapchain image.
+     * Render a frame with no window to show it in: the scene only, at the scene window's size,
+     * kept for frame captures. The GUI is built but not drawn. The frame's fence has been waited
+     * on.
      *
      * @param scene The scene to render.
-     * @param presentation The scene window, which has an acquired image.
+     * @param sceneWindow The hidden window whose size the scene is drawn at.
+     */
+    private void renderHeadless(@NonNull Scene scene, @NonNull Window sceneWindow) {
+        longOutput.put(0, state.fences[state.frameIndex]);
+        checkError(vkResetFences(state.device.logical, longOutput));
+        final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
+        checkError(vkResetCommandBuffer(commandBuffer, 0));
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            checkError(
+                    vkBeginCommandBuffer(
+                            commandBuffer,
+                            VkCommandBufferBeginInfo.calloc(stack)
+                                    .sType$Default()
+                                    .flags(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)));
+            state.recordingFrame = true;
+            recordScene(
+                    scene,
+                    new SceneTarget(sceneWindow.getWidth(), sceneWindow.getHeight(), null),
+                    commandBuffer);
+            checkError(vkEndCommandBuffer(commandBuffer));
+
+            VkCommandBufferSubmitInfo.Buffer commands =
+                    VkCommandBufferSubmitInfo.calloc(1, stack);
+            commands.get(0).sType$Default().commandBuffer(commandBuffer);
+            VkSubmitInfo2.Buffer submit = VkSubmitInfo2.calloc(1, stack);
+            submit.get(0).sType$Default().pCommandBufferInfos(commands);
+            checkError(
+                    vkQueueSubmit2(
+                            state.device.graphicsQueue, submit, state.fences[state.frameIndex]));
+        }
+        state.frameTimings.end(state.frameIndex);
+
+        state.frameIndex = (state.frameIndex + 1) % GraphicsManager.MAX_FRAMES_IN_FLIGHT;
+        ++state.frameNumber;
+        state.recordingFrame = false;
+    }
+
+    /**
+     * Record the uploads and the scene pipeline, which ends by copying the scene into the scene
+     * window's swapchain image, if it has one.
+     *
+     * @param scene The scene to render.
+     * @param target Where the scene goes and how big.
      * @param commandBuffer The frame's command buffer.
      */
     private void recordScene(
             @NonNull Scene scene,
-            @NonNull Presentation presentation,
+            @NonNull SceneTarget target,
             @NonNull VkCommandBuffer commandBuffer) {
-        final Window sceneWindow = presentation.getWindow();
-        final SceneTarget target =
-                new SceneTarget(sceneWindow.getWidth(), sceneWindow.getHeight(), presentation);
         state.frameTimings.begin(commandBuffer, state.frameIndex, state);
 
         // Before anything that could sample the textures or draw the meshes
