@@ -245,7 +245,14 @@ public class GraphicsManager {
         log.debug("Window created");
         new WindowCreated(mainWindow.getWindowHandle()).fire();
 
-        renderInstance.createPresentation(mainWindow);
+        if (settings.headless) {
+            // No swapchain: frames are only kept for captures
+            renderInstance.setHeadless();
+            log.info(
+                    "Rendering headless at {}x{}", mainWindow.getWidth(), mainWindow.getHeight());
+        } else {
+            renderInstance.createPresentation(mainWindow);
+        }
         initializeGui(mainWindow);
         log.trace("Initialized GUI");
         renderInstance.initializePipelines(mainWindow.getWidth(), mainWindow.getHeight());

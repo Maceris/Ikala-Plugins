@@ -4,6 +4,7 @@ import com.ikalagaming.characters.data.Problem;
 import com.ikalagaming.characters.demo.CharacterPreview;
 import com.ikalagaming.characters.demo.SkinnedDemo;
 import com.ikalagaming.characters.editor.CharacterEditor;
+import com.ikalagaming.characters.editor.EditorScripts;
 import com.ikalagaming.characters.registry.BuiltInContent;
 import com.ikalagaming.characters.registry.CharacterLoader;
 import com.ikalagaming.characters.registry.CharacterRegistry;
@@ -15,6 +16,8 @@ import com.ikalagaming.plugins.Plugin;
 import com.ikalagaming.plugins.PluginManager;
 import com.ikalagaming.plugins.config.ConfigManager;
 import com.ikalagaming.plugins.config.PluginConfig;
+import com.ikalagaming.scripting.HostClass;
+import com.ikalagaming.scripting.ScriptManager;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -95,6 +98,25 @@ public class CharacterPlugin extends Plugin {
     }
 
     @Override
+    public boolean onLoad() {
+        /*
+         * Scripts reach the editor through the characters global, for captures and checks. It is
+         * there from loading, since a startup script is checked when the plugin that starts it is
+         * enabled, which can be before this one; calls fail until the editor is attached.
+         */
+        ScriptManager.unregisterGlobal(EditorScripts.GLOBAL);
+        ScriptManager.registerGlobal(
+                EditorScripts.GLOBAL, getName(), owner -> HostClass.of(EditorScripts.class));
+        return true;
+    }
+
+    @Override
+    public boolean onUnload() {
+        ScriptManager.unregisterGlobal(EditorScripts.GLOBAL);
+        return true;
+    }
+
+    @Override
     public boolean onEnable() {
         reload();
         var graphics = GraphicsManager.forPlugin(getName());
@@ -102,6 +124,7 @@ public class CharacterPlugin extends Plugin {
         editor.install();
         // Listed in editors' tool menus, like the asset editor's main menu
         graphics.ui().registerTool(CharacterEditor.TOOL_ID, CharacterEditor.LABEL, editor::open);
+        EditorScripts.attach(editor, graphics);
         PluginManager.getInstance()
                 .registerCommand(CHARACTER_COMMAND, this::onCharacterCommand, getName());
         return true;
@@ -111,6 +134,7 @@ public class CharacterPlugin extends Plugin {
     public boolean onDisable() {
         // Unloading also removes the plugin's commands, but they shouldn't run while disabled
         PluginManager.getInstance().unregisterCommand(CHARACTER_COMMAND);
+        EditorScripts.attach(null, null);
         demo.stop();
         preview.hide();
         if (editor != null) {

@@ -502,6 +502,12 @@ public final class CharacterEditor {
     /** Counts characters asked for, so a slow load that was replaced is dropped. */
     private int loads;
 
+    /** The last load that finished, shown or failed, so scripts know when to look. */
+    private int finishedLoad;
+
+    /** Whether a script stood the character at rest, as the Body tab does. */
+    private boolean scriptStill;
+
     /** The settings while open. */
     private EditorSettings current;
 
@@ -803,6 +809,7 @@ public final class CharacterEditor {
         if (back == null || load != loads) {
             return;
         }
+        finishedLoad = load;
         if (built == null) {
             Throwable cause = failure.getCause() == null ? failure : failure.getCause();
             log.error(
@@ -873,7 +880,7 @@ public final class CharacterEditor {
      */
     private void buildMotion(String variant) {
         motionStyles = styles();
-        motion.setStanding(bodyTab);
+        motion.setStanding(standsStill());
         motion.build(
                 registry.get(),
                 plan,
@@ -2111,7 +2118,7 @@ public final class CharacterEditor {
         if (shown == null) {
             return;
         }
-        motion.setStanding(bodyTab);
+        motion.setStanding(standsStill());
         if (motion.active()) {
             return;
         }
@@ -2126,7 +2133,7 @@ public final class CharacterEditor {
         clipIndex = Math.floorMod(index, clips.size());
         ImportedCharacter.ClipData clip = clips.get(clipIndex);
         // The Body tab stands the character at rest, so the ruler reads its height true
-        shown.play(bodyTab ? null : clip);
+        shown.play(standsStill() ? null : clip);
         shown.setPlaying(playing);
         clipName.set(bodyTab ? clip.name() + " (plays on the Costume tab)" : clip.name());
         clipPosition.set((clipIndex + 1) + " / " + clips.size());
@@ -2469,6 +2476,142 @@ public final class CharacterEditor {
         lastWorn = List.of();
         stage.leave();
         goBack.run();
+    }
+
+    /**
+     * Whether the character stands at rest: on the Body tab, so the ruler reads its height true,
+     * or when a script asked.
+     *
+     * @return True if it stands at rest.
+     */
+    private boolean standsStill() {
+        return bodyTab || scriptStill;
+    }
+
+    /**
+     * Find the slot and option that offer a part.
+     *
+     * @param optionIds For each slot, the part each of its options is.
+     * @param partId The part's ID, like "gen:part/body/robot_leg_l".
+     * @return The slot's and option's positions, or null if no slot offers it.
+     */
+    static int[] findOption(@NonNull List<List<Id>> optionIds, @NonNull String partId) {
+        for (int slot = 0; slot < optionIds.size(); ++slot) {
+            List<Id> ids = optionIds.get(slot);
+            for (int option = 0; option < ids.size(); ++option) {
+                if (ids.get(option).toString().equals(partId)) {
+                    return new int[] {slot, option};
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * For scripts: show a design by its ID. Call on the render thread.
+     *
+     * @param id The design's ID, like "characters:design/fighter".
+     * @return False if the editor is closed or no design has that ID.
+     */
+    boolean showDesignNamed(@NonNull String id) {
+        if (back == null) {
+            return false;
+        }
+        List<Design> designs = designs();
+        for (int i = 0; i < designs.size(); ++i) {
+            if (designs.get(i).id().toString().equals(id)) {
+                designIndex = i;
+                showDesign(designs.get(i));
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * For scripts: whether the design asked for last is shown, or failed to load, so what is on
+     * the stage won't change by itself. Call on the render thread.
+     *
+     * @return True once it is.
+     */
+    boolean isSettled() {
+        return back != null && loads > 0 && finishedLoad == loads;
+    }
+
+    /** For scripts: take off everything that can be taken off. Call on the render thread. */
+    void bare() {
+        changeLook(CharacterLook::clear);
+    }
+
+    /**
+     * For scripts: wear a part, filling the slot that offers it. Call on the render thread.
+     *
+     * @param partId The part's ID.
+     * @return False if nothing is shown or no slot offers the part.
+     */
+    boolean wear(@NonNull String partId) {
+        if (look == null || prepared == null) {
+            return false;
+        }
+        int[] found = findOption(prepared.optionIds(), partId);
+        if (found == null) {
+            return false;
+        }
+        changeLook(changed -> changed.choose(found[0], found[1]));
+        return true;
+    }
+
+    /**
+     * For scripts: stand the character at rest, or let it move again. Call on the render thread.
+     *
+     * @param still Whether it stands at rest.
+     */
+    void setStill(boolean still) {
+        scriptStill = still;
+        playClip(clipIndex);
+    }
+
+    /**
+     * For scripts: look at what the character wears or at one part, from far enough away to see
+     * it whole, without gliding. Call on the render thread.
+     *
+     * @param partId The part to frame, or null for the whole character.
+     * @param pitch The pitch, positive looking down.
+     * @param yaw The yaw, as {@link OrbitCamera#look} takes it.
+     * @return False if nothing is shown or no slot offers the part.
+     */
+    boolean frame(String partId, double pitch, double yaw) {
+        if (look == null || prepared == null || categories == null) {
+            return false;
+        }
+        Vector3f min = new Vector3f();
+        Vector3f max = new Vector3f();
+        if (partId == null) {
+            // What is worn, not every part offered, which reaches far wider
+            PartCategories.bounds(
+                    prepared.character(), look.worn(CharacterLook.NO_PREVIEW, 0), min, max);
+        } else {
+            int[] found = findOption(prepared.optionIds(), partId);
+            if (found == null) {
+                return false;
+            }
+            PartCategories.bounds(
+                    prepared.character(),
+                    prepared.slots().slots().get(found[0]).options().get(found[1]),
+                    min,
+                    max);
+        }
+        Vector3d center =
+                new Vector3d((min.x + max.x) / 2.0, (min.y + max.y) / 2.0, (min.z + max.z) / 2.0)
+                        .add(CharacterStage.origin());
+        double radius = Math.max(MIN_FRAME_RADIUS, new Vector3f(max).sub(min).length() / 2);
+        orbit.look(
+                GraphicsManager.getScene().getCamera(),
+                center,
+                pitch,
+                yaw,
+                OrbitCamera.frameDistance(radius));
+        return true;
     }
 
     /** Reads the mouse each frame for the orbit camera. Draws no window. */

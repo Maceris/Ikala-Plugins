@@ -122,6 +122,9 @@ public class VulkanState {
     /** Where the water is around the camera, see {@link WaterVolume}. */
     public WaterVolume waterVolume = null;
 
+    /** Saves finished frames to files, see {@link FrameCapture}. */
+    public final FrameCapture frameCapture = new FrameCapture();
+
     /** For submitting work outside the frame, like texture uploads. */
     public ImmediateCommands immediateCommands = null;
 

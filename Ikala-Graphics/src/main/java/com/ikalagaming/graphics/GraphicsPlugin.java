@@ -54,6 +54,12 @@ public class GraphicsPlugin extends Plugin {
     /** The layout file used when the config doesn't name one. */
     private static final String DEFAULT_GUI_LAYOUT_FILE = "gui.ini";
 
+    /**
+     * The system property that renders headless, for frame captures: {@code true}, or the scene's
+     * size like {@code 1024x1024}. See {@link GraphicsSettings#applyHeadless(String)}.
+     */
+    public static final String HEADLESS_PROPERTY = "ikala.headless";
+
     /** Bytes in a mebibyte. */
     private static final long BYTES_PER_MIB = 1024L * 1024L;
 
@@ -112,6 +118,9 @@ public class GraphicsPlugin extends Plugin {
                         ? null
                         : PluginFolder.getResource(PLUGIN_NAME, ResourceType.CONFIG, layoutFile)
                                 .getAbsolutePath();
+
+        // After the config, so a headless run never saves the GUI layout or opens viewports
+        settings.applyHeadless(System.getProperty(HEADLESS_PROPERTY));
 
         if (!GraphicsManager.initialize()) {
             return false;

@@ -17,7 +17,8 @@ import org.lwjgl.vulkan.*;
 
 /**
  * Copies the finished scene into the scene window's swapchain image. The image is left as a
- * transfer destination, and the window's GUI pass draws over it and readies it to present.
+ * transfer destination, and the window's GUI pass draws over it and readies it to present. A
+ * {@link com.ikalagaming.graphics.vulkan.FrameCapture} someone asked for copies it here too.
  */
 @Slf4j
 public class SwapchainPresent implements RenderStage {
@@ -42,11 +43,20 @@ public class SwapchainPresent implements RenderStage {
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
 
         final Presentation presentation = sceneTarget.presentation();
-
-        final long swapchainImage =
-                presentation.swapchainImages[presentation.currentSwapchainIndex];
         final long sourceImage =
                 vulkanState.perFrameData[vulkanState.frameIndex].finalTexture.texture;
+        final int renderWidth = Math.min(sceneTarget.width(), vulkanState.realSize.width());
+        final int renderHeight = Math.min(sceneTarget.height(), vulkanState.realSize.height());
+
+        if (presentation == null) {
+            // Headless: no window to copy to, only frame captures read the image
+            readyToCopy(commandBuffer, sourceImage);
+            vulkanState.frameCapture.record(
+                    commandBuffer, vulkanState, sourceImage, renderWidth, renderHeight);
+            return;
+        }
+        final long swapchainImage =
+                presentation.swapchainImages[presentation.currentSwapchainIndex];
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkImageMemoryBarrier2.Buffer outputBarriers = VkImageMemoryBarrier2.calloc(2, stack);
@@ -94,8 +104,6 @@ public class SwapchainPresent implements RenderStage {
                             .layerCount(1)
                             .mipLevel(0);
             // The same region the other stages render to
-            final int renderWidth = Math.min(sceneTarget.width(), vulkanState.realSize.width());
-            final int renderHeight = Math.min(sceneTarget.height(), vulkanState.realSize.height());
             VkOffset3D.Buffer sourceOffsets = VkOffset3D.calloc(2, stack);
             sourceOffsets.get(0).set(0, 0, 0);
             sourceOffsets.get(1).set(renderWidth, renderHeight, 1);
@@ -126,6 +134,37 @@ public class SwapchainPresent implements RenderStage {
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                     blitRegions,
                     VK_FILTER_LINEAR);
+        }
+        // Before the GUI goes over it in the window
+        vulkanState.frameCapture.record(
+                commandBuffer, vulkanState, sourceImage, renderWidth, renderHeight);
+    }
+
+    /**
+     * Make the finished scene a transfer source, as copying it to the window would.
+     *
+     * @param commandBuffer The frame's command buffer.
+     * @param image The scene's final image, after its last color write.
+     */
+    private static void readyToCopy(VkCommandBuffer commandBuffer, long image) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkImageMemoryBarrier2.Buffer barrier =
+                    VkImageMemoryBarrier2.calloc(1, stack)
+                            .sType$Default()
+                            .srcStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
+                            .srcAccessMask(VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT)
+                            .dstStageMask(VK_PIPELINE_STAGE_2_TRANSFER_BIT)
+                            .dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT)
+                            .oldLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+                            .newLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+                            .image(image)
+                            .subresourceRange(
+                                    r -> r.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                                            .levelCount(1)
+                                            .layerCount(1));
+            vkCmdPipelineBarrier2(
+                    commandBuffer,
+                    VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barrier));
         }
     }
 }
