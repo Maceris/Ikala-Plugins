@@ -60,6 +60,9 @@ TURN_SAMPLES = 2000
 # Candidate turns fitting the slots' skin up to this many times worse than the best still count
 # when the image's outline chooses among them
 TURN_SLACK = 1.5
+# How far toward the camera, as the cosine of the angle, a candidate turn must keep the mesh's
+# own front to be preferred
+MIN_FACING = 0.3
 # The grid, in cells per side, a mesh's front outline is compared with its image's on
 OUTLINE_GRID = 128
 # How much an isolated part's front outline must overlap its image's, as a share of both
@@ -231,8 +234,10 @@ def solve_turn(points, slot_points, slot_surface, guide, image_path):
     """Where an isolated part's mesh goes: TRELLIS turns an object on its own as it pleases, so
     its long axis is laid along that of the mannequin's slots, scaled to their length, and turned
     ROLLS ways about it, each way round end to end. Each is refined by ICP onto the slots' skin;
-    of those fitting nearly as well as the best (within TURN_SLACK), the one whose front outline
-    best overlaps the image's wins, the image having been painted over the slots from the front.
+    of those fitting nearly as well as the best (within TURN_SLACK), and keeping the mesh's own
+    front (which TRELLIS takes from the image) toward the camera if any do, the one whose front
+    outline best overlaps the image's wins, the image having been painted over the slots from
+    the front.
     Gives the fit and each candidate's residual and overlap."""
     rng = np.random.default_rng(0)
     sample = points[rng.choice(len(points), min(TURN_SAMPLES, len(points)), replace=False)]
@@ -254,60 +259,120 @@ def solve_turn(points, slot_points, slot_surface, guide, image_path):
             m, _, residual = icp(sample, slot_surface, m, scaled=False)
             outline = front_outline(apply(m, sample), guide)
             overlap = (outline & picture).sum() / max((outline | picture).sum(), 1)
-            candidates.append((m, residual, float(overlap)))
+            # TRELLIS keeps the image's front as the mesh's (glTF +Z, Blender -Y once
+            # imported); the camera looks at the body's front, along +Y
+            facing = float(-(m[:3, :3] @ np.array([0.0, -1.0, 0.0]))[1] / scale)
+            candidates.append((m, residual, float(overlap), facing))
     best = min(c[1] for c in candidates)
-    m = max((c for c in candidates if c[1] <= best * TURN_SLACK), key=lambda c: c[2])[0]
-    return m, [{"residual_mm": round(c[1] * 1000, 1), "overlap": round(c[2], 3)}
-               for c in candidates]
+    fitting = [c for c in candidates if c[1] <= best * TURN_SLACK]
+    # A part seen from the front often has the same outline turned round, like a shin
+    m = max([c for c in fitting if c[3] >= MIN_FACING] or fitting, key=lambda c: c[2])[0]
+    return m, [{"residual_mm": round(c[1] * 1000, 1), "overlap": round(c[2], 3),
+                "facing": round(c[3], 2)} for c in candidates]
+
+
+def seam_reach(moved, plane):
+    """How a part reaches toward a seam: each point's distance past its plane, its offset across
+    the seam's axis, and which points lie within SEAM_WIDE of the ring's radius of the axis."""
+    middle, normal, radius = plane
+    along = (moved - middle) @ normal
+    across = (moved - middle) - np.outer(along, normal)
+    return along, across, np.linalg.norm(across, axis=1) < radius * SEAM_WIDE
 
 
 def reach_seams(points, m, names, seams, segments, axis):
-    """Slide an isolated part's fit along each outer seam's normal until it reaches SEAM_REACH
-    past the seam's plane all the way round: its image was painted up to the seam's line, but it
-    may start a little short of it, after being scaled to its slots' length, or end slanted, and
+    """Move an isolated part's fit along its slots' long axis until it reaches SEAM_REACH past
+    each outer seam's plane all the way round: its image was painted up to the seams' lines,
+    but after being scaled to its slots' length it may stop short of one or end slanted, and
     shape_body.py needs its whole edge there to join the ring. ICP, too, slides a part along a
-    limb about as freely as it likes. So the part's furthest point near the seam's axis (within
-    SEAM_WIDE of its radius) is first brought to the plane, back as well as forward when the part
-    has only that seam; then each of SEAM_SECTORS sectors round the axis must reach, counting
-    only points within SEAM_DEPTH of the plane: a sector the part's end leaves open, as between
-    bones, has only points further along the limb, which would slide it far past.
-    It slides along the slots' long axis, not the seam's normal: a shoulder's ring faces the
-    torso while the arm hangs down from it.
-    Gives the fit and how far it slid at each seam, in millimeters, back being negative."""
+    limb about as freely as it likes.
+
+    First the part's furthest point near each seam's axis is brought to its plane: a part with
+    one outer seam slides there, back as well as forward; one with a seam at each end, like a
+    shin between knee and ankle, stretches or shrinks along the axis to meet both. Then each of
+    SEAM_SECTORS sectors round each axis must reach, sliding on if not, counting only points
+    within SEAM_DEPTH of the plane: a sector the part's end leaves open, as between bones, has
+    only points further along the limb. It moves along the slots' axis, not a seam's normal: a
+    shoulder's ring faces the torso while the arm hangs down from it.
+
+    Last, the part's end at each seam is centered across the ring's axis (the mean of the
+    seams' offsets, for a part with more than one).
+
+    Gives the fit, how far its end moved at each seam, in millimeters, back being negative,
+    and how far it moved across to center it."""
     slots = plan_slots()
     own_bones = {b for name in names for b in slots[name]["bones"] if b in segments}
     inside = np.mean([np.mean(segments[b], axis=0) for b in own_bones], axis=0)
+    planes = {seam: seam_plane(seams[seam], inside) for seam in outer_seams(names)}
     moved = apply(m, points)
-    slid = {}
-    outer = outer_seams(names)
-    for seam in outer:
-        middle, normal, radius = seam_plane(seams[seam], inside)
-        along = (moved - middle) @ normal
-        across = (moved - middle) - np.outer(along, normal)
-        wide = np.linalg.norm(across, axis=1) < radius * SEAM_WIDE
+    # Each seam's way along the axis, the part's end that way, and how far the end must move
+    ends = {}
+    for seam, plane in planes.items():
+        along, _, wide = seam_reach(moved, plane)
         if not wide.any():
             continue
-        short = SEAM_REACH - float(along[wide].max())
-        if len(outer) > 1:
-            short = max(short, 0.0)
-        near = wide & (along + short > -SEAM_DEPTH)
+        slant = float(axis @ plane[1])
+        way = 1.0 if slant > 0 else -1.0
+        reach = moved[wide] @ axis
+        need = (SEAM_REACH - float(along[wide].max())) / max(abs(slant), SLIDE_SLANT)
+        ends[seam] = (way, float(reach.max() if way > 0 else reach.min()), need)
+    ways = sorted(e[0] for e in ends.values())
+    if len(ends) == 2 and ways == [-1.0, 1.0]:
+        (_, top, rise), = [e for e in ends.values() if e[0] > 0]
+        (_, bottom, drop), = [e for e in ends.values() if e[0] < 0]
+        scale = (top + rise - bottom + drop) / max(top - bottom, 1e-6)
+        shift = top + rise - scale * top
+    else:
+        scale = 1.0
+        shift = (max((e[0] * e[2] for e in ends.values()), key=abs, default=0.0)
+                 if len(ends) == 1 else
+                 sum(e[0] * max(e[2], 0.0) for e in ends.values()))
+    # Along the axis: u' = scale * u + shift
+    step = np.eye(4)
+    step[:3, :3] += (scale - 1) * np.outer(axis, axis)
+    step[:3, 3] = axis * shift
+    m = step @ m
+    moved = apply(step, moved)
+    slid = {seam: round(float((scale * end + shift - end) * way) * 1000, 1)
+            for seam, (way, end, _) in ends.items()}
+    for seam, plane in planes.items():
+        if seam not in ends:
+            continue
+        middle, normal, _ = plane
+        along, across, wide = seam_reach(moved, plane)
+        near = wide & (along > -SEAM_DEPTH)
+        if not near.any():
+            continue
         first = np.cross(normal, [1.0, 0.0, 0.0] if abs(normal[0]) < 0.9 else [0.0, 1.0, 0.0])
         first /= np.linalg.norm(first)
         angle = np.arctan2(across[near] @ np.cross(normal, first), across[near] @ first)
         sector = ((angle + np.pi) / (2 * np.pi) * SEAM_SECTORS).astype(int) % SEAM_SECTORS
         reach = np.full(SEAM_SECTORS, -np.inf)
-        np.maximum.at(reach, sector, along[near] + short)
+        np.maximum.at(reach, sector, along[near])
         # Sectors the part leaves empty there, like between bones, have nothing to reach with
-        short += max(SEAM_REACH - float(reach[np.isfinite(reach)].min()), 0.0)
-        if short:
-            # Along the axis, as far as takes it short along the normal
+        short = SEAM_REACH - float(reach[np.isfinite(reach)].min())
+        if short > 0:
             way = axis if axis @ normal > 0 else -axis
-            step = way * short / max(float(way @ normal), SLIDE_SLANT)
-            moved = moved + step
+            nudge = way * short / max(float(way @ normal), SLIDE_SLANT)
+            moved = moved + nudge
             m = m.copy()
-            m[:3, 3] += step
-            slid[seam] = round(float(np.linalg.norm(step)) * np.sign(short) * 1000, 1)
-    return m, slid
+            m[:3, 3] += nudge
+            slid[seam] = round(slid[seam] + float(np.linalg.norm(nudge)) * 1000, 1)
+    # Its end at each seam, centered on the ring's axis: ICP lines a big hand up with the
+    # mannequin's hand and may leave its wrist off to one side of the wrist's ring
+    offsets = []
+    for seam, plane in planes.items():
+        along, across, wide = seam_reach(moved, plane)
+        near = wide & (along > -SEAM_DEPTH)
+        if seam in ends and near.any():
+            offsets.append(across[near].mean(0))
+    centered = 0.0
+    if offsets:
+        offset = np.mean(offsets, axis=0)
+        m = m.copy()
+        m[:3, 3] -= offset
+        centered = round(float(np.linalg.norm(offset)) * 1000, 1)
+    return m, slid, centered
 
 
 def slot_fit(points, surface, segments, bones):
@@ -359,12 +424,12 @@ def main():
     with open(os.path.join(os.path.dirname(os.path.abspath(args.body)),
                            variant + "_seams.json"), encoding="utf-8") as file:
         seams = json.load(file)["seams"]
-    candidates, slid = None, None
+    candidates, slid, centered = None, None, None
     if args.isolated:
         m, candidates = solve_turn(points, chosen[0], tree(*chosen), guide, args.image)
         m, rounds, residual = icp(points, tree(*chosen), m, scaled=False)
-        m, slid = reach_seams(points, m, list(slots), seams, segments,
-                              principal(chosen[0])[1])
+        m, slid, centered = reach_seams(points, m, list(slots), seams, segments,
+                                        principal(chosen[0])[1])
     else:
         if framed:
             m = framed_guess(points, guide, args.image, body)
@@ -404,6 +469,7 @@ def main():
         "outline_overlap": outline_overlap and round(outline_overlap, 3),
         "turn_candidates": candidates,
         "slid_to_seams_mm": slid,
+        "centered_on_seams_mm": centered,
         "limb_turns_degrees": turns,
         "slots_before": before,
         "slots": after,

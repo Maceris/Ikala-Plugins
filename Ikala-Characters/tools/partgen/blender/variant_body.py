@@ -132,12 +132,12 @@ def main():
             continue
         middle, normal, radius = seam_plane(rings[seam], inside)
         planes[seam] = {"middle": middle, "normal": normal, "radius": radius}
-        trim(part, planes[seam])
+        planes[seam]["inset"] = trim(part, planes[seam])
     welded = {}
     for seam, plane in planes.items():
         slot = next(n for n in names if seam in slots[n].get("seams", []))
         ring = mannequin_ring(bpy.data.objects[PREFIX + slot], plane["middle"])
-        welded[seam] = (bridge(part, seam, plane, ring), ring)
+        welded[seam] = (bridge(part, seam, plane, ring, plane["inset"]), ring)
     dress_bridges(part, [indices for indices, _ in welded.values()])
     mesh = bmesh.new()
     mesh.from_mesh(part.data)

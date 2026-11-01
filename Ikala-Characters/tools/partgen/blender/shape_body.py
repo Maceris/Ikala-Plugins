@@ -8,7 +8,9 @@ outer surface, then reduced to its triangle budget.
 
 At each outer seam (see fit_body.py) the part welds to its neighbor, unless the brief leaves the
 seam open:
-- weld: the solid is cut WELD_INSET short of the seam's plane, and that edge bridged to the
+- weld: the solid is cut WELD_INSETS short of the seam's plane (the first that leaves an edge
+  going round the limb: a cut through an instep or a cuff's slanted rim may not), and that
+  edge bridged to the
   mannequin's own ring vertices, taking their positions, normals and skin weights, so the seam is
   the neighbor's exactly. A cap closing the ring is added beside it, as on the mannequin (see
   tools/blender/add_caps.py), for when the neighbor across is open.
@@ -46,9 +48,9 @@ from shape_layer import bone_segments, points_of, reduce  # noqa: E402
 # in voxels, so their thinnest parts survive
 VOXEL = 0.005
 THICKNESS = 2.0
-# How far short of a welded seam's plane the solid is cut, in meters, for the band that bridges
-# it to the ring
-WELD_INSET = 0.01
+# How far short of a welded seam's plane the solid may be cut, in meters, for the band that
+# bridges it to the ring, the nearest first
+WELD_INSETS = (0.01, 0.02, 0.03, 0.04)
 # The vertex group the ring vertices are in, which the weights keep exactly
 SEAM_GROUP = "seam"
 PART_COLOR = (0.85, 0.45, 0.15, 1)
@@ -181,29 +183,52 @@ def around(points, middle, normal):
     return order, angles - angles[0] + np.mod(angles[0], 2 * np.pi)
 
 
-def trim(obj, plane):
-    """Cut the part WELD_INSET short of a seam's plane, dropping what lies past it."""
+def cut_short(data, plane, inset):
+    """Cut mesh data inset short of a seam's plane, dropping what lies past it."""
     middle, normal = np.array(plane["middle"]), np.array(plane["normal"])
     mesh = bmesh.new()
-    mesh.from_mesh(obj.data)
+    mesh.from_mesh(data)
     geom = list(mesh.verts) + list(mesh.edges) + list(mesh.faces)
-    bmesh.ops.bisect_plane(mesh, geom=geom, plane_co=Vector(middle - normal * WELD_INSET),
+    bmesh.ops.bisect_plane(mesh, geom=geom, plane_co=Vector(middle - normal * inset),
                            plane_no=Vector(normal), clear_outer=True, dist=1e-6)
-    mesh.to_mesh(obj.data)
+    mesh.to_mesh(data)
     mesh.free()
 
 
-def bridge(obj, seam, plane, ring):
-    """Bridge the part's edge where it was trimmed short of a seam to the ring: the edge loop on
-    the cut that goes round the limb, any other openings the cut made being filled. It only adds
-    vertices, so indices found before stay good. Gives the ring vertices' indices, in the ring's
-    order."""
+def cut_loops(data, plane, inset):
+    """The open loops on a cut inset short of a seam's plane, each with its way round the seam's
+    axis (None if it doesn't go round)."""
     middle, normal = np.array(plane["middle"]), np.array(plane["normal"])
     on_cut = []
-    for loop in open_loops(obj.data):
-        points = np.array([obj.data.vertices[i].co for i in loop])
-        if np.all(np.abs((points - middle) @ normal + WELD_INSET) < 1e-3):
+    for loop in open_loops(data):
+        points = np.array([data.vertices[i].co for i in loop])
+        if np.all(np.abs((points - middle) @ normal + inset) < 1e-3):
             on_cut.append((loop, around(points, middle, normal)))
+    return on_cut
+
+
+def trim(obj, plane):
+    """Cut the part short of a seam's plane, dropping what lies past it, by the first of
+    WELD_INSETS that leaves an edge going round the seam's axis (or the last). Gives the inset,
+    which bridge() needs."""
+    for inset in WELD_INSETS:
+        trial = obj.data.copy()
+        cut_short(trial, plane, inset)
+        found = any(way is not None for _, way in cut_loops(trial, plane, inset))
+        bpy.data.meshes.remove(trial)
+        if found:
+            break
+    cut_short(obj.data, plane, inset)
+    return inset
+
+
+def bridge(obj, seam, plane, ring, inset):
+    """Bridge the part's edge where it was trimmed inset short of a seam to the ring: the edge
+    loop on the cut that goes round the limb, any other openings the cut made being filled. It
+    only adds vertices, so indices found before stay good. Gives the ring vertices' indices, in
+    the ring's order."""
+    middle, normal = np.array(plane["middle"]), np.array(plane["normal"])
+    on_cut = cut_loops(obj.data, plane, inset)
     rounds = [(loop, way) for loop, way in on_cut if way is not None]
     if not rounds:
         raise SystemExit("The part doesn't reach round the seam %s" % seam)
@@ -311,12 +336,12 @@ def main():
             continue
         middle, normal, radius = seam_plane(rings[seam], inside)
         planes[seam] = {"middle": middle, "normal": normal, "radius": radius}
-        trim(part, planes[seam])
+        planes[seam]["inset"] = trim(part, planes[seam])
     welded = {}
     for seam, plane in planes.items():
         slot = next(n for n in names if seam in slots[n].get("seams", []))
         ring = mannequin_ring(bpy.data.objects["mannequin_" + slot], plane["middle"])
-        welded[seam] = (bridge(part, seam, plane, ring), ring)
+        welded[seam] = (bridge(part, seam, plane, ring, plane["inset"]), ring)
 
     # Turn the faces out again, the bridges among them, then copy the rings' normals and weights
     mesh = bmesh.new()
@@ -345,6 +370,7 @@ def main():
         "triangles": len(part.data.loop_triangles),
         "triangles_reduced": triangles,
         "welded": sorted(welded),
+        "weld_insets_mm": {seam: round(plane["inset"] * 1000) for seam, plane in planes.items()},
         "open": sorted(left_open),
         "ring_error_mm": round(ring_error * 1000, 3),
         "stands_out_mm": {"p50": round(float(np.percentile(signed, 50)) * 1000, 1),

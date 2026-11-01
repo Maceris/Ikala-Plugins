@@ -51,7 +51,7 @@
   "leg": {
     "slots": ["upperLeg", "lowerLeg", "foot"],
     "prompt": "its left leg, from the hip to the toes, is ({description}:1.4), the rest of its body bare smooth gray skin",
-    "piece": "a left leg, from the hip to the toes",
+    "piece": "a single left leg, from the hip to the toes",
     "isolated": true,
     "guideStrength": 0.4,
     "guideEnd": 0.4,
@@ -63,7 +63,7 @@
   "lower leg and foot": {
     "slots": ["lowerLeg", "foot"],
     "prompt": "its left lower leg and foot, from the knee down, are ({description}:1.4), the rest of its body bare smooth gray skin",
-    "piece": "a left lower leg and foot, from the knee to the toes",
+    "piece": "a single left lower leg and foot, from the knee to the toes",
     "isolated": true,
     "guideStrength": 0.3,
     "guideEnd": 0.35,
@@ -75,7 +75,7 @@
   "shin": {
     "slots": ["lowerLeg"],
     "prompt": "its left shin, from the knee to the ankle, is ({description}:1.4), the rest of its body bare smooth gray skin",
-    "piece": "a left shin, from the knee to the ankle",
+    "piece": "a single left shin, from the knee to the ankle",
     "isolated": true,
     "guideStrength": 0.45,
     "guideEnd": 0.4,
@@ -87,7 +87,7 @@
   "foot": {
     "slots": ["foot"],
     "prompt": "its left foot is ({description}:1.4), the rest of its body bare smooth gray skin",
-    "piece": "a left foot, from the ankle to the toes",
+    "piece": "a single left foot, from the ankle to the toes",
     "isolated": true,
     "guideStrength": 0.3,
     "guideEnd": 0.35,

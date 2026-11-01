@@ -145,7 +145,8 @@ ISOLATED_STYLE = ("isolated 3D product render of {piece}, on its own, not attach
                   "made as ({subject}:1.4), seen from the front, one object only, plain white "
                   "background, soft even studio light, clean readable shapes, distinct flat "
                   "material colors, PBR")
-ISOLATED_NEGATIVE = ("person, body, torso, head, full figure, mannequin, clothing, sleeve, glove, "
+ISOLATED_NEGATIVE = ("person, body, torso, head, face, full figure, mannequin, clothing, sleeve, "
+                     "glove, pair, both legs, two legs, two arms, hips, pelvis, waist, "
                      "extra limbs, extra fingers, sprite sheet, multiple views, several objects, "
                      "cropped, text, watermark, logo, frame, border, busy background, scenery, "
                      "floor, shadow, blurry, lowres, deformed")
