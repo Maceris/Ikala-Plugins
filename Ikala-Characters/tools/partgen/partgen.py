@@ -15,6 +15,10 @@ between stages, so expensive steps only run on what was kept:
         Meshes through TRELLIS.2 from picked images, and renders of them for review.
     python partgen.py fit <batch>
         Kept meshes fitted onto the mannequin: glbs and part definitions in the content folder.
+    python partgen.py capture <batch> [--redo]
+        Fitted parts in the character editor, on each bare mannequin: front, side, back and a
+        close-up, rendered headless (no window) into <batch>/<id>/editor/ and shown on the
+        review page under Parts. Needs the "editor" folder in config.json.
     python partgen.py status <batch>
 
 Every stage takes --only <id,...> to limit it, and --all to skip waiting for reviews. Paths come
@@ -77,6 +81,23 @@ TOOLS = pathlib.Path(__file__).resolve().parent
 PLAN = TOOLS.parent.parent / "src/main/resources/characters/ikala/bodyPlan/biped.json"
 PLAN_ID = "ikala:biped"
 TEMPLATE = "ikala:mat/standard"
+# Editor captures: the mannequin design per body variant, unless config.json's "captureDesigns"
+# names others, and the shots of each: (name, framed on the part, pitch, yaw), radians, yaw 0 at
+# the front and pi/2 at the character's left
+CAPTURE_DESIGNS = {"male": "test:design/mannequin_male",
+                   "female": "test:design/mannequin_female"}
+CAPTURE_VIEWS = [("front", False, 0.1, 0.0), ("side", False, 0.1, 1.5708),
+                 ("back", False, 0.1, 3.1416), ("close", True, 0.25, 0.6)]
+CAPTURE_FOLDER = "editor"
+CAPTURE_SCRIPT = "captures.iks"
+# The shots' size in pixels, unless config.json's "captureSize" says otherwise
+CAPTURE_SIZE = 1024
+CAPTURE_SETTLE_FRAMES = 30
+CAPTURE_START_FRAMES = 180
+CAPTURE_START_SECONDS = 90
+CAPTURE_BRIEF_SECONDS = 60
+# Log lines that mean the capture script stopped
+CAPTURE_FAILURES = ("Script failed", "stopping it", "Could not start the startup script")
 # The palette channels a generated part's tint mask channels take, biggest color group first
 MASK_PALETTE = {"r": "primary", "g": "secondary", "b": "tertiary", "a": "accent"}
 MANIFEST = "manifest.json"
@@ -1385,13 +1406,148 @@ def command_fit(config, batch, args):
 
 def command_status(config, batch, args):
     manifest = batch.load()
-    print("%-28s %-6s %-7s %-6s %-6s %-6s" % ("brief", "brief", "images", "pick", "mesh", "part"))
+    print("%-28s %-6s %-7s %-6s %-6s %-6s %-6s" % ("brief", "brief", "images", "pick", "mesh",
+                                                   "part", "shots"))
     for b in manifest["briefs"]:
         review = b["review"]
         mesh = review["mesh"] or ("made" if b["mesh"] else "-")
         part = review["part"] or ("made" if b["part"] else "-")
-        print("%-28s %-6s %-7d %-6s %-6s %-6s" % (b["id"], review["brief"] or "-", len(b["images"]),
-                                                  review["pick"] or "-", mesh, part))
+        shots = sum(len(v) for v in (b.get("captures") or {}).values()) or "-"
+        print("%-28s %-6s %-7d %-6s %-6s %-6s %-6s" % (b["id"], review["brief"] or "-",
+                                                       len(b["images"]), review["pick"] or "-",
+                                                       mesh, part, shots))
+
+
+def worn_ids(brief):
+    """The part IDs a brief's part is worn as: a body part on both sides, others once."""
+    part = brief["part"]
+    if brief["kind"] == "body" and part.endswith("_l"):
+        return [part, part[:-2] + "_r"]
+    return [part]
+
+
+def capture_script(config, batch, briefs):
+    """An editor script that puts each brief's part on each mannequin and saves its shots: the
+    body at rest from CAPTURE_VIEWS, then a close-up framed on the part. Returns the script and
+    each brief's shots by variant, as paths in its folder."""
+    lines = ["// Editor captures for batch %s" % batch.name,
+             "// Written by Ikala-Characters/tools/partgen/partgen.py capture",
+             "Object t = ui.test();",
+             'converter.openTool("characters/editor");',
+             "await(characters.settle());",
+             "characters.markers(false);",
+             "characters.still(true);"]
+    designs = config.get("captureDesigns", CAPTURE_DESIGNS)
+    # The design the editor opens on can leave effects drifting for a while
+    lines += ["characters.showDesign(%s);" % json.dumps(next(iter(designs.values()))),
+              "await(characters.settle());",
+              "await(t.frames(%d));" % CAPTURE_START_FRAMES]
+    shots = {}
+    for brief in briefs:
+        folder = batch.brief_folder(brief["id"])
+        ids = worn_ids(brief)
+        shots[brief["id"]] = {}
+        lines.append('converter.log(%s);' % json.dumps("capture brief " + brief["id"]))
+        for variant, design in designs.items():
+            lines += ["characters.showDesign(%s);" % json.dumps(design),
+                      "await(characters.settle());",
+                      "characters.bare();"]
+            lines += ["characters.wear(%s);" % json.dumps(i) for i in ids]
+            names = []
+            for view, framed, pitch, yaw in CAPTURE_VIEWS:
+                name = "%s/%s_%s.png" % (CAPTURE_FOLDER, variant, view)
+                lines += ["characters.frame(%s, %r, %r);"
+                          % (json.dumps(ids[0]) if framed else "null", pitch, yaw),
+                          # Temporal anti-aliasing and exposure settle after the camera jumps
+                          "await(t.frames(%d));" % CAPTURE_SETTLE_FRAMES,
+                          "await(t.saveFrame(%s));" % json.dumps((folder / name).as_posix())]
+                names.append(name)
+            shots[brief["id"]][variant] = names
+    lines.append('converter.log("capture done");')
+    return "\n".join(lines) + "\n", shots
+
+
+def run_editor(config, script, timeout):
+    """Run the editor headless on a script until it logs "capture done", fails or times out,
+    printing its progress. Only the editor started here is stopped. Returns True if it finished."""
+    editor = pathlib.Path(config["editor"])
+    core = sorted(editor.glob("Ikala-Core-*.jar"))
+    if not core:
+        raise SystemExit("No Ikala-Core jar in the editor folder " + str(editor))
+    log = editor / "logs" / "latest.log"
+    start = log.stat().st_size if log.exists() else 0
+    size = config.get("captureSize", CAPTURE_SIZE)
+    process = subprocess.Popen(
+        [config.get("java", "java"), "-Dikala.headless=%dx%d" % (size, size),
+         "-Dikala.test.script=" + str(script), "-jar", core[-1].name],
+        cwd=editor, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    finished = False
+    deadline = time.time() + timeout
+    try:
+        while time.time() < deadline and process.poll() is None:
+            time.sleep(0.5)
+            if not log.exists():
+                continue
+            if log.stat().st_size < start:  # a new log was started
+                start = 0
+            with open(log, "rb") as file:
+                file.seek(start)
+                data = file.read()
+            start += len(data)
+            text = data.decode("utf8", errors="replace")
+            for line in text.splitlines():
+                if "Script: capture " in line:
+                    print(line.split("Script: ", 1)[1], flush=True)
+                if "Script: capture done" in line:
+                    finished = True
+                elif any(failure in line for failure in CAPTURE_FAILURES):
+                    print(line, flush=True)
+            if finished or any(failure in text for failure in CAPTURE_FAILURES):
+                break
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(20)
+            except subprocess.TimeoutExpired:
+                process.kill()
+    if not finished and time.time() >= deadline:
+        print("The editor didn't finish within %d s" % timeout)
+    return finished
+
+
+def command_capture(config, batch, args):
+    if "editor" not in config:
+        raise SystemExit("config.json has no \"editor\" folder to capture with; see %s"
+                         % CONFIG_EXAMPLE)
+    briefs = ready(batch.load(), args, lambda b: b["part"] is not None
+                   and (args.redo or not b.get("captures")))
+    if not briefs:
+        return
+    script, shots = capture_script(config, batch, briefs)
+    path = (batch.folder / CAPTURE_SCRIPT).resolve()
+    path.write_text(script, encoding="utf8")
+    for brief in briefs:
+        for names in shots[brief["id"]].values():
+            for name in names:
+                (batch.folder / brief["id"] / name).unlink(missing_ok=True)
+    finished = run_editor(config, path, CAPTURE_START_SECONDS + CAPTURE_BRIEF_SECONDS * len(briefs))
+    for brief in briefs:
+        folder = batch.folder / brief["id"]
+        saved = {variant: [n for n in names if (folder / n).exists()]
+                 for variant, names in shots[brief["id"]].items()}
+        saved = {variant: names for variant, names in saved.items() if names}
+
+        def record(entry, saved=saved):
+            entry["captures"] = saved or None
+            # So the review page shows new shots, not ones it already loaded
+            entry["capturedAt"] = datetime.datetime.now().isoformat(timespec="seconds")
+
+        batch.update(brief["id"], record)
+        print("%s: %d shots" % (brief["id"], sum(len(n) for n in saved.values())))
+    if not finished:
+        raise SystemExit("The capture run stopped early; the editor log is in %s"
+                         % (pathlib.Path(config["editor"]) / "logs"))
 
 
 def zoom_boxes(config, batch):
@@ -1460,6 +1616,8 @@ def main():
                         help="Make meshes again for briefs that have one from their pick.")
     fit = stage("fit", "Fit kept meshes onto the biped.")
     fit.add_argument("--redo", action="store_true", help="Fit again briefs that have a part.")
+    capture = stage("capture", "Shots of fitted parts in the editor, on each mannequin.")
+    capture.add_argument("--redo", action="store_true", help="Capture briefs that have shots again.")
     status = commands.add_parser("status", help="What each brief has.")
     status.add_argument("batch")
     args = parser.parse_args()
@@ -1467,7 +1625,8 @@ def main():
     config = load_config()
     batch = Batch(config, args.batch)
     {"new": command_new, "review": command_review, "images": command_images,
-     "meshes": command_meshes, "fit": command_fit, "status": command_status}[args.command](
+     "meshes": command_meshes, "fit": command_fit, "capture": command_capture,
+     "status": command_status}[args.command](
         config, batch, args)
 
 

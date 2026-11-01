@@ -163,6 +163,19 @@ public final class EditorScripts {
     }
 
     /**
+     * Draw debug shapes, like the Align tab's markers, or not, for captures without them.
+     *
+     * @param show Whether to draw them.
+     */
+    public static void markers(boolean show) {
+        call(
+                editor -> {
+                    editor.showMarkers(show);
+                    return true;
+                });
+    }
+
+    /**
      * Stand the character at rest, or let it move again.
      *
      * @param still Whether it stands at rest.

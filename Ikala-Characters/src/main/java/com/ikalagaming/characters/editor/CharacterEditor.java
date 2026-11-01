@@ -2562,6 +2562,16 @@ public final class CharacterEditor {
     }
 
     /**
+     * For scripts: draw debug shapes, like the Align tab's markers, or not. Call on the render
+     * thread.
+     *
+     * @param show Whether to draw them.
+     */
+    void showMarkers(boolean show) {
+        stage.showDebug(show);
+    }
+
+    /**
      * For scripts: stand the character at rest, or let it move again. Call on the render thread.
      *
      * @param still Whether it stands at rest.
