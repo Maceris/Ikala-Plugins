@@ -178,7 +178,8 @@ public final class Retargeter {
                             part.indices(),
                             part.material(),
                             part.min(),
-                            part.max()));
+                            part.max(),
+                            part.formTargets()));
         }
 
         Context context =

@@ -17,8 +17,9 @@ between stages, so expensive steps only run on what was kept:
         Kept meshes fitted onto the mannequin: glbs and part definitions in the content folder.
         A body part is held to the body plan's extents (legs meet the floor, hands are hand
         sized, nothing stands out past the bulkiest clothing form) and given the clothing form
-        it fits in; a layer gets a mesh for each form, pushed out from the body that far.
-        --forms makes only the forms' meshes of layers already fitted.
+        it fits in; a layer gets form targets, pushing it out over each body slot as far as the
+        form of the body part worn there. --forms only gives layers already fitted their
+        targets again.
     python partgen.py capture <batch> [--redo]
         Fitted parts in the character editor, on each bare mannequin: front, side, back and a
         close-up, and dressed in a layer over them, rendered headless (no window) into
@@ -1148,56 +1149,65 @@ def layer_slot(name, layers, defaults):
 
 
 def layer_forms():
-    """The body plan's clothing forms past the first, as (name, offset in meters): the shapes a
-    layer gets a mesh of its own for, to go over bulky body parts."""
+    """The body plan's clothing forms past the first, as (name, offset in meters): the shells a
+    layer is pushed out to over bulky body parts, the last the bulkiest."""
     return [(form["id"], float(form["offset"]))
             for form in load_json_with_comments(PLAN).get("forms", [])[1:]]
 
 
+def add_form_targets(config, folder, brief, out, rule, variant, target):
+    """Give a layer's mesh its clothing form targets in place (see form_layer.py): a move per body
+    slot out to the bulkiest form, which the character code scales by the form of the body part
+    worn there. Gives whether it worked."""
+    forms = layer_forms()
+    if not forms or not rule.get("forms", True):
+        return True
+    mannequins = pathlib.Path(config["mannequin"]).parent
+    suffix = "" if variant == GUIDE_VARIANT else "_" + variant
+    log = folder / ("form%s.log" % suffix)
+    temporary = target.with_name(target.stem + "_forms.glb")
+    if not run_blender(config, "form_layer.py", log, "--mesh", target,
+                       "--body", mannequins / ("%s.blend" % variant),
+                       "--offset", forms[-1][1], "--gap", rule["gap"],
+                       "--out", temporary, "--preview", out / ("form" + suffix)):
+        print("The %s form targets failed for %s; see %s" % (variant, brief["id"], log))
+        temporary.unlink(missing_ok=True)
+        return False
+    temporary.replace(target)
+    return True
+
+
 def write_layer_part(config, batch, brief, out, rule, only_forms=False):
     """Put a baked garment in the content folder as a layer part: the male mesh, a female one
-    carried over through the body cages, and for each clothing form past the first (layer_forms)
-    each of those pushed out from its body by the form's offset (see form_layer.py), each with its
-    tint mask
-    beside it (found by the file's name), and the part's definition. Other body types wear the
-    male's. With only_forms, the plain meshes already there are kept and only the forms' are
-    made. Gives the part's ID, or None if a mesh failed."""
+    carried over through the body cages, each with its clothing form targets (see
+    add_form_targets) and its tint mask beside it (found by the file's name), and the part's
+    definition. Other body types wear the male's. With only_forms, the meshes already there are
+    kept and only given their form targets again. Gives the part's ID, or None if a mesh
+    failed."""
     import shutil
     folder = batch.brief_folder(brief["id"])
     content = pathlib.Path(config["content"])
     mannequins = pathlib.Path(config["mannequin"]).parent
     name = brief["id"]
     meshes = {}
-    jobs = [(GUIDE_VARIANT, None, 0.0), ("female", None, 0.0)]
-    if rule.get("forms", True):
-        jobs += [(variant, form, offset) for form, offset in layer_forms()
-                 for variant in (GUIDE_VARIANT, "female")]
-    for variant, form, offset in jobs:
-        suffix = ("" if variant == GUIDE_VARIANT else "_" + variant) + (
-            "" if form is None else "_" + form)
+    for variant in (GUIDE_VARIANT, "female"):
+        suffix = "" if variant == GUIDE_VARIANT else "_" + variant
         glb = "layer/%s%s.glb" % (name, suffix)
-        key = ("*" if variant == GUIDE_VARIANT else variant) + (
-            "" if form is None else "@" + form)
-        meshes[key] = "%s#%s" % (glb, name)
+        meshes["*" if variant == GUIDE_VARIANT else variant] = "%s#%s" % (glb, name)
         target = content / glb
         target.parent.mkdir(parents=True, exist_ok=True)
-        if only_forms and form is None and target.exists():
+        # Meshes for whole forms came before form targets
+        for form, _ in layer_forms():
+            old = content / ("layer/%s%s_%s.glb" % (name, suffix, form))
+            old.unlink(missing_ok=True)
+            shutil.rmtree(old.with_name(old.stem + "_masks"), ignore_errors=True)
+        if only_forms and target.exists():
+            if not add_form_targets(config, folder, brief, out, rule, variant, target):
+                return None
             continue
         log = folder / ("variant%s.log" % suffix)
-        # The variant's plain mesh, which its forms are pushed out from
-        plain = content / ("layer/%s%s.glb" % (
-            name, "" if variant == GUIDE_VARIANT else "_" + variant))
-        if variant == GUIDE_VARIANT and form is None:
+        if variant == GUIDE_VARIANT:
             shutil.copyfile(out / "baked.glb", target)
-        elif form is not None:
-            if not run_blender(config, "form_layer.py", log, "--mesh", plain,
-                               "--body", mannequins / ("%s.blend" % variant),
-                               "--offset", offset, "--gap", rule["gap"],
-                               "--name", name, "--out", target,
-                               "--preview", out / ("form" + suffix),
-                               "--bare", ",".join(bare_ends(layer_of(brief)[0]))):
-                print("The %s %s mesh failed for %s; see %s" % (variant, form, name, log))
-                return None
         elif not run_blender(config, "variant_layer.py", log,
                              "--baked", out / "baked.glb",
                              "--body", mannequins / ("%s.blend" % variant),
@@ -1215,14 +1225,13 @@ def write_layer_part(config, batch, brief, out, rule, only_forms=False):
                                if rule.get("shell") else [])):
             print("The %s mesh failed for %s; see %s" % (variant, name, log))
             return None
+        if not add_form_targets(config, folder, brief, out, rule, variant, target):
+            return None
         masks = target.with_name(target.stem + "_masks")
         shutil.rmtree(masks, ignore_errors=True)
-        # A variant built afresh bakes its own mask beside the fit; others share the guide's UVs,
-        # and forms their variant's
+        # A variant built afresh bakes its own mask beside the fit; others share the guide's UVs
         own = out / masks.name
-        if form is not None:
-            shutil.copytree(plain.with_name(plain.stem + "_masks"), masks)
-        elif variant != GUIDE_VARIANT and own.exists():
+        if variant != GUIDE_VARIANT and own.exists():
             shutil.copytree(own, masks)
         else:
             shutil.copytree(out / (name + "_masks"), masks)

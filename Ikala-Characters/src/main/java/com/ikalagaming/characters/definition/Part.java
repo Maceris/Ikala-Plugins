@@ -491,7 +491,8 @@ public record Part(
             String name = locksSliders.get(i);
             boolean known =
                     allSliders.stream()
-                            .anyMatch(s -> name.equals(s.group()) || s.id().toString().equals(name));
+                            .anyMatch(
+                                    s -> name.equals(s.group()) || s.id().toString().equals(name));
             if (!known) {
                 checks.error(
                         JsonPath.at(FIELD_LOCKS_SLIDERS, i),
@@ -642,7 +643,7 @@ public record Part(
         List<String> otherPlaces = kind == PartKind.ACCESSORY ? other.fits() : other.fills();
         Set<String> expected = new LinkedHashSet<>();
         places.forEach(place -> expected.add(mirrored(body, place)));
-        if (!expected.equals(new LinkedHashSet<>(otherPlaces))) {
+        if (!new LinkedHashSet<>(otherPlaces).equals(expected)) {
             checks.error(
                     path,
                     "'"
@@ -655,8 +656,8 @@ public record Part(
     }
 
     /**
-     * The place on the other side: a slot's mirror, else the name with .L and .R swapped, else
-     * the place itself, for places in the middle.
+     * The place on the other side: a slot's mirror, else the name with .L and .R swapped, else the
+     * place itself, for places in the middle.
      *
      * @param body The plan.
      * @param place A slot, layer or socket name or type.

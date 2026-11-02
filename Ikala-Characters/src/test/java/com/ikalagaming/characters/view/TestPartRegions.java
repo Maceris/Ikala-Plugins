@@ -140,8 +140,8 @@ class TestPartRegions {
     }
 
     /**
-     * A garment open in the middle, like a jacket's open front, hides the body only where it
-     * covers it: the body showing through the opening stays, though one bone moves it all.
+     * A garment open in the middle, like a jacket's open front, hides the body only where it covers
+     * it: the body showing through the opening stays, though one bone moves it all.
      */
     @Test
     void testOpening() {
@@ -225,8 +225,8 @@ class TestPartRegions {
     }
 
     /**
-     * Past the most regions there can be, the least area's sets of covering parts merge into
-     * sets of fewer of the same parts, so they hide less, never more.
+     * Past the most regions there can be, the least area's sets of covering parts merge into sets
+     * of fewer of the same parts, so they hide less, never more.
      */
     @Test
     void testMerging() {

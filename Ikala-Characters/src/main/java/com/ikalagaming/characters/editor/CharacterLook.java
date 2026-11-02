@@ -206,8 +206,8 @@ final class CharacterLook {
     }
 
     /**
-     * Start a look as {@link #CharacterLook(PartSlots, List, List, List, List)} does, following
-     * the wear rules of the parts behind the options.
+     * Start a look as {@link #CharacterLook(PartSlots, List, List, List, List)} does, following the
+     * wear rules of the parts behind the options.
      *
      * @param slots The slots.
      * @param sliders The sliders.
@@ -580,8 +580,8 @@ final class CharacterLook {
 
     /**
      * Fill a slot, then take off what is in the way of what it now holds and put on what that
-     * needs, and its pair with both sides on. The user decided this slot, so nothing remembered
-     * for it is put back.
+     * needs, and its pair with both sides on. The user decided this slot, so nothing remembered for
+     * it is put back.
      *
      * @param slot The slot.
      * @param choice The position in its options, or {@link #EMPTY}.
@@ -642,7 +642,9 @@ final class CharacterLook {
             boolean covered = filled.contains(slots.slots().get(other).id());
             boolean overlaps = filled(other).stream().anyMatch(filled::contains);
             if ((covered || overlaps) && choices[other] != EMPTY) {
-                displaced.computeIfAbsent(slot, s -> new LinkedHashMap<>()).put(other, choices[other]);
+                displaced
+                        .computeIfAbsent(slot, s -> new LinkedHashMap<>())
+                        .put(other, choices[other]);
                 choices[other] = EMPTY;
             }
         }
@@ -724,7 +726,8 @@ final class CharacterLook {
                             taken -> {
                                 int slot = taken.getKey();
                                 if (changed.contains(slot)
-                                        || (choices[slot] != EMPTY && choices[slot] != fallback(slot))
+                                        || (choices[slot] != EMPTY
+                                                && choices[slot] != fallback(slot))
                                         || !fits(slot, taken.getValue())) {
                                     return false;
                                 }
@@ -736,8 +739,8 @@ final class CharacterLook {
     }
 
     /**
-     * Whether an option could go back in its slot without anything else changing: it is
-     * available, no other choice covers or overlaps it, and it clashes with nothing worn.
+     * Whether an option could go back in its slot without anything else changing: it is available,
+     * no other choice covers or overlaps it, and it clashes with nothing worn.
      *
      * @param slot The slot.
      * @param choice The position in its options.
@@ -836,7 +839,8 @@ final class CharacterLook {
                 continue;
             }
             if (worn.hidesLayers().contains(place)
-                    || (socket != null && WearRules.hides(socket, Set.copyOf(worn.hidesSockets())))) {
+                    || (socket != null
+                            && WearRules.hides(socket, Set.copyOf(worn.hidesSockets())))) {
                 return worn;
             }
         }
@@ -945,13 +949,7 @@ final class CharacterLook {
                 hiddenSockets.addAll(part.hidesSockets());
             }
         }
-        List<Part> wornParts = new ArrayList<>();
-        for (int i = 0; i < choices.length; ++i) {
-            Part part = part(i, i == previewSlot ? previewChoice : choices[i]);
-            if (part != null) {
-                wornParts.add(part);
-            }
-        }
+        List<Part> wornParts = wornParts(previewSlot, previewChoice);
         List<Integer> worn = new ArrayList<>();
         for (int i = 0; i < choices.length; ++i) {
             int choice = i == previewSlot ? previewChoice : choices[i];
@@ -975,25 +973,57 @@ final class CharacterLook {
     }
 
     /**
-     * The clothing form a slot's layer is shown in now.
+     * The clothing form a slot's layer is shown in now: the form of its mesh for one, or the
+     * thickest it is pushed out to over the body parts under it for a layer that pushes out slot by
+     * slot (see {@link #slotForms}).
      *
      * @param slot The slot.
-     * @return The form, or null for its plain mesh.
+     * @return The form, or null for its plain mesh on the bare body's form.
      */
     String formOf(int slot) {
+        List<Part> wornParts = wornParts(NO_PREVIEW, 0);
+        String form = shownForm(slot, choices[slot], wornParts);
+        Part part = part(slot, choices[slot]);
+        return form != null || part == null || part.kind() != Part.PartKind.LAYER || plan == null
+                ? form
+                : WearRules.formFor(plan, part, wornParts);
+    }
+
+    /**
+     * The clothing form of the body part in each body slot, which layers push out over slot by slot
+     * (see {@link com.ikalagaming.characters.view.PartForms}).
+     *
+     * @param previewSlot The slot to preview, or {@link #NO_PREVIEW}.
+     * @param previewChoice What it would hold.
+     * @return The form by slot; slots on the bare body's form are left out.
+     */
+    Map<String, String> slotForms(int previewSlot, int previewChoice) {
+        return plan == null
+                ? Map.of()
+                : WearRules.slotForms(plan, wornParts(previewSlot, previewChoice));
+    }
+
+    /**
+     * The parts chosen, with one slot showing another choice for a preview.
+     *
+     * @param previewSlot The slot to preview, or {@link #NO_PREVIEW}.
+     * @param previewChoice What it would hold.
+     * @return The parts.
+     */
+    private List<Part> wornParts(int previewSlot, int previewChoice) {
         List<Part> wornParts = new ArrayList<>();
         for (int i = 0; i < choices.length; ++i) {
-            Part part = part(i, choices[i]);
+            Part part = part(i, i == previewSlot ? previewChoice : choices[i]);
             if (part != null) {
                 wornParts.add(part);
             }
         }
-        return shownForm(slot, choices[slot], wornParts);
+        return wornParts;
     }
 
     /**
-     * The clothing form a layer option shows: the thickest form among the worn body parts under
-     * it that the layer has a mesh for, or a thinner one it has.
+     * The clothing form a layer option shows: the thickest form among the worn body parts under it
+     * that the layer has a mesh for, or a thinner one it has.
      *
      * @param slot The slot.
      * @param choice The option, or {@link #EMPTY}.
@@ -1105,7 +1135,8 @@ final class CharacterLook {
         fx.addAll(last.fx());
         style = last.style();
         displaced.clear();
-        last.displaced().forEach((slot, emptied) -> displaced.put(slot, new LinkedHashMap<>(emptied)));
+        last.displaced()
+                .forEach((slot, emptied) -> displaced.put(slot, new LinkedHashMap<>(emptied)));
         bothSides = last.bothSides();
         ++version;
         return true;
@@ -1125,7 +1156,8 @@ final class CharacterLook {
             }
             PartSlots.Slot slot = slots.slots().get(i);
             List<Integer> shown = available(i);
-            boolean empty = shown.isEmpty() || (slot.optional() && random.nextBoolean(EMPTY_CHANCE));
+            boolean empty =
+                    shown.isEmpty() || (slot.optional() && random.nextBoolean(EMPTY_CHANCE));
             choices[i] = empty ? fallback(i) : shown.get(random.nextInt(shown.size()));
         }
         for (Slider slider : sliders) {

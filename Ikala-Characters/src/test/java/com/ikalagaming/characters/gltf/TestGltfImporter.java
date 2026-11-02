@@ -201,6 +201,19 @@ class TestGltfImporter {
      * @throws IOException If it can't be written.
      */
     private Path smallCharacter(float boneScale, Consumer<JsonObject> extra) throws IOException {
+        return smallCharacterBuilt(boneScale, glb -> extra.accept(glb.json));
+    }
+
+    /**
+     * Write a small character, with more added to its file, see {@link #smallCharacter(float)}.
+     *
+     * @param boneScale The child bone's scale.
+     * @param extra Adds to the file before it is written: its JSON and binary data.
+     * @return The file.
+     * @throws IOException If it can't be written.
+     */
+    private Path smallCharacterBuilt(float boneScale, Consumer<GlbBuilder> extra)
+            throws IOException {
         GlbBuilder glb = new GlbBuilder();
         JsonArray nodes = glb.json.getAsJsonArray("nodes");
         nodes.add(node("armature", new float[] {0, 0, 5}, 1, 3));
@@ -282,7 +295,7 @@ class TestGltfImporter {
         animation.add("samplers", samplers);
         animation.add("channels", channels);
         glb.json.getAsJsonArray("animations").add(animation);
-        extra.accept(glb.json);
+        extra.accept(glb);
 
         Path path = temp.resolve("small.glb");
         glb.write(path);
@@ -321,6 +334,48 @@ class TestGltfImporter {
         Assertions.assertEquals(0, walk.times()[0], EPSILON);
         Assertions.assertEquals(5, walk.translations()[2], EPSILON);
         Assertions.assertEquals(8, walk.translations()[5], EPSILON);
+    }
+
+    /**
+     * Morph targets named for clothing forms come in as the part's form targets, by slot, moved
+     * into model space as normals are; other targets are left out.
+     *
+     * @throws IOException If the file can't be written or read.
+     */
+    @Test
+    void testFormTargets() throws IOException {
+        Path file =
+                smallCharacterBuilt(
+                        1,
+                        glb -> {
+                            JsonArray targets = new JsonArray();
+                            JsonArray names = new JsonArray();
+                            String[] slots = {"form:upperLeg.L", "smile"};
+                            for (int i = 0; i < slots.length; ++i) {
+                                JsonObject target = new JsonObject();
+                                target.addProperty(
+                                        "POSITION",
+                                        glb.floats("VEC3", 0, 0, i + 1, 0, 0, i + 1, 0, 0, 0));
+                                targets.add(target);
+                                names.add(slots[i]);
+                            }
+                            JsonObject mesh =
+                                    glb.json.getAsJsonArray("meshes").get(0).getAsJsonObject();
+                            mesh.getAsJsonArray("primitives")
+                                    .get(0)
+                                    .getAsJsonObject()
+                                    .add("targets", targets);
+                            JsonObject extras = new JsonObject();
+                            extras.add(GltfImporter.TARGET_NAMES, names);
+                            mesh.add(GltfImporter.EXTRAS, extras);
+                        });
+        ImportedCharacter.Part part = GltfImporter.read(file).parts().get(0);
+        Assertions.assertEquals(java.util.Set.of("upperLeg.L"), part.formTargets().keySet());
+        float[] deltas = part.formTargets().get("upperLeg.L");
+        Assertions.assertArrayEquals(new float[] {0, 0, 1, 0, 0, 1, 0, 0, 0}, deltas, EPSILON);
+        // Without targets, none
+        Assertions.assertTrue(
+                GltfImporter.read(smallCharacter(1)).parts().get(0).formTargets().isEmpty());
     }
 
     /**

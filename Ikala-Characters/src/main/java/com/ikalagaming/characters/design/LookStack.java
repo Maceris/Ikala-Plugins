@@ -68,8 +68,10 @@ public final class LookStack {
      * @param styles The styles to move in, the first winning.
      * @param fx The effects the items carry, after the design's own.
      * @param dyes Dye colors for worn items' parts, by part.
-     * @param forms The clothing form each worn layer is shown in, by the place it is listed
-     *     under; layers shown on the bare body's form are left out.
+     * @param forms The clothing form each worn layer is shown in, by the place it is listed under;
+     *     layers shown on the bare body's form are left out.
+     * @param slotForms The clothing form of the body part in each body slot, for layers whose
+     *     meshes push out slot by slot; slots on the bare body's form are left out.
      */
     public record Shown(
             @NonNull Map<String, Id> worn,
@@ -78,7 +80,8 @@ public final class LookStack {
             @NonNull List<Id> styles,
             @NonNull List<FxUse> fx,
             @NonNull Map<Id, Map<String, Color>> dyes,
-            @NonNull Map<String, String> forms) {}
+            @NonNull Map<String, String> forms,
+            @NonNull Map<String, String> slotForms) {}
 
     /**
      * Work out what a character shows.
@@ -184,7 +187,8 @@ public final class LookStack {
         held.removeIf(item -> WearRules.hides(item.socket(), hiddenSockets));
         fx.removeIf(
                 use -> {
-                    BodyPlan.Socket socket = use.socket() == null ? null : plan.socket(use.socket());
+                    BodyPlan.Socket socket =
+                            use.socket() == null ? null : plan.socket(use.socket());
                     return socket != null && WearRules.hides(socket, hiddenSockets);
                 });
         // Layers over bulky body parts show their mesh for the thickest form under them
@@ -199,7 +203,15 @@ public final class LookStack {
                         }
                     }
                 });
-        return new Shown(settled, hiddenRegions, held, styles, fx, dyes, forms);
+        return new Shown(
+                settled,
+                hiddenRegions,
+                held,
+                styles,
+                fx,
+                dyes,
+                forms,
+                WearRules.slotForms(plan, wornParts));
     }
 
     /**

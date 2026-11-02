@@ -33,9 +33,9 @@ import java.util.function.Function;
  * await(ui.test().saveFrame("shots/front.png"));
  * </pre>
  *
- * <p>Static methods only, so the global is the class. Scripts run on their own thread, so each
- * call runs on the render thread and waits for it. A call that can't do what it was asked throws,
- * which stops the script.
+ * <p>Static methods only, so the global is the class. Scripts run on their own thread, so each call
+ * runs on the render thread and waits for it. A call that can't do what it was asked throws, which
+ * stops the script.
  */
 @Slf4j
 public final class EditorScripts {
@@ -115,8 +115,7 @@ public final class EditorScripts {
                                         new IllegalStateException(
                                                 "characters.settle() is only for scripts"));
         final String tag = TAG_PREFIX + NEXT_TAG.incrementAndGet();
-        final long deadline =
-                System.nanoTime() + TimeUnit.SECONDS.toNanos(SETTLE_TIMEOUT_SECONDS);
+        final long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(SETTLE_TIMEOUT_SECONDS);
         POLLER.schedule(
                 new Runnable() {
                     @Override

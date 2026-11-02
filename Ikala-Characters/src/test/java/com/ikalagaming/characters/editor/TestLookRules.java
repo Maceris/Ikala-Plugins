@@ -260,7 +260,8 @@ class TestLookRules {
     @Test
     void variantsFilter() {
         BodyPlan.Variant any = new BodyPlan.Variant("any", List.of(), Map.of(), Map.of());
-        BodyPlan.Variant cloth = new BodyPlan.Variant("cloth", List.of("cloth"), Map.of(), Map.of());
+        BodyPlan.Variant cloth =
+                new BodyPlan.Variant("cloth", List.of("cloth"), Map.of(), Map.of());
         CharacterLook look = look(List.of(any, cloth));
         look.choose(HAND_L, 0);
         look.choose(JACKET, 0);

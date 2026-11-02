@@ -107,8 +107,8 @@ public final class PartAssembler {
     }
 
     /**
-     * A layer's mesh for a variant and clothing form: the form's own mesh for the variant, else
-     * for any variant, else the same for each thinner form, else the plain mesh for the variant.
+     * A layer's mesh for a variant and clothing form: the form's own mesh for the variant, else for
+     * any variant, else the same for each thinner form, else the plain mesh for the variant.
      *
      * @param part The part.
      * @param variant The variant.
@@ -267,18 +267,67 @@ public final class PartAssembler {
             @NonNull Path reference,
             @NonNull Map<Path, ImportedCharacter> files,
             boolean allForms) {
+        return assemble(parts, plan, variant, registry, reference, files, allForms, Map.of());
+    }
+
+    /**
+     * Build a character out of parts as {@link #assemble(Collection, BodyPlan, String,
+     * CharacterRegistry, Path, Map, boolean)} does, with layers whose meshes have form targets
+     * pushed out over the slots of bulky body parts (see {@link PartForms}).
+     *
+     * @param parts The parts, all for the plan.
+     * @param plan The plan.
+     * @param variant The variant, which picks each part's mesh.
+     * @param registry The loaded definitions, which find the parts' files.
+     * @param reference The rig's reference file, for moving characters from other rigs onto it.
+     * @param files Files read before, on the plan's rig, added to.
+     * @param allForms Whether to add each layer's meshes for every clothing form it has.
+     * @param slotForms The clothing form of the body part in each body slot; see {@link
+     *     com.ikalagaming.characters.design.WearRules#slotForms}.
+     * @return The character, or null if no part could be loaded.
+     */
+    public static Assembled assemble(
+            @NonNull Collection<Part> parts,
+            @NonNull BodyPlan plan,
+            @NonNull String variant,
+            @NonNull CharacterRegistry registry,
+            @NonNull Path reference,
+            @NonNull Map<Path, ImportedCharacter> files,
+            boolean allForms,
+            @NonNull Map<String, String> slotForms) {
         List<String> channels = plan.allChannels();
         Map<Part, List<String>> caps = cappedSeams(parts, plan);
-        Merger merger = new Merger();
+        Merger merger = new Merger(PartForms.amounts(plan, slotForms));
         // Placements turn about the sockets of the rig's reference body, read when first needed
         Skeleton[] referenceSkeleton = {null};
         for (Part part : parts) {
-            addMesh(part, meshFor(part, variant), null, caps, plan, variant, registry, reference,
-                    files, merger, channels, referenceSkeleton);
+            addMesh(
+                    part,
+                    meshFor(part, variant),
+                    null,
+                    caps,
+                    plan,
+                    variant,
+                    registry,
+                    reference,
+                    files,
+                    merger,
+                    channels,
+                    referenceSkeleton);
             if (allForms && part.kind() == Part.PartKind.LAYER) {
                 for (String form : formsOf(part, variant, plan)) {
-                    addMesh(part, meshFor(part, variant, form, plan), form, Map.of(), plan,
-                            variant, registry, reference, files, merger, channels,
+                    addMesh(
+                            part,
+                            meshFor(part, variant, form, plan),
+                            form,
+                            Map.of(),
+                            plan,
+                            variant,
+                            registry,
+                            reference,
+                            files,
+                            merger,
+                            channels,
                             referenceSkeleton);
                 }
             }
@@ -315,51 +364,51 @@ public final class PartAssembler {
             Merger merger,
             List<String> channels,
             Skeleton[] referenceSkeleton) {
-            if (mesh == null) {
-                return;
-            }
-            int split = mesh.indexOf(MESH_SEPARATOR);
-            String fileName = split < 0 ? mesh : mesh.substring(0, split);
-            String meshName = split < 0 ? null : mesh.substring(split + 1);
-            Path file = registry.asset(part.id().namespace(), fileName);
-            if (file == null) {
-                log.warn("{} names {}, but its namespace has no folder on disk", part.id(), mesh);
-                return;
-            }
-            ImportedCharacter source = files.get(file);
-            if (source == null && !files.containsKey(file)) {
-                source = read(file, reference, registry, plan);
-                files.put(file, source);
-            }
-            if (source != null) {
-                Part.Placement placement =
-                        part.kind() == Part.PartKind.ACCESSORY
-                                ? part.placementFor(variant)
-                                : Part.Placement.NONE;
-                if (placement != Part.Placement.NONE && referenceSkeleton[0] == null) {
-                    ImportedCharacter body = files.get(reference);
-                    if (body == null && !files.containsKey(reference)) {
-                        body = read(reference, reference, registry, plan);
-                        files.put(reference, body);
-                    }
-                    referenceSkeleton[0] = body == null ? source.skeleton() : body.skeleton();
+        if (mesh == null) {
+            return;
+        }
+        int split = mesh.indexOf(MESH_SEPARATOR);
+        String fileName = split < 0 ? mesh : mesh.substring(0, split);
+        String meshName = split < 0 ? null : mesh.substring(split + 1);
+        Path file = registry.asset(part.id().namespace(), fileName);
+        if (file == null) {
+            log.warn("{} names {}, but its namespace has no folder on disk", part.id(), mesh);
+            return;
+        }
+        ImportedCharacter source = files.get(file);
+        if (source == null && !files.containsKey(file)) {
+            source = read(file, reference, registry, plan);
+            files.put(file, source);
+        }
+        if (source != null) {
+            Part.Placement placement =
+                    part.kind() == Part.PartKind.ACCESSORY
+                            ? part.placementFor(variant)
+                            : Part.Placement.NONE;
+            if (placement != Part.Placement.NONE && referenceSkeleton[0] == null) {
+                ImportedCharacter body = files.get(reference);
+                if (body == null && !files.containsKey(reference)) {
+                    body = read(reference, reference, registry, plan);
+                    files.put(reference, body);
                 }
-                merger.add(source, part, meshName, channels, placement, referenceSkeleton[0], form);
-                for (String seam : caps.getOrDefault(part, List.of())) {
-                    if (meshName == null) {
-                        log.warn("{} has no mesh name to find its {} cap by", part.id(), seam);
-                        continue;
-                    }
-                    merger.add(
-                            source,
-                            part,
-                            capMesh(meshName, seam),
-                            channels,
-                            Part.Placement.NONE,
-                            null,
-                            null);
-                }
+                referenceSkeleton[0] = body == null ? source.skeleton() : body.skeleton();
             }
+            merger.add(source, part, meshName, channels, placement, referenceSkeleton[0], form);
+            for (String seam : caps.getOrDefault(part, List.of())) {
+                if (meshName == null) {
+                    log.warn("{} has no mesh name to find its {} cap by", part.id(), seam);
+                    continue;
+                }
+                merger.add(
+                        source,
+                        part,
+                        capMesh(meshName, seam),
+                        channels,
+                        Part.Placement.NONE,
+                        null,
+                        null);
+            }
+        }
     }
 
     /**
@@ -388,6 +437,9 @@ public final class PartAssembler {
 
     /** Merges the chosen meshes of several characters on the same rig into one. */
     private static final class Merger {
+        /** How far layers push out over each body slot; see {@link PartForms#amounts}. */
+        private final Map<String, Float> amounts;
+
         /** The rig and rest pose, from the first character. */
         private ImportedCharacter first;
 
@@ -414,6 +466,15 @@ public final class PartAssembler {
 
         /** Where each character's materials start among the merged ones. */
         private final Map<ImportedCharacter, Integer> materialStarts = new HashMap<>();
+
+        /**
+         * A merger.
+         *
+         * @param amounts How far layers push out over each body slot.
+         */
+        Merger(Map<String, Float> amounts) {
+            this.amounts = amounts;
+        }
 
         /**
          * Add a part's meshes from a character.
@@ -455,6 +516,9 @@ public final class PartAssembler {
                 if (placement != Part.Placement.NONE) {
                     piece = placed(piece, reference, placement);
                 }
+                if (part.kind() == Part.PartKind.LAYER && !amounts.isEmpty()) {
+                    piece = PartForms.displace(piece, amounts);
+                }
                 int material = piece.material() < 0 ? -1 : piece.material() + materialStart;
                 parts.add(
                         new ImportedCharacter.Part(
@@ -465,7 +529,8 @@ public final class PartAssembler {
                                 piece.indices(),
                                 material,
                                 piece.min(),
-                                piece.max()));
+                                piece.max(),
+                                piece.formTargets()));
                 partIds.add(part.id());
                 forms.add(form);
                 String materialName =

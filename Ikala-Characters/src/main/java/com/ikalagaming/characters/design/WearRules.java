@@ -65,9 +65,9 @@ public final class WearRules {
 
     /**
      * Keep only parts that can be worn together: walking from the last entry to the first, a part
-     * is dropped if it clashes with one kept already, so later entries win, as the last part put
-     * on does in the editor and worn items do over the design. Then parts whose required parts
-     * were dropped or never worn go too, until none are left to drop.
+     * is dropped if it clashes with one kept already, so later entries win, as the last part put on
+     * does in the editor and worn items do over the design. Then parts whose required parts were
+     * dropped or never worn go too, until none are left to drop.
      *
      * @param plan The plan.
      * @param worn The parts by the place they are listed under, in order; not changed.
@@ -152,6 +152,36 @@ public final class WearRules {
     }
 
     /**
+     * The clothing form of the body part worn in each body slot, for layers to push out over it
+     * slot by slot (see {@link com.ikalagaming.characters.view.PartForms}).
+     *
+     * @param plan The body plan, with its forms.
+     * @param worn The parts worn.
+     * @return The form by slot, the thickest where parts share one; slots with no body part or a
+     *     body part of the first form are left out.
+     */
+    public static Map<String, String> slotForms(
+            @NonNull BodyPlan plan, @NonNull Collection<Part> worn) {
+        Map<String, String> forms = new LinkedHashMap<>();
+        for (Part part : worn) {
+            int index =
+                    part.kind() == Part.PartKind.BODY && part.form() != null
+                            ? plan.formIndex(part.form())
+                            : -1;
+            if (index <= 0) {
+                continue;
+            }
+            for (String slot : part.fills()) {
+                String held = forms.get(slot);
+                if (held == null || plan.formIndex(held) < index) {
+                    forms.put(slot, part.form());
+                }
+            }
+        }
+        return forms;
+    }
+
+    /**
      * The layers some worn parts hide.
      *
      * @param worn The parts.
@@ -183,7 +213,8 @@ public final class WearRules {
      * @return True if its name or type is among them.
      */
     public static boolean hides(@NonNull BodyPlan.Socket socket, @NonNull Set<String> hidden) {
-        return hidden.contains(socket.id()) || (socket.type() != null && hidden.contains(socket.type()));
+        return hidden.contains(socket.id())
+                || (socket.type() != null && hidden.contains(socket.type()));
     }
 
     /**

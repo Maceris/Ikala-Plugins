@@ -31,6 +31,7 @@ import com.ikalagaming.characters.view.FxEffects;
 import com.ikalagaming.characters.view.HeldItems;
 import com.ikalagaming.characters.view.PartAssembler;
 import com.ikalagaming.characters.view.PartCategories;
+import com.ikalagaming.characters.view.PartForms;
 import com.ikalagaming.characters.view.PartRegions;
 import com.ikalagaming.characters.view.PartSlots;
 import com.ikalagaming.characters.view.ShownCharacter;
@@ -631,6 +632,12 @@ public final class CharacterEditor {
     /** The parts last shown, to change them only when they change. */
     private List<Integer> lastWorn = List.of();
 
+    /**
+     * How far each shown part pushing out over bulky body parts is pushed over each slot, by part
+     * index, to move one again only when that changes; see {@link PartForms}.
+     */
+    private final Map<Integer, Map<String, Float>> pushed = new HashMap<>();
+
     /** The body plan the character's rig belongs to, or null. */
     private BodyPlan plan;
 
@@ -842,7 +849,8 @@ public final class CharacterEditor {
             log.error(
                     "Couldn't show {} in the character editor: {}",
                     design.id(),
-                    cause.getMessage());
+                    cause.getMessage(),
+                    cause);
             characterName.set("Couldn't build " + design.id());
             return;
         }
@@ -886,6 +894,8 @@ public final class CharacterEditor {
                         new Quaternionf(),
                         lastWorn);
         shown.setHiddenRegions(regions.hidden(lastWorn));
+        pushed.clear();
+        pushForms(lastWorn, look.slotForms(CharacterLook.NO_PREVIEW, 0));
         equipment = Equipment.NONE;
         itemFx = List.of();
         motion.setCombat(false);
@@ -1113,10 +1123,40 @@ public final class CharacterEditor {
             return;
         }
         List<Integer> worn = look.worn(previewSlot, previewChoice);
+        pushForms(worn, look.slotForms(previewSlot, previewChoice));
         if (!worn.equals(lastWorn)) {
             lastWorn = worn;
             shown.showParts(worn);
             shown.setHiddenRegions(regions.hidden(worn));
+        }
+    }
+
+    /**
+     * Push the shown layers that have form targets out over the slots of bulky body parts, each
+     * only when how far it is pushed changes.
+     *
+     * @param worn The shown parts.
+     * @param slotForms The clothing form of the body part in each slot.
+     */
+    private void pushForms(List<Integer> worn, Map<String, String> slotForms) {
+        Map<String, Float> amounts = PartForms.amounts(plan, slotForms);
+        ImportedCharacter character = prepared.character();
+        for (int index : worn) {
+            ImportedCharacter.Part part = character.parts().get(index);
+            if (part.formTargets().isEmpty()) {
+                continue;
+            }
+            Map<String, Float> own = new HashMap<>();
+            amounts.forEach(
+                    (slot, amount) -> {
+                        if (part.formTargets().containsKey(slot)) {
+                            own.put(slot, amount);
+                        }
+                    });
+            if (!own.equals(pushed.getOrDefault(index, Map.of()))) {
+                pushed.put(index, own);
+                shown.replaceVertices(index, PartForms.displace(part, own));
+            }
         }
     }
 
@@ -2555,13 +2595,14 @@ public final class CharacterEditor {
         categories = null;
         openCategory = -1;
         lastWorn = List.of();
+        pushed.clear();
         stage.leave();
         goBack.run();
     }
 
     /**
-     * Whether the character stands at rest: on the Body tab, so the ruler reads its height true,
-     * or when a script asked.
+     * Whether the character stands at rest: on the Body tab, so the ruler reads its height true, or
+     * when a script asked.
      *
      * @return True if it stands at rest.
      */
@@ -2610,8 +2651,8 @@ public final class CharacterEditor {
     }
 
     /**
-     * For scripts: whether the design asked for last is shown, or failed to load, so what is on
-     * the stage won't change by itself. Call on the render thread.
+     * For scripts: whether the design asked for last is shown, or failed to load, so what is on the
+     * stage won't change by itself. Call on the render thread.
      *
      * @return True once it is.
      */
@@ -2696,8 +2737,8 @@ public final class CharacterEditor {
     }
 
     /**
-     * For scripts: look at what the character wears or at one part, from far enough away to see
-     * it whole, without gliding. Call on the render thread.
+     * For scripts: look at what the character wears or at one part, from far enough away to see it
+     * whole, without gliding. Call on the render thread.
      *
      * @param partId The part to frame, or null for the whole character.
      * @param pitch The pitch, positive looking down.

@@ -593,7 +593,8 @@ public record BodyPlan(
             Form form = forms.get(i);
             String path = JsonPath.at(FIELD_FORMS, i);
             unique(checks, names, form.id(), JsonPath.field(path, FIELD_ID), "form");
-            boolean thicker = i == 0 ? form.offset() >= 0 : form.offset() > forms.get(i - 1).offset();
+            boolean thicker =
+                    i == 0 ? form.offset() >= 0 : form.offset() > forms.get(i - 1).offset();
             if (!thicker) {
                 checks.error(
                         JsonPath.field(path, Form.FIELD_OFFSET),
