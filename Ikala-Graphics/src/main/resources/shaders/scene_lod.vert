@@ -66,6 +66,9 @@ layout(location = 8) flat out uint outShellSeed;
 // wants every input it declares written
 layout(location = 9) flat out uvec4 outTint;
 layout(location = 10) flat out uint outTintMask;
+// No decals here, see scene_skinned.vert
+layout(location = 11) out vec4 outDecalCoord;
+layout(location = 12) flat out uvec4 outDecal;
 
 layout(std430, set = 0, binding = 2) readonly buffer Materials {
     Material materials[];
@@ -220,6 +223,8 @@ void main()
     outShellSeed = uint(gl_VertexIndex);
     outTint = uvec4(0xFFFFFFFFu);
     outTintMask = 0u;
+    outDecalCoord = vec4(0.0);
+    outDecal = uvec4(0u);
     for (uint i = 0u; instanced && i < world.model.w; ++i) {
         outRemaps[i] = (world.remapFrom[i] & 0xFFFFu) | (world.remapTo[i] << 16);
     }

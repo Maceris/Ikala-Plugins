@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.vulkan;
 
+import com.ikalagaming.graphics.SkinnedDecal;
 import com.ikalagaming.graphics.SkinnedPart;
 import com.ikalagaming.graphics.Skins;
 import com.ikalagaming.graphics.TextureHandle;
@@ -27,17 +28,19 @@ import java.util.function.ToIntFunction;
  *   <li>Each instance is {@value #INSTANCE_SIZE} bytes: its model matrix relative to the camera,
  *       the index of its first palette matrix, counted in matrices from the start of the buffer,
  *       its hidden regions' mask as two halves, a padding word, and its {@value Skins#TINT_SLOTS}
- *       tint colors, packed sRGB with red in the low byte.
+ *       tint colors, packed sRGB with red in the low byte; then its decal's box matrix and its
+ *       art's bindless index (0 for none), tint slots (a byte each, 255 for none) and fallback
+ *       colors. See {@link SkinnedDecal}.
  *   <li>Palettes start at the next multiple of {@value #MATRIX_SIZE} bytes after the instances, so
  *       the whole buffer can be read as matrices too.
  * </ul>
  *
  * <p>The draws buffer holds a {@value #DRAW_SIZE} byte record per drawn part: its instance, its
- * material, its packed tint slots and its tint mask's bindless index, 0 for none, then its four
- * fallback tint colors (see {@link SkinnedPart#fallbacks}). Each draw command's first instance is
- * its record's index. Scene commands come first, for the instances the camera can see; shadow
- * commands start at {@link Counts#shadowFirst()}, for every instance that casts shadows, seen or
- * not.
+ * material, its packed tint slots, with {@value #DECAL_BIT} set on the instance for parts that take
+ * decals, and its tint mask's bindless index, 0 for none, then its four fallback tint colors (see
+ * {@link SkinnedPart#fallbacks}). Each draw command's first instance is its record's index. Scene
+ * commands come first, for the instances the camera can see; shadow commands start at {@link
+ * Counts#shadowFirst()}, for every instance that casts shadows, seen or not.
  *
  * @author Ches Burks
  */
@@ -47,7 +50,21 @@ public final class SkinnedPacker {
 
     /** The size of one instance in the data buffer, in bytes. */
     public static final int INSTANCE_SIZE =
+            MATRIX_SIZE
+                    + 4 * Integer.BYTES
+                    + Skins.TINT_SLOTS * Integer.BYTES
+                    + MATRIX_SIZE
+                    + 4 * Integer.BYTES;
+
+    /** Where an instance's decal starts in the data buffer, from the instance's start. */
+    public static final int DECAL_OFFSET =
             MATRIX_SIZE + 4 * Integer.BYTES + Skins.TINT_SLOTS * Integer.BYTES;
+
+    /** The bit of a draw record's instance word marking parts that take decals. */
+    public static final int DECAL_BIT = 1 << 31;
+
+    /** A tint slot byte for none, see {@link SkinnedDecal}. */
+    private static final int NO_SLOT = 0xFF;
 
     /** The size of one draw record, in bytes. */
     public static final int DRAW_SIZE = 8 * Integer.BYTES;
@@ -232,6 +249,7 @@ public final class SkinnedPacker {
             for (int t = 0; t < Skins.TINT_SLOTS; ++t) {
                 data.putInt(base + (4 + t) * Integer.BYTES, entry.tints[t]);
             }
+            writeDecal(data, instance * INSTANCE_SIZE + DECAL_OFFSET, entry.decal, textures);
             final int paletteFloats = entry.boneCount * SkinnedRegistry.MATRIX_FLOATS;
             final int paletteByte = paletteMatrix * MATRIX_SIZE;
             for (int f = 0; f < paletteFloats; ++f) {
@@ -243,7 +261,8 @@ public final class SkinnedPacker {
                 if (location == null) {
                     continue;
                 }
-                drawRecords.putInt(draw * DRAW_SIZE, instance);
+                drawRecords.putInt(
+                        draw * DRAW_SIZE, part.decals() ? instance | DECAL_BIT : instance);
                 drawRecords.putInt(
                         draw * DRAW_SIZE + Integer.BYTES, materials.applyAsInt(part.material()));
                 drawRecords.putInt(draw * DRAW_SIZE + 2 * Integer.BYTES, part.tintSlots());
@@ -313,6 +332,35 @@ public final class SkinnedPacker {
         boundsMin.add(boundsMax, center).mul(0.5f);
         boundsMax.sub(boundsMin, extents).mul(0.5f);
         return FrustumPlanes.boxInside(planes, center, extents);
+    }
+
+    /**
+     * Write an instance's decal: its box matrix, then its art's bindless index, its tint slots and
+     * its fallback colors.
+     *
+     * @param data The data buffer.
+     * @param at Where the decal starts.
+     * @param decal The decal, or null for none.
+     * @param textures Finds a texture's bindless index.
+     */
+    private static void writeDecal(
+            ByteBuffer data, int at, SkinnedDecal decal, ToIntFunction<TextureHandle> textures) {
+        if (decal == null) {
+            new Matrix4f().get(at, data);
+            data.putInt(at + MATRIX_SIZE, 0);
+            data.putInt(at + MATRIX_SIZE + Integer.BYTES, NO_SLOT | NO_SLOT << 8);
+            data.putInt(at + MATRIX_SIZE + 2 * Integer.BYTES, SkinnedPart.WHITE);
+            data.putInt(at + MATRIX_SIZE + 3 * Integer.BYTES, SkinnedPart.WHITE);
+            return;
+        }
+        decal.restToBox().get(at, data);
+        data.putInt(at + MATRIX_SIZE, textures.applyAsInt(decal.art()));
+        data.putInt(
+                at + MATRIX_SIZE + Integer.BYTES,
+                (decal.slotA() < 0 ? NO_SLOT : decal.slotA())
+                        | (decal.slotB() < 0 ? NO_SLOT : decal.slotB()) << 8);
+        data.putInt(at + MATRIX_SIZE + 2 * Integer.BYTES, decal.fallbackA());
+        data.putInt(at + MATRIX_SIZE + 3 * Integer.BYTES, decal.fallbackB());
     }
 
     /**

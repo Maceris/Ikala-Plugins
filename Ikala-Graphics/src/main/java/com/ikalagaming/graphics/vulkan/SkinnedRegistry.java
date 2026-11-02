@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.vulkan;
 
+import com.ikalagaming.graphics.SkinnedDecal;
 import com.ikalagaming.graphics.SkinnedInstanceHandle;
 import com.ikalagaming.graphics.SkinnedPart;
 import com.ikalagaming.graphics.Skins;
@@ -78,6 +79,9 @@ public final class SkinnedRegistry {
 
         /** Its tint colors, packed sRGB with red in the low byte, unset until set. */
         final int[] tints = unset();
+
+        /** Its decal, or null for none. */
+        SkinnedDecal decal;
 
         /**
          * Its world position.
@@ -448,6 +452,29 @@ public final class SkinnedRegistry {
         int[] tints = new int[Skins.TINT_SLOTS];
         Arrays.fill(tints, UNSET);
         return tints;
+    }
+
+    /**
+     * Change an instance's decal.
+     *
+     * @param owner The plugin changing it.
+     * @param handle The handle.
+     * @param decal The decal, or null for none.
+     * @return False if the handle is null, stale or someone else's.
+     */
+    public boolean setDecal(
+            @NonNull String owner, SkinnedInstanceHandle handle, SkinnedDecal decal) {
+        lock.lock();
+        try {
+            Entry entry = find(owner, handle);
+            if (entry == null) {
+                return false;
+            }
+            entry.decal = decal;
+            return true;
+        } finally {
+            lock.unlock();
+        }
     }
 
     /**

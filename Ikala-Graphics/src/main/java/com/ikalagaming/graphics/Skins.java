@@ -263,6 +263,19 @@ public final class Skins {
     }
 
     /**
+     * Change an instance's decal, which its parts that take decals show; see {@link SkinnedDecal}.
+     *
+     * @param instance The instance.
+     * @param decal The decal, or null for none.
+     */
+    public void setDecal(SkinnedInstanceHandle instance, SkinnedDecal decal) {
+        SkinnedRegistry registry = registryOrNull();
+        if (registry != null && !registry.setDecal(owner(), instance, decal)) {
+            ignored(registry, instance, "change the decal of");
+        }
+    }
+
+    /**
      * Change whether an instance casts shadows. They do by default.
      *
      * @param instance The instance.

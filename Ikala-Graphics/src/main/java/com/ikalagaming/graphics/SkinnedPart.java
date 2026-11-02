@@ -15,6 +15,9 @@ import lombok.NonNull;
  * mask)}. A part with slots but no mask takes the red channel's color everywhere, so plain parts
  * can be tinted whole.
  *
+ * <p>A part that takes decals shows its instance's decal where it lies in the decal's box (see
+ * {@link SkinnedDecal}), like a shirt or a bare chest under an emblem.
+ *
  * <p>A tint color left unset (see {@link Skins#UNSET}) gives each part its own color for that
  * channel instead, its fallback: so parts sharing a slot keep their own colors until the slot is
  * set, like two garments in one palette channel that no one has colored yet.
@@ -27,6 +30,7 @@ import lombok.NonNull;
  *     #NO_TINT}.
  * @param fallbacks The color each mask channel (r, g, b, a) takes where its slot's tint is unset,
  *     packed sRGB with red in the low byte (see {@link #pack}); white changes nothing.
+ * @param decals Whether it shows its instance's decal.
  * @see Skins#setParts(SkinnedInstanceHandle, java.util.List)
  */
 public record SkinnedPart(
@@ -34,7 +38,8 @@ public record SkinnedPart(
         Material material,
         TextureHandle tintMask,
         int tintSlots,
-        int @NonNull [] fallbacks) {
+        int @NonNull [] fallbacks,
+        boolean decals) {
     /** Slots that take no tint for any channel. */
     public static final int NO_TINT = 0xFFFF_FFFF;
 
@@ -54,6 +59,26 @@ public record SkinnedPart(
             throw new IllegalArgumentException("A part has one fallback color per mask channel");
         }
         fallbacks = fallbacks.clone();
+    }
+
+    /**
+     * A part that shows no decal.
+     *
+     * @param mesh The skinned mesh.
+     * @param material The material, which must be in the scene's material cache, or null for the
+     *     default material.
+     * @param tintMask The tint mask, linear rather than sRGB, or null for none.
+     * @param tintSlots Which tint color each mask channel takes, from {@link #slots}, or {@link
+     *     #NO_TINT}.
+     * @param fallbacks The color each mask channel takes where its slot's tint is unset.
+     */
+    public SkinnedPart(
+            @NonNull SkinnedMeshHandle mesh,
+            Material material,
+            TextureHandle tintMask,
+            int tintSlots,
+            int @NonNull [] fallbacks) {
+        this(mesh, material, tintMask, tintSlots, fallbacks, false);
     }
 
     /**

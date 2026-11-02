@@ -9,8 +9,10 @@
 const uint TINT_SLOTS = 8u;
 
 // One skinned instance: its model matrix relative to the camera, where its palette starts,
-// counted in matrices from the start of the same buffer, which of its 64 regions are hidden, and
-// its tint colors, packed sRGB with red in the low byte
+// counted in matrices from the start of the same buffer, which of its 64 regions are hidden, its
+// tint colors, packed sRGB with red in the low byte, and its decal (see SkinnedDecal): the matrix
+// from rest space into its box, and its art's bindless index (0 for none), its two tint slots, a
+// byte each, 255 for none, and their fallback colors
 struct SkinnedInstance {
     mat4 model;
     uint paletteFirst;
@@ -18,6 +20,8 @@ struct SkinnedInstance {
     uint hiddenHigh;
     uint padding;
     uint tint[TINT_SLOTS];
+    mat4 decalBox;
+    uvec4 decal;
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer SkinnedInstances {
@@ -40,6 +44,14 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Sk
 // Where a draw's record starts in SkinnedDraws; its fallback colors follow
 uint drawRecord(uint index) {
     return 2u * index;
+}
+
+// The bit of a draw record's instance word marking parts that take decals, see SkinnedPacker
+const uint DECAL_BIT = 0x80000000u;
+
+// A draw record's instance, without its decal bit
+uint drawInstance(uvec4 draw) {
+    return draw.x & ~DECAL_BIT;
 }
 
 // The vertex's bones, their weights, adding up to 1, and its mask region, see SkinnedVertex
@@ -88,6 +100,35 @@ uvec4 tintColors(SkinnedInstance instance, uint slots, uvec4 fallbacks) {
         }
     }
     return colors;
+}
+
+// A tint slot's color, or the fallback where the slot is none or unset
+uint slotColor(SkinnedInstance instance, uint slot, uint fallback) {
+    if (slot == NO_TINT_SLOT) {
+        return fallback;
+    }
+    uint tint = instance.tint[slot];
+    return tintUnset(tint) ? fallback : tint;
+}
+
+// The decal's art index and two colors for a part, art 0 for none
+uvec4 decalOf(SkinnedInstance instance, uvec4 draw) {
+    if ((draw.x & DECAL_BIT) == 0u || instance.decal.x == 0u) {
+        return uvec4(0u);
+    }
+    uint slots = instance.decal.y;
+    return uvec4(instance.decal.x,
+        slotColor(instance, slots & 0xFFu, instance.decal.z),
+        slotColor(instance, (slots >> 8u) & 0xFFu, instance.decal.w), 0u);
+}
+
+// Where a rest position lies in the decal's box, and how much its rest normal faces out of it
+vec4 decalCoord(SkinnedInstance instance, vec3 restPosition, vec3 restNormal) {
+    vec3 box = (instance.decalBox * vec4(restPosition, 1.0)).xyz;
+    // The box's z grows along this direction in rest space
+    vec3 forward = normalize(vec3(instance.decalBox[0][2], instance.decalBox[1][2],
+        instance.decalBox[2][2]));
+    return vec4(box, dot(normalize(restNormal), forward));
 }
 
 // The vertex's blended skinning matrix, from model space at rest to model space posed
