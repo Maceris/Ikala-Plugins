@@ -95,9 +95,13 @@ CAPTURE_DESIGNS = {"male": "test:design/mannequin_male",
 CAPTURE_VIEWS = [("front", False, 0.1, 0.0), ("side", False, 0.1, 1.5708),
                  ("back", False, 0.1, 3.1416), ("close", True, 0.25, 0.6)]
 # Body parts are also shown under clothing: these layers, where they cover the part, unless
-# config.json's "captureLayers" names others, from the front and close up
+# config.json's "captureLayers" names others, from the front and close up. Accessories are shown
+# over the thickest body part for the slot their socket rests on and these layers over it, to see
+# them move out onto what is worn
 CAPTURE_LAYERS = ["gen:part/pants/blue_jeans", "gen:part/jacket/navy_blazer"]
 CAPTURE_DRESSED_VIEWS = [("front", False, 0.1, 0.0), ("close", True, 0.25, 0.6)]
+# Accessories dressed are seen from every side, since they sit on the back or sides as often
+CAPTURE_DRESSED_ACCESSORY_VIEWS = CAPTURE_VIEWS
 CAPTURE_FOLDER = "editor"
 CAPTURE_SCRIPT = "captures.iks"
 # The shots' size in pixels, unless config.json's "captureSize" says otherwise
@@ -1584,12 +1588,13 @@ def command_status(config, batch, args):
                                                        mesh, part, shots))
 
 
-def dressed_layers(config, brief):
+def dressed_layers(config, brief, slots=None):
     """The layers a body part is shown dressed in: those of config.json's "captureLayers" (else
-    CAPTURE_LAYERS) whose body plan layers cover one of its slots, either side."""
+    CAPTURE_LAYERS) whose body plan layers cover one of its slots (or the slots given), either
+    side."""
     plan = load_json_with_comments(PLAN)
     covers = {layer["id"]: set(layer["covers"]) for layer in plan["layers"]}
-    slots = set(brief.get("slots", []))
+    slots = set(brief.get("slots", []) if slots is None else slots)
     slots |= {other_side(s) for s in slots}
     content = pathlib.Path(config["content"]) / "part"
     chosen = []
@@ -1601,6 +1606,32 @@ def dressed_layers(config, brief):
         if any(covers.get(fill, set()) & slots for fill in fills):
             chosen.append(part_id)
     return chosen
+
+
+def under_accessory(config, brief):
+    """What an accessory is shown worn over: the thickest generated body part filling the slot
+    its socket rests on (both sides of a sided one), then the capture layers covering that slot.
+    Nothing for a socket that doesn't rest on a slot."""
+    socket, _ = socket_of(brief)
+    rest = socket.get("rests")
+    if not rest:
+        return []
+    plan = load_json_with_comments(PLAN)
+    thickness = {form["id"]: form["offset"] for form in plan.get("forms", [])}
+    thickest = None
+    for path in sorted((pathlib.Path(config["content"]) / "part").glob("*.json")):
+        part = load_json_with_comments(path)[0]
+        if part.get("kind") != "body" or rest["slot"] not in part.get("fills", []):
+            continue
+        depth = thickness.get(part.get("form"), 0)
+        if depth > 0 and (thickest is None or depth > thickest[0]):
+            thickest = (depth, part["id"])
+    under = []
+    if thickest:
+        under.append(thickest[1])
+        if thickest[1][-2:] in ("_l", "_r"):
+            under.append(thickest[1][:-1] + ("r" if thickest[1].endswith("_l") else "l"))
+    return under + dressed_layers(config, brief, {rest["slot"]})
 
 
 def worn_ids(brief):
@@ -1650,10 +1681,18 @@ def capture_script(config, batch, briefs):
                           "await(t.frames(%d));" % CAPTURE_SETTLE_FRAMES,
                           "await(t.saveFrame(%s));" % json.dumps((folder / name).as_posix())]
                 names.append(name)
-            # Then dressed: clothing over a body part shows in its form for the part
-            dressed = dressed_layers(config, brief) if brief["kind"] == "body" else []
+            # Then dressed: clothing over a body part shows in its form for the part, and an
+            # accessory moves out onto a thick body part and clothing under it
+            if brief["kind"] == "body":
+                dressed = dressed_layers(config, brief)
+            elif brief["kind"] == "accessory":
+                dressed = under_accessory(config, brief)
+            else:
+                dressed = []
             lines += ["characters.wear(%s);" % json.dumps(i) for i in dressed]
-            for view, framed, pitch, yaw in CAPTURE_DRESSED_VIEWS if dressed else ():
+            views = (CAPTURE_DRESSED_ACCESSORY_VIEWS if brief["kind"] == "accessory"
+                     else CAPTURE_DRESSED_VIEWS)
+            for view, framed, pitch, yaw in views if dressed else ():
                 name = "%s/%s_dressed_%s.png" % (CAPTURE_FOLDER, variant, view)
                 lines += ["characters.frame(%s, %r, %r);"
                           % (json.dumps(ids[0]) if framed else "null", pitch, yaw),

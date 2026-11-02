@@ -293,7 +293,9 @@ public final class PartAssembler {
      * @param allForms Whether to add each layer's meshes for every clothing form it has.
      * @param slotForms The clothing form of the body part in each body slot; see {@link
      *     com.ikalagaming.characters.design.WearRules#slotForms}.
-     * @return The character, or null if no part could be loaded.
+     * @return The character, or null if no part could be loaded. Unless every form is added, the
+     *     parts are all worn together, so accessories move out to rest on them (see {@link
+     *     AccessoryRests}).
      */
     public static Assembled assemble(
             @NonNull Collection<Part> parts,
@@ -310,10 +312,15 @@ public final class PartAssembler {
         // Placements turn about the sockets of the rig's reference body, read when first needed
         Skeleton[] referenceSkeleton = {null};
         for (Part part : parts) {
+            Vector3f push =
+                    allForms || part.kind() != Part.PartKind.ACCESSORY
+                            ? null
+                            : AccessoryRests.push(plan, AccessoryRests.socketOf(plan, part), parts);
             addMesh(
                     part,
                     meshFor(part, variant),
                     null,
+                    push,
                     caps,
                     plan,
                     variant,
@@ -329,6 +336,7 @@ public final class PartAssembler {
                             part,
                             meshFor(part, variant, form, plan),
                             form,
+                            null,
                             Map.of(),
                             plan,
                             variant,
@@ -350,6 +358,7 @@ public final class PartAssembler {
      * @param part The part.
      * @param mesh The mesh asset, or null to add nothing.
      * @param form The clothing form the mesh is for, or null for the part's plain mesh.
+     * @param push How far an accessory moves out to rest on what is worn, or null.
      * @param caps The seams where each part shows a cap.
      * @param plan The plan.
      * @param variant The variant.
@@ -364,6 +373,7 @@ public final class PartAssembler {
             Part part,
             String mesh,
             String form,
+            Vector3f push,
             Map<Part, List<String>> caps,
             BodyPlan plan,
             String variant,
@@ -394,6 +404,9 @@ public final class PartAssembler {
                     part.kind() == Part.PartKind.ACCESSORY
                             ? part.placementFor(variant)
                             : Part.Placement.NONE;
+            if (push != null && push.lengthSquared() > 0) {
+                placement = placement.movedBy(push);
+            }
             if (placement != Part.Placement.NONE && referenceSkeleton[0] == null) {
                 ImportedCharacter body = files.get(reference);
                 if (body == null && !files.containsKey(reference)) {

@@ -255,6 +255,8 @@ public record BodyPlan(
      * @param id The layer's name.
      * @param covers The body slots it covers.
      * @param order Where it stacks; higher goes over lower.
+     * @param standoff How far its clothing usually stands out from the form it is fitted over, in
+     *     meters, so accessories resting on a slot it covers sit on it; a part can give its own.
      */
     @Doc("A clothing or armor layer.")
     public record Layer(
@@ -262,9 +264,18 @@ public record BodyPlan(
             @Doc("The body slots it covers.") @Optional List<String> covers,
             @Doc("Where it stacks; higher goes over lower, like shirt 10 < jacket 20.")
                     @Default("0")
-                    int order) {
+                    int order,
+            @Doc(
+                            "How far its clothing usually stands out from the clothing form it is"
+                                    + " fitted over, in meters, so accessories resting on a slot it"
+                                    + " covers sit on it. A part can give its own.")
+                    @Default("0")
+                    float standoff) {
         /** The field for the covered slots. */
         public static final String FIELD_COVERS = "covers";
+
+        /** The field for the standoff. */
+        public static final String FIELD_STANDOFF = "standoff";
     }
 
     /**
@@ -274,6 +285,8 @@ public record BodyPlan(
      * @param bone The bone it is on.
      * @param max How many items it holds.
      * @param type Its type tag, which items fit by.
+     * @param rests The body slot accessories on it rest on, and which way they move out from it, or
+     *     null if they stay where they are fitted.
      */
     @Doc("An attach point.")
     public record Socket(
@@ -281,12 +294,42 @@ public record BodyPlan(
             @Doc("The bone it is on, like \"socket.back\".") String bone,
             @Doc("How many items it holds at once.") @Default("1") int max,
             @Doc("Its type tag, which items fit by, like \"grip.1h\" or \"back.large\".") @Optional
-                    String type) {
+                    String type,
+            @Doc(
+                            "The body slot accessories on it rest on, and which way they move out"
+                                    + " as the part and clothing there stand further out than the"
+                                    + " bare body they were fitted on. Left out, they stay put.")
+                    @Optional
+                    Rest rests) {
         /** The field for the bone. */
         public static final String FIELD_BONE = "bone";
 
         /** The field for the item count. */
         public static final String FIELD_MAX = "max";
+
+        /** The field for the resting place. */
+        public static final String FIELD_RESTS = "rests";
+    }
+
+    /**
+     * Where accessories on a socket rest on the body.
+     *
+     * @param slot The body slot they rest on.
+     * @param out Which way they move out from it, in the character's space at rest (x across, y up,
+     *     z forward); its length doesn't matter.
+     */
+    @Doc("Where accessories on a socket rest on the body.")
+    public record Rest(
+            @Doc("The body slot they rest on, like \"torso\".") String slot,
+            @Doc(
+                            "Which way they move out from it, in the character's space at rest:"
+                                    + " x across, y up, z forward, like [0, 0, -1] for the back.")
+                    Vec3 out) {
+        /** The field for the slot. */
+        public static final String FIELD_SLOT = "slot";
+
+        /** The field for the direction. */
+        public static final String FIELD_OUT = "out";
     }
 
     /**
@@ -542,6 +585,27 @@ public record BodyPlan(
     }
 
     /**
+     * Find the socket on a bone.
+     *
+     * @param bone The bone's name.
+     * @return The socket, or null if no socket is on that bone.
+     */
+    public Socket socketOnBone(@NonNull String bone) {
+        return sockets.stream().filter(s -> s.bone().equals(bone)).findFirst().orElse(null);
+    }
+
+    /**
+     * How far out from the bare body a clothing form's shell is.
+     *
+     * @param form The form's name, or null for the first.
+     * @return Its offset in meters, 0 for the first form or one the plan doesn't have.
+     */
+    public float formOffset(String form) {
+        int index = form == null ? -1 : formIndex(form);
+        return index < 0 ? 0 : forms.get(index).offset();
+    }
+
+    /**
      * Find an equipment slot.
      *
      * @param name The slot's name.
@@ -633,7 +697,7 @@ public record BodyPlan(
         checkVariants(checks);
         Set<String> slotNames = checkSlots(checks, bones);
         checkLayers(checks, slotNames);
-        checkSockets(checks, bones);
+        checkSockets(checks, bones, slotNames);
         checkEquipment(checks);
         checkExtensions(checks, rigDefinition, bones);
         checkForms(checks);
@@ -866,6 +930,11 @@ public record BodyPlan(
                             "There is no slot '" + layer.covers().get(c) + "'");
                 }
             }
+            if (layer.standoff() < 0) {
+                checks.error(
+                        JsonPath.field(path, Layer.FIELD_STANDOFF),
+                        "A layer's standoff can't be below 0");
+            }
         }
     }
 
@@ -875,7 +944,7 @@ public record BodyPlan(
      * @param checks Where problems go.
      * @param bones Checks that bones exist.
      */
-    private void checkSockets(Checks checks, BoneCheck bones) {
+    private void checkSockets(Checks checks, BoneCheck bones, Set<String> slotNames) {
         Set<String> names = new HashSet<>();
         for (int i = 0; i < sockets.size(); ++i) {
             Socket socket = sockets.get(i);
@@ -886,6 +955,21 @@ public record BodyPlan(
                 checks.error(
                         JsonPath.field(path, Socket.FIELD_MAX),
                         "A socket must hold at least 1 item");
+            }
+            Rest rest = socket.rests();
+            if (rest != null) {
+                String restPath = JsonPath.field(path, Socket.FIELD_RESTS);
+                if (!slotNames.contains(rest.slot())) {
+                    checks.error(
+                            JsonPath.field(restPath, Rest.FIELD_SLOT),
+                            "The plan has no body slot '" + rest.slot() + "'");
+                }
+                Vec3 out = rest.out();
+                if (out.x() == 0 && out.y() == 0 && out.z() == 0) {
+                    checks.error(
+                            JsonPath.field(restPath, Rest.FIELD_OUT),
+                            "A resting direction can't be zero");
+                }
             }
         }
     }

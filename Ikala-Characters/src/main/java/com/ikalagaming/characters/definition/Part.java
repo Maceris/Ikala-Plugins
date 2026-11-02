@@ -46,6 +46,8 @@ import java.util.Set;
  * @param locksSliders Sliders it locks while worn, by ID or editor group.
  * @param hidesSockets Sockets it covers, by name or type.
  * @param form For body parts, the plan's thinnest clothing form its surface fits in.
+ * @param standoff For body parts, how far its surface stands out from the bare body; for layers,
+ *     from the form it is fitted over; in meters. Null takes its form's offset or its layer's.
  * @author Ches Burks
  */
 @Doc(
@@ -122,7 +124,14 @@ public record Part(
                                 + " \"bulky\" for a robot leg, so layers over it show their mesh for"
                                 + " that form. Left out, it is the plan's first, the bare body's.")
                 @Optional
-                String form)
+                String form,
+        @Doc(
+                        "How far it stands out where accessories rest on it, in meters: a body"
+                                + " part from the bare body, a layer from the clothing form it is"
+                                + " fitted over. Left out, a body part takes its form's offset and"
+                                + " a layer its layer's standoff.")
+                @Optional
+                Float standoff)
         implements Definition {
 
     /** The field for the plan. */
@@ -181,6 +190,9 @@ public record Part(
 
     /** The field for the clothing form. */
     public static final String FIELD_FORM = "form";
+
+    /** The field for the standoff. */
+    public static final String FIELD_STANDOFF = "standoff";
 
     /** Joins a variant and a clothing form in a mesh key, like "female@bulky". */
     public static final String FORM_SEPARATOR = "@";
@@ -340,6 +352,21 @@ public record Part(
         public static final String FIELD_SCALE = "scale";
 
         /**
+         * This placement moved further.
+         *
+         * @param by How much further, in meters, in model space.
+         * @return The moved placement.
+         */
+        public Placement movedBy(@NonNull Vector3fc by) {
+            Vec3 moved =
+                    offset == null
+                            ? new Vec3(by.x(), by.y(), by.z())
+                            : new Vec3(
+                                    offset.x() + by.x(), offset.y() + by.y(), offset.z() + by.z());
+            return new Placement(moved, rotate, scale);
+        }
+
+        /**
          * The placement as a transform in model space.
          *
          * @param socket Where the socket bone is at rest on the rig's reference body.
@@ -455,6 +482,14 @@ public record Part(
                 checks.error(JsonPath.at(FIELD_FORM), "Only body parts have a clothing form");
             } else if (body.formIndex(form) < 0) {
                 checks.error(JsonPath.at(FIELD_FORM), "The plan has no form '" + form + "'");
+            }
+        }
+        if (standoff != null) {
+            if (kind == PartKind.ACCESSORY) {
+                checks.error(
+                        JsonPath.at(FIELD_STANDOFF), "Only body parts and layers have a standoff");
+            } else if (standoff < 0) {
+                checks.error(JsonPath.at(FIELD_STANDOFF), "A standoff can't be below 0");
             }
         }
         for (int i = 0; i < hidesRegions.size(); ++i) {

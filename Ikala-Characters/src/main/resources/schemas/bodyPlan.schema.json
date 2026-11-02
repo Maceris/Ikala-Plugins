@@ -338,6 +338,11 @@
           "type": "integer",
           "description": "Where it stacks; higher goes over lower, like shirt 10 < jacket 20.",
           "default": 0
+        },
+        "standoff": {
+          "type": "number",
+          "description": "How far its clothing usually stands out from the clothing form it is fitted over, in meters, so accessories resting on a slot it covers sit on it. A part can give its own.",
+          "default": 0
         }
       },
       "required": [
@@ -378,6 +383,30 @@
       "required": [
         "bone",
         "weight"
+      ],
+      "additionalProperties": false
+    },
+    "Rest": {
+      "type": "object",
+      "description": "Where accessories on a socket rest on the body.",
+      "properties": {
+        "slot": {
+          "type": "string",
+          "description": "The body slot they rest on, like \"torso\"."
+        },
+        "out": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "Which way they move out from it, in the character's space at rest: x across, y up, z forward, like [0, 0, -1] for the back."
+        }
+      },
+      "required": [
+        "slot",
+        "out"
       ],
       "additionalProperties": false
     },
@@ -460,6 +489,14 @@
         "type": {
           "type": "string",
           "description": "Its type tag, which items fit by, like \"grip.1h\" or \"back.large\"."
+        },
+        "rests": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Rest"
+            }
+          ],
+          "description": "The body slot accessories on it rest on, and which way they move out as the part and clothing there stand further out than the bare body they were fitted on. Left out, they stay put."
         }
       },
       "required": [
