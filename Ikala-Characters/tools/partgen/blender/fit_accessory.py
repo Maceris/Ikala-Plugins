@@ -27,7 +27,8 @@ import sys
 import bmesh
 import bpy
 import numpy as np
-from mathutils import Vector
+from mathutils import Matrix, Vector
+from mathutils.bvhtree import BVHTree
 
 # A part of the generated mesh this thin across, and this many times longer, is a sliver
 SLIVER_THICKNESS = 0.003
@@ -45,6 +46,8 @@ NEEDLE_LENGTH = 0.2
 NEEDLE_TILT = 15
 # Fewer faces than this is a speck
 SPECK_FACES = 12
+# Which way each side an accessory may sit on points, in Blender's space (the mannequin faces -Y)
+SIDES = {"front": (0, -1, 0), "back": (0, 1, 0), "up": (0, 0, 1)}
 # Slices the mesh is cut into to find its crown, and the points a slice needs to count
 CROWN_SLICES = 40
 SLICE_POINTS = 30
@@ -316,6 +319,123 @@ def place_bottom_crown(high, mannequin, armature, rule):
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     pull_in_brim(high, head_center, crown_width * scale / 2, bottom + (crown_z - low) * scale,
                  head_width * rule["maxWidth"] / 2)
+
+
+def side_direction(rule, socket_head):
+    """Which way, in Blender's space (the mannequin faces -Y), an accessory sits from the body:
+    the rule's "side", with "out" meaning away from the body's middle on the socket's side."""
+    side = rule["side"]
+    if side == "out":
+        return Vector((1.0 if socket_head.x >= 0 else -1.0, 0.0, 0.0))
+    return Vector(SIDES[side])
+
+
+def measure(mannequin, spec, socket_head):
+    """A body measurement for sizing, like "torso.width": the named slot's mesh (a slot ending
+    in ".?" takes the socket's side), and what of it: width (side to side) or depth (front to
+    back) where it crosses the socket's height, height (its whole span up and down), length
+    (its span along its longest axis) or girth (twice its median distance from that axis)."""
+    slot, what = spec.rsplit(".", 1)
+    if slot.endswith(".?"):
+        slot = slot[:-1] + ("L" if socket_head.x >= 0 else "R")
+    obj = next((o for o in mannequin if o.name == "mannequin_" + slot), None)
+    if obj is None:
+        raise SystemExit("The mannequin has no slot mesh for " + slot)
+    points = vertices(obj)
+    if what in ("width", "depth"):
+        ring = section(obj, socket_head.z)
+        if len(ring) < 3:
+            ring = points
+        axis = 0 if what == "width" else 1
+        return float(ring[:, axis].max() - ring[:, axis].min())
+    if what == "height":
+        return float(points[:, 2].max() - points[:, 2].min())
+    center = points.mean(0)
+    _, _, rows = np.linalg.svd(points - center, full_matrices=False)
+    along = (points - center) @ rows[0]
+    if what == "length":
+        return float(along.max() - along.min())
+    if what == "girth":
+        apart = (points - center) - np.outer(along, rows[0])
+        return float(2 * np.median(np.linalg.norm(apart, axis=1)))
+    raise SystemExit("Measurements are width, depth, height, length or girth, not " + what)
+
+
+def body_tree(mannequin):
+    """The mannequin's skin as one BVH tree, for casting onto its surface."""
+    points, faces = [], []
+    start = 0
+    for obj in mannequin:
+        co = vertices(obj)
+        for polygon in obj.data.polygons:
+            ids = list(polygon.vertices)
+            faces += [(ids[0] + start, ids[k] + start, ids[k + 1] + start)
+                      for k in range(1, len(ids) - 1)]
+        points.append(co)
+        start += len(co)
+    return BVHTree.FromPolygons([tuple(p) for p in np.concatenate(points)], faces)
+
+
+def place_against_body(high, mannequin, armature, bone, rule):
+    """Size and place an accessory against the body beside a socket: turned so its outer face,
+    the one the picture showed (toward -Y), looks along the rule's side; sized so one of its
+    spans is a share of a body measurement; scaled down whole if any span passes its limit; and
+    moved so its inner face rests "gap" off the body's surface beside the socket, centered on
+    the socket across and up. Gives a report of what was done."""
+    head = armature.matrix_world @ armature.data.bones[bone].head_local
+    direction = side_direction(rule, head)
+    # The outer face looks toward -Y; turn it to look along the side
+    if abs(direction.z) > 0.5:
+        turn = Matrix.Rotation(math.radians(-90 if direction.z > 0 else 90), 4, "X")
+    else:
+        turn = Matrix.Rotation(math.atan2(direction.x, -direction.y), 4, "Z")
+    high.matrix_world = turn @ high.matrix_world
+    select_only(high)
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+
+    # Its spans along its own axes: across, up and out from the body
+    up = Vector((0, 0, 1)) if abs(direction.z) < 0.5 else Vector((0, 1, 0))
+    across = up.cross(direction).normalized()
+    axes = {"across": np.array(across), "up": np.array(up), "depth": np.array(direction)}
+    points = vertices(high)
+
+    def span(axis):
+        values = points @ axes[axis]
+        return float(values.max() - values.min())
+
+    wanted = rule["size"]
+    scale = (measure(mannequin, wanted["of"], head) * wanted["share"]
+             / max(span(wanted["axis"]), 1e-6))
+    scale *= rule.get("scale", 1.0)
+    limited = 1.0
+    for limit in rule.get("maxSize", []):
+        most = measure(mannequin, limit["of"], head) * limit["share"]
+        limited = min(limited, most / max(span(limit["axis"]) * scale, 1e-6))
+    scale *= limited
+    spans = {axis: round(span(axis) * scale, 4) for axis in axes}
+    high.scale = (scale, scale, scale)
+    select_only(high)
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+
+    # The body's surface beside the socket: the first hit coming in from outside along the side
+    hit, _, _, _ = body_tree(mannequin).ray_cast(head + direction * 2.0, -direction)
+    surface = hit if hit is not None else head
+
+    points = vertices(high)
+    middle = (points.min(0) + points.max(0)) / 2
+    move = np.array(head) - middle
+    # Across and up it centers on the socket; along the side its inner face meets the surface
+    move -= axes["depth"] * float(move @ axes["depth"])
+    inner = float((points @ axes["depth"]).min())
+    target = float(np.array(surface) @ axes["depth"]) + rule.get("gap", 0.0)
+    move += axes["depth"] * (target - inner)
+    high.location = Vector(move.tolist())
+    select_only(high)
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    report = {"scale": round(scale, 4), "limited": round(limited, 3), "spans": spans,
+              "surface": [round(v, 4) for v in surface], "hit": hit is not None}
+    print("[fit] against the body:", json.dumps(report))
+    return report
 
 
 def pull_in_brim(obj, center, crown, top, limit):
@@ -755,6 +875,9 @@ def main():
     parser.add_argument("--out", required=True)
     parser.add_argument("--preview", help="A folder for preview renders.")
     parser.add_argument("--tints", help="Where to write the default tint colors, as JSON.")
+    parser.add_argument("--mirror", action="store_true",
+                        help="Mirror the mesh across the body's middle first, for the other "
+                             "side's copy of a sided accessory.")
     args = parser.parse_args(argv)
     rule = json.loads(args.rule)
 
@@ -768,10 +891,22 @@ def main():
     if not rule.get("keepThin", False):
         drop_needles(high)
     high = drop_slivers(high)
-    if rule["anchor"] == "bottom" and rule["fit"] == "crown":
+    if args.mirror:
+        # The other side's copy: mirrored across the body's middle before placing
+        high.scale = (-1, 1, 1)
+        select_only(high)
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+        mesh = bmesh.new()
+        mesh.from_mesh(high.data)
+        bmesh.ops.reverse_faces(mesh, faces=mesh.faces)
+        mesh.to_mesh(high.data)
+        mesh.free()
+    if rule["fit"] == "crown":
         place_bottom_crown(high, mannequin, armature, rule)
+    elif rule["fit"] == "surface":
+        place_against_body(high, mannequin, armature, args.bone, rule)
     else:
-        raise SystemExit("No fitting for anchor %s, fit %s yet" % (rule["anchor"], rule["fit"]))
+        raise SystemExit("No fitting called %s yet" % rule["fit"])
     low = low_poly(high, args.name, rule["triangles"])
     base, covered = bake(high, low, args.name, rule["texture"], mannequin)
     out = pathlib.Path(args.out)

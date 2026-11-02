@@ -252,7 +252,10 @@ def socket_of(brief):
     rules = json.loads((TOOLS / "sockets.json").read_text(encoding="utf8"))
     if socket["type"] not in rules:
         raise SystemExit("No fitting rule for the socket type " + socket["type"] + " yet")
-    return socket, rules[socket["type"]]
+    rule = dict(rules[socket["type"]])
+    # A rule can differ for one socket of its type, like a pouch at the back of the belt
+    rule.update(rule.pop("bySocket", {}).get(socket["id"], {}))
+    return socket, rule
 
 
 def layers_of(brief):
@@ -1479,42 +1482,71 @@ def command_fit(config, batch, args):
                 batch.update(brief["id"], record)
                 print("part", " ".join(ids))
             continue
-        folder = batch.brief_folder(brief["id"])
-        socket, rule = socket_of(brief)
-        rule = dict(rule, **brief.get("fit", {}))
-        content = pathlib.Path(config["content"])
-        relative = "accessory/%s.glb" % brief["id"]
+        ids = fit_accessory(config, batch, brief)
+        if ids:
+            def record(entry, part_id=ids[0]):
+                entry["part"] = part_id
+                entry["review"]["part"] = None
+
+            batch.update(brief["id"], record)
+            print("part", " ".join(ids))
+
+
+def fit_accessory(config, batch, brief):
+    """Fit a brief's mesh as an accessory on its socket (see blender/fit_accessory.py and
+    sockets.json) and write its part. A sided socket (.L/.R) gets a part for each side, the other
+    side's mirrored, paired so the editor puts both on together. Gives the part IDs, the brief's
+    own side first, or None if a fit failed."""
+    folder = batch.brief_folder(brief["id"])
+    socket, rule = socket_of(brief)
+    rule = dict(rule, **brief.get("fit", {}))
+    content = pathlib.Path(config["content"])
+    sides = [(socket, False)]
+    if socket["id"].endswith((".L", ".R")):
+        plan = load_json_with_comments(PLAN)
+        mirror = next(s for s in plan["sockets"] if s["id"] == other_side(socket["id"]))
+        sides.append((mirror, True))
+    ids = []
+    parts = []
+    for place, mirrored in sides:
+        name = brief["id"] if len(sides) == 1 else "%s_%s" % (brief["id"],
+                                                              place["id"][-1].lower())
+        relative = "accessory/%s.glb" % name
         out = content / relative
         out.parent.mkdir(parents=True, exist_ok=True)
-        renders = folder / "fit"
+        renders = folder / ("fit" if not mirrored else "fit_" + place["id"][-1].lower())
         renders.mkdir(exist_ok=True)
-        log = folder / "fit.log"
+        log = folder / ("fit.log" if not mirrored else "fit_%s.log" % place["id"][-1].lower())
         tints = folder / "tints.json"
         with open(log, "w", encoding="utf8") as stream:
             result = subprocess.run(
                 [config["blender"], "-b", "--factory-startup", "--python",
                  str(TOOLS / "blender/fit_accessory.py"), "--",
                  "--mesh", str(folder / brief["mesh"]["file"]), "--mannequin", config["mannequin"],
-                 "--bone", socket["bone"], "--rule", json.dumps(rule), "--name", brief["id"],
-                 "--out", str(out), "--preview", str(renders), "--tints", str(tints)],
+                 "--bone", place["bone"], "--rule", json.dumps(rule), "--name", name,
+                 "--out", str(out), "--preview", str(renders), "--tints", str(tints)]
+                + (["--mirror"] if mirrored else []),
                 stdout=stream, stderr=subprocess.STDOUT)
         if result.returncode != 0:
-            print("fit failed for %s; see %s" % (brief["id"], log))
-            continue
-
-        part_id = "%s:part/%s/%s" % (config["namespace"], socket["type"].replace(".", "_"),
-                                     brief["id"])
+            print("fit failed for %s; see %s" % (name, log))
+            return None
+        part_id = "%s:part/%s/%s" % (config["namespace"], socket["type"].replace(".", "_"), name)
         part = {
             "id": part_id,
             "plan": PLAN_ID,
             "kind": "accessory",
-            "fits": [socket["id"]],
+            "fits": [place["id"]],
             "rigid": True,
-            "meshes": {"*": "%s#%s" % (relative, brief["id"])},
-            "materialSlots": [material_slot(brief["id"], tints)],
+            "meshes": {"*": "%s#%s" % (relative, name)},
+            "materialSlots": [material_slot(name, tints)],
             "tags": brief.get("tags", []),
         }
-        definition = content / "part" / ("%s.json" % brief["id"])
+        ids.append(part_id)
+        parts.append((name, part))
+    for name, part in parts:
+        if len(ids) > 1:
+            part["pair"] = next(other for other in ids if other != part["id"])
+        definition = content / "part" / ("%s.json" % name)
         definition.parent.mkdir(parents=True, exist_ok=True)
         # A placement lined up by hand in the character editor outlives a refit
         placement = saved_placement(definition)
@@ -1524,13 +1556,7 @@ def command_fit(config, batch, args):
                   "// Written by Ikala-Characters/tools/partgen/partgen.py\n"
                   % (brief["description"], batch.name, brief["mesh"]["image"]))
         definition.write_text(header + json.dumps([part], indent=2) + "\n", encoding="utf8")
-
-        def record(entry, part_id=part_id):
-            entry["part"] = part_id
-            entry["review"]["part"] = None
-
-        batch.update(brief["id"], record)
-        print("part", part_id)
+    return ids
 
 
 def command_status(config, batch, args):
