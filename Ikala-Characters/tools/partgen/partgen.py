@@ -1494,9 +1494,10 @@ def command_fit(config, batch, args):
 
 def fit_accessory(config, batch, brief):
     """Fit a brief's mesh as an accessory on its socket (see blender/fit_accessory.py and
-    sockets.json) and write its part. A sided socket (.L/.R) gets a part for each side, the other
-    side's mirrored, paired so the editor puts both on together. Gives the part IDs, the brief's
-    own side first, or None if a fit failed."""
+    sockets.json) and write its part. Each body variant gets its own fit on its own mannequin, so
+    a smaller head or narrower shoulders get a smaller, nearer accessory. A sided socket (.L/.R)
+    gets a part for each side, the other side's mirrored, paired so the editor puts both on
+    together. Gives the part IDs, the brief's own side first, or None if a fit failed."""
     folder = batch.brief_folder(brief["id"])
     socket, rule = socket_of(brief)
     rule = dict(rule, **brief.get("fit", {}))
@@ -1511,26 +1512,35 @@ def fit_accessory(config, batch, brief):
     for place, mirrored in sides:
         name = brief["id"] if len(sides) == 1 else "%s_%s" % (brief["id"],
                                                               place["id"][-1].lower())
-        relative = "accessory/%s.glb" % name
-        out = content / relative
-        out.parent.mkdir(parents=True, exist_ok=True)
-        renders = folder / ("fit" if not mirrored else "fit_" + place["id"][-1].lower())
-        renders.mkdir(exist_ok=True)
-        log = folder / ("fit.log" if not mirrored else "fit_%s.log" % place["id"][-1].lower())
+        meshes = {}
+        for variant in (GUIDE_VARIANT, "female"):
+            suffix = "" if variant == GUIDE_VARIANT else "_" + variant
+            relative = "accessory/%s%s.glb" % (name, suffix)
+            out = content / relative
+            out.parent.mkdir(parents=True, exist_ok=True)
+            side = "" if not mirrored else "_" + place["id"][-1].lower()
+            renders = folder / ("fit%s%s" % (side, suffix))
+            renders.mkdir(exist_ok=True)
+            log = folder / ("fit%s%s.log" % (side, suffix))
+            # The guide's colors name the part's tints; the other variants' are the same object
+            tints = folder / ("tints%s.json" % suffix)
+            mannequin = pathlib.Path(config["mannequin"]).parent / ("%s.glb" % variant)
+            with open(log, "w", encoding="utf8") as stream:
+                result = subprocess.run(
+                    [config["blender"], "-b", "--factory-startup", "--python",
+                     str(TOOLS / "blender/fit_accessory.py"), "--",
+                     "--mesh", str(folder / brief["mesh"]["file"]),
+                     "--mannequin", str(mannequin),
+                     "--bone", place["bone"], "--rule", json.dumps(rule), "--name", name,
+                     "--out", str(out), "--preview", str(renders), "--tints", str(tints),
+                     "--image", str(folder / "images" / ("%d.png" % brief["mesh"]["image"]))]
+                    + (["--mirror"] if mirrored else []),
+                    stdout=stream, stderr=subprocess.STDOUT)
+            if result.returncode != 0:
+                print("fit failed for %s on the %s body; see %s" % (name, variant, log))
+                return None
+            meshes["*" if variant == GUIDE_VARIANT else variant] = "%s#%s" % (relative, name)
         tints = folder / "tints.json"
-        with open(log, "w", encoding="utf8") as stream:
-            result = subprocess.run(
-                [config["blender"], "-b", "--factory-startup", "--python",
-                 str(TOOLS / "blender/fit_accessory.py"), "--",
-                 "--mesh", str(folder / brief["mesh"]["file"]), "--mannequin", config["mannequin"],
-                 "--bone", place["bone"], "--rule", json.dumps(rule), "--name", name,
-                 "--out", str(out), "--preview", str(renders), "--tints", str(tints),
-                 "--image", str(folder / "images" / ("%d.png" % brief["mesh"]["image"]))]
-                + (["--mirror"] if mirrored else []),
-                stdout=stream, stderr=subprocess.STDOUT)
-        if result.returncode != 0:
-            print("fit failed for %s; see %s" % (name, log))
-            return None
         part_id = "%s:part/%s/%s" % (config["namespace"], socket["type"].replace(".", "_"), name)
         part = {
             "id": part_id,
@@ -1538,7 +1548,7 @@ def fit_accessory(config, batch, brief):
             "kind": "accessory",
             "fits": [place["id"]],
             "rigid": True,
-            "meshes": {"*": "%s#%s" % (relative, name)},
+            "meshes": meshes,
             "materialSlots": [material_slot(name, tints)],
             "tags": brief.get("tags", []),
         }
