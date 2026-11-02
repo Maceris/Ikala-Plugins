@@ -1,0 +1,17 @@
+[
+  {"id": "leather_backpack", "kind": "accessory", "socket": "back",
+   "description": "rugged brown leather adventurer backpack with two buckled straps and a rolled blanket on top",
+   "tags": ["backpack", "adventurer"]},
+  {"id": "brass_goggles", "kind": "accessory", "socket": "face",
+   "description": "steampunk brass goggles with round green-tinted lenses and a dark leather strap",
+   "tags": ["goggles", "steampunk"]},
+  {"id": "belt_pouch", "kind": "accessory", "socket": "belt_front",
+   "description": "small dark brown leather belt pouch with a flap and a brass snap",
+   "tags": ["pouch", "adventurer"]},
+  {"id": "brass_epaulet", "kind": "accessory", "socket": "shoulder.L",
+   "description": "military dress epaulet, a gold fringed brass shoulder board",
+   "tags": ["epaulet", "military"]},
+  {"id": "wrist_gadget", "kind": "accessory", "socket": "forearm_mount.L",
+   "description": "sci-fi wrist computer gadget, a curved dark grey device with a small glowing cyan screen",
+   "tags": ["gadget", "tech"]}
+]

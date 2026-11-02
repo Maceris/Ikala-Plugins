@@ -1657,6 +1657,21 @@ def capture_script(config, batch, briefs):
     return "\n".join(lines) + "\n", shots
 
 
+def stop_tree(process):
+    """Stop a process and every process it started. On Windows "java" is often a launcher stub
+    (Oracle's javapath) that runs the real JVM as its child, and stopping the stub alone left
+    headless editors running and rendering."""
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/T", "/F", "/PID", str(process.pid)],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    elif process.poll() is None:
+        process.terminate()
+    try:
+        process.wait(20)
+    except subprocess.TimeoutExpired:
+        process.kill()
+
+
 def run_editor(config, script, timeout):
     """Run the editor headless on a script until it logs "capture done", fails or times out,
     printing its progress. Only the editor started here is stopped. Returns True if it finished."""
@@ -1695,12 +1710,7 @@ def run_editor(config, script, timeout):
             if finished or any(failure in text for failure in CAPTURE_FAILURES):
                 break
     finally:
-        if process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(20)
-            except subprocess.TimeoutExpired:
-                process.kill()
+        stop_tree(process)
     if not finished and time.time() >= deadline:
         print("The editor didn't finish within %d s" % timeout)
     return finished
