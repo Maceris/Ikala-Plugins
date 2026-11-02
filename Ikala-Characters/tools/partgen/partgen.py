@@ -68,7 +68,13 @@ shape ("open", for skeletal or mechanical ends), where the welded neighbor shows
 are painted only over its slots, grown by the rule in bodyparts.json for its group of slots but
 never past an outer seam's line, so the neighboring body stays the mannequin's.
 
-Accessories can be fitted on head_top sockets so far. Clothing is lined up on the mannequin, cut
+Over the body plan's clothed slots (torso, pelvis, arms and legs, not hands, feet or the head), a
+body part must fit under clothing: within the bulkiest form, a share of each slot's radius. One
+standing out further is reined in toward the body, and rejected if that would take too much. A
+part meant to stand out, like an arm covered in spikes, says "clothes": false; it is left as it
+is, and clothing covering its slots can't be worn with it.
+
+Accessories are fitted on the face, head_top, back, hip, shoulder and forearm sockets. Clothing is lined up on the mannequin, cut
 out of its figure, shaped over the body, weighted to the rig, baked, carried over to the female
 body, and written as a layer part. Run it with any Python that has Pillow, such as TRELLIS.2's.
 """
