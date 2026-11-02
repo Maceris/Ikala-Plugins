@@ -19,7 +19,7 @@ layout(push_constant) uniform ShadowConstants {
 
 void main()
 {
-    uvec4 draw = draws.draws[gl_InstanceIndex];
+    uvec4 draw = draws.draws[drawRecord(gl_InstanceIndex)];
     SkinnedInstance instance = data.instances[draw.x];
     if (regionHidden(instance)) {
         gl_Position = HIDDEN_POSITION;

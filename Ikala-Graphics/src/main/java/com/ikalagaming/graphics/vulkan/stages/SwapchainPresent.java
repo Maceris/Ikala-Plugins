@@ -17,8 +17,8 @@ import org.lwjgl.vulkan.*;
 
 /**
  * Copies the finished scene into the scene window's swapchain image. The image is left as a
- * transfer destination, and the window's GUI pass draws over it and readies it to present. A
- * {@link com.ikalagaming.graphics.vulkan.FrameCapture} someone asked for copies it here too.
+ * transfer destination, and the window's GUI pass draws over it and readies it to present. A {@link
+ * com.ikalagaming.graphics.vulkan.FrameCapture} someone asked for copies it here too.
  */
 @Slf4j
 public class SwapchainPresent implements RenderStage {
@@ -159,9 +159,10 @@ public class SwapchainPresent implements RenderStage {
                             .newLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
                             .image(image)
                             .subresourceRange(
-                                    r -> r.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
-                                            .levelCount(1)
-                                            .layerCount(1));
+                                    r ->
+                                            r.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                                                    .levelCount(1)
+                                                    .layerCount(1));
             vkCmdPipelineBarrier2(
                     commandBuffer,
                     VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barrier));

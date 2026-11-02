@@ -341,6 +341,7 @@ public final class CharacterEditor {
             List<List<Map<String, List<Integer>>>> formMeshes,
             List<List<Set<String>>> fills,
             List<int[]> channels,
+            List<int[]> fallbacks,
             List<String> channelNames) {
         /**
          * Build a design's parts and sort them.
@@ -479,6 +480,7 @@ public final class CharacterEditor {
                     formMeshes,
                     fills,
                     assembled.channels(),
+                    assembled.fallbacks(),
                     used.stream().map(all::get).toList());
         }
 
@@ -890,6 +892,7 @@ public final class CharacterEditor {
                         character,
                         regions.regions(),
                         built.channels(),
+                        built.fallbacks(),
                         new Vector3d(CharacterStage.origin()),
                         new Quaternionf(),
                         lastWorn);
@@ -2174,7 +2177,7 @@ public final class CharacterEditor {
         shownColorVersion = look.version();
         shownPreviewChannel = previewChannel;
         shownPreviewCode = previewCode;
-        // One tint per standard channel; channels nothing colors stay white, changing nothing
+        // One tint per standard channel; channels the design leaves uncolored are unset
         List<String> channels = plan.allChannels();
         float[] tints = new float[3 * Math.min(channels.size(), Skins.TINT_SLOTS)];
         Arrays.fill(tints, 1);
@@ -2184,10 +2187,13 @@ public final class CharacterEditor {
             Integer code =
                     channel.equals(previewChannel)
                             ? Integer.valueOf(previewCode)
-                            : channelColor(channel);
+                            : look.color(channel);
             if (code != null) {
                 ColorCode.decode(code, rgb);
                 System.arraycopy(rgb, 0, tints, 3 * c, 3);
+            } else {
+                // Each part shows its own default for a channel the design leaves uncolored
+                tints[3 * c] = Skins.UNSET;
             }
         }
         shown.setTints(tints);

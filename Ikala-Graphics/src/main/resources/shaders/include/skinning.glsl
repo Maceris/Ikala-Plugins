@@ -29,12 +29,18 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Sk
     mat4 matrices[];
 };
 
-// One record per drawn part: its instance, its material, which tint slot each tint mask channel
-// takes, a byte each from red up, 255 for none, and its tint mask's bindless index, 0 for none. A
-// draw's first instance is its record's index.
+// Two uvec4s per drawn part, see SkinnedPacker: its instance, its material, which tint slot each
+// tint mask channel takes, a byte each from red up, 255 for none, and its tint mask's bindless
+// index, 0 for none; then the color each mask channel takes where its slot is unset. A draw's
+// first instance is its record's index.
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer SkinnedDraws {
     uvec4 draws[];
 };
+
+// Where a draw's record starts in SkinnedDraws; its fallback colors follow
+uint drawRecord(uint index) {
+    return 2u * index;
+}
 
 // The vertex's bones, their weights, adding up to 1, and its mask region, see SkinnedVertex
 layout(location = 5) in uvec4 joints;
@@ -63,12 +69,23 @@ const uint WHITE = 0xFFFFFFFFu;
 // The slot number meaning a mask channel takes no tint
 const uint NO_TINT_SLOT = 255u;
 
-// The tint color each mask channel takes, from the draw's packed slots
-uvec4 tintColors(SkinnedInstance instance, uint slots) {
+// Whether a slot's tint is unset (no alpha, see SkinnedRegistry.UNSET), so parts take their own
+bool tintUnset(uint tint) {
+    return (tint >> 24u) == 0u;
+}
+
+// The tint color each mask channel takes, from the draw's packed slots, or the part's fallback
+// where the slot is unset
+uvec4 tintColors(SkinnedInstance instance, uint slots, uvec4 fallbacks) {
     uvec4 colors;
     for (int c = 0; c < 4; ++c) {
         uint slot = (slots >> (8u * uint(c))) & 0xFFu;
-        colors[c] = slot == NO_TINT_SLOT ? WHITE : instance.tint[slot];
+        if (slot == NO_TINT_SLOT) {
+            colors[c] = WHITE;
+        } else {
+            uint tint = instance.tint[slot];
+            colors[c] = tintUnset(tint) ? fallbacks[c] : tint;
+        }
     }
     return colors;
 }

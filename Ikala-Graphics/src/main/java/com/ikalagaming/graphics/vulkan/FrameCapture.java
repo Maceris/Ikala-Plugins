@@ -25,7 +25,6 @@ import java.util.ArrayDeque;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.locks.ReentrantLock;
-
 import javax.imageio.ImageIO;
 
 /**
@@ -95,8 +94,7 @@ public class FrameCapture {
         for (int y = 0; y < height; ++y) {
             int at = y * width * 4;
             for (int x = 0; x < width; ++x, at += 4) {
-                row[x] =
-                        (rgba[at] & 0xFF) << 16 | (rgba[at + 1] & 0xFF) << 8 | rgba[at + 2] & 0xFF;
+                row[x] = (rgba[at] & 0xFF) << 16 | (rgba[at + 1] & 0xFF) << 8 | rgba[at + 2] & 0xFF;
             }
             image.setRGB(0, y, width, 1, row, 0, width);
         }

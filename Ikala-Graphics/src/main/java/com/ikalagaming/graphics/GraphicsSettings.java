@@ -36,8 +36,8 @@ public class GraphicsSettings {
     public int requestedWindowWidth = 0;
 
     /**
-     * Whether to render without showing anything, for frame captures: the main window is hidden
-     * and gets no swapchain, the GUI runs but isn't drawn, and the scene is only kept for {@link
+     * Whether to render without showing anything, for frame captures: the main window is hidden and
+     * gets no swapchain, the GUI runs but isn't drawn, and the scene is only kept for {@link
      * com.ikalagaming.graphics.vulkan.VulkanInstance#saveFrame}. Read when graphics start; see
      * {@link #applyHeadless(String)}.
      */

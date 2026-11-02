@@ -1,11 +1,13 @@
 package com.ikalagaming.characters.view;
 
+import com.ikalagaming.characters.data.Color;
 import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.definition.BodyPlan;
 import com.ikalagaming.characters.definition.Part;
 import com.ikalagaming.characters.gltf.ImportedCharacter;
 import com.ikalagaming.characters.pose.Skeleton;
 import com.ikalagaming.characters.registry.CharacterRegistry;
+import com.ikalagaming.graphics.SkinnedPart;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -51,6 +53,9 @@ public final class PartAssembler {
     /** The tint mask channels, in order. */
     private static final List<String> MASK_CHANNELS = List.of("r", "g", "b", "a");
 
+    /** The most a color's channel holds, see {@link Color}. */
+    private static final float COLOR_MAX = 255;
+
     /**
      * A character built from parts.
      *
@@ -58,6 +63,9 @@ public final class PartAssembler {
      * @param partIds Which part definition each of the character's parts comes from.
      * @param channels For each of the character's parts, the palette channel each tint mask channel
      *     takes, as a position in {@link BodyPlan#allChannels()}, or {@link #NO_CHANNEL}.
+     * @param fallbacks For each of the character's parts, the color each tint mask channel shows
+     *     while the design leaves its palette channel uncolored: its material slot's default,
+     *     packed as {@link SkinnedPart#pack} packs, or white for none.
      * @param forms For each of the character's parts, the clothing form its mesh is for, or null
      *     for the part's plain mesh.
      */
@@ -65,6 +73,7 @@ public final class PartAssembler {
             @NonNull ImportedCharacter character,
             @NonNull List<Id> partIds,
             @NonNull List<int[]> channels,
+            @NonNull List<int[]> fallbacks,
             @NonNull List<String> forms) {
         /**
          * The character's parts that come from a part definition's plain mesh.
@@ -452,6 +461,9 @@ public final class PartAssembler {
         /** The clothing form each part's mesh is for, or null for a plain mesh. */
         private final List<String> forms = new ArrayList<>();
 
+        /** Each merged part's tint mask channels' colors while their channels are uncolored. */
+        private final List<int[]> fallbacks = new ArrayList<>();
+
         /** Each merged part's tint mask channels' palette channels. */
         private final List<int[]> channels = new ArrayList<>();
 
@@ -538,6 +550,7 @@ public final class PartAssembler {
                                 ? null
                                 : source.materials().get(piece.material()).name();
                 channels.add(maskChannels(part, materialName, channelNames));
+                fallbacks.add(maskFallbacks(part, materialName));
             }
             if (!found) {
                 log.warn("{} names the mesh {}, which isn't in its file", part.id(), meshName);
@@ -590,6 +603,36 @@ public final class PartAssembler {
         }
 
         /**
+         * The color each of a part's tint mask channels shows while its palette channel is
+         * uncolored: its material slot's default.
+         *
+         * @param part The part definition.
+         * @param materialName The mesh's material's name, or null for the part's first slot.
+         * @return The packed colors, white where the slot has no default.
+         */
+        private static int[] maskFallbacks(Part part, String materialName) {
+            int[] colors = new int[MASK_CHANNELS.size()];
+            Arrays.fill(colors, SkinnedPart.WHITE);
+            for (Part.MaterialSlot slot : part.materialSlots()) {
+                if (materialName != null && !slot.name().equals(materialName)) {
+                    continue;
+                }
+                for (int c = 0; c < MASK_CHANNELS.size(); ++c) {
+                    Color color = slot.defaults().get(MASK_CHANNELS.get(c));
+                    if (color != null) {
+                        colors[c] =
+                                SkinnedPart.pack(
+                                        color.red() / COLOR_MAX,
+                                        color.green() / COLOR_MAX,
+                                        color.blue() / COLOR_MAX);
+                    }
+                }
+                break;
+            }
+            return colors;
+        }
+
+        /**
          * The merged character.
          *
          * @return It, or null if nothing was added.
@@ -607,7 +650,7 @@ public final class PartAssembler {
                             new ArrayList<>(clips.values()),
                             materials,
                             images);
-            return new Assembled(merged, partIds, channels, forms);
+            return new Assembled(merged, partIds, channels, fallbacks, forms);
         }
     }
 

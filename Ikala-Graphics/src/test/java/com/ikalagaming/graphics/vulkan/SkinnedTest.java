@@ -284,7 +284,10 @@ class SkinnedTest {
         TextureHandle mask =
                 new TextureHandle(3, 1, 4, 4, com.ikalagaming.graphics.Format.R8G8B8A8_UNORM);
         int slots = SkinnedPart.slots(2, -1, 0, -1);
-        SkinnedPart jacket = new SkinnedPart(mesh(1, 2, 30), null, mask, slots);
+        int[] fallbacks = {0xFF11_2233, SkinnedPart.WHITE, 0xFF44_5566, SkinnedPart.WHITE};
+        SkinnedPart jacket = new SkinnedPart(mesh(1, 2, 30), null, mask, slots, fallbacks);
+        // The part keeps its own copy
+        fallbacks[0] = 0;
         SkinnedPart plain = new SkinnedPart(mesh(2, 2, 12), null);
         SkinnedInstanceHandle handle = posed(registry, -10, 2, List.of(jacket, plain));
         int[] tints = {0xFF00_00FF, 0xFF00_FF00, 0xFFFF_0000};
@@ -311,18 +314,25 @@ class SkinnedTest {
         int tintBase = SkinnedPacker.MATRIX_SIZE + 4 * Integer.BYTES;
         Assertions.assertEquals(0xFF00_00FF, data.getInt(tintBase));
         Assertions.assertEquals(0xFFFF_0000, data.getInt(tintBase + 2 * Integer.BYTES));
-        // Slots not set stay white
+        // Slots not set stay unset, so parts show their fallbacks
         Assertions.assertEquals(
-                0xFFFF_FFFF, data.getInt(tintBase + (Skins.TINT_SLOTS - 1) * Integer.BYTES));
+                SkinnedRegistry.UNSET,
+                data.getInt(tintBase + (Skins.TINT_SLOTS - 1) * Integer.BYTES));
 
         ByteBuffer draws = heap.draws.order(ByteOrder.LITTLE_ENDIAN);
         Assertions.assertEquals(0xFF00_FF02, draws.getInt(2 * Integer.BYTES));
         Assertions.assertEquals(42, draws.getInt(3 * Integer.BYTES));
+        // The fallbacks follow, one per mask channel
+        Assertions.assertEquals(0xFF11_2233, draws.getInt(4 * Integer.BYTES));
+        Assertions.assertEquals(0xFF44_5566, draws.getInt(6 * Integer.BYTES));
+        Assertions.assertEquals(SkinnedPart.WHITE, draws.getInt(SkinnedPacker.DRAW_SIZE + 16));
         Assertions.assertEquals(SkinnedPart.NO_TINT, draws.getInt(SkinnedPacker.DRAW_SIZE + 8));
         Assertions.assertEquals(0, draws.getInt(SkinnedPacker.DRAW_SIZE + 12));
 
         Assertions.assertThrows(
                 IllegalArgumentException.class, () -> SkinnedPart.slots(8, 0, 0, 0));
+        Assertions.assertEquals(
+                0xFF33_2211, SkinnedPart.pack(0x11 / 255f, 0x22 / 255f, 0x33 / 255f));
     }
 
     /** Nothing posed, nothing packed. */

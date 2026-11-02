@@ -41,6 +41,12 @@ public final class Skins {
     /** How many tint colors an instance has, which its parts' tint masks map their channels to. */
     public static final int TINT_SLOTS = 8;
 
+    /**
+     * A tint color's red for a slot left unset: each part shows its own fallback color for the
+     * channels that take it (see {@link SkinnedPart#fallbacks}).
+     */
+    public static final float UNSET = Float.NaN;
+
     /** The context these belong to. */
     private final GraphicsContext context;
 
@@ -229,11 +235,12 @@ public final class Skins {
 
     /**
      * Change an instance's tint colors, which its parts' tint masks map their channels to; see
-     * {@link SkinnedPart}. Instances start with every slot white, which changes nothing.
+     * {@link SkinnedPart}. Instances start with every slot unset, which shows each part's
+     * fallbacks.
      *
      * @param instance The instance.
      * @param colors sRGB colors, three floats from 0 to 1 per slot, for up to {@value #TINT_SLOTS}
-     *     slots; slots past the end go white.
+     *     slots; a slot whose red is {@link #UNSET} is unset, as are slots past the end.
      * @throws IllegalArgumentException If there are more than {@value #TINT_SLOTS} colors, or the
      *     array isn't whole colors.
      */
@@ -245,25 +252,14 @@ public final class Skins {
         int[] packed = new int[colors.length / 3];
         for (int t = 0; t < packed.length; ++t) {
             packed[t] =
-                    channel(colors[3 * t])
-                            | channel(colors[3 * t + 1]) << 8
-                            | channel(colors[3 * t + 2]) << 16
-                            | 0xFF << 24;
+                    Float.isNaN(colors[3 * t])
+                            ? SkinnedRegistry.UNSET
+                            : SkinnedPart.pack(colors[3 * t], colors[3 * t + 1], colors[3 * t + 2]);
         }
         SkinnedRegistry registry = registryOrNull();
         if (registry != null && !registry.setTints(owner(), instance, packed)) {
             ignored(registry, instance, "tint");
         }
-    }
-
-    /**
-     * A color channel as a byte.
-     *
-     * @param value The channel, 0 to 1.
-     * @return The byte, 0 to 255.
-     */
-    private static int channel(float value) {
-        return Math.round(Math.clamp(value, 0, 1) * 255);
     }
 
     /**

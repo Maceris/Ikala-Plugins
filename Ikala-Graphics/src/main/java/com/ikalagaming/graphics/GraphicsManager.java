@@ -248,8 +248,7 @@ public class GraphicsManager {
         if (settings.headless) {
             // No swapchain: frames are only kept for captures
             renderInstance.setHeadless();
-            log.info(
-                    "Rendering headless at {}x{}", mainWindow.getWidth(), mainWindow.getHeight());
+            log.info("Rendering headless at {}x{}", mainWindow.getWidth(), mainWindow.getHeight());
         } else {
             renderInstance.createPresentation(mainWindow);
         }
