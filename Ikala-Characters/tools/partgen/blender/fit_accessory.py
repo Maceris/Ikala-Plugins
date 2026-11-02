@@ -21,6 +21,7 @@ folder gets front and side renders on the mannequin, in those default colors.
 import argparse
 import json
 import math
+import os
 import pathlib
 import sys
 
@@ -46,6 +47,16 @@ NEEDLE_LENGTH = 0.2
 NEEDLE_TILT = 15
 # Fewer faces than this is a speck
 SPECK_FACES = 12
+# Turning an accessory to face as its picture does: how many turns about the vertical are tried,
+# the grid outlines are compared on, and how far a pixel's color must be from the picture's
+# border color (summed over red, green and blue, 0 to 765) to count as the object
+TURNS = 36
+TURN_GRID = 48
+PICTURE_CONTRAST = 45
+# Turns whose overlap is within this of the best count as ties, and the smallest of them wins:
+# a nearly symmetric object's outline barely changes when it turns round, so a large turn needs
+# a clearly better match
+TURN_TOLERANCE = 0.03
 # Spans are measured between these percentiles of an accessory's points, so a strap end or a
 # stray bit doesn't count as its size
 SPAN_PERCENTILES = (2, 98)
@@ -329,13 +340,105 @@ def place_bottom_crown(high, mannequin, armature, rule):
                  head_width * rule["maxWidth"] / 2)
 
 
-def side_direction(rule, socket_head):
-    """Which way, in Blender's space (the mannequin faces -Y), an accessory sits from the body:
-    the rule's "side", with "out" meaning away from the body's middle on the socket's side."""
-    side = rule["side"]
-    if side == "out":
-        return Vector((1.0 if socket_head.x >= 0 else -1.0, 0.0, 0.0))
-    return Vector(SIDES[side])
+def mirror_x(obj):
+    """Mirror a mesh across the body's middle, keeping its faces turned out."""
+    obj.scale = (-1, 1, 1)
+    select_only(obj)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    mesh = bmesh.new()
+    mesh.from_mesh(obj.data)
+    bmesh.ops.reverse_faces(mesh, faces=mesh.faces)
+    mesh.to_mesh(obj.data)
+    mesh.free()
+
+
+def picture_outline(path):
+    """Which cells of a TURN_GRID grid the object in a picture covers: pixels whose color is
+    PICTURE_CONTRAST from the border's (generated pictures have plain, often graded, grounds),
+    cropped to the object and centered in a square, top row first."""
+    image = bpy.data.images.load(os.path.abspath(path))
+    width, height = image.size
+    pixels = np.empty(width * height * 4, dtype=np.float32)
+    image.pixels.foreach_get(pixels)
+    rgb = np.flipud(pixels.reshape(height, width, 4)[..., :3]) * 255
+    border = np.concatenate([rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]])
+    ground = np.median(border, axis=0)
+    shown = np.abs(rgb - ground).sum(-1) > PICTURE_CONTRAST
+    rows, columns = np.nonzero(shown)
+    if len(rows) == 0:
+        return None
+    return square_outline(columns.astype(float), rows.astype(float))
+
+
+def square_outline(x, y):
+    """Points (x right, y down) on a TURN_GRID grid, scaled so their larger span fills it and
+    centered, grown a cell so scattered points cover their outline."""
+    low_x, high_x = np.percentile(x, [1, 99])
+    low_y, high_y = np.percentile(y, [1, 99])
+    size = max(high_x - low_x, high_y - low_y, 1e-9)
+    column = ((x - (low_x + high_x) / 2) / size + 0.5) * (TURN_GRID - 1)
+    row = ((y - (low_y + high_y) / 2) / size + 0.5) * (TURN_GRID - 1)
+    inside = (column >= 0) & (column < TURN_GRID) & (row >= 0) & (row < TURN_GRID)
+    cells = np.zeros((TURN_GRID, TURN_GRID), dtype=bool)
+    cells[row[inside].astype(int), column[inside].astype(int)] = True
+    grown = cells.copy()
+    grown[1:] |= cells[:-1]
+    grown[:-1] |= cells[1:]
+    grown[:, 1:] |= cells[:, :-1]
+    grown[:, :-1] |= cells[:, 1:]
+    return grown
+
+
+def face_as_pictured(high, picture):
+    """Turn a generated mesh about the vertical so it faces -Y as its picture showed it: TRELLIS
+    keeps a picture's up but turns the object freely about it, so each of TURNS turns is seen
+    from the front and the one whose outline best overlaps the picture's is kept, the smallest
+    turn among near ties. A picture seen from an angle gives that angle, so pictures should be
+    straight on. Gives the turn in degrees and its overlap, or None if the picture shows
+    nothing."""
+    wanted = picture_outline(picture)
+    if wanted is None:
+        return None
+    points = vertices(high)
+    points = points[:: max(1, len(points) // 20000)]
+    middle = points.mean(0)
+    overlaps = []
+    for k in range(TURNS):
+        angle = 2 * math.pi * k / TURNS
+        c, s = math.cos(angle), math.sin(angle)
+        x = (points[:, 0] - middle[0]) * c - (points[:, 1] - middle[1]) * s
+        # Seen from -Y: x to the right, up the picture's rows run down
+        outline = square_outline(x, -(points[:, 2] - middle[2]))
+        overlap = (outline & wanted).sum() / max((outline | wanted).sum(), 1)
+        overlaps.append((float(overlap), angle))
+    unturned = overlaps[0][0]
+    most = max(overlap for overlap, _ in overlaps)
+    best = min((pair for pair in overlaps if pair[0] >= most - TURN_TOLERANCE),
+               key=lambda pair: min(pair[1], 2 * math.pi - pair[1]))
+    high.matrix_world = Matrix.Rotation(best[1], 4, "Z") @ high.matrix_world
+    select_only(high)
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    print("[fit] turned %.0f degrees to face as pictured, overlap %.3f (best %.3f, unturned %.3f)"
+          % (math.degrees(best[1]), best[0], most, unturned))
+    return round(math.degrees(best[1])), round(best[0], 3)
+
+
+def side_direction(rule, armature, bone):
+    """Which way, in Blender's space (the mannequin faces -Y), an accessory sits from the body,
+    and which way is up for it. The rule's "side" is back, front or up, or "out": along the
+    socket bone, which points out of its limb, with up along the limb toward its root, so
+    something on a sloping arm sits square on it."""
+    if rule["side"] == "out":
+        socket = armature.data.bones[bone]
+        direction = (armature.matrix_world.to_3x3() @ (socket.tail_local - socket.head_local))
+        direction.normalize()
+        limb = socket.parent
+        up = armature.matrix_world.to_3x3() @ (limb.head_local - limb.tail_local)
+    else:
+        direction = Vector(SIDES[rule["side"]])
+        up = Vector((0, 0, 1)) if abs(direction.z) < 0.5 else Vector((0, 1, 0))
+    up = (up - direction * up.dot(direction)).normalized()
+    return direction, up
 
 
 def measure(mannequin, spec, socket_head):
@@ -391,19 +494,22 @@ def place_against_body(high, mannequin, armature, bone, rule):
     moved so its inner face rests "gap" off the body's surface beside the socket, centered on
     the socket across and up. Gives a report of what was done."""
     head = armature.matrix_world @ armature.data.bones[bone].head_local
-    direction = side_direction(rule, head)
-    # The outer face looks toward -Y; turn it to look along the side
-    if abs(direction.z) > 0.5:
-        turn = Matrix.Rotation(math.radians(-90 if direction.z > 0 else 90), 4, "X")
-    else:
-        turn = Matrix.Rotation(math.atan2(direction.x, -direction.y), 4, "Z")
+    # A socket that sits a little off where its accessories belong, like a belt socket below the
+    # belt, can be moved for them
+    offset = Vector(rule.get("offset", (0, 0, 0)))
+    if head.x < 0:
+        # Given for the left side; the right's is its mirror
+        offset.x = -offset.x
+    head = head + offset
+    direction, up = side_direction(rule, armature, bone)
+    across = up.cross(direction).normalized()
+    # The outer face looks toward -Y and its top toward +Z; turn them to the side and up
+    turn = Matrix((across, -direction, up)).transposed().to_4x4()
     high.matrix_world = turn @ high.matrix_world
     select_only(high)
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 
     # Its spans along its own axes: across, up and out from the body
-    up = Vector((0, 0, 1)) if abs(direction.z) < 0.5 else Vector((0, 1, 0))
-    across = up.cross(direction).normalized()
     axes = {"across": np.array(across), "up": np.array(up), "depth": np.array(direction)}
     points = vertices(high)
 
@@ -442,8 +548,13 @@ def place_against_body(high, mannequin, armature, bone, rule):
     # Then it moves in along the side until the body is the gap away from all but a few of its
     # points, so it rests on the body's curve rather than on its one innermost point
     inward = Vector((-axes["depth"]).tolist())
+    # Only the outer "contact" share of its depth rests on the body, so the sides of something
+    # that wraps around, like a mask, can pass beside the head instead of holding it off
+    depth = points @ axes["depth"]
+    low, high_end = np.percentile(depth, SPAN_PERCENTILES)
+    resting = points[depth >= high_end - rule.get("contact", 1.0) * (high_end - low)]
     reach = []
-    for point in points[:: max(1, len(points) // 4000)]:
+    for point in resting[:: max(1, len(resting) // 4000)]:
         found, _, _, distance = tree.ray_cast(Vector(point.tolist()), inward)
         if found is not None:
             reach.append(distance)
@@ -896,6 +1007,8 @@ def main():
     parser.add_argument("--out", required=True)
     parser.add_argument("--preview", help="A folder for preview renders.")
     parser.add_argument("--tints", help="Where to write the default tint colors, as JSON.")
+    parser.add_argument("--image", help="The picture the mesh was made from, to turn it to face "
+                        "as pictured.")
     parser.add_argument("--mirror", action="store_true",
                         help="Mirror the mesh across the body's middle first, for the other "
                              "side's copy of a sided accessory.")
@@ -912,7 +1025,7 @@ def main():
     if not rule.get("keepThin", False):
         drop_needles(high)
     high = drop_slivers(high)
-    if args.mirror:
+    if args.mirror and rule["fit"] != "surface":
         # The other side's copy: mirrored across the body's middle before placing
         high.scale = (-1, 1, 1)
         select_only(high)
@@ -925,6 +1038,10 @@ def main():
     if rule["fit"] == "crown":
         place_bottom_crown(high, mannequin, armature, rule)
     elif rule["fit"] == "surface":
+        if args.image:
+            face_as_pictured(high, args.image)
+        if args.mirror:
+            mirror_x(high)
         place_against_body(high, mannequin, armature, args.bone, rule)
     else:
         raise SystemExit("No fitting called %s yet" % rule["fit"])

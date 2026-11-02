@@ -1524,7 +1524,8 @@ def fit_accessory(config, batch, brief):
                  str(TOOLS / "blender/fit_accessory.py"), "--",
                  "--mesh", str(folder / brief["mesh"]["file"]), "--mannequin", config["mannequin"],
                  "--bone", place["bone"], "--rule", json.dumps(rule), "--name", name,
-                 "--out", str(out), "--preview", str(renders), "--tints", str(tints)]
+                 "--out", str(out), "--preview", str(renders), "--tints", str(tints),
+                 "--image", str(folder / "images" / ("%d.png" % brief["mesh"]["image"]))]
                 + (["--mirror"] if mirrored else []),
                 stdout=stream, stderr=subprocess.STDOUT)
         if result.returncode != 0:
