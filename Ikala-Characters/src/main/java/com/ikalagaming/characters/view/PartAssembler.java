@@ -315,7 +315,8 @@ public final class PartAssembler {
             Vector3f push =
                     allForms || part.kind() != Part.PartKind.ACCESSORY
                             ? null
-                            : AccessoryRests.push(plan, AccessoryRests.socketOf(plan, part), parts);
+                            : AccessoryRests.push(
+                                    plan, AccessoryRests.socketOf(plan, part), parts, variant);
             addMesh(
                     part,
                     meshFor(part, variant),

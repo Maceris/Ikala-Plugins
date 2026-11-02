@@ -279,7 +279,19 @@
           "additionalProperties": {
             "type": "number"
           },
-          "description": "How far it stands out over each body slot, in meters, with \"*\" for any other slot: a body part from the bare body, which clothing over it is pushed out by, a layer from the body part under it. Accessories resting on the slot sit on both. Slots left out take a body part's form's offset or a layer's layer's standoff."
+          "description": "How far it stands out over each body slot, as a share of the slot's radius, with \"*\" for any other slot: a body part from the bare body, which clothing over it is pushed out by, a layer from the body part under it. Accessories resting on the slot sit on both. Slots left out take a body part's form's share or a layer's layer's standoff."
+        },
+        "covers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "For layers: the body slots it really covers, like a t-shirt leaving the arms bare. Left out, all its layers cover."
+        },
+        "takesClothing": {
+          "type": "boolean",
+          "description": "For body parts: whether clothing can go over it. One that can't, like an arm covered in spikes, can't be worn with layers covering its slots.",
+          "default": true
         },
         "extends": {
           "type": "string",

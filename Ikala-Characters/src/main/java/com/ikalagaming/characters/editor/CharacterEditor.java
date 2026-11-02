@@ -1233,7 +1233,8 @@ public final class CharacterEditor {
             }
             // The socket the mesh is on, whichever of the sockets it fits that is
             BodyPlan.Socket socket = plan.socketOnBone(character.skeleton().name(part.joints()[0]));
-            Vector3f push = AccessoryRests.push(plan, socket, wornParts);
+            Vector3f push =
+                    AccessoryRests.push(plan, socket, wornParts, prepared.design().variant());
             Vector3f last = rested.get(index);
             if (last == null ? push.lengthSquared() > 0 : !push.equals(last)) {
                 rested.put(index, push);

@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Tests for {@link AccessoryRests}: accessories move out to rest on the body parts and clothing
@@ -29,16 +30,25 @@ class TestAccessoryRests {
     /** Floats per vertex in a part. */
     private static final int STRIDE = 14;
 
-    /** A torso with a jacket and a cape over it, and a back socket resting on it. */
+    /**
+     * A torso and an arm with a shirt, a jacket and a cape over them, and a back socket resting on
+     * the torso; the torso is 0.1 m thick, and 0.08 m on the small variant.
+     */
     private static final String PLAN =
             """
-            { "id": "t:plan", "rig": "t:rig", "variants": [{ "id": "male" }],
-              "slots": [ { "id": "torso", "bones": ["chest"] }, { "id": "head", "bones": ["head"] } ],
+            { "id": "t:plan", "rig": "t:rig",
+              "variants": [{ "id": "male" }, { "id": "small", "radii": { "torso": 0.08 } }],
+              "slots": [ { "id": "torso", "bones": ["chest"], "clothed": true, "radius": 0.1 },
+                         { "id": "upperArm.L", "bones": ["upperarm.L"], "clothed": true,
+                           "radius": 0.05 },
+                         { "id": "head", "bones": ["head"], "radius": 0.06 } ],
               "layers": [
-                { "id": "jacket", "covers": ["torso"], "order": 20, "standoff": 0.02 },
-                { "id": "cape", "covers": ["torso"], "order": 40, "standoff": 0.01 },
-                { "id": "hood", "covers": ["head"], "order": 40, "standoff": 0.03 } ],
-              "forms": [ { "id": "tight", "offset": 0 }, { "id": "bulky", "offset": 0.06 } ],
+                { "id": "shirt", "covers": ["torso", "upperArm.L"], "order": 10, "standoff": 0.1,
+                  "reach": 0.25 },
+                { "id": "jacket", "covers": ["torso"], "order": 20, "standoff": 0.2 },
+                { "id": "cape", "covers": ["torso"], "order": 40, "standoff": 0.1 },
+                { "id": "hood", "covers": ["head"], "order": 40, "standoff": 0.3 } ],
+              "forms": [ { "id": "tight", "share": 0 }, { "id": "bulky", "share": 0.45 } ],
               "sockets": [
                 { "id": "back", "bone": "socket.back", "type": "back.large",
                   "rests": { "slot": "torso", "out": [0, 0, -2] } },
@@ -119,17 +129,22 @@ class TestAccessoryRests {
     @Test
     void bare() {
         BodyPlan plan = read(PLAN, BodyPlan.class);
-        Vector3f push = AccessoryRests.push(plan, back(plan), List.of(TORSO, PACK));
+        Vector3f push = AccessoryRests.push(plan, back(plan), List.of(TORSO, PACK), "male");
         Assertions.assertEquals(0, push.length(), EPSILON);
     }
 
-    /** A bulky body part moves it out by its form, along the resting direction made unit. */
+    /**
+     * A bulky body part moves it out by its form's share of the slot's radius on the variant shown,
+     * along the resting direction made unit.
+     */
     @Test
     void bulkyBody() {
         BodyPlan plan = read(PLAN, BodyPlan.class);
-        Vector3f push = AccessoryRests.push(plan, back(plan), List.of(ROBOT, PACK));
-        Assertions.assertEquals(-0.06f, push.z, EPSILON);
+        Vector3f push = AccessoryRests.push(plan, back(plan), List.of(ROBOT, PACK), "male");
+        Assertions.assertEquals(-0.045f, push.z, EPSILON);
         Assertions.assertEquals(0, push.x, EPSILON);
+        Vector3f small = AccessoryRests.push(plan, back(plan), List.of(ROBOT, PACK), "small");
+        Assertions.assertEquals(-0.036f, small.z, EPSILON);
     }
 
     /** A body part's own standoff takes the place of its form's offset. */
@@ -140,17 +155,17 @@ class TestAccessoryRests {
                 part(
                         "slim",
                         "\"kind\": \"body\", \"fills\": [\"torso\"], \"form\": \"bulky\","
-                                + " \"standoff\": { \"torso\": 0.035 }");
+                                + " \"standoff\": { \"torso\": 0.35 }");
         Assertions.assertEquals(
-                0.035f, AccessoryRests.standoff(plan, "torso", List.of(slim)), EPSILON);
+                0.35f, AccessoryRests.standoff(plan, "torso", List.of(slim)), EPSILON);
         // Clothing over it is pushed out only as far as the part stands out
         Assertions.assertEquals(
-                0.055f, AccessoryRests.standoff(plan, "torso", List.of(slim, JACKET)), EPSILON);
+                0.55f, AccessoryRests.standoff(plan, "torso", List.of(slim, JACKET)), EPSILON);
     }
 
     /**
      * Clothing is pushed out over each slot by how far the body part there stands out: its own
-     * measure, else its form's offset, as a share of the bulkiest form's.
+     * measure, else its form's share, as a share of the bulkiest form's.
      */
     @Test
     void clothingShares() {
@@ -159,11 +174,11 @@ class TestAccessoryRests {
                 part(
                         "slim",
                         "\"kind\": \"body\", \"fills\": [\"torso\", \"head\"], \"form\":"
-                                + " \"bulky\", \"standoff\": { \"torso\": 0.015 }");
+                                + " \"bulky\", \"standoff\": { \"torso\": 0.15 }");
         Map<String, Float> standoffs = WearRules.slotStandoffs(plan, List.of(slim, JACKET));
-        Assertions.assertEquals(Map.of("torso", 0.015f, "head", 0.06f), standoffs);
+        Assertions.assertEquals(Map.of("torso", 0.15f, "head", 0.45f), standoffs);
         Map<String, Float> shares = PartForms.shares(plan, standoffs);
-        Assertions.assertEquals(0.25f, shares.get("torso"), EPSILON);
+        Assertions.assertEquals(1f / 3, shares.get("torso"), EPSILON);
         Assertions.assertEquals(1f, shares.get("head"), EPSILON);
         // The bare body pushes nothing
         Assertions.assertTrue(WearRules.slotStandoffs(plan, List.of(TORSO)).isEmpty());
@@ -175,18 +190,41 @@ class TestAccessoryRests {
         BodyPlan plan = read(PLAN, BodyPlan.class);
         Part cape = part("cape", "\"kind\": \"layer\", \"fills\": [\"cape\"]");
         Assertions.assertEquals(
-                0.02f, AccessoryRests.standoff(plan, "torso", List.of(TORSO, JACKET)), EPSILON);
+                0.2f, AccessoryRests.standoff(plan, "torso", List.of(TORSO, JACKET)), EPSILON);
         Assertions.assertEquals(
-                0.08f,
+                0.65f,
                 AccessoryRests.standoff(plan, "torso", List.of(ROBOT, JACKET, cape)),
                 EPSILON);
         Part puffy =
                 part(
                         "puffy",
                         "\"kind\": \"layer\", \"fills\": [\"jacket\"],"
-                                + " \"standoff\": { \"*\": 0.05 }");
+                                + " \"standoff\": { \"*\": 0.5 }");
         Assertions.assertEquals(
-                0.05f, AccessoryRests.standoff(plan, "torso", List.of(TORSO, puffy)), EPSILON);
+                0.5f, AccessoryRests.standoff(plan, "torso", List.of(TORSO, puffy)), EPSILON);
+    }
+
+    /**
+     * A body part that takes no clothing keeps off layers covering its slots, but not a layer part
+     * that leaves those slots bare, like a t-shirt over spiked arms.
+     */
+    @Test
+    void wildParts() {
+        BodyPlan plan = read(PLAN, BodyPlan.class);
+        Part spiked =
+                part(
+                        "spiked",
+                        "\"kind\": \"body\", \"fills\": [\"upperArm.L\"], \"takesClothing\":"
+                                + " false");
+        Part shirt = part("shirt", "\"kind\": \"layer\", \"fills\": [\"shirt\"]");
+        Part tee =
+                part("tee", "\"kind\": \"layer\", \"fills\": [\"shirt\"], \"covers\": [\"torso\"]");
+        Assertions.assertTrue(WearRules.clash(plan, spiked, shirt));
+        Assertions.assertTrue(WearRules.clash(plan, shirt, spiked));
+        Assertions.assertFalse(WearRules.clash(plan, spiked, tee));
+        Assertions.assertFalse(WearRules.clash(plan, spiked, JACKET));
+        Assertions.assertFalse(WearRules.clash(plan, TORSO, shirt));
+        Assertions.assertEquals(Set.of("torso"), tee.coveredSlots(plan));
     }
 
     /** Clothing on other slots, or hidden by another part, doesn't count. */
@@ -211,9 +249,10 @@ class TestAccessoryRests {
         BodyPlan plan = read(PLAN, BodyPlan.class);
         Assertions.assertEquals(
                 0,
-                AccessoryRests.push(plan, plan.socket("grip.R"), List.of(ROBOT)).length(),
+                AccessoryRests.push(plan, plan.socket("grip.R"), List.of(ROBOT), "male").length(),
                 EPSILON);
-        Assertions.assertEquals(0, AccessoryRests.push(plan, null, List.of(ROBOT)).length());
+        Assertions.assertEquals(
+                0, AccessoryRests.push(plan, null, List.of(ROBOT), "male").length());
     }
 
     /** An accessory goes on the first socket it fits, by name or type. */

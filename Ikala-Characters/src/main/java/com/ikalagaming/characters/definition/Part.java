@@ -46,9 +46,11 @@ import java.util.Set;
  * @param locksSliders Sliders it locks while worn, by ID or editor group.
  * @param hidesSockets Sockets it covers, by name or type.
  * @param form For body parts, the plan's thinnest clothing form its surface fits in.
- * @param standoff How far it stands out over each body slot, in meters, with "*" for any other
- *     slot: a body part from the bare body, a layer from the body part under it. Slots left out
- *     take a body part's form's offset or a layer's layer's standoff.
+ * @param standoff How far it stands out over each body slot, as a share of the slot's radius, with
+ *     "*" for any other slot: a body part from the bare body, a layer from the body part under it.
+ *     Slots left out take a body part's form's share or a layer's layer's standoff.
+ * @param covers For layers, the body slots it really covers, or empty for all its layers cover.
+ * @param takesClothing For body parts, whether clothing can go over it.
  * @author Ches Burks
  */
 @Doc(
@@ -127,14 +129,25 @@ public record Part(
                 @Optional
                 String form,
         @Doc(
-                        "How far it stands out over each body slot, in meters, with \"*\" for any"
-                                + " other slot: a body part from the bare body, which clothing over"
-                                + " it is pushed out by, a layer from the body part under it."
-                                + " Accessories resting on the slot sit on both. Slots left out"
-                                + " take a body part's form's offset or a layer's layer's"
-                                + " standoff.")
+                        "How far it stands out over each body slot, as a share of the slot's"
+                                + " radius, with \"*\" for any other slot: a body part from the"
+                                + " bare body, which clothing over it is pushed out by, a layer"
+                                + " from the body part under it. Accessories resting on the slot"
+                                + " sit on both. Slots left out take a body part's form's share or"
+                                + " a layer's layer's standoff.")
                 @Optional
-                Map<String, Float> standoff)
+                Map<String, Float> standoff,
+        @Doc(
+                        "For layers: the body slots it really covers, like a t-shirt leaving the"
+                                + " arms bare. Left out, all its layers cover.")
+                @Optional
+                List<String> covers,
+        @Doc(
+                        "For body parts: whether clothing can go over it. One that can't, like an"
+                                + " arm covered in spikes, can't be worn with layers covering its"
+                                + " slots.")
+                @Default("true")
+                boolean takesClothing)
         implements Definition {
 
     /** The field for the plan. */
@@ -196,6 +209,12 @@ public record Part(
 
     /** The field for the standoff. */
     public static final String FIELD_STANDOFF = "standoff";
+
+    /** The field for the covered slots. */
+    public static final String FIELD_COVERS = "covers";
+
+    /** The field for taking clothing. */
+    public static final String FIELD_TAKES_CLOTHING = "takesClothing";
 
     /** The standoff key for any slot not given its own. */
     public static final String ANY_SLOT = "*";
@@ -407,6 +426,30 @@ public record Part(
     }
 
     /**
+     * The body slots this layer covers.
+     *
+     * @param plan The body plan.
+     * @return Its own covered slots if it gives them, else those of the layers it fills; empty for
+     *     parts that aren't layers.
+     */
+    public Set<String> coveredSlots(@NonNull BodyPlan plan) {
+        if (kind != PartKind.LAYER) {
+            return Set.of();
+        }
+        if (!covers.isEmpty()) {
+            return new LinkedHashSet<>(covers);
+        }
+        Set<String> slots = new LinkedHashSet<>();
+        for (String fill : fills) {
+            BodyPlan.Layer layer = plan.layer(fill);
+            if (layer != null) {
+                slots.addAll(layer.covers());
+            }
+        }
+        return slots;
+    }
+
+    /**
      * Where this accessory sits on a variant.
      *
      * @param variant The variant.
@@ -503,6 +546,19 @@ public record Part(
         }
         if (!standoff.isEmpty() && kind == PartKind.ACCESSORY) {
             checks.error(JsonPath.at(FIELD_STANDOFF), "Only body parts and layers have a standoff");
+        }
+        if (!covers.isEmpty() && kind != PartKind.LAYER) {
+            checks.error(JsonPath.at(FIELD_COVERS), "Only layers cover slots of their own");
+        }
+        for (int i = 0; i < covers.size(); ++i) {
+            if (body.slot(covers.get(i)) == null) {
+                checks.error(
+                        JsonPath.at(FIELD_COVERS, i),
+                        "The plan has no body slot '" + covers.get(i) + "'");
+            }
+        }
+        if (!takesClothing && kind != PartKind.BODY) {
+            checks.error(JsonPath.at(FIELD_TAKES_CLOTHING), "Only body parts can refuse clothing");
         }
         standoff.forEach(
                 (slot, meters) -> {

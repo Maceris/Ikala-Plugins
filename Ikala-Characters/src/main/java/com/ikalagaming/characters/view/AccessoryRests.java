@@ -32,8 +32,8 @@ public final class AccessoryRests {
      * @param plan The body plan.
      * @param slot The body slot.
      * @param worn The parts worn.
-     * @return The distance in meters: how far the body part stands out, plus the thickest shown
-     *     layer over it.
+     * @return The distance as a share of the slot's radius: how far the body part stands out, plus
+     *     the thickest shown layer over it.
      */
     public static float standoff(
             @NonNull BodyPlan plan, @NonNull String slot, @NonNull Collection<Part> worn) {
@@ -44,7 +44,7 @@ public final class AccessoryRests {
         for (Part part : worn) {
             if (part.kind() == Part.PartKind.BODY && part.fills().contains(slot)) {
                 Float own = part.standoffOver(slot);
-                body = Math.max(body, own != null ? own : plan.formOffset(part.form()));
+                body = Math.max(body, own != null ? own : plan.formShare(part.form()));
             } else if (part.kind() == Part.PartKind.LAYER) {
                 for (String fill : part.fills()) {
                     BodyPlan.Layer layer = plan.layer(fill);
@@ -66,16 +66,21 @@ public final class AccessoryRests {
      * @param plan The body plan.
      * @param socket The socket, or null.
      * @param worn The parts worn.
+     * @param variant The body variant, whose slot radii the standoff is a share of.
      * @return The move in model space, zero if the socket has no resting place.
      */
     public static Vector3f push(
-            @NonNull BodyPlan plan, BodyPlan.Socket socket, @NonNull Collection<Part> worn) {
+            @NonNull BodyPlan plan,
+            BodyPlan.Socket socket,
+            @NonNull Collection<Part> worn,
+            @NonNull String variant) {
         if (socket == null || socket.rests() == null) {
             return new Vector3f();
         }
+        String slot = socket.rests().slot();
         Vec3 out = socket.rests().out();
         return new Vector3f(out.x(), out.y(), out.z())
-                .normalize(standoff(plan, socket.rests().slot(), worn));
+                .normalize(standoff(plan, slot, worn) * plan.radius(slot, variant));
     }
 
     /**
