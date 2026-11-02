@@ -1,10 +1,14 @@
 """Give a garment fitted to a body (see bake_layer.py and variant_layer.py) its clothing form
 targets: for each body slot it lies over, a morph target named "form:<slot>" moving each vertex
-out far enough to clear the body plan's bulkiest form, times how much that slot owns the vertex
-(1 over the slot, easing to 0 within TAPER of it). The character code scales each slot's target
-by the form of the body part worn there (see PartForms.java), so jeans over a robot leg stand out
-around the leg and stay snug at the waist. Its vertices, weights, texture layout, textures and
-tint mask stay as they are.
+out far enough to clear the body plan's bulkiest form (a share of that slot's radius), times how
+much that slot owns the vertex (1 over the slot, easing to 0 within TAPER of it). The character
+code scales each slot's target by how far the body part worn there stands out (see
+PartForms.java), so jeans over a robot leg stand out around the leg and stay snug at the waist.
+Its weights, texture layout, textures and tint mask stay as they are; a layer others go over is
+first pulled in to its reach, a share of each slot's radius, if it stands out further.
+
+It also reports which of the slots its layers cover it really covers (a t-shirt leaves the arms
+bare) and how far it stands out over each, as a share of the slot's radius.
 
 Each vertex moves straight out from its nearest point on the body. Where those directions part,
 as in an armpit or the crotch, the moves are averaged with the neighbors' a few times, over
@@ -13,7 +17,8 @@ shell meets itself, as an arm's and the chest's do in the armpit, pushing a vert
 puts it into the other, so those are pushed out to the layer's gap again (see shape_layer.py).
 
     blender -b --python form_layer.py -- --mesh <garment.glb> --body <male.blend>
-        --offset 0.06 --gap 0.004 --out <file.glb> --preview <folder>
+        --share 0.45 --radii <json> --slots torso,upperArm.L,... [--reach 0.25]
+        --gap 0.004 --out <file.glb> --preview <folder>
 
 writes the garment with its targets, form.json and renders preview_20.png and preview_21.png in
 the preview folder: the garment pushed out over every slot, from the front and back.
@@ -26,6 +31,7 @@ import sys
 
 import bpy
 import numpy as np
+from mathutils import Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fit_accessory as hat  # noqa: E402
@@ -45,6 +51,14 @@ LEAST_SHARE = 0.01
 SMOOTH_ROUNDS = 4
 # How close vertices must be to count as one when welding by position, in meters
 WELD = 1e-5
+# A slot counts as covered when this share of its skin has the garment over it
+COVERED_SHARE = 0.1
+# The garment is over a point of skin when straight out from it, it is within this share of the
+# slot's radius, plus the most a body part may stand out
+OVER_REACH = 1.0
+# How far a layer stands out over a slot, for accessories resting on it: this percentile of its
+# vertices'
+STANDOFF_PERCENTILE = 50
 
 
 def welded(points, faces):
@@ -59,7 +73,8 @@ def welded(points, faces):
 
 
 def push_out(points, faces, surface, offset):
-    """How far each vertex moves to stand offset further out from the body."""
+    """How far each vertex moves to stand offset (one for all, or one for each vertex) further
+    out from the body."""
     closest, signed = nearest(points, surface)
     away = points - closest
     length = np.linalg.norm(away, axis=1, keepdims=True)
@@ -67,9 +82,12 @@ def push_out(points, faces, surface, offset):
     away *= np.sign(signed)[:, None] / np.maximum(length, 1e-9)
     index, pairs = welded(points, faces)
     count = index.max() + 1
+    offsets = np.broadcast_to(np.asarray(offset, dtype=float), len(points))
+    sizes = np.maximum(np.bincount(index, minlength=count), 1)
+    welded_offset = np.bincount(index, weights=offsets, minlength=count) / sizes
     move = np.zeros((count, 3))
-    np.add.at(move, index, away * offset)
-    move /= np.maximum(np.bincount(index, minlength=count), 1)[:, None]
+    np.add.at(move, index, away * offsets[:, None])
+    move /= sizes[:, None]
     for _ in range(SMOOTH_ROUNDS):
         total = move.copy()
         neighbors = np.ones(count)
@@ -79,7 +97,7 @@ def push_out(points, faces, surface, offset):
         move = total / neighbors[:, None]
     # Averaging shortens the moves where directions part; give them their length back
     length = np.linalg.norm(move, axis=1, keepdims=True)
-    move *= offset / np.maximum(length, 1e-9)
+    move *= welded_offset[:, None] / np.maximum(length, 1e-9)
     return move[index]
 
 
@@ -123,13 +141,52 @@ def slot_shares(points, bodies):
     return shares
 
 
+def vertex_radii(shares, radii):
+    """Each vertex's slot radius, its slots' radii weighted by how much each owns it."""
+    total = np.zeros(len(next(iter(shares.values()))))
+    weight = np.zeros_like(total)
+    for slot, share in shares.items():
+        if radii.get(slot, 0) > 0:
+            total += share * radii[slot]
+            weight += share
+    fallback = float(np.median([r for r in radii.values() if r > 0]))
+    return np.where(weight > 0, total / np.maximum(weight, 1e-9), fallback)
+
+
+def coverage(garment_points, garment_faces, bodies, slots, radii, bulkiest):
+    """Which of some slots the garment covers: those where COVERED_SHARE of the skin has the
+    garment straight out from it within OVER_REACH plus bulkiest of the slot's radius."""
+    garment = tree(garment_points, garment_faces)
+    covered = {}
+    for obj in bodies:
+        slot = obj.name[len(SLOT_PREFIX):]
+        if slot not in slots or radii.get(slot, 0) <= 0:
+            continue
+        co, _ = world_vertices(obj)
+        normals = np.array([obj.matrix_world.to_3x3() @ v.normal for v in obj.data.vertices])
+        reach = (OVER_REACH + bulkiest) * radii[slot]
+        hits = 0
+        for point, normal in zip(co, normals):
+            found = garment.ray_cast(Vector(point), Vector(normal).normalized(), reach)
+            hits += found[0] is not None
+        covered[slot] = round(hits / max(len(co), 1), 3)
+    return covered
+
+
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     for name in ("--mesh", "--body", "--out", "--preview"):
         parser.add_argument(name, required=True)
-    parser.add_argument("--offset", type=float, required=True,
-                        help="The bulkiest form's offset, in meters.")
+    parser.add_argument("--share", type=float, required=True,
+                        help="The bulkiest form's share of each slot's radius.")
+    parser.add_argument("--radii", required=True,
+                        help="Each body slot's radius on this body, in meters, as JSON.")
+    parser.add_argument("--slots", required=True,
+                        help="Comma-separated slots the garment's layers cover.")
+    parser.add_argument("--reach", type=float,
+                        help="The most the garment may stand out from the body, as a share of"
+                             " each slot's radius, for a layer others go over.")
     parser.add_argument("--gap", type=float, required=True,
                         help="The layer's gap: the least it may stand off the body.")
     args = parser.parse_args(argv)
@@ -150,15 +207,24 @@ def main():
         start += len(co)
     surface = tree(np.concatenate(surface_points), np.concatenate(surface_faces))
 
+    radii = json.loads(args.radii)
     rest = np.empty(len(garment.data.vertices) * 3)
     garment.data.vertices.foreach_get("co", rest)
     rest = rest.reshape(-1, 3)
+    shares = slot_shares(rest, bodies)
+    per_vertex = vertex_radii(shares, radii)
+    pulled = 0
+    if args.reach is not None:
+        # A layer others go over stays within its reach, so theirs cover it
+        pulled = shape(garment, surface, args.gap, reach=args.reach * per_vertex, rounds=0,
+                       armature=armature)
+        garment.data.vertices.foreach_get("co", rest.reshape(-1))
     garment.data.calc_loop_triangles()
     faces = np.array([tuple(t.vertices) for t in garment.data.loop_triangles])
     _, before = nearest(rest, surface)
 
     # The whole move, over every slot at once
-    points = rest + push_out(rest, faces, surface, args.offset)
+    points = rest + push_out(rest, faces, surface, args.share * per_vertex)
     garment.data.vertices.foreach_set("co", points.astype(np.float32).ravel())
     garment.data.update()
     _, pushed = nearest(points, surface)
@@ -172,7 +238,6 @@ def main():
     garment.data.update()
 
     # Each slot's share of the move, as a shape key
-    shares = slot_shares(rest, bodies)
     garment.shape_key_add(name="Basis", from_mix=False)
     for slot, share in shares.items():
         key = garment.shape_key_add(name=TARGET_PREFIX + slot, from_mix=False)
@@ -183,8 +248,23 @@ def main():
     skin.object = armature
     hat.export(args.out, garment, armature)
 
+    wanted = [s for s in args.slots.split(",") if s]
+    owner = np.array(list(shares.keys()))[np.argmax(np.stack(list(shares.values())), axis=0)]
+    standoff = {}
+    for slot in wanted:
+        mine = before[owner == slot]
+        if len(mine) >= 10 and radii.get(slot, 0) > 0:
+            standoff[slot] = round(max(float(np.percentile(mine, STANDOFF_PERCENTILE)), 0.0)
+                                   / radii[slot], 3)
+    covered = coverage(rest, faces, bodies, set(wanted), radii, args.share)
     report = {
-        "offset_mm": round(args.offset * 1000, 1),
+        "share": args.share,
+        "reach": args.reach,
+        "pulled_in": pulled,
+        # How much of each slot's skin it is over, and which it covers
+        "covered": covered,
+        "covers": [s for s in wanted if covered.get(s, 0) >= COVERED_SHARE],
+        "standoff": standoff,
         # Each slot's share of the garment, as the percentage of vertices it owns most of
         "slots": {slot: round(float((share > 0.5).mean()) * 100, 1)
                   for slot, share in shares.items()},

@@ -1157,16 +1157,38 @@ def layer_slot(name, layers, defaults):
 
 
 def layer_forms():
-    """The body plan's clothing forms past the first, as (name, offset in meters): the shells a
-    layer is pushed out to over bulky body parts, the last the bulkiest."""
-    return [(form["id"], float(form["offset"]))
+    """The body plan's clothing forms past the first, as (name, share of each slot's radius):
+    the shells a layer is pushed out to over bulky body parts, the last the bulkiest."""
+    return [(form["id"], float(form["share"]))
             for form in load_json_with_comments(PLAN).get("forms", [])[1:]]
+
+
+def plan_radii(variant):
+    """Each body slot's radius on a variant, in meters (see the body plan's slots)."""
+    plan = load_json_with_comments(PLAN)
+    own = next((v.get("radii", {}) for v in plan["variants"] if v["id"] == variant), {})
+    return {slot["id"]: float(own.get(slot["id"], slot.get("radius", 0.0)))
+            for slot in plan["slots"]}
+
+
+def layer_limits(brief):
+    """The slots a layer brief's layers cover, and the most it may stand out over them, as a
+    share of each slot's radius: the least reach of its layers that give one, or None."""
+    plan = load_json_with_comments(PLAN)
+    found = [layer for layer in plan["layers"] if layer["id"] in layers_of(brief)]
+    slots = []
+    for layer in found:
+        slots += [s for s in layer["covers"] if s not in slots]
+    reaches = [layer["reach"] for layer in found if layer.get("reach") is not None]
+    return slots, min(reaches) if reaches else None
 
 
 def add_form_targets(config, folder, brief, out, rule, variant, target):
     """Give a layer's mesh its clothing form targets in place (see form_layer.py): a move per body
-    slot out to the bulkiest form, which the character code scales by the form of the body part
-    worn there. Gives whether it worked."""
+    slot out to the bulkiest form, which the character code scales by how far the body part worn
+    there stands out, after pulling a layer others go over in to its reach. Its report (form.json
+    in the preview folder) says which slots it really covers and how far it stands out over each.
+    Gives whether it worked."""
     forms = layer_forms()
     if not forms or not rule.get("forms", True):
         return True
@@ -1174,9 +1196,13 @@ def add_form_targets(config, folder, brief, out, rule, variant, target):
     suffix = "" if variant == GUIDE_VARIANT else "_" + variant
     log = folder / ("form%s.log" % suffix)
     temporary = target.with_name(target.stem + "_forms.glb")
+    slots, reach = layer_limits(brief)
     if not run_blender(config, "form_layer.py", log, "--mesh", target,
                        "--body", mannequins / ("%s.blend" % variant),
-                       "--offset", forms[-1][1], "--gap", rule["gap"],
+                       "--share", forms[-1][1], "--radii", json.dumps(plan_radii(variant)),
+                       "--slots", ",".join(slots),
+                       *(["--reach", reach] if reach is not None else []),
+                       "--gap", rule["gap"],
                        "--out", temporary, "--preview", out / ("form" + suffix)):
         print("The %s form targets failed for %s; see %s" % (variant, brief["id"], log))
         temporary.unlink(missing_ok=True)
@@ -1255,6 +1281,14 @@ def write_layer_part(config, batch, brief, out, rule, only_forms=False):
         "materialSlots": [layer_slot(name, layers, defaults)],
         "tags": brief.get("tags", []),
     }
+    # What the guide's mesh really covers and how far it stands out, from its form targets' report
+    formed = out / "form" / "form.json"
+    if formed.exists():
+        report = json.loads(formed.read_text(encoding="utf8"))
+        if set(report.get("covers", [])) != set(layer_limits(brief)[0]):
+            part["covers"] = report.get("covers", [])
+        if report.get("standoff"):
+            part["standoff"] = report["standoff"]
     definition = content / "part" / ("%s.json" % name)
     definition.parent.mkdir(parents=True, exist_ok=True)
     header = ("// %s, batch %s, image %d\n"
@@ -1354,7 +1388,8 @@ def write_body_part(config, batch, brief, part, rule):
     form = None if shaped.get("bare") else thickest_form(f for f in forms if f)
     for side, name, definition in definitions:
         if shaped.get("bare"):
-            definition["hidesLayers"] = covering_layers(definition["fills"])
+            # Clothing covering its slots can't be worn with it
+            definition["takesClothing"] = False
         elif form is not None:
             definition["form"] = form
         path = content / "part" / ("%s.json" % name)
@@ -1364,8 +1399,7 @@ def write_body_part(config, batch, brief, part, rule):
                   % (brief["description"], "left" if side == "l" else "right", batch.name,
                      brief["mesh"]["image"]))
         path.write_text(header + json.dumps([definition], indent=2) + "\n", encoding="utf8")
-    if not shaped.get("bare"):
-        measure_standoffs(config, batch, brief)
+    measure_standoffs(config, batch, brief)
     return ids
 
 
@@ -1470,8 +1504,11 @@ def fit_body_part(config, batch, brief):
 
 
 def beyond_of(brief, rule):
-    """What to do with a body part standing out past the thickest clothing form: the brief's
-    "fit" says, else its rule, else it is clamped back in."""
+    """What to do with a body part standing out past the thickest clothing form over a clothed
+    slot: nothing for a brief whose part takes no clothing ("clothes": false, like spiked arms),
+    else what its "fit" or rule says, else rein it in, or reject it if that is too much."""
+    if brief.get("clothes", True) is False:
+        return "bare"
     return brief.get("fit", {}).get("beyond", rule.get("beyond", "clamp"))
 
 
@@ -1480,12 +1517,6 @@ def thickest_form(names):
     order = [form["id"] for form in load_json_with_comments(PLAN).get("forms", [])]
     known = [n for n in names if n in order]
     return max(known, key=order.index) if known else None
-
-
-def covering_layers(slots):
-    """The body plan's layers that cover any of some slots, as a bare body part hides them."""
-    plan = load_json_with_comments(PLAN)
-    return [layer["id"] for layer in plan["layers"] if set(layer["covers"]) & set(slots)]
 
 
 def command_fit(config, batch, args):
@@ -1658,7 +1689,7 @@ def under_accessory(config, brief):
     if not rest:
         return []
     plan = load_json_with_comments(PLAN)
-    thickness = {form["id"]: form["offset"] for form in plan.get("forms", [])}
+    thickness = {form["id"]: form["share"] for form in plan.get("forms", [])}
     thickest = None
     for path in sorted((pathlib.Path(config["content"]) / "part").glob("*.json")):
         part = load_json_with_comments(path)[0]
