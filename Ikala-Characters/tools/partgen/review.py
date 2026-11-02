@@ -123,6 +123,15 @@ function card(b) {
   const text = document.createElement("div");
   text.textContent = b.description;
   div.append(text);
+  if (stage === "parts" && b.extents) {
+    // A body part's clothing form, and how its size was corrected
+    const e = b.extents, bits = [e.bare ? "bare of clothing" : "form " + (e.form || "none")];
+    if (e.clamped) bits.push(e.clamped + " vertices clamped");
+    if (e.floor_scale) bits.push("stretched to the floor x" + e.floor_scale);
+    if (e.hand_scale) bits.push("hand scaled x" + e.hand_scale);
+    const n = document.createElement("div"); n.className = "note"; n.textContent = bits.join(" · ");
+    div.append(n);
+  }
   const note = (b.notes || {})[stage];
   if (note && typeof note === "string") {
     const n = document.createElement("div"); n.className = "note"; n.textContent = note;

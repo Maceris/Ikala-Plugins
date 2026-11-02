@@ -36,10 +36,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import fit_accessory as hat  # noqa: E402
 from add_caps import CAP_INFIX, make_cap, open_loops  # noqa: E402
 from bake_body import dress_caps  # noqa: E402
-from fit_body import outer_seams, plan_slots, seam_plane  # noqa: E402
+from bodies import body_meshes, merged, nearest, tree  # noqa: E402
+from fit_body import outer_seams, plan_forms, plan_slots, seam_plane  # noqa: E402
 from fit_layer import render  # noqa: E402
-from shape_body import (bridge, close_strays, mannequin_ring, mark_rings, orient_out,  # noqa: E402
-                        trim)
+from shape_body import (bridge, close_strays, form_of, mannequin_ring, mark_rings,  # noqa: E402
+                        orient_out, trim)
 from shape_layer import bone_segments  # noqa: E402
 from variant_layer import carry, face_normals, import_garment, untangle  # noqa: E402
 from weight_body import PREFIX, skin_part  # noqa: E402
@@ -164,7 +165,15 @@ def main():
         np.array([part.data.vertices[i].co for i in indices])
         - np.array([r["co"] for r in ring]), axis=1)))
         for indices, ring in welded.values()), default=0.0)
+    # The clothing form this body's version fits in, against this body's skin
+    skin = merged([o for o in body_meshes() if o.name.startswith(PREFIX)])
+    count = len(part.data.vertices)
+    co = np.empty(count * 3)
+    part.data.vertices.foreach_get("co", co)
+    _, signed = nearest(co.reshape(-1, 3), tree(*skin))
     report = {"welded": sorted(welded), "open": sorted(left_open), "folded_faces": folded,
+              "form": form_of(signed, plan_forms()),
+              "stands_out_mm": {"p95": round(float(np.percentile(signed, 95)) * 1000, 1)},
               "ring_error_mm": round(ring_error * 1000, 3),
               "open_edges": sorted(len(lp) for lp in open_loops(part.data)),
               "nearest_bone": int(empty.sum())}

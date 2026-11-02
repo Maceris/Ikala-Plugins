@@ -13,12 +13,17 @@ between stages, so expensive steps only run on what was kept:
         Concept images from SDXL through ComfyUI, for kept briefs that have none (or more).
     python partgen.py meshes <batch> [--type 512]
         Meshes through TRELLIS.2 from picked images, and renders of them for review.
-    python partgen.py fit <batch>
+    python partgen.py fit <batch> [--forms]
         Kept meshes fitted onto the mannequin: glbs and part definitions in the content folder.
+        A body part is held to the body plan's extents (legs meet the floor, hands are hand
+        sized, nothing stands out past the bulkiest clothing form) and given the clothing form
+        it fits in; a layer gets a mesh for each form, pushed out from the body that far.
+        --forms makes only the forms' meshes of layers already fitted.
     python partgen.py capture <batch> [--redo]
         Fitted parts in the character editor, on each bare mannequin: front, side, back and a
-        close-up, rendered headless (no window) into <batch>/<id>/editor/ and shown on the
-        review page under Parts. Needs the "editor" folder in config.json.
+        close-up, and dressed in a layer over them, rendered headless (no window) into
+        <batch>/<id>/editor/ and shown on the review page under Parts. Needs the "editor"
+        folder in config.json.
     python partgen.py status <batch>
 
 Every stage takes --only <id,...> to limit it, and --all to skip waiting for reviews. Paths come
@@ -88,6 +93,10 @@ CAPTURE_DESIGNS = {"male": "test:design/mannequin_male",
                    "female": "test:design/mannequin_female"}
 CAPTURE_VIEWS = [("front", False, 0.1, 0.0), ("side", False, 0.1, 1.5708),
                  ("back", False, 0.1, 3.1416), ("close", True, 0.25, 0.6)]
+# Body parts are also shown under clothing: these layers, where they cover the part, unless
+# config.json's "captureLayers" names others, from the front and close up
+CAPTURE_LAYERS = ["gen:part/pants/blue_jeans", "gen:part/jacket/navy_blazer"]
+CAPTURE_DRESSED_VIEWS = [("front", False, 0.1, 0.0), ("close", True, 0.25, 0.6)]
 CAPTURE_FOLDER = "editor"
 CAPTURE_SCRIPT = "captures.iks"
 # The shots' size in pixels, unless config.json's "captureSize" says otherwise
@@ -1138,27 +1147,63 @@ def layer_slot(name, layers, defaults):
     return slot
 
 
-def write_layer_part(config, batch, brief, out, rule):
+def layer_forms():
+    """The body plan's clothing forms past the first, as (name, offset in meters): the shapes a
+    layer gets a mesh of its own for, to go over bulky body parts."""
+    return [(form["id"], float(form["offset"]))
+            for form in load_json_with_comments(PLAN).get("forms", [])[1:]]
+
+
+def write_layer_part(config, batch, brief, out, rule, only_forms=False):
     """Put a baked garment in the content folder as a layer part: the male mesh, a female one
-    carried over through the body cages, each with its tint mask beside it (found by the file's
-    name), and the part's definition. Other body types wear the male's. Gives the part's ID, or
-    None if the female mesh failed."""
+    carried over through the body cages, and for each clothing form past the first (layer_forms)
+    each of those pushed out from its body by the form's offset (see form_layer.py), each with its
+    tint mask
+    beside it (found by the file's name), and the part's definition. Other body types wear the
+    male's. With only_forms, the plain meshes already there are kept and only the forms' are
+    made. Gives the part's ID, or None if a mesh failed."""
     import shutil
     folder = batch.brief_folder(brief["id"])
     content = pathlib.Path(config["content"])
     mannequins = pathlib.Path(config["mannequin"]).parent
     name = brief["id"]
     meshes = {}
-    for variant, glb in ((GUIDE_VARIANT, "layer/%s.glb" % name),
-                         ("female", "layer/%s_female.glb" % name)):
+    jobs = [(GUIDE_VARIANT, None, 0.0), ("female", None, 0.0)]
+    if rule.get("forms", True):
+        jobs += [(variant, form, offset) for form, offset in layer_forms()
+                 for variant in (GUIDE_VARIANT, "female")]
+    for variant, form, offset in jobs:
+        suffix = ("" if variant == GUIDE_VARIANT else "_" + variant) + (
+            "" if form is None else "_" + form)
+        glb = "layer/%s%s.glb" % (name, suffix)
+        key = ("*" if variant == GUIDE_VARIANT else variant) + (
+            "" if form is None else "@" + form)
+        meshes[key] = "%s#%s" % (glb, name)
         target = content / glb
         target.parent.mkdir(parents=True, exist_ok=True)
-        if variant == GUIDE_VARIANT:
+        if only_forms and form is None and target.exists():
+            continue
+        log = folder / ("variant%s.log" % suffix)
+        # The variant's plain mesh, which its forms are pushed out from
+        plain = content / ("layer/%s%s.glb" % (
+            name, "" if variant == GUIDE_VARIANT else "_" + variant))
+        if variant == GUIDE_VARIANT and form is None:
             shutil.copyfile(out / "baked.glb", target)
-        elif not run_blender(config, "variant_layer.py", folder / "variant.log",
-                             "--baked", out / "baked.glb", "--body", mannequins / "female.blend",
+        elif form is not None:
+            if not run_blender(config, "form_layer.py", log, "--mesh", plain,
+                               "--body", mannequins / ("%s.blend" % variant),
+                               "--offset", offset, "--gap", rule["gap"],
+                               "--name", name, "--out", target,
+                               "--preview", out / ("form" + suffix),
+                               "--bare", ",".join(bare_ends(layer_of(brief)[0]))):
+                print("The %s %s mesh failed for %s; see %s" % (variant, form, name, log))
+                return None
+        elif not run_blender(config, "variant_layer.py", log,
+                             "--baked", out / "baked.glb",
+                             "--body", mannequins / ("%s.blend" % variant),
                              "--from-cage", mannequins / ("%s_cage.npz" % GUIDE_VARIANT),
-                             "--to-cage", mannequins / "female_cage.npz", "--gap", rule["gap"],
+                             "--to-cage", mannequins / ("%s_cage.npz" % variant),
+                             "--gap", rule["gap"],
                              "--name", name, "--out", target, "--preview", out,
                              "--bare", ",".join(bare_ends(layer_of(brief)[0])),
                              *(["--reach", rule["reach"]] if "reach" in rule else []),
@@ -1168,17 +1213,19 @@ def write_layer_part(config, batch, brief, out, rule):
                                 "--triangles", rule["triangles"], *flap_args(rule),
                                 *simplifier_args(config)]
                                if rule.get("shell") else [])):
-            print("The female mesh failed for %s; see %s" % (name, folder / "variant.log"))
+            print("The %s mesh failed for %s; see %s" % (variant, name, log))
             return None
         masks = target.with_name(target.stem + "_masks")
         shutil.rmtree(masks, ignore_errors=True)
-        # A variant built afresh bakes its own mask beside the fit; others share the guide's UVs
+        # A variant built afresh bakes its own mask beside the fit; others share the guide's UVs,
+        # and forms their variant's
         own = out / masks.name
-        if variant != GUIDE_VARIANT and own.exists():
+        if form is not None:
+            shutil.copytree(plain.with_name(plain.stem + "_masks"), masks)
+        elif variant != GUIDE_VARIANT and own.exists():
             shutil.copytree(own, masks)
         else:
             shutil.copytree(out / (name + "_masks"), masks)
-        meshes["*" if variant == GUIDE_VARIANT else variant] = "%s#%s" % (glb, name)
     defaults = json.loads((out / "bake.json").read_text(encoding="utf8"))["defaults"]
     layers = layers_of(brief)
     part_id = "%s:part/%s/%s" % (config["namespace"], layers[0], name)
@@ -1236,6 +1283,9 @@ def write_body_part(config, batch, brief, part, rule):
     cages = ["--from-cage", mannequins / ("%s_cage.npz" % GUIDE_VARIANT),
              "--to-cage", mannequins / "female_cage.npz"]
     ids = []
+    definitions = []
+    shaped = json.loads((out / "shape.json").read_text(encoding="utf8")).get("extents", {})
+    forms = [shaped.get("form")]
     for side in ("l", "r"):
         name = "%s_%s" % (brief["id"], side)
         mirror = side == "r"
@@ -1258,6 +1308,9 @@ def write_body_part(config, batch, brief, part, rule):
                                *(["--open", left_open] if left_open else [])):
                 print("The %s %s mesh failed for %s; see %s" % (variant, side, brief["id"], log))
                 return None
+            variant_report = out / ("%s_%s" % (side, variant)) / "variant.json"
+            if variant_report.exists():
+                forms.append(json.loads(variant_report.read_text(encoding="utf8")).get("form"))
             masks = target.with_name(target.stem + "_masks")
             shutil.rmtree(masks, ignore_errors=True)
             shutil.copytree(out / (brief["id"] + "_masks"), masks)
@@ -1277,6 +1330,16 @@ def write_body_part(config, batch, brief, part, rule):
         }
         if any(mode != "weld" for mode in seams.values()):
             definition["seams"] = {s: mode for s, mode in seams.items() if mode != "weld"}
+        definitions.append((side, name, definition))
+        ids.append(part_id)
+    # One form for both sides and bodies, the thickest any of them needs; a part too bulky for
+    # clothing that is left bare hides the layers over it instead
+    form = None if shaped.get("bare") else thickest_form(f for f in forms if f)
+    for side, name, definition in definitions:
+        if shaped.get("bare"):
+            definition["hidesLayers"] = covering_layers(definition["fills"])
+        elif form is not None:
+            definition["form"] = form
         path = content / "part" / ("%s.json" % name)
         path.parent.mkdir(parents=True, exist_ok=True)
         header = ("// %s, %s side, batch %s, image %d\n"
@@ -1284,7 +1347,6 @@ def write_body_part(config, batch, brief, part, rule):
                   % (brief["description"], "left" if side == "l" else "right", batch.name,
                      brief["mesh"]["image"]))
         path.write_text(header + json.dumps([definition], indent=2) + "\n", encoding="utf8")
-        ids.append(part_id)
     return ids
 
 
@@ -1308,7 +1370,8 @@ def fit_body_part(config, batch, brief):
          + (["--isolated"] if part["isolated"] else [])),
         ("shape_body.py", "shape.json",
          ["--part", out / "part.glb", "--body", body, "--out", out, "--slots", slots,
-          "--triangles", rule["triangles"]] + (["--open", left_open] if left_open else [])
+          "--triangles", rule["triangles"], "--beyond", beyond_of(brief, rule)]
+         + (["--open", left_open] if left_open else [])
          + (["--voxel", rule["voxel"]] if "voxel" in rule else [])),
         ("weight_body.py", "weights.json",
          ["--shaped", out / "shaped.blend", "--out", out, "--slots", slots]),
@@ -1323,17 +1386,67 @@ def fit_body_part(config, batch, brief):
     for script, report, arguments in steps:
         log = folder / (pathlib.Path(script).stem + ".log")
         if not run_blender(config, script, log, *arguments) or not (out / report).exists():
-            print("%s failed for %s; see %s" % (script, brief["id"], log))
+            rejected = None
+            if script == "shape_body.py" and (out / report).exists():
+                shaped = json.loads((out / report).read_text(encoding="utf8"))
+                rejected = shaped.get("extents", {}).get("rejected")
+            if rejected:
+                # Too big for clothing: left for review, with why
+                print("%s rejected: %s" % (brief["id"], rejected))
+
+                def note(entry, rejected=rejected):
+                    entry.setdefault("notes", {})["parts"] = "rejected: " + rejected
+
+                batch.update(brief["id"], note)
+            else:
+                print("%s failed for %s; see %s" % (script, brief["id"], log))
             return None
         reports[pathlib.Path(report).stem] = json.loads((out / report).read_text(encoding="utf8"))
     gaps = [p["seam_gap_mm"] for p in reports["weights"]["poses"].values()]
-    print("body %s: %d triangles, welded %s, open %s, seams move at most %.3f mm in poses"
-          % (brief["id"], reports["shape"]["triangles"], reports["shape"]["welded"] or "none",
-             reports["shape"]["open"] or "none", max(gaps, default=0)))
+    extents = reports["shape"].get("extents", {})
+    print("body %s: %d triangles, welded %s, open %s, seams move at most %.3f mm in poses;"
+          " form %s%s%s%s" % (brief["id"], reports["shape"]["triangles"],
+                              reports["shape"]["welded"] or "none",
+                              reports["shape"]["open"] or "none", max(gaps, default=0),
+                              "bare" if extents.get("bare") else extents.get("form"),
+                              ", %s vertices clamped" % extents["clamped"]
+                              if extents.get("clamped") else "",
+                              ", floor x%s" % extents["floor_scale"]
+                              if extents.get("floor_scale") else "",
+                              ", hand x%s" % extents["hand_scale"]
+                              if extents.get("hand_scale") else ""))
     return reports
 
 
+def beyond_of(brief, rule):
+    """What to do with a body part standing out past the thickest clothing form: the brief's
+    "fit" says, else its rule, else it is clamped back in."""
+    return brief.get("fit", {}).get("beyond", rule.get("beyond", "clamp"))
+
+
+def thickest_form(names):
+    """The thickest of some clothing form names by the body plan's order, None for none."""
+    order = [form["id"] for form in load_json_with_comments(PLAN).get("forms", [])]
+    known = [n for n in names if n in order]
+    return max(known, key=order.index) if known else None
+
+
+def covering_layers(slots):
+    """The body plan's layers that cover any of some slots, as a bare body part hides them."""
+    plan = load_json_with_comments(PLAN)
+    return [layer["id"] for layer in plan["layers"] if set(layer["covers"]) & set(slots)]
+
+
 def command_fit(config, batch, args):
+    if args.forms:
+        # Only the clothing forms' meshes, for layers fitted before forms
+        for brief in ready(batch.load(), args,
+                           lambda b: b["kind"] == "layer" and b["part"] is not None):
+            out = batch.brief_folder(brief["id"]) / "fit"
+            part_id = write_layer_part(config, batch, brief, out, layer_of(brief)[1],
+                                       only_forms=True)
+            print("forms", part_id or "failed for " + brief["id"])
+        return
     briefs = ready(batch.load(), args, lambda b: b["mesh"] is not None and kept(b, "mesh", args)
                    and (args.redo or b["part"] is None))
     for brief in briefs:
@@ -1341,14 +1454,18 @@ def command_fit(config, batch, args):
             fit_layer(config, batch, brief)
             continue
         if brief["kind"] == "body":
-            if fit_body_part(config, batch, brief) is None:
+            reports = fit_body_part(config, batch, brief)
+            if reports is None:
                 continue
             part, rule = body_of(brief)
             ids = write_body_part(config, batch, brief, part, rule)
             if ids is not None:
-                def record(entry, ids=ids):
+                def record(entry, ids=ids, extents=reports["shape"].get("extents", {})):
                     entry["part"] = ids[0]
                     entry["review"]["part"] = None
+                    # The clothing form and size corrections, for the review page
+                    entry["extents"] = extents
+                    entry.get("notes", {}).pop("parts", None)
 
                 batch.update(brief["id"], record)
                 print("part", " ".join(ids))
@@ -1421,6 +1538,25 @@ def command_status(config, batch, args):
                                                        mesh, part, shots))
 
 
+def dressed_layers(config, brief):
+    """The layers a body part is shown dressed in: those of config.json's "captureLayers" (else
+    CAPTURE_LAYERS) whose body plan layers cover one of its slots, either side."""
+    plan = load_json_with_comments(PLAN)
+    covers = {layer["id"]: set(layer["covers"]) for layer in plan["layers"]}
+    slots = set(brief.get("slots", []))
+    slots |= {other_side(s) for s in slots}
+    content = pathlib.Path(config["content"]) / "part"
+    chosen = []
+    for part_id in config.get("captureLayers", CAPTURE_LAYERS):
+        path = content / (part_id.rsplit("/", 1)[-1] + ".json")
+        if not path.exists():
+            continue
+        fills = load_json_with_comments(path)[0].get("fills", [])
+        if any(covers.get(fill, set()) & slots for fill in fills):
+            chosen.append(part_id)
+    return chosen
+
+
 def worn_ids(brief):
     """The part IDs a brief's part is worn as: a body part on both sides, others once."""
     part = brief["part"]
@@ -1465,6 +1601,19 @@ def capture_script(config, batch, briefs):
                           "await(t.frames(%d));" % CAPTURE_SETTLE_FRAMES,
                           "await(t.saveFrame(%s));" % json.dumps((folder / name).as_posix())]
                 names.append(name)
+            # Then dressed: clothing over a body part shows in its form for the part
+            dressed = dressed_layers(config, brief) if brief["kind"] == "body" else []
+            lines += ["characters.wear(%s);" % json.dumps(i) for i in dressed]
+            for view, framed, pitch, yaw in CAPTURE_DRESSED_VIEWS if dressed else ():
+                name = "%s/%s_dressed_%s.png" % (CAPTURE_FOLDER, variant, view)
+                lines += ["characters.frame(%s, %r, %r);"
+                          % (json.dumps(ids[0]) if framed else "null", pitch, yaw),
+                          "await(t.frames(%d));" % CAPTURE_SETTLE_FRAMES,
+                          "await(t.saveFrame(%s));" % json.dumps((folder / name).as_posix())]
+                names.append(name)
+            if dressed:
+                lines.append("converter.log(%s + characters.worn());"
+                             % json.dumps("capture worn %s %s: " % (brief["id"], variant)))
             shots[brief["id"]][variant] = names
     lines.append('converter.log("capture done");')
     return "\n".join(lines) + "\n", shots
@@ -1619,6 +1768,8 @@ def main():
                         help="Make meshes again for briefs that have one from their pick.")
     fit = stage("fit", "Fit kept meshes onto the biped.")
     fit.add_argument("--redo", action="store_true", help="Fit again briefs that have a part.")
+    fit.add_argument("--forms", action="store_true",
+                     help="Only make the clothing forms' meshes of layers that have a part.")
     capture = stage("capture", "Shots of fitted parts in the editor, on each mannequin.")
     capture.add_argument("--redo", action="store_true", help="Capture briefs that have shots again.")
     status = commands.add_parser("status", help="What each brief has.")
