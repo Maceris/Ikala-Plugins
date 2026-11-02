@@ -6,8 +6,11 @@ import com.ikalagaming.plugins.Plugin;
 
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 
 import java.lang.ref.WeakReference;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import javax.annotation.Nullable;
@@ -21,6 +24,7 @@ import javax.annotation.Nullable;
  * new context, even if the unload is still being processed, so its resources are never released
  * along with the old ones.
  */
+@Slf4j
 public final class GraphicsContext {
 
     /** Counts contexts, to give each one a unique owner key. */
@@ -83,6 +87,9 @@ public final class GraphicsContext {
 
     /** Retained UI for this context. */
     private final UI ui;
+
+    /** What runs every frame, see {@link #addFrameTask}. */
+    private final List<Runnable> frameTasks = new CopyOnWriteArrayList<>();
 
     /** Whether the plugin was unloaded. */
     private volatile boolean closed;
@@ -265,6 +272,42 @@ public final class GraphicsContext {
     void collectDebugLabels(@NonNull Consumer<DebugLabel> consumer) {
         if (!closed) {
             debug.collectLabels(consumer);
+        }
+    }
+
+    /**
+     * Run something on the render thread every frame, before the frame is built, whether or not the
+     * GUI is drawn: per-frame work that belongs to no window, like keeping a shown character in
+     * step with an editor's state. Removed when the plugin unloads.
+     *
+     * @param task The task, run until removed.
+     * @throws IllegalStateException If the plugin was unloaded.
+     */
+    public void addFrameTask(@NonNull Runnable task) {
+        checkOpen();
+        frameTasks.add(task);
+    }
+
+    /**
+     * Stop running a frame task. Nothing happens if it isn't running.
+     *
+     * @param task The task.
+     */
+    public void removeFrameTask(@NonNull Runnable task) {
+        frameTasks.remove(task);
+    }
+
+    /** Run the frame tasks, each on its own, so one failing doesn't stop the rest. */
+    void runFrameTasks() {
+        if (closed) {
+            return;
+        }
+        for (Runnable task : frameTasks) {
+            try {
+                task.run();
+            } catch (RuntimeException e) {
+                log.warn("A frame task of {} failed", ownerKey, e);
+            }
         }
     }
 

@@ -8,6 +8,7 @@ import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.Presentation;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 import com.ikalagaming.graphics.vulkan.SceneTarget;
+import com.ikalagaming.graphics.vulkan.TextureInfoVulkan;
 import com.ikalagaming.graphics.vulkan.VulkanState;
 
 import lombok.NonNull;
@@ -48,15 +49,25 @@ public class SwapchainPresent implements RenderStage {
         final int renderWidth = Math.min(sceneTarget.width(), vulkanState.realSize.width());
         final int renderHeight = Math.min(sceneTarget.height(), vulkanState.realSize.height());
 
-        if (presentation == null) {
-            // Headless: no window to copy to, only frame captures read the image
+        final TextureInfoVulkan headlessImage =
+                vulkanState.perFrameData[vulkanState.frameIndex].headlessImage;
+        if (presentation == null && headlessImage == null) {
+            // No window and no stand-in for one: only frame captures read the image
             readyToCopy(commandBuffer, sourceImage);
             vulkanState.frameCapture.record(
                     commandBuffer, vulkanState, sourceImage, renderWidth, renderHeight);
             return;
         }
+        // Headless, the stand-in for the window's swapchain image takes the scene, and the GUI
+        // pass and frame captures follow
         final long swapchainImage =
-                presentation.swapchainImages[presentation.currentSwapchainIndex];
+                presentation == null
+                        ? headlessImage.texture
+                        : presentation.swapchainImages[presentation.currentSwapchainIndex];
+        final int destWidth =
+                presentation == null ? vulkanState.realSize.width() : presentation.swapchainWidth;
+        final int destHeight =
+                presentation == null ? vulkanState.realSize.height() : presentation.swapchainHeight;
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkImageMemoryBarrier2.Buffer outputBarriers = VkImageMemoryBarrier2.calloc(2, stack);
@@ -116,7 +127,7 @@ public class SwapchainPresent implements RenderStage {
             VkOffset3D.Buffer destOffsets = VkOffset3D.calloc(2, stack);
             destOffsets.get(0).set(0, 0, 0);
             // Usually the same size, but the swapchain can briefly disagree with the window
-            destOffsets.get(1).set(presentation.swapchainWidth, presentation.swapchainHeight, 1);
+            destOffsets.get(1).set(destWidth, destHeight, 1);
 
             VkImageBlit.Buffer blitRegions = VkImageBlit.calloc(1, stack);
             blitRegions
@@ -135,9 +146,11 @@ public class SwapchainPresent implements RenderStage {
                     blitRegions,
                     VK_FILTER_LINEAR);
         }
-        // Before the GUI goes over it in the window
-        vulkanState.frameCapture.record(
-                commandBuffer, vulkanState, sourceImage, renderWidth, renderHeight);
+        if (presentation != null) {
+            // Before the GUI goes over it in the window
+            vulkanState.frameCapture.record(
+                    commandBuffer, vulkanState, sourceImage, renderWidth, renderHeight);
+        }
     }
 
     /**

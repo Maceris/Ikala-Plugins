@@ -43,6 +43,16 @@ class FrameCaptureTest {
         assertEquals(0xC8C9CA, image.getRGB(1, 1) & 0xFFFFFF);
     }
 
+    /**
+     * Blue-first pixels, as swapchain images and their headless stand-in hold them, come out right.
+     */
+    @Test
+    void imageFromBgra() {
+        byte[] bgra = {(byte) 0x30, (byte) 0x20, (byte) 0x10, (byte) 255};
+        BufferedImage image = FrameCapture.toImage(bgra, 1, 1, true);
+        assertEquals(0x102030, image.getRGB(0, 0) & 0xFFFFFF);
+    }
+
     /** Too few bytes for the size is refused rather than read past. */
     @Test
     void imageNeedsEveryPixel() {

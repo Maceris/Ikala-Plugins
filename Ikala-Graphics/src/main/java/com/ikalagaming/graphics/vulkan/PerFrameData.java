@@ -9,6 +9,13 @@ import java.util.Map;
 /** Data buffers for a frame, only the data that the CPU cares about. */
 public class PerFrameData {
     /**
+     * Rendering headless, what stands in for the scene window's swapchain image: the scene is
+     * copied into it and the GUI drawn over it, in the swapchain's format, for frame captures. Null
+     * when rendering to windows.
+     */
+    public TextureInfoVulkan headlessImage;
+
+    /**
      * The index of the first bone matrix in each animated model's animation buffer, per pose.
      * Entities on the same animation frame share a pose, so it's only skinned once. Every animated
      * model's poses are packed back to back, see {@link ModelDrawInfo#firstPose()}.

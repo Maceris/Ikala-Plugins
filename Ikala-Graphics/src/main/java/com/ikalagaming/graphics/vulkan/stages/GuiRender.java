@@ -158,11 +158,46 @@ public class GuiRender {
             @NonNull Presentation presentation,
             boolean sceneCopied,
             DrawData drawData) {
-        final long image = presentation.swapchainImages[presentation.currentSwapchainIndex];
-        final long view = presentation.swapchainImageViews[presentation.currentSwapchainIndex];
-        final int imageWidth = presentation.swapchainWidth;
-        final int imageHeight = presentation.swapchainHeight;
+        recordImage(
+                commandBuffer,
+                vulkanState,
+                presentation.swapchainImages[presentation.currentSwapchainIndex],
+                presentation.swapchainImageViews[presentation.currentSwapchainIndex],
+                presentation.swapchainWidth,
+                presentation.swapchainHeight,
+                sceneCopied,
+                drawData,
+                false,
+                presentation.toString());
+    }
 
+    /**
+     * Draw GUI into an image in the swapchain's format: a window's swapchain image, readied to
+     * present, or, rendering headless, the image standing in for it, readied to copy for frame
+     * captures.
+     *
+     * @param commandBuffer The command buffer to record into.
+     * @param vulkanState The Vulkan state.
+     * @param image The image.
+     * @param view Its view.
+     * @param imageWidth Its width in pixels.
+     * @param imageHeight Its height in pixels.
+     * @param sceneCopied Whether the scene was just copied into it, to keep rather than clear.
+     * @param drawData The GUI to draw, or null for none.
+     * @param toCopy Whether to ready it to copy from rather than to present.
+     * @param where What the image is, for messages.
+     */
+    public void recordImage(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull VulkanState vulkanState,
+            long image,
+            long view,
+            int imageWidth,
+            int imageHeight,
+            boolean sceneCopied,
+            DrawData drawData,
+            boolean toCopy,
+            @NonNull String where) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             transitionToDraw(commandBuffer, image, sceneCopied, stack);
 
@@ -190,12 +225,12 @@ public class GuiRender {
             if (offsets != null && offsets.length > 0) {
                 drawLists(commandBuffer, vulkanState, drawData, offsets, imageWidth, imageHeight);
             } else if (drawData != null) {
-                log.warn("GUI draw data for {} wasn't prepared this frame", presentation);
+                log.warn("GUI draw data for {} wasn't prepared this frame", where);
             }
 
             vkCmdEndRendering(commandBuffer);
 
-            transitionToPresent(commandBuffer, image, stack);
+            transitionAfterDraw(commandBuffer, image, toCopy, stack);
         }
     }
 
@@ -248,24 +283,33 @@ public class GuiRender {
     }
 
     /**
-     * Ready a swapchain image we drew to for presenting.
+     * Ready an image we drew GUI to: a swapchain image for presenting, or the headless stand-in for
+     * copying.
      *
      * @param commandBuffer The command buffer to record into.
-     * @param image The swapchain image.
+     * @param image The image.
+     * @param toCopy Whether to ready it to copy from rather than to present.
      * @param stack The stack to allocate on.
      */
-    private static void transitionToPresent(
-            @NonNull VkCommandBuffer commandBuffer, long image, @NonNull MemoryStack stack) {
+    private static void transitionAfterDraw(
+            @NonNull VkCommandBuffer commandBuffer,
+            long image,
+            boolean toCopy,
+            @NonNull MemoryStack stack) {
         VkImageMemoryBarrier2.Buffer barriers = VkImageMemoryBarrier2.calloc(1, stack);
-        // Presenting waits on the render complete semaphore, so nothing needs to wait here
+        // Presenting waits on the render complete semaphore, so nothing needs to wait there; a
+        // copy for a frame capture follows in the same command buffer
         barriers.get(0)
                 .sType$Default()
                 .srcStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
                 .srcAccessMask(VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT)
-                .dstStageMask(VK_PIPELINE_STAGE_2_NONE)
-                .dstAccessMask(VK_ACCESS_2_NONE)
+                .dstStageMask(toCopy ? VK_PIPELINE_STAGE_2_TRANSFER_BIT : VK_PIPELINE_STAGE_2_NONE)
+                .dstAccessMask(toCopy ? VK_ACCESS_2_TRANSFER_READ_BIT : VK_ACCESS_2_NONE)
                 .oldLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
-                .newLayout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+                .newLayout(
+                        toCopy
+                                ? VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+                                : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
                 .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
                 .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
                 .image(image)

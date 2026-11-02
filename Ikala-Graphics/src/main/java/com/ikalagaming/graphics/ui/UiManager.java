@@ -564,6 +564,16 @@ public class UiManager {
     }
 
     /**
+     * Do what {@link #draw()} does for frames that build no GUI: run posted changes and let
+     * automation runs advance, so frame waits and captures still finish. Steps that need a surface
+     * on screen wait until the GUI is drawn again. Render thread only.
+     */
+    public void tickWithoutGui() {
+        runPending();
+        automation.afterDraw(List.of());
+    }
+
+    /**
      * Run posted changes, then lay out and submit every visible surface. Render thread only,
      * between IkGui's new frame and render.
      */
