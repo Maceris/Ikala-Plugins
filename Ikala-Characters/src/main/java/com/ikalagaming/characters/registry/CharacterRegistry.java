@@ -11,8 +11,13 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import lombok.NonNull;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.ClosedFileSystemException;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -151,6 +156,39 @@ public final class CharacterRegistry {
     public Path asset(@NonNull String namespace, @NonNull String path) {
         Path root = roots.get(namespace);
         return root == null ? null : root.resolve(path).normalize();
+    }
+
+    /**
+     * Read an asset's bytes, like a decal's image, from its namespace's content folder, or for the
+     * built-in content, from the plugin's resources: its folder there is only readable while the
+     * definitions load (see {@link BuiltInContent}).
+     *
+     * @param namespace The namespace of the definition that names it.
+     * @param path The asset's path, with / between folders.
+     * @return The bytes.
+     * @throws IOException If it can't be found or read.
+     */
+    public byte[] readAsset(@NonNull String namespace, @NonNull String path) throws IOException {
+        Path file = asset(namespace, path);
+        if (file != null) {
+            try {
+                return Files.readAllBytes(file);
+            } catch (ClosedFileSystemException | NoSuchFileException e) {
+                if (!BuiltInContent.NAMESPACE.equals(namespace)) {
+                    throw e;
+                }
+            }
+        } else if (!BuiltInContent.NAMESPACE.equals(namespace)) {
+            throw new IOException("The namespace " + namespace + " has no content folder");
+        }
+        String resource = BuiltInContent.RESOURCE_FOLDER + "/" + path;
+        try (InputStream in =
+                CharacterRegistry.class.getClassLoader().getResourceAsStream(resource)) {
+            if (in == null) {
+                throw new NoSuchFileException(resource);
+            }
+            return in.readAllBytes();
+        }
     }
 
     /**

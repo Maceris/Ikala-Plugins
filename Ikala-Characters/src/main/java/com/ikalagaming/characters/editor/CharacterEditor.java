@@ -8,10 +8,13 @@ import com.ikalagaming.characters.data.Problem;
 import com.ikalagaming.characters.data.Range;
 import com.ikalagaming.characters.definition.AnimStyle;
 import com.ikalagaming.characters.definition.BodyPlan;
+import com.ikalagaming.characters.definition.Decal;
+import com.ikalagaming.characters.definition.DecalUse;
 import com.ikalagaming.characters.definition.Design;
 import com.ikalagaming.characters.definition.Fx;
 import com.ikalagaming.characters.definition.FxUse;
 import com.ikalagaming.characters.definition.Item;
+import com.ikalagaming.characters.definition.Palette;
 import com.ikalagaming.characters.definition.Part;
 import com.ikalagaming.characters.definition.Rig;
 import com.ikalagaming.characters.definition.Slider;
@@ -26,6 +29,7 @@ import com.ikalagaming.characters.pose.Proportions;
 import com.ikalagaming.characters.pose.Skeleton;
 import com.ikalagaming.characters.registry.CharacterRegistry;
 import com.ikalagaming.characters.registry.ContentSource;
+import com.ikalagaming.characters.view.CharacterDecals;
 import com.ikalagaming.characters.view.CharacterFx;
 import com.ikalagaming.characters.view.FxEffects;
 import com.ikalagaming.characters.view.HeldItems;
@@ -37,6 +41,7 @@ import com.ikalagaming.characters.view.PartSlots;
 import com.ikalagaming.characters.view.ShownCharacter;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.SkinnedPart;
 import com.ikalagaming.graphics.Skins;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.component.GuiWindow;
@@ -342,6 +347,7 @@ public final class CharacterEditor {
             List<List<Set<String>>> fills,
             List<int[]> channels,
             List<int[]> fallbacks,
+            List<Part> partDefinitions,
             List<String> channelNames) {
         /**
          * Build a design's parts and sort them.
@@ -481,6 +487,7 @@ public final class CharacterEditor {
                     fills,
                     assembled.channels(),
                     assembled.fallbacks(),
+                    assembled.partIds().stream().map(id -> registry.get(Part.class, id)).toList(),
                     used.stream().map(all::get).toList());
         }
 
@@ -639,6 +646,19 @@ public final class CharacterEditor {
      * index, to move one again only when that changes; see {@link PartForms}.
      */
     private final Map<Integer, Map<String, Float>> pushed = new HashMap<>();
+
+    /** The decal last shown, see {@link #showDecal}. */
+    private DecalUse shownDecal;
+
+    /** Whether the shown character has the look's decal, {@link #shownDecal}. */
+    private boolean decalSynced;
+
+    /** The most a color's channel holds, see {@link Color}. */
+    private static final float COLOR_MAX = 255;
+
+    /** The channels a newly chosen decal's colors take, until the user picks others. */
+    private static final Map<String, String> DECAL_CHANNELS =
+            Map.of(Decal.FIRST, Palette.ACCENT, Decal.SECOND, Palette.PRIMARY);
 
     /** The body plan the character's rig belongs to, or null. */
     private BodyPlan plan;
@@ -881,7 +901,9 @@ public final class CharacterEditor {
                 sliderValues(design),
                 colorCodes(design),
                 design.fx(),
-                design.style());
+                design.style(),
+                design.decal());
+        decalSynced = false;
         beforeEditVersion = -1;
         editing = false;
         lastWorn = look.worn(CharacterLook.NO_PREVIEW, 0);
@@ -1042,7 +1064,8 @@ public final class CharacterEditor {
                 layers,
                 null,
                 colors,
-                List.copyOf(look.fx()));
+                List.copyOf(look.fx()),
+                look.decal());
     }
 
     /**
@@ -1709,6 +1732,8 @@ public final class CharacterEditor {
      * and its tuning, and a button to add another, up to {@link Design#MAX_FX}.
      */
     private void drawEffects() {
+        drawDecal();
+        IkGui.separatorText("Effects");
         List<Fx> all = registry.get().all(Fx.class);
         if (all.isEmpty()) {
             IkGui.textDisabled("No effects loaded");
@@ -1744,6 +1769,115 @@ public final class CharacterEditor {
         if (uses.size() >= Design.MAX_FX) {
             IkGui.textDisabled("A design wears up to " + Design.MAX_FX + " effects");
         }
+    }
+
+    /**
+     * Draw the decal rows: which art, on which of the plan's places, and the palette channel each
+     * of its colors takes.
+     */
+    private void drawDecal() {
+        IkGui.separatorText("Decal");
+        List<Decal> all = registry.get().all(Decal.class);
+        if (all.isEmpty() || plan.decals().isEmpty()) {
+            IkGui.textDisabled("No decals for this body");
+            return;
+        }
+        DecalUse use = look.decal();
+        if (IkGui.beginCombo("Decal##decal", use == null ? "none" : Prepared.label(use.decal()))) {
+            if (IkGui.selectable("none##no-decal", use == null)) {
+                changeLook(changed -> changed.setDecal(null));
+            }
+            for (Decal decal : all) {
+                boolean chosen = use != null && decal.id().equals(use.decal());
+                if (IkGui.selectable(Prepared.label(decal.id()) + "##" + decal.id(), chosen)) {
+                    String place = use == null ? plan.decals().get(0).id() : use.place();
+                    Map<String, String> channels = use == null ? DECAL_CHANNELS : use.channels();
+                    changeLook(
+                            changed -> changed.setDecal(new DecalUse(decal.id(), place, channels)));
+                }
+            }
+            IkGui.endCombo();
+        }
+        if (use == null) {
+            return;
+        }
+        if (plan.decals().size() > 1 && IkGui.beginCombo("On##decal-place", use.place())) {
+            for (BodyPlan.DecalPlace place : plan.decals()) {
+                if (IkGui.selectable(
+                        place.id() + "##" + place.id(), place.id().equals(use.place()))) {
+                    changeLook(
+                            changed ->
+                                    changed.setDecal(
+                                            new DecalUse(use.decal(), place.id(), use.channels())));
+                }
+            }
+            IkGui.endCombo();
+        }
+        String[] labels = {"Fill##decal-r", "Edge##decal-g"};
+        List<String> masks = List.of(Decal.FIRST, Decal.SECOND);
+        for (int c = 0; c < masks.size(); ++c) {
+            String mask = masks.get(c);
+            String channel = use.channels().get(mask);
+            if (IkGui.beginCombo(labels[c], channel == null ? "its own" : channel)) {
+                if (IkGui.selectable("its own##own-" + mask, channel == null)) {
+                    changeLook(changed -> changed.setDecal(recolored(use, mask, null)));
+                }
+                for (String other : plan.allChannels()) {
+                    if (IkGui.selectable(
+                            other + "##" + mask + "-" + other, other.equals(channel))) {
+                        changeLook(changed -> changed.setDecal(recolored(use, mask, other)));
+                    }
+                }
+                IkGui.endCombo();
+            }
+        }
+    }
+
+    /**
+     * A decal with one of its colors taking another palette channel.
+     *
+     * @param use The decal.
+     * @param mask The mask channel, {@link Decal#FIRST} or {@link Decal#SECOND}.
+     * @param channel The palette channel, or null for the decal's default color.
+     * @return The decal.
+     */
+    private static DecalUse recolored(DecalUse use, String mask, String channel) {
+        Map<String, String> channels = new LinkedHashMap<>(use.channels());
+        if (channel == null) {
+            channels.remove(mask);
+        } else {
+            channels.put(mask, channel);
+        }
+        return new DecalUse(use.decal(), use.place(), channels);
+    }
+
+    /**
+     * For scripts: wear a decal, or none. Call on the render thread.
+     *
+     * @param decalId The decal's ID, or null or empty for none.
+     * @param place The plan's decal place, or null for its first.
+     * @param first The palette channel the decal's first color takes, or null for its default.
+     * @param second The channel its second color takes, or null.
+     * @return False if nothing is shown or the plan has no decal places.
+     */
+    boolean wearDecal(String decalId, String place, String first, String second) {
+        if (look == null || plan == null || plan.decals().isEmpty()) {
+            return false;
+        }
+        if (decalId == null || decalId.isBlank()) {
+            changeLook(changed -> changed.setDecal(null));
+            return true;
+        }
+        Map<String, String> channels = new LinkedHashMap<>();
+        if (first != null && !first.isBlank()) {
+            channels.put(Decal.FIRST, first);
+        }
+        if (second != null && !second.isBlank()) {
+            channels.put(Decal.SECOND, second);
+        }
+        String where = place == null || place.isBlank() ? plan.decals().get(0).id() : place;
+        changeLook(changed -> changed.setDecal(new DecalUse(Id.parse(decalId), where, channels)));
+        return true;
     }
 
     /**
@@ -2197,6 +2331,70 @@ public final class CharacterEditor {
             }
         }
         shown.setTints(tints);
+        showDecal();
+    }
+
+    /**
+     * Give the shown character the look's decal, if it changed: its art, its box on the plan's
+     * place, the tint slots its colors take and its defaults, and the parts that show it.
+     */
+    private void showDecal() {
+        DecalUse use = look.decal();
+        if (decalSynced && Objects.equals(use, shownDecal)) {
+            return;
+        }
+        decalSynced = true;
+        shownDecal = use;
+        Decal art = use == null ? null : registry.get().get(Decal.class, use.decal());
+        BodyPlan.DecalPlace place = use == null ? null : plan.decalPlace(use.place());
+        byte[] bytes = null;
+        if (art != null) {
+            try {
+                bytes = registry.get().readAsset(art.id().namespace(), art.image());
+            } catch (IOException e) {
+                log.warn("Couldn't read the decal {}: {}", art.image(), e.getMessage());
+            }
+        }
+        if (bytes == null || place == null) {
+            if (use != null) {
+                log.debug("No decal art for {} on {}", use.decal(), use.place());
+            }
+            shown.setDecal(null, null, -1, -1, SkinnedPart.WHITE, SkinnedPart.WHITE);
+            return;
+        }
+        List<String> all = plan.allChannels();
+        int[] slots = new int[2];
+        int[] fallbacks = new int[2];
+        List<String> masks = List.of(Decal.FIRST, Decal.SECOND);
+        for (int c = 0; c < masks.size(); ++c) {
+            String channel = use.channels().get(masks.get(c));
+            int slot = channel == null ? -1 : all.indexOf(channel);
+            slots[c] = slot < Skins.TINT_SLOTS ? slot : -1;
+            Color color = art.defaults().get(masks.get(c));
+            fallbacks[c] =
+                    color == null
+                            ? SkinnedPart.WHITE
+                            : SkinnedPart.pack(
+                                    color.red() / COLOR_MAX,
+                                    color.green() / COLOR_MAX,
+                                    color.blue() / COLOR_MAX);
+        }
+        shown.setDecal(
+                new ImportedCharacter.ImageData(art.image(), "image/png", bytes),
+                CharacterDecals.restToBox(shown.getSkeleton(), place),
+                slots[0],
+                slots[1],
+                fallbacks[0],
+                fallbacks[1]);
+        boolean[] showing = CharacterDecals.partsShowing(plan, place, prepared.partDefinitions());
+        shown.setDecalParts(showing);
+        if (log.isDebugEnabled()) {
+            int count = 0;
+            for (boolean shows : showing) {
+                count += shows ? 1 : 0;
+            }
+            log.debug("Showing the decal {} on {} of {} parts", art.id(), count, showing.length);
+        }
     }
 
     /**
