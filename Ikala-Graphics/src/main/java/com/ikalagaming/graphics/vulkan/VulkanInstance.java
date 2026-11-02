@@ -345,8 +345,8 @@ public class VulkanInstance {
      * Save the next frame that draws the scene to a PNG file, without the GUI over it.
      *
      * @param path Where the file goes; folders are made as needed.
-     * @return Completed with the path once the file is written, or cancelled if the renderer
-     *     stops first.
+     * @return Completed with the path once the file is written, or cancelled if the renderer stops
+     *     first.
      */
     public CompletableFuture<Path> saveFrame(@NonNull Path path) {
         return state.frameCapture.request(path);
@@ -2036,9 +2036,8 @@ public class VulkanInstance {
     }
 
     /**
-     * Render a frame with no window to show it in: the scene only, at the scene window's size,
-     * kept for frame captures. The GUI is built but not drawn. The frame's fence has been waited
-     * on.
+     * Render a frame with no window to show it in: the scene only, at the scene window's size, kept
+     * for frame captures. The GUI is built but not drawn. The frame's fence has been waited on.
      *
      * @param scene The scene to render.
      * @param sceneWindow The hidden window whose size the scene is drawn at.
@@ -2062,8 +2061,7 @@ public class VulkanInstance {
                     commandBuffer);
             checkError(vkEndCommandBuffer(commandBuffer));
 
-            VkCommandBufferSubmitInfo.Buffer commands =
-                    VkCommandBufferSubmitInfo.calloc(1, stack);
+            VkCommandBufferSubmitInfo.Buffer commands = VkCommandBufferSubmitInfo.calloc(1, stack);
             commands.get(0).sType$Default().commandBuffer(commandBuffer);
             VkSubmitInfo2.Buffer submit = VkSubmitInfo2.calloc(1, stack);
             submit.get(0).sType$Default().pCommandBufferInfos(commands);

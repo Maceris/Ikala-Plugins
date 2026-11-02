@@ -18,8 +18,22 @@ class FrameCaptureTest {
     @Test
     void imageKeepsColorsAndRows() {
         byte[] rgba = {
-            (byte) 255, 0, 0, (byte) 255, 0, (byte) 128, 0, 0,
-            1, 2, 3, (byte) 255, (byte) 200, (byte) 201, (byte) 202, 7
+            (byte) 255,
+            0,
+            0,
+            (byte) 255,
+            0,
+            (byte) 128,
+            0,
+            0,
+            1,
+            2,
+            3,
+            (byte) 255,
+            (byte) 200,
+            (byte) 201,
+            (byte) 202,
+            7
         };
         BufferedImage image = FrameCapture.toImage(rgba, 2, 2);
         assertEquals(BufferedImage.TYPE_INT_RGB, image.getType());

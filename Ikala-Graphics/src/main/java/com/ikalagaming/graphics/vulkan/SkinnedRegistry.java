@@ -32,8 +32,11 @@ public final class SkinnedRegistry {
     /** Floats per bone in a palette: one column-major 4x4 matrix. */
     public static final int MATRIX_FLOATS = 16;
 
-    /** A packed tint color that changes nothing. */
-    private static final int WHITE = 0xFFFF_FFFF;
+    /**
+     * A packed tint color left unset, so each part shows its fallback: white with no alpha, which a
+     * set color never has.
+     */
+    public static final int UNSET = 0x00FF_FFFF;
 
     /** One instance's state. */
     public static final class Entry {
@@ -73,8 +76,8 @@ public final class SkinnedRegistry {
         /** Whether it casts shadows. */
         boolean castsShadows = true;
 
-        /** Its tint colors, packed sRGB with red in the low byte, white until set. */
-        final int[] tints = white();
+        /** Its tint colors, packed sRGB with red in the low byte, unset until set. */
+        final int[] tints = unset();
 
         /**
          * Its world position.
@@ -416,7 +419,7 @@ public final class SkinnedRegistry {
      * @param owner The plugin changing it.
      * @param handle The handle.
      * @param tints Up to {@value Skins#TINT_SLOTS} colors, packed sRGB with red in the low byte;
-     *     slots past the end go white.
+     *     {@link #UNSET} for a slot left unset, as are slots past the end.
      * @return False if the handle is null, stale or someone else's.
      */
     public boolean setTints(
@@ -428,7 +431,7 @@ public final class SkinnedRegistry {
                 return false;
             }
             for (int t = 0; t < Skins.TINT_SLOTS; ++t) {
-                entry.tints[t] = t < tints.length ? tints[t] : WHITE;
+                entry.tints[t] = t < tints.length ? tints[t] : UNSET;
             }
             return true;
         } finally {
@@ -437,13 +440,13 @@ public final class SkinnedRegistry {
     }
 
     /**
-     * Tint colors that change nothing.
+     * Tint colors all left unset.
      *
-     * @return White in every slot.
+     * @return {@link #UNSET} in every slot.
      */
-    private static int[] white() {
+    private static int[] unset() {
         int[] tints = new int[Skins.TINT_SLOTS];
-        Arrays.fill(tints, WHITE);
+        Arrays.fill(tints, UNSET);
         return tints;
     }
 

@@ -172,7 +172,11 @@ def tint_groups(defaults, mask_image, orm_image, covered):
 
 
 def skin_channel(groups):
-    """The biggest tint group that is the mannequin's skin (see SKIN_CHROMA), or None."""
+    """The biggest tint group that is the mannequin's skin (see SKIN_CHROMA), or None. A part of
+    one group is all part, never skin: skin TRELLIS kept from the mannequin only ever borders the
+    part's own colors, and a single gray group is the part's matte plates or steel."""
+    if len(groups) < 2:
+        return None
     best = None
     for channel, group in groups.items():
         rgb = [int(group["color"][i:i + 2], 16) for i in (1, 3, 5)]

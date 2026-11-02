@@ -15,18 +15,64 @@ import lombok.NonNull;
  * mask)}. A part with slots but no mask takes the red channel's color everywhere, so plain parts
  * can be tinted whole.
  *
+ * <p>A tint color left unset (see {@link Skins#UNSET}) gives each part its own color for that
+ * channel instead, its fallback: so parts sharing a slot keep their own colors until the slot is
+ * set, like two garments in one palette channel that no one has colored yet.
+ *
  * @param mesh The skinned mesh.
  * @param material The material, which must be in the scene's material cache, or null for the
  *     default material.
  * @param tintMask The tint mask, linear rather than sRGB, or null for none.
  * @param tintSlots Which tint color each mask channel takes, from {@link #slots}, or {@link
  *     #NO_TINT}.
+ * @param fallbacks The color each mask channel (r, g, b, a) takes where its slot's tint is unset,
+ *     packed sRGB with red in the low byte (see {@link #pack}); white changes nothing.
  * @see Skins#setParts(SkinnedInstanceHandle, java.util.List)
  */
 public record SkinnedPart(
-        @NonNull SkinnedMeshHandle mesh, Material material, TextureHandle tintMask, int tintSlots) {
+        @NonNull SkinnedMeshHandle mesh,
+        Material material,
+        TextureHandle tintMask,
+        int tintSlots,
+        int @NonNull [] fallbacks) {
     /** Slots that take no tint for any channel. */
     public static final int NO_TINT = 0xFFFF_FFFF;
+
+    /** A packed color that changes nothing. */
+    public static final int WHITE = 0xFFFF_FFFF;
+
+    /** How many mask channels a part has, each with a fallback color. */
+    public static final int CHANNELS = 4;
+
+    /**
+     * Check the fallbacks.
+     *
+     * @throws IllegalArgumentException If there isn't one per mask channel.
+     */
+    public SkinnedPart {
+        if (fallbacks.length != CHANNELS) {
+            throw new IllegalArgumentException("A part has one fallback color per mask channel");
+        }
+        fallbacks = fallbacks.clone();
+    }
+
+    /**
+     * A part tinted by its instance's colors, white where they are unset.
+     *
+     * @param mesh The skinned mesh.
+     * @param material The material, which must be in the scene's material cache, or null for the
+     *     default material.
+     * @param tintMask The tint mask, linear rather than sRGB, or null for none.
+     * @param tintSlots Which tint color each mask channel takes, from {@link #slots}, or {@link
+     *     #NO_TINT}.
+     */
+    public SkinnedPart(
+            @NonNull SkinnedMeshHandle mesh,
+            Material material,
+            TextureHandle tintMask,
+            int tintSlots) {
+        this(mesh, material, tintMask, tintSlots, new int[] {WHITE, WHITE, WHITE, WHITE});
+    }
 
     /** The slot number that means a channel takes no tint. */
     private static final int NO_SLOT = 0xFF;
@@ -43,6 +89,28 @@ public record SkinnedPart(
      */
     public SkinnedPart(@NonNull SkinnedMeshHandle mesh, Material material) {
         this(mesh, material, null, NO_TINT);
+    }
+
+    /**
+     * Pack an sRGB color as tint colors are packed, with red in the low byte.
+     *
+     * @param red Red, 0 to 1.
+     * @param green Green, 0 to 1.
+     * @param blue Blue, 0 to 1.
+     * @return The packed color.
+     */
+    public static int pack(float red, float green, float blue) {
+        return channel(red) | channel(green) << 8 | channel(blue) << 16 | 0xFF << 24;
+    }
+
+    /**
+     * A color channel as a byte.
+     *
+     * @param value The channel, 0 to 1.
+     * @return The byte, 0 to 255.
+     */
+    private static int channel(float value) {
+        return Math.round(Math.clamp(value, 0, 1) * 255);
     }
 
     /**

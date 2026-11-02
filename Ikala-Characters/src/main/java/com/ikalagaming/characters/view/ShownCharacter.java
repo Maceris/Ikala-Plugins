@@ -110,6 +110,12 @@ public final class ShownCharacter implements AutoCloseable {
     /** Which tint slot each part's mask channels take, packed, by the part's index. */
     private final List<Integer> partSlots = new ArrayList<>();
 
+    /**
+     * Each part's colors for its tint mask channels while their palette channels are uncolored, see
+     * {@link SkinnedPart#fallbacks}.
+     */
+    private final List<int[]> partFallbacks = new ArrayList<>();
+
     /** The loaded textures. */
     private final List<TextureHandle> textures = new ArrayList<>();
 
@@ -170,7 +176,7 @@ public final class ShownCharacter implements AutoCloseable {
             @NonNull Vector3d position,
             @NonNull Quaternionf facing,
             @NonNull Collection<Integer> shown) {
-        this(plugin, character, null, null, position, facing, shown);
+        this(plugin, character, null, null, null, position, facing, shown);
     }
 
     /**
@@ -183,6 +189,8 @@ public final class ShownCharacter implements AutoCloseable {
      *     no regions at all.
      * @param channels For each part, the tint slot each tint mask channel (r, g, b, a) takes, or -1
      *     for none; null for no tinting. See {@link #tintSlots}.
+     * @param fallbacks For each part, the color each tint mask channel shows while its tint slot is
+     *     unset, see {@link SkinnedPart#fallbacks}; null for white.
      * @param position Where its root stands.
      * @param facing Which way it faces; characters face +Z.
      * @param shown The indices of the parts to show.
@@ -192,6 +200,7 @@ public final class ShownCharacter implements AutoCloseable {
             @NonNull ImportedCharacter character,
             List<int[]> regions,
             List<int[]> channels,
+            List<int[]> fallbacks,
             @NonNull Vector3d position,
             @NonNull Quaternionf facing,
             @NonNull Collection<Integer> shown) {
@@ -256,6 +265,15 @@ public final class ShownCharacter implements AutoCloseable {
             boolean textured = material != null && material.getTexture() != null;
             int[] mapped = channels == null ? null : channels.get(p);
             partSlots.add(tintSlots(mapped, mask != null, textured));
+            partFallbacks.add(
+                    fallbacks == null || fallbacks.get(p) == null
+                            ? new int[] {
+                                SkinnedPart.WHITE,
+                                SkinnedPart.WHITE,
+                                SkinnedPart.WHITE,
+                                SkinnedPart.WHITE
+                            }
+                            : fallbacks.get(p));
         }
         instance = skins.place(skeleton.size(), position, facing, 1);
         showParts(shown);
@@ -289,7 +307,8 @@ public final class ShownCharacter implements AutoCloseable {
                             meshes.get(index),
                             partMaterials.get(index),
                             partMasks.get(index),
-                            partSlots.get(index)));
+                            partSlots.get(index),
+                            partFallbacks.get(index)));
         }
         parts.addAll(heldParts);
         GraphicsManager.forPlugin(plugin).skins().setParts(instance, parts);

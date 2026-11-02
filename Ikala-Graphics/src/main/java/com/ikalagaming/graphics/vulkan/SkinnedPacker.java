@@ -33,10 +33,11 @@ import java.util.function.ToIntFunction;
  * </ul>
  *
  * <p>The draws buffer holds a {@value #DRAW_SIZE} byte record per drawn part: its instance, its
- * material, its packed tint slots and its tint mask's bindless index, 0 for none. Each draw
- * command's first instance is its record's index. Scene commands come first, for the instances the
- * camera can see; shadow commands start at {@link Counts#shadowFirst()}, for every instance that
- * casts shadows, seen or not.
+ * material, its packed tint slots and its tint mask's bindless index, 0 for none, then its four
+ * fallback tint colors (see {@link SkinnedPart#fallbacks}). Each draw command's first instance is
+ * its record's index. Scene commands come first, for the instances the camera can see; shadow
+ * commands start at {@link Counts#shadowFirst()}, for every instance that casts shadows, seen or
+ * not.
  *
  * @author Ches Burks
  */
@@ -49,7 +50,7 @@ public final class SkinnedPacker {
             MATRIX_SIZE + 4 * Integer.BYTES + Skins.TINT_SLOTS * Integer.BYTES;
 
     /** The size of one draw record, in bytes. */
-    public static final int DRAW_SIZE = 4 * Integer.BYTES;
+    public static final int DRAW_SIZE = 8 * Integer.BYTES;
 
     /** Finds where a mesh is in the skinned geometry buffers. */
     @FunctionalInterface
@@ -249,6 +250,10 @@ public final class SkinnedPacker {
                 drawRecords.putInt(
                         draw * DRAW_SIZE + 3 * Integer.BYTES,
                         part.tintMask() == null ? 0 : textures.applyAsInt(part.tintMask()));
+                for (int c = 0; c < SkinnedPart.CHANNELS; ++c) {
+                    drawRecords.putInt(
+                            draw * DRAW_SIZE + (4 + c) * Integer.BYTES, part.fallbacks()[c]);
+                }
                 final int indexCount = part.mesh().mesh().indexCount();
                 if (seen[i]) {
                     writeCommand(commands, sceneCommands++, indexCount, location, draw);
