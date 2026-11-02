@@ -6,6 +6,8 @@ import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.data.Vec3;
 import com.ikalagaming.characters.definition.AnimStyle;
 import com.ikalagaming.characters.definition.BodyPlan;
+import com.ikalagaming.characters.definition.Decal;
+import com.ikalagaming.characters.definition.DecalUse;
 import com.ikalagaming.characters.definition.Definition;
 import com.ikalagaming.characters.definition.Design;
 import com.ikalagaming.characters.definition.Fx;
@@ -56,6 +58,9 @@ import java.util.Map;
  *          when (length byte, 0 for always, then ASCII)
  *          flags (byte: 1 turns with its bone, 2 spawns along a line)
  *          line's other end, if it has one (3 signed bytes of centimeters)
+ * decal (0 for none, else numeric ID + 1), and if there is one:
+ *          place (index in the plan's decal places)
+ *          channels (2 varints, red then green: 0 for none, else channel index + 1)
  * </pre>
  *
  * Encoding is lossy where the steps are coarse: slider values go to steps of 1/{@value #STEPS},
@@ -67,7 +72,10 @@ import java.util.Map;
  */
 public final class DesignCodec {
     /** The encoding's version. */
-    public static final int FORMAT = 1;
+    public static final int FORMAT = 2;
+
+    /** The format before designs wore decals, which still decodes, with none. */
+    public static final int FORMAT_NO_DECAL = 1;
 
     /** Slider steps per unit: a signed byte covers -2 to 2, with 1 and 2 exactly on a step. */
     public static final float STEPS = 63;
@@ -179,6 +187,21 @@ public final class DesignCodec {
                 out.write(offsetStep(use.to().z()));
             }
         }
+
+        DecalUse decal = design.decal();
+        writeVarint(out, decal == null ? 0 : numeric(registry, Kind.DECAL, decal.decal()) + 1);
+        if (decal != null) {
+            writeVarint(
+                    out,
+                    index(
+                            plan.decals().stream().map(BodyPlan.DecalPlace::id).toList(),
+                            decal.place(),
+                            "decal place"));
+            for (String mask : List.of(Decal.FIRST, Decal.SECOND)) {
+                String channel = decal.channels().get(mask);
+                writeVarint(out, channel == null ? 0 : index(channels, channel, "channel") + 1);
+            }
+        }
         return out.toByteArray();
     }
 
@@ -197,7 +220,7 @@ public final class DesignCodec {
         ByteBuffer in = ByteBuffer.wrap(bytes);
         try {
             int format = in.get() & 0xFF;
-            if (format != FORMAT) {
+            if (format != FORMAT && format != FORMAT_NO_DECAL) {
                 throw new IllegalArgumentException("Unknown design format " + format);
             }
             BodyPlan plan = definition(registry, BodyPlan.class, readVarint(in));
@@ -287,6 +310,23 @@ public final class DesignCodec {
                                 to,
                                 (flags & TURN_BIT) != 0));
             }
+            DecalUse decal = null;
+            int decalNumber = format == FORMAT_NO_DECAL ? 0 : readVarint(in);
+            if (decalNumber > 0) {
+                Id art = definition(registry, Decal.class, decalNumber - 1).id();
+                int place = readVarint(in);
+                if (place >= plan.decals().size()) {
+                    throw new IllegalArgumentException("No decal place " + place);
+                }
+                Map<String, String> decalChannels = new LinkedHashMap<>();
+                for (String mask : List.of(Decal.FIRST, Decal.SECOND)) {
+                    int channel = readVarint(in);
+                    if (channel > 0) {
+                        decalChannels.put(mask, element(channels, channel - 1, "palette channel"));
+                    }
+                }
+                decal = new DecalUse(art, plan.decals().get(place).id(), decalChannels);
+            }
             if (in.hasRemaining()) {
                 throw new IllegalArgumentException("Extra bytes after the design");
             }
@@ -300,7 +340,8 @@ public final class DesignCodec {
                     layers,
                     paletteId,
                     colors,
-                    fx);
+                    fx,
+                    decal);
         } catch (BufferUnderflowException e) {
             throw new IllegalArgumentException("The design is cut short", e);
         }

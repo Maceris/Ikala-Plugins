@@ -1,0 +1,7 @@
+// Built-in decals, drawn by tools/make_decals.py: red is the fill (a design's first decal color),
+// green the outline (its second), alpha the shape
+[
+  {"id": "ikala:decal/star", "image": "decals/star.png", "defaults": {"r": "#f2c230", "g": "#1d2a4a"}, "tags": ["emblem"]},
+  {"id": "ikala:decal/shield", "image": "decals/shield.png", "defaults": {"r": "#2f5aa8", "g": "#e8e8e8"}, "tags": ["emblem"]},
+  {"id": "ikala:decal/bolt", "image": "decals/bolt.png", "defaults": {"r": "#ffe24a", "g": "#202020"}, "tags": ["emblem"]}
+]

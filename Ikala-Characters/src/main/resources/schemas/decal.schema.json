@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ikala character decal",
+  "description": "Art a design can wear projected onto a decal place, like an emblem on the chest. Its image is a mask: red takes the first color, green the second, alpha covers.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Decal"
+    },
+    {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Decal"
+      }
+    }
+  ],
+  "$defs": {
+    "Decal": {
+      "type": "object",
+      "description": "Art a design can wear projected onto a decal place, like an emblem on the chest. Its image is a mask: red takes the first color, green the second, alpha covers.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "This decal's ID, like \"ikala:decal/star\"."
+        },
+        "image": {
+          "type": "string",
+          "description": "The art, like \"decals/star.png\", relative to its namespace's content folder: red takes the first color, green the second, alpha is how much it covers."
+        },
+        "defaults": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "description": "The colors red and green show while the design leaves their palette channels uncolored, like {\"r\": \"#ffd040\"}."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Tags that editors filter by, like \"emblem\"."
+        },
+        "extends": {
+          "type": "string",
+          "description": "The ID of a definition of the same kind to start from. Fields written here replace the parent's, and objects merge field by field."
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "extends"
+          ]
+        },
+        {
+          "required": [
+            "id",
+            "image"
+          ]
+        }
+      ]
+    }
+  }
+}

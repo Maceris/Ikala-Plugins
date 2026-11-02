@@ -6,6 +6,8 @@ import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.data.Problem;
 import com.ikalagaming.characters.data.Vec3;
 import com.ikalagaming.characters.definition.BodyPlan;
+import com.ikalagaming.characters.definition.Decal;
+import com.ikalagaming.characters.definition.DecalUse;
 import com.ikalagaming.characters.definition.Design;
 import com.ikalagaming.characters.definition.FxUse;
 import com.ikalagaming.characters.definition.Part;
@@ -298,6 +300,61 @@ class TestDesign {
     }
 
     /** Broken bytes are refused rather than read as something else. */
+    /** A decal goes through the codec, and designs from before decals still decode. */
+    @Test
+    void testDecal() {
+        Design knight = registry.get(Design.class, KNIGHT);
+        DecalUse emblem =
+                new DecalUse(
+                        Id.parse("ikala:decal/emblem"),
+                        "chest",
+                        Map.of(Decal.FIRST, "accent", Decal.SECOND, "primary"));
+        Design worn =
+                new Design(
+                        knight.id(),
+                        knight.plan(),
+                        knight.variant(),
+                        knight.style(),
+                        knight.sliders(),
+                        knight.parts(),
+                        knight.layers(),
+                        knight.palette(),
+                        knight.colors(),
+                        knight.fx(),
+                        emblem);
+        Assertions.assertEquals("", problems(worn));
+        Design back = DesignCodec.decode(DesignCodec.encode(worn, registry), KNIGHT, registry);
+        Assertions.assertEquals(emblem.decal(), back.decal().decal());
+        Assertions.assertEquals("chest", back.decal().place());
+        Assertions.assertEquals(emblem.channels(), back.decal().channels());
+
+        // Format 1 had nothing after the effects
+        byte[] bytes = DesignCodec.encode(knight, registry);
+        byte[] old = java.util.Arrays.copyOf(bytes, bytes.length - 1);
+        old[0] = (byte) DesignCodec.FORMAT_NO_DECAL;
+        Assertions.assertNull(DesignCodec.decode(old, KNIGHT, registry).decal());
+
+        Design misplaced =
+                new Design(
+                        knight.id(),
+                        knight.plan(),
+                        knight.variant(),
+                        knight.style(),
+                        knight.sliders(),
+                        knight.parts(),
+                        knight.layers(),
+                        knight.palette(),
+                        knight.colors(),
+                        knight.fx(),
+                        new DecalUse(
+                                Id.parse("ikala:decal/emblem"),
+                                "back",
+                                Map.of(Decal.FIRST, "fur")));
+        String found = problems(misplaced);
+        Assertions.assertTrue(found.contains("decal place 'back'"), found);
+        Assertions.assertTrue(found.contains("palette channel 'fur'"), found);
+    }
+
     @Test
     void testBrokenBytes() {
         byte[] bytes = DesignCodec.encode(registry.get(Design.class, KNIGHT), registry);

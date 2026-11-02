@@ -6,6 +6,7 @@ import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.data.JsonPath;
 import com.ikalagaming.characters.data.Optional;
 import com.ikalagaming.characters.data.Range;
+import com.ikalagaming.characters.data.Vec3;
 
 import lombok.NonNull;
 
@@ -85,6 +86,12 @@ public record BodyPlan(
                 @Optional
                 List<Form> forms,
         @Doc(
+                        "Places a design's decal can go, like \"chest\": a box fixed to a bone at"
+                                + " rest that art is projected through onto the parts covering"
+                                + " its slots.")
+                @Optional
+                List<DecalPlace> decals,
+        @Doc(
                         "Mask region names that body meshes tag their triangles with, so layers"
                                 + " can hide them. At most 64.")
                 @Optional
@@ -124,6 +131,9 @@ public record BodyPlan(
 
     /** The field for the clothing forms. */
     public static final String FIELD_FORMS = "forms";
+
+    /** The field for the decal places. */
+    public static final String FIELD_DECALS = "decals";
 
     /** The field for the exclusive tags. */
     public static final String FIELD_EXCLUSIVE_TAGS = "exclusiveTags";
@@ -314,6 +324,71 @@ public record BodyPlan(
             @Doc("How far out from the body its shell is, in meters.") float offset) {
         /** The field for the offset. */
         public static final String FIELD_OFFSET = "offset";
+    }
+
+    /**
+     * A place a design's decal can go: a box fixed to a bone at rest, facing the character's front,
+     * that art is projected through onto the parts filling or covering its slots.
+     *
+     * @param id The place's name, like "chest".
+     * @param bone The bone the box is fixed to.
+     * @param offset Where the box's middle is from the bone, in the character's space at rest, in
+     *     meters, or null for the bone itself.
+     * @param size The art's width and height, in meters.
+     * @param depth How deep the box is, front to back, in meters: enough for the thickest clothing
+     *     over the place, but not the body's back.
+     * @param covers The body slots whose parts, and the layers over which, show the decal.
+     */
+    @Doc(
+            "A place a design's decal can go: a box fixed to a bone at rest, facing the"
+                    + " character's front, that art is projected through.")
+    public record DecalPlace(
+            @Doc("The place's name, like \"chest\".") String id,
+            @Doc("The bone the box is fixed to, like \"chest\".") String bone,
+            @Doc(
+                            "Where the box's middle is from the bone, in the character's space at"
+                                    + " rest, in meters.")
+                    @Optional
+                    Vec3 offset,
+            @Doc("The art's width and height, in meters.") float size,
+            @Doc(
+                            "How deep the box is, front to back, in meters: enough for the"
+                                    + " thickest clothing, not the body's back.")
+                    float depth,
+            @Doc(
+                            "The body slots whose parts, and the layers covering which, show the"
+                                    + " decal, like [\"torso\"].")
+                    List<String> covers) {
+        /** The field for the bone. */
+        public static final String FIELD_BONE = "bone";
+
+        /** The field for the size. */
+        public static final String FIELD_SIZE = "size";
+
+        /** The field for the depth. */
+        public static final String FIELD_DEPTH = "depth";
+
+        /** The field for the covered slots. */
+        public static final String FIELD_COVERS = "covers";
+
+        /**
+         * The offset, zero if none was given.
+         *
+         * @return The offset.
+         */
+        public Vec3 offsetOrZero() {
+            return offset == null ? Vec3.ZERO : offset;
+        }
+    }
+
+    /**
+     * Find a decal place.
+     *
+     * @param name The place's name.
+     * @return The place, or null if the plan has none by that name.
+     */
+    public DecalPlace decalPlace(@NonNull String name) {
+        return decals.stream().filter(d -> d.id().equals(name)).findFirst().orElse(null);
     }
 
     /**
@@ -562,6 +637,7 @@ public record BodyPlan(
         checkEquipment(checks);
         checkExtensions(checks, rigDefinition, bones);
         checkForms(checks);
+        checkDecals(checks, bones, slotNames);
         checkNames(checks);
 
         String groupsPath = JsonPath.at(FIELD_BONE_GROUPS);
@@ -580,6 +656,40 @@ public record BodyPlan(
             checkCollision(checks, bones);
         }
         checkSliders(checks, rigDefinition);
+    }
+
+    /**
+     * Check the decal places: unique names, bones the rig has, sizes above 0 and slots the plan
+     * has.
+     *
+     * @param checks Where problems go.
+     * @param bones Checks bone names.
+     * @param slotNames The plan's body slots.
+     */
+    private void checkDecals(Checks checks, BoneCheck bones, Set<String> slotNames) {
+        Set<String> names = new HashSet<>();
+        for (int i = 0; i < decals.size(); ++i) {
+            DecalPlace place = decals.get(i);
+            String path = JsonPath.at(FIELD_DECALS, i);
+            unique(checks, names, place.id(), JsonPath.field(path, FIELD_ID), "decal place");
+            bones.check(place.bone(), JsonPath.field(path, DecalPlace.FIELD_BONE));
+            if (place.size() <= 0) {
+                checks.error(
+                        JsonPath.field(path, DecalPlace.FIELD_SIZE), "A decal's size is above 0");
+            }
+            if (place.depth() <= 0) {
+                checks.error(
+                        JsonPath.field(path, DecalPlace.FIELD_DEPTH), "A decal's depth is above 0");
+            }
+            String coversPath = JsonPath.field(path, DecalPlace.FIELD_COVERS);
+            for (int c = 0; c < place.covers().size(); ++c) {
+                if (!slotNames.contains(place.covers().get(c))) {
+                    checks.error(
+                            JsonPath.index(coversPath, c),
+                            "The plan has no body slot '" + place.covers().get(c) + "'");
+                }
+            }
+        }
     }
 
     /**

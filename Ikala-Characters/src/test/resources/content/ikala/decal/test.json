@@ -1,0 +1,2 @@
+// A test decal: its image needn't exist for loading or the codec
+{"id": "ikala:decal/emblem", "image": "decals/emblem.png", "defaults": {"r": "#ffcc00"}}

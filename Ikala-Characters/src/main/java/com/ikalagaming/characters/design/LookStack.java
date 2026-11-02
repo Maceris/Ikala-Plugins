@@ -4,6 +4,7 @@ import com.ikalagaming.characters.data.Color;
 import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.data.Vec3;
 import com.ikalagaming.characters.definition.BodyPlan;
+import com.ikalagaming.characters.definition.DecalUse;
 import com.ikalagaming.characters.definition.Design;
 import com.ikalagaming.characters.definition.FxUse;
 import com.ikalagaming.characters.definition.Item;
@@ -72,6 +73,7 @@ public final class LookStack {
      *     layers shown on the bare body's form are left out.
      * @param slotForms The clothing form of the body part in each body slot, for layers whose
      *     meshes push out slot by slot; slots on the bare body's form are left out.
+     * @param decal The design's decal, or null for none.
      */
     public record Shown(
             @NonNull Map<String, Id> worn,
@@ -81,7 +83,8 @@ public final class LookStack {
             @NonNull List<FxUse> fx,
             @NonNull Map<Id, Map<String, Color>> dyes,
             @NonNull Map<String, String> forms,
-            @NonNull Map<String, String> slotForms) {}
+            @NonNull Map<String, String> slotForms,
+            DecalUse decal) {}
 
     /**
      * Work out what a character shows.
@@ -211,7 +214,8 @@ public final class LookStack {
                 fx,
                 dyes,
                 forms,
-                WearRules.slotForms(plan, wornParts));
+                WearRules.slotForms(plan, wornParts),
+                design.decal());
     }
 
     /**
