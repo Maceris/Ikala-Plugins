@@ -647,6 +647,15 @@ public final class CharacterEditor {
      */
     private final Map<Integer, Map<String, Float>> pushed = new HashMap<>();
 
+    /** The channel whose swatch the Colors tab has hovered, or null, see {@link #tickFrame}. */
+    private String previewChannel;
+
+    /** The hovered swatch's color code, or {@link #NO_SWATCH}. */
+    private int previewCode = NO_SWATCH;
+
+    /** Runs {@link #tickFrame} while the editor is open. */
+    private final Runnable frameTick = this::tickFrame;
+
     /** The decal last shown, see {@link #showDecal}. */
     private DecalUse shownDecal;
 
@@ -778,6 +787,7 @@ public final class CharacterEditor {
                 LOOK_PITCH,
                 LOOK_YAW,
                 LOOK_DISTANCE);
+        graphics.addFrameTask(frameTick);
         GraphicsManager.getWindowManager().addWindow(graphics, INPUT_WINDOW, new InputWindow());
         GraphicsManager.getWindowManager().show(INPUT_WINDOW);
         SpecBindings bindings =
@@ -1675,12 +1685,29 @@ public final class CharacterEditor {
             }
             IkGui.endTabBar();
         }
-        showFx();
-        tickMotion();
         if (editing && !IkGui.isAnyItemActive()) {
             editing = false;
         }
-        showColors(hovered == NO_SWATCH ? null : colorChannel, hovered);
+        // The next frame's tick shows it, see tickFrame
+        previewChannel = hovered == NO_SWATCH ? null : colorChannel;
+        previewCode = hovered;
+    }
+
+    /**
+     * Keep the shown character in step with the look, every frame whether or not the GUI is drawn,
+     * so scripts and captures work with the GUI off: its effects, its motion, and its colors with
+     * any swatch the Colors tab has hovered.
+     */
+    private void tickFrame() {
+        if (look == null) {
+            return;
+        }
+        showFx();
+        tickMotion();
+        showColors(previewChannel, previewCode);
+        // The Colors tab sets it again each frame it is drawn
+        previewChannel = null;
+        previewCode = NO_SWATCH;
     }
 
     /** Remember the look before a drag for undo, once, when the drag starts changing it. */
@@ -2781,6 +2808,7 @@ public final class CharacterEditor {
         panels.forEach(SpecInstance::close);
         panels.clear();
         GraphicsManager.getWindowManager().removeWindow(INPUT_WINDOW);
+        graphics.removeFrameTask(frameTick);
         if (shown != null) {
             shown.close();
             shown = null;

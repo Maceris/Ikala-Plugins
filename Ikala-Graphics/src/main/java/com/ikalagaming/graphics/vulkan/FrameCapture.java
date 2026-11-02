@@ -51,7 +51,7 @@ public class FrameCapture {
      * @param width Its width in pixels.
      * @param height Its height in pixels.
      */
-    private record InFlight(Request request, int width, int height) {}
+    private record InFlight(Request request, int width, int height, boolean bgra) {}
 
     /** Guards {@link #waiting}, which other threads add to. */
     private final ReentrantLock lock = new ReentrantLock();
@@ -85,6 +85,23 @@ public class FrameCapture {
      * @throws IllegalArgumentException If there are too few bytes.
      */
     public static BufferedImage toImage(byte @NonNull [] rgba, int width, int height) {
+        return toImage(rgba, width, height, false);
+    }
+
+    /**
+     * Turn pixels, top row first, into an image without alpha.
+     *
+     * @param pixels Four bytes per pixel.
+     * @param width The width in pixels.
+     * @param height The height in pixels.
+     * @param bgra Whether each pixel's bytes are blue, green, red, alpha, as swapchain images' are,
+     *     rather than red first.
+     * @return The image.
+     * @throws IllegalArgumentException If there are too few bytes.
+     */
+    public static BufferedImage toImage(
+            byte @NonNull [] pixels, int width, int height, boolean bgra) {
+        final byte[] rgba = pixels;
         if (rgba.length < (long) width * height * 4) {
             throw new IllegalArgumentException(
                     "Need " + (long) width * height * 4 + " bytes, got " + rgba.length);
@@ -94,7 +111,9 @@ public class FrameCapture {
         for (int y = 0; y < height; ++y) {
             int at = y * width * 4;
             for (int x = 0; x < width; ++x, at += 4) {
-                row[x] = (rgba[at] & 0xFF) << 16 | (rgba[at + 1] & 0xFF) << 8 | rgba[at + 2] & 0xFF;
+                final int red = rgba[bgra ? at + 2 : at] & 0xFF;
+                final int blue = rgba[bgra ? at : at + 2] & 0xFF;
+                row[x] = red << 16 | (rgba[at + 1] & 0xFF) << 8 | blue;
             }
             image.setRGB(0, y, width, 1, row, 0, width);
         }
@@ -162,6 +181,27 @@ public class FrameCapture {
             long image,
             int width,
             int height) {
+        record(commandBuffer, state, image, width, height, false);
+    }
+
+    /**
+     * Copy an image for the next waiting request, if there is one and this frame index is free. The
+     * image must be a transfer source.
+     *
+     * @param commandBuffer The frame's command buffer.
+     * @param state The Vulkan state.
+     * @param image The image, four bytes per pixel.
+     * @param width The width to copy, in pixels.
+     * @param height The height to copy, in pixels.
+     * @param bgra Whether its bytes are blue first, as swapchain images' are.
+     */
+    public void record(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull VulkanState state,
+            long image,
+            int width,
+            int height,
+            boolean bgra) {
         final int index = state.frameIndex;
         if (inFlight[index] != null || width <= 0 || height <= 0) {
             return;
@@ -206,7 +246,7 @@ public class FrameCapture {
                     commandBuffer,
                     VkDependencyInfo.calloc(stack).sType$Default().pBufferMemoryBarriers(barrier));
         }
-        inFlight[index] = new InFlight(request, width, height);
+        inFlight[index] = new InFlight(request, width, height, bgra);
     }
 
     /**
@@ -239,7 +279,10 @@ public class FrameCapture {
             if (parent != null) {
                 Files.createDirectories(parent);
             }
-            if (!ImageIO.write(toImage(rgba, done.width(), done.height()), "png", path.toFile())) {
+            if (!ImageIO.write(
+                    toImage(rgba, done.width(), done.height(), done.bgra()),
+                    "png",
+                    path.toFile())) {
                 throw new IOException("No PNG writer");
             }
             log.debug("Saved a {}x{} frame to {}", done.width(), done.height(), path);

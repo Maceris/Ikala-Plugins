@@ -1065,6 +1065,22 @@ public class PipelineManagerVulkan {
                         VK_IMAGE_ASPECT_COLOR_BIT,
                         VK_FILTER_LINEAR,
                         VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+        if (state.headless) {
+            // Stands in for the scene window's swapchain image: the scene is copied in, the GUI
+            // drawn over it, and frame captures copy it out
+            data.headlessImage =
+                    createRenderTarget(
+                            state,
+                            imageExtent.width(),
+                            imageExtent.height(),
+                            Presentation.SWAPCHAIN_FORMAT,
+                            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+                                    | VK_IMAGE_USAGE_TRANSFER_DST_BIT
+                                    | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                            VK_IMAGE_ASPECT_COLOR_BIT,
+                            VK_FILTER_LINEAR,
+                            VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+        }
     }
 
     /** Clean up all the rendering resources. */
@@ -1206,6 +1222,10 @@ public class PipelineManagerVulkan {
         if (data.finalTexture != null) {
             data.finalTexture.destroy(state);
             data.finalTexture = null;
+        }
+        if (data.headlessImage != null) {
+            data.headlessImage.destroy(state);
+            data.headlessImage = null;
         }
     }
 

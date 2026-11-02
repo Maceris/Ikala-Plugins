@@ -499,6 +499,9 @@ public class GraphicsManager {
             // Creates, moves and closes the windows of IkGui viewports
             IkGui.updatePlatformWindows();
             gui = guiDrawData();
+        } else {
+            // Posted changes and automation runs still go on, so scripts work without the GUI
+            uiManager.tickWithoutGui();
         }
         renderInstance.render(scene, sceneWindow, gui);
 
@@ -922,6 +925,9 @@ public class GraphicsManager {
         if (currentTime >= nextRenderTime) {
             // Drives the gate benchmark's camera and timings, if one is running
             GateBenchmark.update(scene);
+            for (GraphicsContext context : contexts.values()) {
+                context.runFrameTasks();
+            }
             render();
             // Frames keep to a fixed beat: one that started late, as the wait sometimes wakes a few
             // milliseconds past its time, is followed by one that starts early, rather than every

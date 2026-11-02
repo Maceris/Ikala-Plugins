@@ -330,6 +330,7 @@ public class VulkanInstance {
      */
     public void setHeadless() {
         headless = true;
+        state.headless = true;
     }
 
     /**
@@ -1957,7 +1958,7 @@ public class VulkanInstance {
         // What only some scenes need, once a frame needed it
         pipelineManager.createWhenNeeded(state);
         if (headless) {
-            renderHeadless(scene, sceneWindow);
+            renderHeadless(scene, sceneWindow, gui.get(sceneWindow));
             return;
         }
 
@@ -2036,13 +2037,16 @@ public class VulkanInstance {
     }
 
     /**
-     * Render a frame with no window to show it in: the scene only, at the scene window's size, kept
-     * for frame captures. The GUI is built but not drawn. The frame's fence has been waited on.
+     * Render a frame with no window to show it in, at the scene window's size, for frame captures:
+     * the scene copied into an image standing in for the window's swapchain image, and the GUI
+     * drawn over it when the pipeline draws GUI, as a window would show them. The frame's fence has
+     * been waited on.
      *
      * @param scene The scene to render.
      * @param sceneWindow The hidden window whose size the scene is drawn at.
+     * @param gui The scene window's GUI draw data, or null for none this frame.
      */
-    private void renderHeadless(@NonNull Scene scene, @NonNull Window sceneWindow) {
+    private void renderHeadless(@NonNull Scene scene, @NonNull Window sceneWindow, DrawData gui) {
         longOutput.put(0, state.fences[state.frameIndex]);
         checkError(vkResetFences(state.device.logical, longOutput));
         final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
@@ -2059,6 +2063,26 @@ public class VulkanInstance {
                     scene,
                     new SceneTarget(sceneWindow.getWidth(), sceneWindow.getHeight(), null),
                     commandBuffer);
+            final TextureInfoVulkan image = state.perFrameData[state.frameIndex].headlessImage;
+            if (image != null) {
+                final int width = Math.min(sceneWindow.getWidth(), state.realSize.width());
+                final int height = Math.min(sceneWindow.getHeight(), state.realSize.height());
+                final boolean sceneCopied = PipelineManagerVulkan.drawsFinalImage(renderConfig);
+                final GuiRender guiRender = pipelineManager.getGuiRender();
+                guiRender.prepare(commandBuffer, state, gui == null ? List.of() : List.of(gui));
+                guiRender.recordImage(
+                        commandBuffer,
+                        state,
+                        image.texture,
+                        image.view,
+                        state.realSize.width(),
+                        state.realSize.height(),
+                        sceneCopied,
+                        gui,
+                        true,
+                        "the headless frame");
+                state.frameCapture.record(commandBuffer, state, image.texture, width, height, true);
+            }
             checkError(vkEndCommandBuffer(commandBuffer));
 
             VkCommandBufferSubmitInfo.Buffer commands = VkCommandBufferSubmitInfo.calloc(1, stack);

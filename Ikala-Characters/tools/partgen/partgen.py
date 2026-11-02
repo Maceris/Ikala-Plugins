@@ -1585,6 +1585,9 @@ def capture_script(config, batch, briefs):
              "await(characters.settle());",
              "characters.markers(false);",
              "characters.still(true);"]
+    # Part shots are of the character alone; config "captureGui" keeps the editor's panels in them
+    if not config.get("captureGui", False):
+        lines.append("t.showGui(false);")
     designs = config.get("captureDesigns", CAPTURE_DESIGNS)
     # The design the editor opens on can leave effects drifting for a while
     lines += ["characters.showDesign(%s);" % json.dumps(next(iter(designs.values()))),

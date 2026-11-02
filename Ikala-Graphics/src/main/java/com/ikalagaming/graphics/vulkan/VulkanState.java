@@ -122,6 +122,9 @@ public class VulkanState {
     /** Where the water is around the camera, see {@link WaterVolume}. */
     public WaterVolume waterVolume = null;
 
+    /** Whether frames are rendered without windows, see {@link VulkanInstance#setHeadless()}. */
+    public boolean headless;
+
     /** Saves finished frames to files, see {@link FrameCapture}. */
     public final FrameCapture frameCapture = new FrameCapture();
 

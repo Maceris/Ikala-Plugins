@@ -429,8 +429,25 @@ public final class ScriptAutomation {
     }
 
     /**
-     * Save the next frame that draws the scene to a PNG file, without the GUI over it. The window
-     * doesn't have to be in front, but a minimized window draws nothing to save.
+     * Draw the GUI or not, by the pipeline config, as {@link GraphicsManager#swapPipeline} does:
+     * frames saved headless show what is drawn, so captures of the scene alone turn it off. Posted
+     * UI changes and frame waits still run without it, but steps that need a surface on screen wait
+     * until it is back. Takes effect from the next frame.
+     *
+     * @param show Whether to draw the GUI.
+     */
+    public void showGui(boolean show) {
+        GraphicsManager.runOnMainThread(
+                () ->
+                        GraphicsManager.swapPipeline(
+                                GraphicsManager.getPipelineConfig().withGui(show)));
+    }
+
+    /**
+     * Save the next frame that draws the scene to a PNG file. Headless, it is the frame as a window
+     * would show it, with the GUI when the pipeline draws GUI (see {@link #showGui}); in a window,
+     * the scene without the GUI over it. The window doesn't have to be in front, but a minimized
+     * window draws nothing to save.
      *
      * @param path Where the file goes; folders are made as needed.
      * @return The tag to await, which resumes once the file is written.
