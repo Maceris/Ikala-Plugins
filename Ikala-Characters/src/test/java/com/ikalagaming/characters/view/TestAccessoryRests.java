@@ -5,6 +5,7 @@ import com.ikalagaming.characters.data.JsonText;
 import com.ikalagaming.characters.data.Report;
 import com.ikalagaming.characters.definition.BodyPlan;
 import com.ikalagaming.characters.definition.Part;
+import com.ikalagaming.characters.design.WearRules;
 import com.ikalagaming.characters.gltf.ImportedCharacter;
 
 import org.joml.Vector3f;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Tests for {@link AccessoryRests}: accessories move out to rest on the body parts and clothing
@@ -138,12 +140,36 @@ class TestAccessoryRests {
                 part(
                         "slim",
                         "\"kind\": \"body\", \"fills\": [\"torso\"], \"form\": \"bulky\","
-                                + " \"standoff\": 0.035");
+                                + " \"standoff\": { \"torso\": 0.035 }");
         Assertions.assertEquals(
                 0.035f, AccessoryRests.standoff(plan, "torso", List.of(slim)), EPSILON);
+        // Clothing over it is pushed out only as far as the part stands out
+        Assertions.assertEquals(
+                0.055f, AccessoryRests.standoff(plan, "torso", List.of(slim, JACKET)), EPSILON);
     }
 
-    /** Clothing sits over the body part's form, so the two add, the thickest layer winning. */
+    /**
+     * Clothing is pushed out over each slot by how far the body part there stands out: its own
+     * measure, else its form's offset, as a share of the bulkiest form's.
+     */
+    @Test
+    void clothingShares() {
+        BodyPlan plan = read(PLAN, BodyPlan.class);
+        Part slim =
+                part(
+                        "slim",
+                        "\"kind\": \"body\", \"fills\": [\"torso\", \"head\"], \"form\":"
+                                + " \"bulky\", \"standoff\": { \"torso\": 0.015 }");
+        Map<String, Float> standoffs = WearRules.slotStandoffs(plan, List.of(slim, JACKET));
+        Assertions.assertEquals(Map.of("torso", 0.015f, "head", 0.06f), standoffs);
+        Map<String, Float> shares = PartForms.shares(plan, standoffs);
+        Assertions.assertEquals(0.25f, shares.get("torso"), EPSILON);
+        Assertions.assertEquals(1f, shares.get("head"), EPSILON);
+        // The bare body pushes nothing
+        Assertions.assertTrue(WearRules.slotStandoffs(plan, List.of(TORSO)).isEmpty());
+    }
+
+    /** Clothing sits over the body part, so the two add, the thickest layer winning. */
     @Test
     void clothingOverForm() {
         BodyPlan plan = read(PLAN, BodyPlan.class);
@@ -155,7 +181,10 @@ class TestAccessoryRests {
                 AccessoryRests.standoff(plan, "torso", List.of(ROBOT, JACKET, cape)),
                 EPSILON);
         Part puffy =
-                part("puffy", "\"kind\": \"layer\", \"fills\": [\"jacket\"], \"standoff\": 0.05");
+                part(
+                        "puffy",
+                        "\"kind\": \"layer\", \"fills\": [\"jacket\"],"
+                                + " \"standoff\": { \"*\": 0.05 }");
         Assertions.assertEquals(
                 0.05f, AccessoryRests.standoff(plan, "torso", List.of(TORSO, puffy)), EPSILON);
     }

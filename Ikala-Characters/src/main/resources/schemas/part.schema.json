@@ -275,8 +275,11 @@
           "description": "For body parts: the plan's thinnest clothing form its surface fits in, like \"bulky\" for a robot leg, so layers over it show their mesh for that form. Left out, it is the plan's first, the bare body's."
         },
         "standoff": {
-          "type": "number",
-          "description": "How far it stands out where accessories rest on it, in meters: a body part from the bare body, a layer from the clothing form it is fitted over. Left out, a body part takes its form's offset and a layer its layer's standoff."
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "How far it stands out over each body slot, in meters, with \"*\" for any other slot: a body part from the bare body, which clothing over it is pushed out by, a layer from the body part under it. Accessories resting on the slot sit on both. Slots left out take a body part's form's offset or a layer's layer's standoff."
         },
         "extends": {
           "type": "string",

@@ -939,7 +939,7 @@ public final class CharacterEditor {
         shown.setHiddenRegions(regions.hidden(lastWorn));
         pushed.clear();
         rested.clear();
-        pushForms(lastWorn, look.slotForms(CharacterLook.NO_PREVIEW, 0));
+        pushForms(lastWorn, look.slotStandoffs(CharacterLook.NO_PREVIEW, 0));
         equipment = Equipment.NONE;
         itemFx = List.of();
         motion.setCombat(false);
@@ -1168,7 +1168,7 @@ public final class CharacterEditor {
             return;
         }
         List<Integer> worn = look.worn(previewSlot, previewChoice);
-        pushForms(worn, look.slotForms(previewSlot, previewChoice));
+        pushForms(worn, look.slotStandoffs(previewSlot, previewChoice));
         if (!worn.equals(lastWorn)) {
             lastWorn = worn;
             shown.showParts(worn);
@@ -1182,10 +1182,10 @@ public final class CharacterEditor {
      * changes.
      *
      * @param worn The shown parts.
-     * @param slotForms The clothing form of the body part in each slot.
+     * @param slotStandoffs How far the body part in each slot stands out, in meters.
      */
-    private void pushForms(List<Integer> worn, Map<String, String> slotForms) {
-        Map<String, Float> amounts = PartForms.amounts(plan, slotForms);
+    private void pushForms(List<Integer> worn, Map<String, Float> slotStandoffs) {
+        Map<String, Float> amounts = PartForms.shares(plan, slotStandoffs);
         ImportedCharacter character = prepared.character();
         for (int index : worn) {
             ImportedCharacter.Part part = character.parts().get(index);

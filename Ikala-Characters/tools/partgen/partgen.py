@@ -13,13 +13,14 @@ between stages, so expensive steps only run on what was kept:
         Concept images from SDXL through ComfyUI, for kept briefs that have none (or more).
     python partgen.py meshes <batch> [--type 512]
         Meshes through TRELLIS.2 from picked images, and renders of them for review.
-    python partgen.py fit <batch> [--forms]
+    python partgen.py fit <batch> [--forms] [--standoff]
         Kept meshes fitted onto the mannequin: glbs and part definitions in the content folder.
         A body part is held to the body plan's extents (legs meet the floor, hands are hand
         sized, nothing stands out past the bulkiest clothing form) and given the clothing form
-        it fits in; a layer gets form targets, pushing it out over each body slot as far as the
-        form of the body part worn there. --forms only gives layers already fitted their
-        targets again.
+        it fits in, and how far it stands out over each slot it fills; a layer gets form targets,
+        pushing it out over each body slot as far as the body part worn there stands out.
+        --forms only gives layers already fitted their targets again, and --standoff only
+        measures body parts already fitted again.
     python partgen.py capture <batch> [--redo]
         Fitted parts in the character editor, on each bare mannequin: front, side, back and a
         close-up, and dressed in a layer over them, rendered headless (no window) into
@@ -1363,7 +1364,41 @@ def write_body_part(config, batch, brief, part, rule):
                   % (brief["description"], "left" if side == "l" else "right", batch.name,
                      brief["mesh"]["image"]))
         path.write_text(header + json.dumps([definition], indent=2) + "\n", encoding="utf8")
+    if not shaped.get("bare"):
+        measure_standoffs(config, batch, brief)
     return ids
+
+
+def measure_standoffs(config, batch, brief):
+    """Measure how far each side of a body part stands out over each slot it fills
+    (blender/measure_standoff.py, on its guide mesh) and write it into its part definition as
+    "standoff", which clothing over it is pushed out by. Gives whether every side worked."""
+    folder = batch.brief_folder(brief["id"])
+    content = pathlib.Path(config["content"])
+    worked = True
+    for side in ("l", "r"):
+        name = "%s_%s" % (brief["id"], side)
+        path = content / "part" / ("%s.json" % name)
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf8")
+        header = "".join(line for line in text.splitlines(keepends=True)
+                         if line.startswith("//"))
+        definitions = load_json_with_comments(path)
+        definition = definitions[0]
+        glb = definition["meshes"]["*"].split("#", 1)[0]
+        out = folder / "fit" / ("standoff_%s.json" % side)
+        log = folder / ("standoff_%s.log" % side)
+        if not run_blender(config, "measure_standoff.py", log, "--part", content / glb,
+                           "--mannequin", config["mannequin"],
+                           "--slots", ",".join(definition["fills"]), "--out", out):
+            print("Measuring %s's standoff failed; see %s" % (name, log))
+            worked = False
+            continue
+        definition["standoff"] = json.loads(out.read_text(encoding="utf8"))
+        path.write_text(header + json.dumps(definitions, indent=2) + "\n", encoding="utf8")
+        print("standoff", name, json.dumps(definition["standoff"]))
+    return worked
 
 
 def fit_body_part(config, batch, brief):
@@ -1462,6 +1497,12 @@ def command_fit(config, batch, args):
             part_id = write_layer_part(config, batch, brief, out, layer_of(brief)[1],
                                        only_forms=True)
             print("forms", part_id or "failed for " + brief["id"])
+        return
+    if args.standoff:
+        # Only how far body parts stand out over their slots, for parts fitted before it was kept
+        for brief in ready(batch.load(), args,
+                           lambda b: b["kind"] == "body" and b["part"] is not None):
+            measure_standoffs(config, batch, brief)
         return
     briefs = ready(batch.load(), args, lambda b: b["mesh"] is not None and kept(b, "mesh", args)
                    and (args.redo or b["part"] is None))
@@ -1868,6 +1909,9 @@ def main():
     fit.add_argument("--redo", action="store_true", help="Fit again briefs that have a part.")
     fit.add_argument("--forms", action="store_true",
                      help="Only make the clothing forms' meshes of layers that have a part.")
+    fit.add_argument("--standoff", action="store_true",
+                     help="Only measure how far body parts that have a part stand out over each"
+                          " slot.")
     capture = stage("capture", "Shots of fitted parts in the editor, on each mannequin.")
     capture.add_argument("--redo", action="store_true", help="Capture briefs that have shots again.")
     status = commands.add_parser("status", help="What each brief has.")

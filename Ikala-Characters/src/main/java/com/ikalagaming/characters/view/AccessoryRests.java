@@ -17,8 +17,8 @@ import java.util.Set;
 /**
  * How far accessories move out from where they were fitted on the bare body, so they rest on what
  * is worn under them: along their socket's resting direction (see {@link BodyPlan.Rest}), by how
- * far the body part in the slot they rest on stands out, or, under clothing, by that part's
- * clothing form and how far the clothing stands out from it.
+ * far the body part in the slot they rest on stands out, plus how far the clothing over it stands
+ * out from it.
  *
  * @author Ches Burks
  */
@@ -32,36 +32,32 @@ public final class AccessoryRests {
      * @param plan The body plan.
      * @param slot The body slot.
      * @param worn The parts worn.
-     * @return The distance in meters: a shown layer's standoff over the thickest body part's form,
-     *     else the body part's own standoff.
+     * @return The distance in meters: how far the body part stands out, plus the thickest shown
+     *     layer over it.
      */
     public static float standoff(
             @NonNull BodyPlan plan, @NonNull String slot, @NonNull Collection<Part> worn) {
         Set<String> hidden = new HashSet<>();
         worn.forEach(part -> hidden.addAll(part.hidesLayers()));
         float body = 0;
-        float form = 0;
-        float clothing = -1;
+        float clothing = 0;
         for (Part part : worn) {
             if (part.kind() == Part.PartKind.BODY && part.fills().contains(slot)) {
-                float offset = plan.formOffset(part.form());
-                form = Math.max(form, offset);
-                body = Math.max(body, part.standoff() == null ? offset : part.standoff());
+                Float own = part.standoffOver(slot);
+                body = Math.max(body, own != null ? own : plan.formOffset(part.form()));
             } else if (part.kind() == Part.PartKind.LAYER) {
                 for (String fill : part.fills()) {
                     BodyPlan.Layer layer = plan.layer(fill);
                     if (layer == null || hidden.contains(fill) || !layer.covers().contains(slot)) {
                         continue;
                     }
-                    clothing =
-                            Math.max(
-                                    clothing,
-                                    part.standoff() == null ? layer.standoff() : part.standoff());
+                    Float own = part.standoffOver(slot);
+                    clothing = Math.max(clothing, own != null ? own : layer.standoff());
                 }
             }
         }
-        // Clothing is fitted over the form's shell, which a part may stand inside of
-        return clothing < 0 ? body : form + clothing;
+        // Clothing is pushed out by as far as the body part stands out, then stands out itself
+        return body + clothing;
     }
 
     /**

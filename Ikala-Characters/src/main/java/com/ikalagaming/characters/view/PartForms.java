@@ -33,6 +33,22 @@ public final class PartForms {
      */
     public static Map<String, Float> amounts(
             @NonNull BodyPlan plan, @NonNull Map<String, String> slotForms) {
+        Map<String, Float> standoffs = new HashMap<>();
+        slotForms.forEach((slot, form) -> standoffs.put(slot, plan.formOffset(form)));
+        return shares(plan, standoffs);
+    }
+
+    /**
+     * How far over each slot clothing is pushed out, as shares of the bulkiest form's offset, for
+     * body parts standing out by some distance.
+     *
+     * @param plan The body plan, with its forms.
+     * @param standoffs How far the body part in each slot stands out from the bare body, in meters
+     *     (see {@link com.ikalagaming.characters.design.WearRules#slotStandoffs}).
+     * @return The share for each slot that stands out, at most 1.
+     */
+    public static Map<String, Float> shares(
+            @NonNull BodyPlan plan, @NonNull Map<String, Float> standoffs) {
         Map<String, Float> amounts = new HashMap<>();
         if (plan.forms().isEmpty()) {
             return amounts;
@@ -41,11 +57,10 @@ public final class PartForms {
         if (bulkiest <= 0) {
             return amounts;
         }
-        slotForms.forEach(
-                (slot, form) -> {
-                    int index = plan.formIndex(form);
-                    if (index > 0) {
-                        amounts.put(slot, plan.forms().get(index).offset() / bulkiest);
+        standoffs.forEach(
+                (slot, standoff) -> {
+                    if (standoff > 0) {
+                        amounts.put(slot, Math.min(standoff / bulkiest, 1f));
                     }
                 });
         return amounts;

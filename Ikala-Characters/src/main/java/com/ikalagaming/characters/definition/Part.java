@@ -46,8 +46,9 @@ import java.util.Set;
  * @param locksSliders Sliders it locks while worn, by ID or editor group.
  * @param hidesSockets Sockets it covers, by name or type.
  * @param form For body parts, the plan's thinnest clothing form its surface fits in.
- * @param standoff For body parts, how far its surface stands out from the bare body; for layers,
- *     from the form it is fitted over; in meters. Null takes its form's offset or its layer's.
+ * @param standoff How far it stands out over each body slot, in meters, with "*" for any other
+ *     slot: a body part from the bare body, a layer from the body part under it. Slots left out
+ *     take a body part's form's offset or a layer's layer's standoff.
  * @author Ches Burks
  */
 @Doc(
@@ -126,12 +127,14 @@ public record Part(
                 @Optional
                 String form,
         @Doc(
-                        "How far it stands out where accessories rest on it, in meters: a body"
-                                + " part from the bare body, a layer from the clothing form it is"
-                                + " fitted over. Left out, a body part takes its form's offset and"
-                                + " a layer its layer's standoff.")
+                        "How far it stands out over each body slot, in meters, with \"*\" for any"
+                                + " other slot: a body part from the bare body, which clothing over"
+                                + " it is pushed out by, a layer from the body part under it."
+                                + " Accessories resting on the slot sit on both. Slots left out"
+                                + " take a body part's form's offset or a layer's layer's"
+                                + " standoff.")
                 @Optional
-                Float standoff)
+                Map<String, Float> standoff)
         implements Definition {
 
     /** The field for the plan. */
@@ -193,6 +196,9 @@ public record Part(
 
     /** The field for the standoff. */
     public static final String FIELD_STANDOFF = "standoff";
+
+    /** The standoff key for any slot not given its own. */
+    public static final String ANY_SLOT = "*";
 
     /** Joins a variant and a clothing form in a mesh key, like "female@bulky". */
     public static final String FORM_SEPARATOR = "@";
@@ -390,6 +396,17 @@ public record Part(
     }
 
     /**
+     * How far this part stands out over a body slot, as it gives it.
+     *
+     * @param slot The body slot.
+     * @return The distance in meters, or null if it gives none for the slot.
+     */
+    public Float standoffOver(@NonNull String slot) {
+        Float found = standoff.get(slot);
+        return found != null ? found : standoff.get(ANY_SLOT);
+    }
+
+    /**
      * Where this accessory sits on a variant.
      *
      * @param variant The variant.
@@ -484,14 +501,18 @@ public record Part(
                 checks.error(JsonPath.at(FIELD_FORM), "The plan has no form '" + form + "'");
             }
         }
-        if (standoff != null) {
-            if (kind == PartKind.ACCESSORY) {
-                checks.error(
-                        JsonPath.at(FIELD_STANDOFF), "Only body parts and layers have a standoff");
-            } else if (standoff < 0) {
-                checks.error(JsonPath.at(FIELD_STANDOFF), "A standoff can't be below 0");
-            }
+        if (!standoff.isEmpty() && kind == PartKind.ACCESSORY) {
+            checks.error(JsonPath.at(FIELD_STANDOFF), "Only body parts and layers have a standoff");
         }
+        standoff.forEach(
+                (slot, meters) -> {
+                    String path = JsonPath.at(FIELD_STANDOFF);
+                    if (!ANY_SLOT.equals(slot) && body.slot(slot) == null) {
+                        checks.error(path, "The plan has no body slot '" + slot + "'");
+                    } else if (meters == null || meters < 0) {
+                        checks.error(path, "A standoff can't be below 0");
+                    }
+                });
         for (int i = 0; i < hidesRegions.size(); ++i) {
             if (!body.regions().contains(hidesRegions.get(i))) {
                 checks.error(

@@ -182,6 +182,33 @@ public final class WearRules {
     }
 
     /**
+     * How far the body parts worn stand out from the bare body over each body slot, which clothing
+     * over them is pushed out by (see {@link com.ikalagaming.characters.view.PartForms}): a part's
+     * own measure for the slot, else its form's offset, the furthest where parts share a slot.
+     *
+     * @param plan The body plan, with its forms.
+     * @param worn The parts worn.
+     * @return The distance in meters by slot; slots the bare body's are left out.
+     */
+    public static Map<String, Float> slotStandoffs(
+            @NonNull BodyPlan plan, @NonNull Collection<Part> worn) {
+        Map<String, Float> standoffs = new LinkedHashMap<>();
+        for (Part part : worn) {
+            if (part.kind() != Part.PartKind.BODY) {
+                continue;
+            }
+            for (String slot : part.fills()) {
+                Float own = part.standoffOver(slot);
+                float standoff = own != null ? own : plan.formOffset(part.form());
+                if (standoff > standoffs.getOrDefault(slot, 0f)) {
+                    standoffs.put(slot, standoff);
+                }
+            }
+        }
+        return standoffs;
+    }
+
+    /**
      * The layers some worn parts hide.
      *
      * @param worn The parts.
