@@ -44,6 +44,14 @@
     {"id": "skirt", "covers": ["pelvis", "upperLeg.L", "upperLeg.R"], "order": 18}
   ],
   "exclusiveTags": ["cloth", "backDetail"],
+  // Clothing forms: shells over the body that layers are fitted to, so they go over bulky body
+  // parts; the thickest is also the most a generated body part may stand out
+  "forms": [
+    {"id": "tight", "offset": 0},
+    {"id": "padded", "offset": 0.02},
+    {"id": "armored", "offset": 0.04},
+    {"id": "bulky", "offset": 0.06}
+  ],
   "sockets": [
     {"id": "head_top", "bone": "socket.head_top", "type": "head_top"},
     {"id": "face", "bone": "socket.face", "type": "face"},

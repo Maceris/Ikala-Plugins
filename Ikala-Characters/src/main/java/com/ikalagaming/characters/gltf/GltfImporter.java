@@ -59,6 +59,15 @@ public final class GltfImporter {
     /** The namespace of rigs made from imported files. */
     public static final String RIG_NAMESPACE = "imported";
 
+    /** What the names of a layer's morph targets for clothing forms start with, then a slot. */
+    public static final String FORM_TARGET_PREFIX = "form:";
+
+    /** The field for a glTF object's extra data. */
+    public static final String EXTRAS = "extras";
+
+    /** The field in a mesh's extras naming its morph targets. */
+    public static final String TARGET_NAMES = "targetNames";
+
     /** The extension that scales a material's emissive factor past 1. */
     public static final String EMISSIVE_STRENGTH = "KHR_materials_emissive_strength";
 
@@ -292,10 +301,16 @@ public final class GltfImporter {
             JsonArray primitives = mesh.getAsJsonArray("primitives");
             String meshName =
                     mesh.has("name") ? mesh.get("name").getAsString() : nodeName(n, "mesh");
+            List<String> targetNames = targetNames(mesh);
             for (int p = 0; p < primitives.size(); ++p) {
                 String partName = primitives.size() == 1 ? meshName : meshName + "." + p;
                 parts.add(
-                        part(partName, primitives.get(p).getAsJsonObject(), skinToRig, bindToRest));
+                        part(
+                                partName,
+                                primitives.get(p).getAsJsonObject(),
+                                targetNames,
+                                skinToRig,
+                                bindToRest));
             }
         }
         List<ImportedCharacter.ClipData> clips = new ArrayList<>();
@@ -319,12 +334,17 @@ public final class GltfImporter {
      *
      * @param name The part's name.
      * @param primitive The primitive's JSON.
+     * @param targetNames The mesh's morph targets' names, in order; empty if they have none.
      * @param skinToRig Rig bone index by skin joint index.
      * @param bindToRest Each skin joint's matrix from bind pose to model space at rest.
      * @return The part.
      */
     private ImportedCharacter.Part part(
-            String name, JsonObject primitive, int[] skinToRig, Matrix4f[] bindToRest) {
+            String name,
+            JsonObject primitive,
+            List<String> targetNames,
+            int[] skinToRig,
+            Matrix4f[] bindToRest) {
         if (primitive.has("mode") && primitive.get("mode").getAsInt() != TRIANGLES) {
             throw new IllegalArgumentException("The mesh " + name + " isn't made of triangles");
         }
@@ -351,6 +371,23 @@ public final class GltfImporter {
                 || skinJoints.length != count * 4
                 || weights.length != count * 4) {
             throw new IllegalArgumentException("The mesh " + name + " has mismatched attributes");
+        }
+
+        // Form targets, by slot: moves in the file's bind space, turned as normals are below
+        Map<String, float[]> formDeltas = new LinkedHashMap<>();
+        Map<String, float[]> formTargets = new LinkedHashMap<>();
+        JsonArray targets = primitive.getAsJsonArray("targets");
+        for (int t = 0; targets != null && t < targets.size() && t < targetNames.size(); ++t) {
+            String targetName = targetNames.get(t);
+            JsonObject target = targets.get(t).getAsJsonObject();
+            if (targetName.startsWith(FORM_TARGET_PREFIX) && target.has("POSITION")) {
+                float[] deltas = file.floats(target.get("POSITION").getAsInt());
+                if (deltas.length == count * 3) {
+                    String slot = targetName.substring(FORM_TARGET_PREFIX.length());
+                    formDeltas.put(slot, deltas);
+                    formTargets.put(slot, new float[count * 3]);
+                }
+            }
         }
 
         float[] vertices = new float[count * 14];
@@ -394,6 +431,14 @@ public final class GltfImporter {
                     positions[v * 3], positions[v * 3 + 1], positions[v * 3 + 2], position);
             blend.transformDirection(normals[v * 3], normals[v * 3 + 1], normals[v * 3 + 2], normal)
                     .normalize();
+            for (Map.Entry<String, float[]> entry : formDeltas.entrySet()) {
+                float[] delta = entry.getValue();
+                blend.transformDirection(delta[v * 3], delta[v * 3 + 1], delta[v * 3 + 2], tangent);
+                float[] out = formTargets.get(entry.getKey());
+                out[v * 3] = tangent.x;
+                out[v * 3 + 1] = tangent.y;
+                out[v * 3 + 2] = tangent.z;
+            }
             float handedness = 1;
             if (tangents != null) {
                 blend.transformDirection(
@@ -437,7 +482,23 @@ public final class GltfImporter {
         }
         int material = primitive.has("material") ? primitive.get("material").getAsInt() : -1;
         return new ImportedCharacter.Part(
-                name, vertices, joints, weights, indices, material, min, max);
+                name, vertices, joints, weights, indices, material, min, max, formTargets);
+    }
+
+    /**
+     * A mesh's morph targets' names, which Blender and most exporters put in its extras.
+     *
+     * @param mesh The mesh's JSON.
+     * @return The names, in order; empty if there are none.
+     */
+    private static List<String> targetNames(JsonObject mesh) {
+        List<String> names = new ArrayList<>();
+        if (mesh.has(EXTRAS) && mesh.getAsJsonObject(EXTRAS).has(TARGET_NAMES)) {
+            mesh.getAsJsonObject(EXTRAS)
+                    .getAsJsonArray(TARGET_NAMES)
+                    .forEach(name -> names.add(name.getAsString()));
+        }
+        return names;
     }
 
     /**

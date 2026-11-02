@@ -86,6 +86,9 @@ public final class ShownCharacter implements AutoCloseable {
     /** Each part's mesh, by the part's index. */
     private final List<SkinnedMeshHandle> meshes = new ArrayList<>();
 
+    /** Each part's mask region per vertex, or null; null for no regions at all. */
+    private final List<int[]> partRegions;
+
     /** The parts shown last, by index, which held items are drawn beside. */
     private List<Integer> shownParts = List.of();
 
@@ -194,6 +197,7 @@ public final class ShownCharacter implements AutoCloseable {
             @NonNull Collection<Integer> shown) {
         this.plugin = plugin;
         this.character = character;
+        partRegions = regions;
         this.position = new Vector3d(position);
         this.facing = new Quaternionf(facing);
         skeleton = character.skeleton();
@@ -289,6 +293,31 @@ public final class ShownCharacter implements AutoCloseable {
         }
         parts.addAll(heldParts);
         GraphicsManager.forPlugin(plugin).skins().setParts(instance, parts);
+    }
+
+    /**
+     * Draw one of the character's parts with other vertices, as many as it has, keeping its
+     * triangles, skin, material and regions: a layer pushed out over bulky body parts (see {@link
+     * PartForms}).
+     *
+     * @param index The part's index.
+     * @param moved The part with its new vertices and bounds.
+     */
+    public void replaceVertices(int index, ImportedCharacter.@NonNull Part moved) {
+        Skins skins = GraphicsManager.forPlugin(plugin).skins();
+        SkinnedMeshHandle old = meshes.get(index);
+        meshes.set(
+                index,
+                skins.registerMesh(
+                        moved.vertices(),
+                        moved.joints(),
+                        moved.weights(),
+                        partRegions == null ? null : partRegions.get(index),
+                        moved.indices(),
+                        moved.min(),
+                        moved.max()));
+        sendParts();
+        skins.releaseMesh(old);
     }
 
     /**

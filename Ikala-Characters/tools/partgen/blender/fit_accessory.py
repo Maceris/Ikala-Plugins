@@ -706,6 +706,9 @@ def export(path, low, armature):
         "export_colors": False,
         "export_extras": False,
         "export_tangents": True,  # normal maps follow them
+        # Morph targets (a layer's form targets) whole: the character code reads no sparse ones
+        "export_try_sparse_sk": False,
+        "export_morph_normal": False,
         "export_image_format": "AUTO",
     }
     known = {p.identifier for p in bpy.ops.export_scene.gltf.get_rna_type().properties}

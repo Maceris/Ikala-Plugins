@@ -11,14 +11,16 @@ import java.nio.file.Path;
  * Reduce a fitted garment to its triangle budget with Ikala-Graphics' level of detail simplifier
  * (after Liu, Zhang and Yuksel, <i>Simplifying Textured Triangle Meshes in the Wild</i>), which
  * shape_layer.py runs in place of Blender's collapse decimation: it leaves far fewer sliver
- * triangles, and slivers fold over when the garment is pushed out of the body or carried to
- * another body type, leaving holes. Run with the Java source launcher:
+ * triangles, and slivers fold over when the garment is pushed out of the body or carried to another
+ * body type, leaving holes. Run with the Java source launcher:
  *
- * <pre>java -cp &lt;Ikala-Graphics jar&gt;;&lt;Ikala-Core jar&gt; SimplifyMesh.java in.bin out.bin 3000</pre>
+ * <pre>
+ * java -cp &lt;Ikala-Graphics jar&gt;;&lt;Ikala-Core jar&gt; SimplifyMesh.java in.bin out.bin 3000
+ * </pre>
  *
- * <p>Both files are little endian: the vertex count and triangle count as ints, then x, y, z
- * floats per vertex, then three vertex indices per triangle. Vertices in the same place are welded.
- * No virtual edges are added, so a sleeve never joins the side it hangs beside.
+ * <p>Both files are little endian: the vertex count and triangle count as ints, then x, y, z floats
+ * per vertex, then three vertex indices per triangle. Vertices in the same place are welded. No
+ * virtual edges are added, so a sleeve never joins the side it hangs beside.
  */
 public final class SimplifyMesh {
 

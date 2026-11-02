@@ -8,8 +8,8 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 /**
- * Tests for what scripts can do with the character editor: finding the slot that offers a part,
- * and calls failing while the editor isn't loaded.
+ * Tests for what scripts can do with the character editor: finding the slot that offers a part, and
+ * calls failing while the editor isn't loaded.
  *
  * @author Ches Burks
  */

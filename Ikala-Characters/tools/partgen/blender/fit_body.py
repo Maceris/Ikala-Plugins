@@ -94,6 +94,14 @@ def plan_slots():
     return {slot["id"]: slot for slot in plan["slots"]}
 
 
+def plan_forms():
+    """The body plan's clothing forms, thinnest first, as (name, offset in meters): shells over
+    the body that clothing is fitted to, the thickest also the most a body part may stand out."""
+    with open(PLAN, encoding="utf-8") as file:
+        plan = json.loads("".join(line for line in file if not line.lstrip().startswith("//")))
+    return [(form["id"], float(form["offset"])) for form in plan.get("forms", [])]
+
+
 def slot_bones(names):
     """Each named slot's bones, from the body plan."""
     slots = plan_slots()

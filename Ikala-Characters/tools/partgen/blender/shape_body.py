@@ -39,10 +39,10 @@ from mathutils import Vector
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "blender"))
 from add_caps import CAP_INFIX, make_cap, open_loops  # noqa: E402
-from bodies import load_body, nearest, tree  # noqa: E402
-from fit_body import outer_seams, plan_slots, seam_plane  # noqa: E402
+from bodies import load_body, merged, nearest, tree  # noqa: E402
+from fit_body import outer_seams, plan_forms, plan_slots, seam_plane  # noqa: E402
 from fit_layer import import_figure, render  # noqa: E402
-from shape_layer import bone_segments, points_of, reduce  # noqa: E402
+from shape_layer import bone_segments, points_of, reduce, set_points  # noqa: E402
 
 # The voxel size the part is rebuilt at, in meters, and the thickness its sheets are given first,
 # in voxels, so their thinnest parts survive
@@ -54,6 +54,23 @@ WELD_INSETS = (0.01, 0.02, 0.03, 0.04)
 # The vertex group the ring vertices are in, which the weights keep exactly
 SEAM_GROUP = "seam"
 PART_COLOR = (0.85, 0.45, 0.15, 1)
+# A part's clothing form is the thinnest whose shell holds all but this share of its surface
+FORM_SHARE = 0.99
+# How far past a form's shell that share may stand and still count as in it, in meters
+FORM_TOLERANCE = 0.002
+# Past the thickest form: clamp the part back in, leave it bare of clothing, or reject it
+BEYOND = ("clamp", "bare", "reject")
+# The most a part may stand out past the thickest form and still be clamped into it, in meters
+CLAMP_LIMIT = 0.03
+# How far inside the limit clamping starts to ease points in, in meters
+CLAMP_KNEE = 0.01
+# How far a leg's sole may be from the floor, the mannequin's lowest point, before it is stretched
+FLOOR_TOLERANCE = 0.005
+# How much a leg may be stretched or shrunk to meet the floor; past this the fit is wrong, not
+# the leg's length, and the part is rejected
+FLOOR_RANGE = (0.8, 1.25)
+# How far past the wrist a hand may reach, as shares of the mannequin hand's reach
+HAND_RANGE = (0.75, 1.3)
 BODY_COLOR = (0.7, 0.7, 0.72, 1)
 
 
@@ -341,6 +358,98 @@ def mark_rings(part, welded):
     part.data.normals_split_custom_set_from_vertices(normals)
 
 
+def form_of(signed, forms):
+    """The thinnest clothing form a surface fits in: the first whose shell is at least as far out
+    as all but FORM_SHARE of the surface's points. None past the thickest."""
+    standing = float(np.percentile(signed, FORM_SHARE * 100))
+    return next((name for name, offset in forms if standing <= offset + FORM_TOLERANCE), None)
+
+
+def soft_clamp(signed, limit):
+    """How far out points should be so none goes past the limit: those within CLAMP_KNEE of it
+    and beyond ease toward it, so spikes shorten smoothly rather than being cut flat."""
+    knee = limit - CLAMP_KNEE
+    over = np.maximum(signed - knee, 0.0)
+    return np.where(signed > knee, knee + CLAMP_KNEE * (1 - np.exp(-over / CLAMP_KNEE)), signed)
+
+
+def clamp_to(part, surface, limit):
+    """Pull a part's vertices further out from the body than about the limit back in along the
+    line to their nearest body point, easing as soft_clamp() does. Gives how many moved."""
+    points = points_of(part)
+    closest, signed = nearest(points, surface)
+    wanted = soft_clamp(signed, limit)
+    moving = wanted < signed - 1e-6
+    direction = points - closest
+    length = np.linalg.norm(direction, axis=1, keepdims=True)
+    direction = direction / np.maximum(length, 1e-9)
+    points[moving] = closest[moving] + direction[moving] * wanted[moving, None]
+    set_points(part, points)
+    return int(moving.sum())
+
+
+def ring_mask(part):
+    """Which of a part's vertices are on its welded seam rings (mark_rings' group), which must
+    not move, or the weld opens."""
+    mask = np.zeros(len(part.data.vertices), dtype=bool)
+    group = part.vertex_groups.get(SEAM_GROUP)
+    if group is not None:
+        for vertex in part.data.vertices:
+            if any(g.group == group.index for g in vertex.groups):
+                mask[vertex.index] = True
+    return mask
+
+
+def reach_floor(part, names, rings, inside, floor):
+    """Stretch or shrink a part that ends a leg so its sole meets the floor, along the up axis
+    below the seam it starts at, so the seam ring stays where it is. Gives the scale, or None if
+    the part doesn't end a leg or already meets the floor (the given height)."""
+    if not any(name.startswith("foot.") for name in names):
+        return None
+    seams = outer_seams(names)
+    # The seam furthest from the foot is where the part starts
+    top = max((seam_plane(rings[s], inside)[0][2], s) for s in seams)[0]
+    points = points_of(part)
+    lowest = float(points[:, 2].min())
+    if abs(lowest - floor) <= FLOOR_TOLERANCE or top - lowest < 1e-3:
+        return None
+    scale = (top - floor) / (top - lowest)
+    below = (points[:, 2] < top) & ~ring_mask(part)
+    points[below, 2] = top + (points[below, 2] - top) * scale
+    set_points(part, points)
+    return round(float(scale), 3)
+
+
+def hand_length(part, names, rings, inside, segments, bones, mannequin):
+    """Scale a part that ends an arm along the hand's bone, about the wrist, so it reaches
+    HAND_RANGE times as far past the wrist as the mannequin's hand does. Gives the scale, or None
+    if the part doesn't end an arm or is already in range."""
+    hands = [name for name in names if name.startswith("hand.")]
+    if not hands:
+        return None
+    wrist = "wrist." + hands[0].split(".")[1]
+    if wrist not in rings:
+        return None
+    middle = np.array(seam_plane(rings[wrist], inside)[0])
+    bone = next((b for b in bones if b.startswith("hand")), None)
+    if bone is None:
+        return None
+    head, tail = (np.array(p) for p in segments[bone])
+    axis = (tail - head) / np.linalg.norm(tail - head)
+    points = points_of(part)
+    reach = float(np.max((points - middle) @ axis))
+    wanted = float(np.max((mannequin - middle) @ axis))
+    low, high = HAND_RANGE
+    if reach <= 0 or wanted <= 0 or low * wanted <= reach <= high * wanted:
+        return None
+    scale = min(max(reach, low * wanted), high * wanted) / reach
+    along = (points - middle) @ axis
+    past = (along > 0) & ~ring_mask(part)
+    points[past] += np.outer(along[past] * (scale - 1), axis)
+    set_points(part, points)
+    return round(scale, 3)
+
+
 def main():
     global VOXEL
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
@@ -353,6 +462,9 @@ def main():
     parser.add_argument("--open", default="", help="Comma-separated seams left open.")
     parser.add_argument("--voxel", type=float, default=VOXEL,
                         help="The voxel size the part is rebuilt at, in meters.")
+    parser.add_argument("--beyond", default="clamp", choices=BEYOND,
+                        help="What to do with a part standing out past the thickest clothing"
+                             " form: clamp it back in, leave it bare of clothing, or reject it.")
     args = parser.parse_args(argv)
     VOXEL = args.voxel
     os.makedirs(args.out, exist_ok=True)
@@ -409,6 +521,38 @@ def main():
         polygon.use_smooth = True
     mark_rings(part, welded.values())
 
+    # Extents: legs reach the floor, hands stay hand-sized, and the surface fits in the thickest
+    # clothing form, or is clamped into it, or left bare, or rejected
+    extents = {"floor_scale": reach_floor(part, names, rings, inside, float(body[:, 2].min()))}
+    hand_parts = [o for o in bpy.data.objects if o.type == "MESH" and o.name.startswith(
+        "mannequin_hand")]
+    mannequin_hands = merged(hand_parts)[0] if hand_parts else np.zeros((0, 3))
+    extents["hand_scale"] = (hand_length(part, names, rings, inside, segments, bones,
+                                         mannequin_hands) if len(mannequin_hands) else None)
+    low, high = FLOOR_RANGE
+    if extents["floor_scale"] and not low <= extents["floor_scale"] <= high:
+        extents["rejected"] = ("needs stretching x%s to meet the floor, more than %s-%s; the fit"
+                               " is likely wrong" % (extents["floor_scale"], low, high))
+    forms = plan_forms()
+    _, signed = nearest(points_of(part), surface)
+    limit = forms[-1][1] if forms else None
+    excess = 0.0 if limit is None else float(np.percentile(signed, FORM_SHARE * 100)) - limit
+    extents["past_max_mm"] = round(max(excess, 0.0) * 1000, 1)
+    if extents.get("rejected"):
+        pass
+    elif excess > 0 and args.beyond == "clamp":
+        if excess > CLAMP_LIMIT:
+            extents["rejected"] = ("stands out %.0f mm past the %s form, more than clamping"
+                                   " takes (%.0f mm)" % (excess * 1000, forms[-1][0],
+                                                         CLAMP_LIMIT * 1000))
+        else:
+            extents["clamped"] = clamp_to(part, surface, limit)
+            _, signed = nearest(points_of(part), surface)
+    elif excess > 0 and args.beyond == "reject":
+        extents["rejected"] = "stands out %.0f mm past the %s form" % (excess * 1000, forms[-1][0])
+    extents["form"] = None if args.beyond == "bare" and excess > 0 else form_of(signed, forms)
+    extents["bare"] = args.beyond == "bare" and excess > 0
+
     caps = []
     for seam, (indices, _) in welded.items():
         loop = next(lp for lp in open_loops(part.data) if set(lp) == set(indices))
@@ -434,10 +578,13 @@ def main():
         "inside_pct": round(float((signed < -0.005).mean()) * 100, 1),
         # The welded rings, and any holes left, as how many vertices each has
         "open_edges": sorted(len(lp) for lp in open_loops(part.data)),
+        "extents": extents,
     }
     print("[shape_body]", json.dumps(report))
     with open(os.path.join(args.out, "shape.json"), "w", encoding="utf-8") as file:
         json.dump(report, file, indent=1)
+    if extents.get("rejected"):
+        raise SystemExit("[shape_body] rejected: " + extents["rejected"])
 
     bpy.ops.object.select_all(action="DESELECT")
     for obj in [part] + caps:

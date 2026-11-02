@@ -91,6 +91,13 @@
           },
           "description": "Tags a character wears at most one part of each, like \"cloth\" for long coats, capes and robes, or \"backDetail\" for wings, jetpacks and backpacks. The last one put on takes the others off."
         },
+        "forms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Form"
+          },
+          "description": "Shapes clothing is fitted to, thinnest first: shells over the body at an offset, like \"tight\" at 0 and \"bulky\" at 0.06 m. A body part names the thinnest its surface fits in, and a layer shows its mesh for the thickest form among the body parts under it."
+        },
         "regions": {
           "type": "array",
           "items": {
@@ -216,6 +223,25 @@
         "id",
         "root",
         "bones"
+      ],
+      "additionalProperties": false
+    },
+    "Form": {
+      "type": "object",
+      "description": "A shape clothing is fitted to: a shell over the body at an offset.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The form's name, like \"bulky\"."
+        },
+        "offset": {
+          "type": "number",
+          "description": "How far out from the body its shell is, in meters."
+        }
+      },
+      "required": [
+        "id",
+        "offset"
       ],
       "additionalProperties": false
     },

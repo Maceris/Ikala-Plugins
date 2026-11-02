@@ -118,7 +118,8 @@ class TestLookRules {
                 List.of(),
                 fills,
                 parts,
-                plan);
+                plan,
+                null);
     }
 
     /**
@@ -217,11 +218,50 @@ class TestLookRules {
         Assertions.assertEquals(CharacterLook.EMPTY, look.choice(HAND_R));
     }
 
+    /** Gloves swap to their padded mesh when a bulky claw is under them, and back without. */
+    @Test
+    void layerFormFollowsBodyParts() {
+        Part claw = registry.get(Part.class, Id.parse("ikala:part/biped/claw_l"));
+        Part gauntlets = registry.get(Part.class, Id.parse("ikala:part/biped/gauntlets"));
+        PartSlots slots =
+                new PartSlots(
+                        List.of(
+                                new PartSlots.Slot(
+                                        "hand.L", List.of(List.of(0)), List.of("claw"), true, -1),
+                                new PartSlots.Slot(
+                                        "gloves",
+                                        List.of(List.of(1)),
+                                        List.of("gauntlets"),
+                                        true,
+                                        -1)));
+        CharacterLook look =
+                new CharacterLook(
+                        slots,
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(List.of(Set.of("hand.L")), List.of(Set.of("gloves"))),
+                        List.of(List.of(claw), List.of(gauntlets)),
+                        plan,
+                        List.of(List.of(Map.of()), List.of(Map.of("padded", List.of(2)))));
+        look.setBothSides(false);
+        look.choose(1, 0);
+        Assertions.assertEquals(List.of(1), look.worn(CharacterLook.NO_PREVIEW, 0));
+        Assertions.assertNull(look.formOf(1));
+        look.choose(0, 0);
+        // Bulky claw, but the gauntlets only have a padded mesh, the next thinner
+        Assertions.assertEquals(List.of(0, 2), look.worn(CharacterLook.NO_PREVIEW, 0));
+        Assertions.assertEquals("padded", look.formOf(1));
+        look.choose(0, CharacterLook.EMPTY);
+        Assertions.assertEquals(List.of(1), look.worn(CharacterLook.NO_PREVIEW, 0));
+    }
+
     /** Options the variant doesn't allow aren't available, and switching to it drops them. */
     @Test
     void variantsFilter() {
         BodyPlan.Variant any = new BodyPlan.Variant("any", List.of(), Map.of(), Map.of());
-        BodyPlan.Variant cloth = new BodyPlan.Variant("cloth", List.of("cloth"), Map.of(), Map.of());
+        BodyPlan.Variant cloth =
+                new BodyPlan.Variant("cloth", List.of("cloth"), Map.of(), Map.of());
         CharacterLook look = look(List.of(any, cloth));
         look.choose(HAND_L, 0);
         look.choose(JACKET, 0);

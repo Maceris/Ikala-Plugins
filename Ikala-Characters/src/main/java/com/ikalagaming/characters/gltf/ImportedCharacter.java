@@ -47,6 +47,9 @@ public record ImportedCharacter(
      * @param material The index of its material, or -1 for none.
      * @param min The minimum corner of its rest bounds.
      * @param max The maximum corner of its rest bounds.
+     * @param formTargets For a layer, how far each vertex moves to clear the bulkiest clothing form
+     *     over each body slot, by slot, 3 floats per vertex; empty for none. See {@link
+     *     com.ikalagaming.characters.view.PartForms}.
      */
     public record Part(
             @NonNull String name,
@@ -56,7 +59,54 @@ public record ImportedCharacter(
             int @NonNull [] indices,
             int material,
             @NonNull Vector3f min,
-            @NonNull Vector3f max) {}
+            @NonNull Vector3f max,
+            @NonNull Map<String, float[]> formTargets) {
+        /**
+         * A mesh without form targets.
+         *
+         * @param name The mesh's name in the file.
+         * @param vertices Scene vertices at rest, 14 floats each.
+         * @param joints Four bone indices per vertex.
+         * @param weights Four weights per vertex.
+         * @param indices Triangle indices.
+         * @param material The index of its material, or -1 for none.
+         * @param min The minimum corner of its rest bounds.
+         * @param max The maximum corner of its rest bounds.
+         */
+        public Part(
+                @NonNull String name,
+                float @NonNull [] vertices,
+                int @NonNull [] joints,
+                float @NonNull [] weights,
+                int @NonNull [] indices,
+                int material,
+                @NonNull Vector3f min,
+                @NonNull Vector3f max) {
+            this(name, vertices, joints, weights, indices, material, min, max, Map.of());
+        }
+
+        /**
+         * This mesh with other vertices and bounds, its form targets kept.
+         *
+         * @param newVertices The vertices, as many as before.
+         * @param newMin The minimum corner of its rest bounds.
+         * @param newMax The maximum corner of its rest bounds.
+         * @return The mesh.
+         */
+        public Part withVertices(
+                float @NonNull [] newVertices, @NonNull Vector3f newMin, @NonNull Vector3f newMax) {
+            return new Part(
+                    name,
+                    newVertices,
+                    joints,
+                    weights,
+                    indices,
+                    material,
+                    newMin,
+                    newMax,
+                    formTargets);
+        }
+    }
 
     /**
      * One animation, not yet bound to a skeleton.
@@ -301,7 +351,8 @@ public record ImportedCharacter(
                             part.indices(),
                             part.material(),
                             part.min(),
-                            part.max()));
+                            part.max(),
+                            part.formTargets()));
         }
         return new ImportedCharacter(name, other, rest, moved, clips, materials, images);
     }

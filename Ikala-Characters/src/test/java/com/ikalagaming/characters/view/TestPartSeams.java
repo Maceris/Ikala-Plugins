@@ -77,7 +77,7 @@ class TestPartSeams {
      */
     private static Part part(String name, String fills, String seams) {
         return read(
-                """
+                        """
                 { "id": "t:part/%s", "plan": "t:plan", "kind": "body", "fills": %s,
                   "meshes": { "*": "a.glb#%s" }, "seams": %s }
                 """

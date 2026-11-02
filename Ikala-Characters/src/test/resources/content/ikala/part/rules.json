@@ -51,10 +51,18 @@
     "fills": ["hair"]
   },
   {
+    "id": "ikala:part/biped/gauntlets",
+    "plan": "ikala:biped",
+    "kind": "layer",
+    "fills": ["gloves"],
+    "meshes": { "*": "gauntlets.glb#plain", "*@padded": "gauntlets.glb#padded" }
+  },
+  {
     "id": "ikala:part/biped/claw_l",
     "plan": "ikala:biped",
     "kind": "body",
     "fills": ["hand.L"],
+    "form": "bulky",
     "pair": "ikala:part/biped/claw_r"
   },
   {
@@ -62,6 +70,7 @@
     "plan": "ikala:biped",
     "kind": "body",
     "fills": ["hand.R"],
+    "form": "bulky",
     "pair": "ikala:part/biped/claw_l"
   }
 ]

@@ -108,7 +108,8 @@ class TestWearRules {
         Assertions.assertTrue(WearRules.clash(plan, part(JETPACK), part(WINGS)));
         Assertions.assertFalse(WearRules.clash(plan, part(COAT), part(JETPACK)));
         Assertions.assertFalse(WearRules.clash(plan, part(COAT), part(COAT)));
-        Assertions.assertEquals("cloth", WearRules.sharedExclusiveTag(plan, part(COAT), part(CAPE)));
+        Assertions.assertEquals(
+                "cloth", WearRules.sharedExclusiveTag(plan, part(COAT), part(CAPE)));
     }
 
     /** The later of two clashing parts stays, and parts lose what they require. */
@@ -198,6 +199,65 @@ class TestWearRules {
                         .map(Problem::message)
                         .collect(Collectors.joining("\n"));
         Assertions.assertTrue(problems.contains("'cloth'"), problems);
+    }
+
+    /**
+     * A layer takes the thickest form of the body parts under it, falling back to thinner meshes.
+     */
+    @Test
+    void forms() {
+        Part gauntlets = part(Id.parse("ikala:part/biped/gauntlets"));
+        Part claw = part(Id.parse("ikala:part/biped/claw_l"));
+        Part stump = part(Id.parse("ikala:part/biped/forearm_stump"));
+        Assertions.assertEquals("bulky", WearRules.formFor(plan, gauntlets, List.of(stump, claw)));
+        Assertions.assertNull(WearRules.formFor(plan, gauntlets, List.of(stump)));
+        // A coat covers the torso, not the hands, so the claws don't change it
+        Assertions.assertNull(WearRules.formFor(plan, part(COAT), List.of(claw)));
+
+        // No bulky mesh, so the padded one; no form, or the bare body's, the plain one
+        Assertions.assertEquals(
+                "gauntlets.glb#padded",
+                com.ikalagaming.characters.view.PartAssembler.meshFor(
+                        gauntlets, "male", "bulky", plan));
+        Assertions.assertEquals(
+                "gauntlets.glb#plain",
+                com.ikalagaming.characters.view.PartAssembler.meshFor(
+                        gauntlets, "male", null, plan));
+        Assertions.assertEquals(
+                "gauntlets.glb#plain",
+                com.ikalagaming.characters.view.PartAssembler.meshFor(
+                        gauntlets, "male", "tight", plan));
+        Assertions.assertEquals(
+                List.of("padded"),
+                com.ikalagaming.characters.view.PartAssembler.formsOf(gauntlets, "male", plan));
+
+        Design design =
+                new Design(
+                        Id.parse("ikala:design/test"),
+                        Id.parse("ikala:biped"),
+                        "male",
+                        null,
+                        Map.of(),
+                        Map.of("hand.L", Id.parse("ikala:part/biped/claw_l")),
+                        Map.of("gloves", gauntlets.id()),
+                        null,
+                        Map.of(),
+                        List.of());
+        LookStack.Shown shown = LookStack.resolve(design, new Equipment(Map.of()), registry);
+        Assertions.assertEquals(Map.of("gloves", "bulky"), shown.forms());
+        Assertions.assertEquals(Map.of("hand.L", "bulky"), shown.slotForms());
+    }
+
+    /** Each slot takes its body part's form; layers and thin body parts add none. */
+    @Test
+    void slotForms() {
+        Part claw = part(Id.parse("ikala:part/biped/claw_l"));
+        Part stump = part(Id.parse("ikala:part/biped/forearm_stump"));
+        Part gauntlets = part(Id.parse("ikala:part/biped/gauntlets"));
+        Assertions.assertEquals(
+                Map.of("hand.L", "bulky"),
+                WearRules.slotForms(plan, List.of(stump, claw, gauntlets)));
+        Assertions.assertEquals(Map.of(), WearRules.slotForms(plan, List.of(stump, gauntlets)));
     }
 
     /** A place's mirror is the slot's, else .L and .R swapped, else itself. */

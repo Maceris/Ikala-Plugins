@@ -219,10 +219,10 @@ public record PartRegions(
     }
 
     /**
-     * Merge the least area's sets of covering parts into others until there are few enough to
-     * give each a region. A set merges into the biggest set among the rest that holds only parts
-     * it holds too, so its triangles hide while fewer parts are worn, never more, or into the
-     * empty set, never hidden.
+     * Merge the least area's sets of covering parts into others until there are few enough to give
+     * each a region. A set merges into the biggest set among the rest that holds only parts it
+     * holds too, so its triangles hide while fewer parts are worn, never more, or into the empty
+     * set, never hidden.
      *
      * @param areas The area each set of covering parts covers.
      * @return What each merged set merged into.
@@ -339,6 +339,16 @@ public record PartRegions(
                     part.weights(), from * INFLUENCES, weights, v * INFLUENCES, INFLUENCES);
             regions[v] = sourceRegions.get(v);
         }
+        Map<String, float[]> targets = new LinkedHashMap<>();
+        part.formTargets()
+                .forEach(
+                        (slot, deltas) -> {
+                            float[] copied = new float[count * 3];
+                            for (int v = 0; v < count; ++v) {
+                                System.arraycopy(deltas, sources.get(v) * 3, copied, v * 3, 3);
+                            }
+                            targets.put(slot, copied);
+                        });
         return new Split(
                 new ImportedCharacter.Part(
                         part.name(),
@@ -348,7 +358,8 @@ public record PartRegions(
                         newIndices,
                         part.material(),
                         part.min(),
-                        part.max()),
+                        part.max(),
+                        targets),
                 regions);
     }
 

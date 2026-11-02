@@ -31,6 +31,7 @@ import com.ikalagaming.characters.view.FxEffects;
 import com.ikalagaming.characters.view.HeldItems;
 import com.ikalagaming.characters.view.PartAssembler;
 import com.ikalagaming.characters.view.PartCategories;
+import com.ikalagaming.characters.view.PartForms;
 import com.ikalagaming.characters.view.PartRegions;
 import com.ikalagaming.characters.view.PartSlots;
 import com.ikalagaming.characters.view.ShownCharacter;
@@ -322,6 +323,8 @@ public final class CharacterEditor {
      * @param regions What the layers cover.
      * @param optionIds For each slot, the part each of its options is.
      * @param optionParts For each slot, the definition of the part each of its options is.
+     * @param formMeshes For each slot, each option's meshes by clothing form, for layers with
+     *     meshes for bulky body parts.
      * @param fills For each slot, the places each of its options fills.
      * @param channels For each of the character's parts, the palette channel each tint mask channel
      *     takes, as a position in the plan's channels.
@@ -335,6 +338,7 @@ public final class CharacterEditor {
             PartRegions regions,
             List<List<Id>> optionIds,
             List<List<Part>> optionParts,
+            List<List<Map<String, List<Integer>>>> formMeshes,
             List<List<Set<String>>> fills,
             List<int[]> channels,
             List<String> channelNames) {
@@ -371,8 +375,9 @@ public final class CharacterEditor {
                             .sorted(Comparator.comparing(part -> !wornIds.contains(part.id())))
                             .toList();
             PartAssembler.Assembled assembled =
+                    // Every clothing form's meshes too, which layers swap to over bulky parts
                     PartAssembler.assemble(
-                            candidates, plan, design.variant(), registry, reference, files);
+                            candidates, plan, design.variant(), registry, reference, files, true);
             if (assembled == null) {
                 throw new IllegalArgumentException("None of " + plan.id() + "'s parts loaded");
             }
@@ -384,6 +389,7 @@ public final class CharacterEditor {
             List<PartSlots.Slot> slots = new ArrayList<>();
             List<List<Id>> optionIds = new ArrayList<>();
             List<List<Part>> optionParts = new ArrayList<>();
+            List<List<Map<String, List<Integer>>>> formMeshes = new ArrayList<>();
             List<List<Set<String>>> fills = new ArrayList<>();
             for (String place : places) {
                 Part.PartKind wanted =
@@ -396,6 +402,7 @@ public final class CharacterEditor {
                 List<String> labels = new ArrayList<>();
                 List<Id> ids = new ArrayList<>();
                 List<Part> defined = new ArrayList<>();
+                List<Map<String, List<Integer>>> optionForms = new ArrayList<>();
                 List<Set<String>> optionFills = new ArrayList<>();
                 for (Part part :
                         candidates.stream().sorted(Comparator.comparing(Part::id)).toList()) {
@@ -409,6 +416,14 @@ public final class CharacterEditor {
                     labels.add(label(part.id()));
                     ids.add(part.id());
                     defined.add(part);
+                    Map<String, List<Integer>> byForm = new LinkedHashMap<>();
+                    for (String form : PartAssembler.formsOf(part, design.variant(), plan)) {
+                        List<Integer> formParts = assembled.partsOf(part.id(), form);
+                        if (!formParts.isEmpty()) {
+                            byForm.put(form, formParts);
+                        }
+                    }
+                    optionForms.add(byForm);
                     optionFills.add(Set.copyOf(part.fills()));
                 }
                 if (options.isEmpty()) {
@@ -420,6 +435,7 @@ public final class CharacterEditor {
                 slots.add(new PartSlots.Slot(place, options, labels, optional, initial));
                 optionIds.add(ids);
                 optionParts.add(defined);
+                formMeshes.add(optionForms);
                 fills.add(optionFills);
             }
 
@@ -460,6 +476,7 @@ public final class CharacterEditor {
                     regions,
                     optionIds,
                     optionParts,
+                    formMeshes,
                     fills,
                     assembled.channels(),
                     used.stream().map(all::get).toList());
@@ -614,6 +631,12 @@ public final class CharacterEditor {
 
     /** The parts last shown, to change them only when they change. */
     private List<Integer> lastWorn = List.of();
+
+    /**
+     * How far each shown part pushing out over bulky body parts is pushed over each slot, by part
+     * index, to move one again only when that changes; see {@link PartForms}.
+     */
+    private final Map<Integer, Map<String, Float>> pushed = new HashMap<>();
 
     /** The body plan the character's rig belongs to, or null. */
     private BodyPlan plan;
@@ -826,7 +849,8 @@ public final class CharacterEditor {
             log.error(
                     "Couldn't show {} in the character editor: {}",
                     design.id(),
-                    cause.getMessage());
+                    cause.getMessage(),
+                    cause);
             characterName.set("Couldn't build " + design.id());
             return;
         }
@@ -848,7 +872,8 @@ public final class CharacterEditor {
                         built.channelNames(),
                         built.fills(),
                         built.optionParts(),
-                        plan);
+                        plan,
+                        built.formMeshes());
         look.start(
                 plan.variants().indexOf(plan.variant(design.variant())),
                 sliderValues(design),
@@ -869,6 +894,8 @@ public final class CharacterEditor {
                         new Quaternionf(),
                         lastWorn);
         shown.setHiddenRegions(regions.hidden(lastWorn));
+        pushed.clear();
+        pushForms(lastWorn, look.slotForms(CharacterLook.NO_PREVIEW, 0));
         equipment = Equipment.NONE;
         itemFx = List.of();
         motion.setCombat(false);
@@ -886,7 +913,8 @@ public final class CharacterEditor {
                             built.channelNames(),
                             built.fills(),
                             built.optionParts(),
-                            plan);
+                            plan,
+                            built.formMeshes());
             slidersTitle.set("No sliders: the skeleton lacks their bones");
         }
         openCategory = Math.min(openCategory, categories.categories().size() - 1);
@@ -1095,10 +1123,40 @@ public final class CharacterEditor {
             return;
         }
         List<Integer> worn = look.worn(previewSlot, previewChoice);
+        pushForms(worn, look.slotForms(previewSlot, previewChoice));
         if (!worn.equals(lastWorn)) {
             lastWorn = worn;
             shown.showParts(worn);
             shown.setHiddenRegions(regions.hidden(worn));
+        }
+    }
+
+    /**
+     * Push the shown layers that have form targets out over the slots of bulky body parts, each
+     * only when how far it is pushed changes.
+     *
+     * @param worn The shown parts.
+     * @param slotForms The clothing form of the body part in each slot.
+     */
+    private void pushForms(List<Integer> worn, Map<String, String> slotForms) {
+        Map<String, Float> amounts = PartForms.amounts(plan, slotForms);
+        ImportedCharacter character = prepared.character();
+        for (int index : worn) {
+            ImportedCharacter.Part part = character.parts().get(index);
+            if (part.formTargets().isEmpty()) {
+                continue;
+            }
+            Map<String, Float> own = new HashMap<>();
+            amounts.forEach(
+                    (slot, amount) -> {
+                        if (part.formTargets().containsKey(slot)) {
+                            own.put(slot, amount);
+                        }
+                    });
+            if (!own.equals(pushed.getOrDefault(index, Map.of()))) {
+                pushed.put(index, own);
+                shown.replaceVertices(index, PartForms.displace(part, own));
+            }
         }
     }
 
@@ -2537,13 +2595,14 @@ public final class CharacterEditor {
         categories = null;
         openCategory = -1;
         lastWorn = List.of();
+        pushed.clear();
         stage.leave();
         goBack.run();
     }
 
     /**
-     * Whether the character stands at rest: on the Body tab, so the ruler reads its height true,
-     * or when a script asked.
+     * Whether the character stands at rest: on the Body tab, so the ruler reads its height true, or
+     * when a script asked.
      *
      * @return True if it stands at rest.
      */
@@ -2592,8 +2651,8 @@ public final class CharacterEditor {
     }
 
     /**
-     * For scripts: whether the design asked for last is shown, or failed to load, so what is on
-     * the stage won't change by itself. Call on the render thread.
+     * For scripts: whether the design asked for last is shown, or failed to load, so what is on the
+     * stage won't change by itself. Call on the render thread.
      *
      * @return True once it is.
      */
@@ -2647,7 +2706,10 @@ public final class CharacterEditor {
         for (int slot = 0; slot < look.slots().slots().size(); ++slot) {
             int choice = look.choice(slot);
             if (choice != CharacterLook.EMPTY && look.hiddenBy(slot) == null) {
-                ids.add(prepared.optionIds().get(slot).get(choice).toString());
+                String form = look.formOf(slot);
+                ids.add(
+                        prepared.optionIds().get(slot).get(choice)
+                                + (form == null ? "" : Part.FORM_SEPARATOR + form));
             }
         }
         return ids;
@@ -2675,8 +2737,8 @@ public final class CharacterEditor {
     }
 
     /**
-     * For scripts: look at what the character wears or at one part, from far enough away to see
-     * it whole, without gliding. Call on the render thread.
+     * For scripts: look at what the character wears or at one part, from far enough away to see it
+     * whole, without gliding. Call on the render thread.
      *
      * @param partId The part to frame, or null for the whole character.
      * @param pitch The pitch, positive looking down.
