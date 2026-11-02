@@ -2,6 +2,7 @@ package com.ikalagaming.characters.editor;
 
 import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.definition.BodyPlan;
+import com.ikalagaming.characters.definition.DecalUse;
 import com.ikalagaming.characters.definition.Part;
 import com.ikalagaming.characters.definition.Slider;
 import com.ikalagaming.characters.registry.CharacterLoader;
@@ -254,6 +255,41 @@ class TestLookRules {
         Assertions.assertEquals("padded", look.formOf(1));
         look.choose(0, CharacterLook.EMPTY);
         Assertions.assertEquals(List.of(1), look.worn(CharacterLook.NO_PREVIEW, 0));
+    }
+
+    /** A decal goes on and comes off with undo, and its channels join the look's. */
+    @Test
+    void decal() {
+        CharacterLook look = look();
+        int before = look.channels().size();
+        DecalUse star =
+                new DecalUse(
+                        Id.parse("ikala:decal/emblem"),
+                        "chest",
+                        Map.of(com.ikalagaming.characters.definition.Decal.FIRST, "tertiary"));
+        look.setDecal(star);
+        Assertions.assertEquals(star, look.decal());
+        Assertions.assertTrue(look.channels().contains("tertiary"));
+        Assertions.assertEquals(before + 1, look.channels().size());
+        look.undo();
+        Assertions.assertNull(look.decal());
+        look.setDecal(star);
+        look.clear();
+        Assertions.assertNull(look.decal());
+    }
+
+    /** Body parts in a covered slot and layers over one show a decal; others don't. */
+    @Test
+    void decalParts() {
+        BodyPlan.DecalPlace chest = plan.decalPlace("chest");
+        Assertions.assertNotNull(chest);
+        List<Part> parts = new ArrayList<>();
+        for (String name : List.of("coat_long", "cape_cloth", "claw_l", "forearm_stump")) {
+            parts.add(registry.get(Part.class, Id.parse("ikala:part/biped/" + name)));
+        }
+        boolean[] showing =
+                com.ikalagaming.characters.view.CharacterDecals.partsShowing(plan, chest, parts);
+        Assertions.assertArrayEquals(new boolean[] {true, true, false, false}, showing);
     }
 
     /** Options the variant doesn't allow aren't available, and switching to it drops them. */

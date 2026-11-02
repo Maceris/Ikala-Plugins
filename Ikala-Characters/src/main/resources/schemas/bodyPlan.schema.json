@@ -98,6 +98,13 @@
           },
           "description": "Shapes clothing is fitted to, thinnest first: shells over the body at an offset, like \"tight\" at 0 and \"bulky\" at 0.06 m. A body part names the thinnest its surface fits in, and a layer shows its mesh for the thickest form among the body parts under it."
         },
+        "decals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DecalPlace"
+          },
+          "description": "Places a design's decal can go, like \"chest\": a box fixed to a bone at rest that art is projected through onto the parts covering its slots."
+        },
         "regions": {
           "type": "array",
           "items": {
@@ -171,6 +178,52 @@
       },
       "required": [
         "capsuleFromBones"
+      ],
+      "additionalProperties": false
+    },
+    "DecalPlace": {
+      "type": "object",
+      "description": "A place a design's decal can go: a box fixed to a bone at rest, facing the character's front, that art is projected through.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The place's name, like \"chest\"."
+        },
+        "bone": {
+          "type": "string",
+          "description": "The bone the box is fixed to, like \"chest\"."
+        },
+        "offset": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "Where the box's middle is from the bone, in the character's space at rest, in meters."
+        },
+        "size": {
+          "type": "number",
+          "description": "The art's width and height, in meters."
+        },
+        "depth": {
+          "type": "number",
+          "description": "How deep the box is, front to back, in meters: enough for the thickest clothing, not the body's back."
+        },
+        "covers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The body slots whose parts, and the layers covering which, show the decal, like [\"torso\"]."
+        }
+      },
+      "required": [
+        "id",
+        "bone",
+        "size",
+        "depth",
+        "covers"
       ],
       "additionalProperties": false
     },

@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.vulkan;
 
 import com.ikalagaming.graphics.MeshHandle;
+import com.ikalagaming.graphics.SkinnedDecal;
 import com.ikalagaming.graphics.SkinnedInstanceHandle;
 import com.ikalagaming.graphics.SkinnedMeshHandle;
 import com.ikalagaming.graphics.SkinnedPart;
@@ -254,14 +255,14 @@ class SkinnedTest {
         ByteBuffer data = heap.data.order(ByteOrder.LITTLE_ENDIAN);
         Matrix4f model = new Matrix4f().set(data.position(0));
         Assertions.assertEquals(-10, model.m32(), 1e-6);
-        // Three instances of 112 bytes, then palettes from byte 384: matrix 6
-        Assertions.assertEquals(6, data.getInt(SkinnedPacker.MATRIX_SIZE));
+        // Three instances of 192 bytes, then palettes from byte 576: matrix 9
+        Assertions.assertEquals(9, data.getInt(SkinnedPacker.MATRIX_SIZE));
         Assertions.assertEquals(2, data.getInt(SkinnedPacker.MATRIX_SIZE + 4));
         Assertions.assertEquals(0x8000_0001, data.getInt(SkinnedPacker.MATRIX_SIZE + 8));
         Assertions.assertEquals(
-                6 + 3, data.getInt(SkinnedPacker.INSTANCE_SIZE + SkinnedPacker.MATRIX_SIZE));
+                9 + 3, data.getInt(SkinnedPacker.INSTANCE_SIZE + SkinnedPacker.MATRIX_SIZE));
         Assertions.assertEquals(
-                1, new Matrix4f().set(data.position(6 * SkinnedPacker.MATRIX_SIZE)).m00());
+                1, new Matrix4f().set(data.position(9 * SkinnedPacker.MATRIX_SIZE)).m00());
 
         ByteBuffer draws = heap.draws.order(ByteOrder.LITTLE_ENDIAN);
         Assertions.assertEquals(7, draws.getInt(4));
@@ -333,6 +334,90 @@ class SkinnedTest {
                 IllegalArgumentException.class, () -> SkinnedPart.slots(8, 0, 0, 0));
         Assertions.assertEquals(
                 0xFF33_2211, SkinnedPart.pack(0x11 / 255f, 0x22 / 255f, 0x33 / 255f));
+    }
+
+    /** A decal goes after the tints; parts that take it carry the decal bit on their instance. */
+    @Test
+    void testPackDecal() {
+        SkinnedRegistry registry = new SkinnedRegistry();
+        TextureHandle art =
+                new TextureHandle(5, 1, 4, 4, com.ikalagaming.graphics.Format.R8G8B8A8_UNORM);
+        SkinnedPart shirt =
+                new SkinnedPart(
+                        mesh(1, 2, 30),
+                        null,
+                        null,
+                        SkinnedPart.NO_TINT,
+                        new int[] {
+                            SkinnedPart.WHITE,
+                            SkinnedPart.WHITE,
+                            SkinnedPart.WHITE,
+                            SkinnedPart.WHITE
+                        },
+                        true);
+        SkinnedPart boots = new SkinnedPart(mesh(2, 2, 12), null);
+        SkinnedInstanceHandle handle = posed(registry, -10, 2, List.of(shirt, boots));
+        org.joml.Matrix4f box = new org.joml.Matrix4f().translation(0.5f, 0.25f, 0);
+        Assertions.assertTrue(
+                registry.setDecal(
+                        OWNER,
+                        handle,
+                        new SkinnedDecal(art, box, 6, -1, 0xFF00_00FF, 0xFF00_FF00)));
+        // The decal keeps its own copy of the box
+        box.identity();
+
+        Map<Integer, MeshRegistry.Location> locations =
+                Map.of(
+                        1,
+                        new MeshRegistry.Location(100, 200),
+                        2,
+                        new MeshRegistry.Location(300, 400));
+        Heap heap = new Heap();
+        new SkinnedPacker()
+                .pack(
+                        registry,
+                        part -> locations.get(part.mesh().mesh().slot()),
+                        material -> 0,
+                        texture -> texture == art ? 9 : 0,
+                        new Vector3d(),
+                        planes(),
+                        heap);
+
+        ByteBuffer data = heap.data.order(ByteOrder.LITTLE_ENDIAN);
+        int decal = SkinnedPacker.DECAL_OFFSET;
+        // Column-major: the translation is the last column
+        Assertions.assertEquals(0.5f, data.getFloat(decal + 12 * Float.BYTES));
+        Assertions.assertEquals(0.25f, data.getFloat(decal + 13 * Float.BYTES));
+        Assertions.assertEquals(9, data.getInt(decal + SkinnedPacker.MATRIX_SIZE));
+        Assertions.assertEquals(
+                6 | 0xFF << 8, data.getInt(decal + SkinnedPacker.MATRIX_SIZE + Integer.BYTES));
+        Assertions.assertEquals(
+                0xFF00_00FF, data.getInt(decal + SkinnedPacker.MATRIX_SIZE + 2 * Integer.BYTES));
+
+        ByteBuffer draws = heap.draws.order(ByteOrder.LITTLE_ENDIAN);
+        Assertions.assertEquals(SkinnedPacker.DECAL_BIT, draws.getInt(0));
+        Assertions.assertEquals(0, draws.getInt(SkinnedPacker.DRAW_SIZE));
+
+        // No decal: art 0
+        Assertions.assertTrue(registry.setDecal(OWNER, handle, null));
+        Heap again = new Heap();
+        new SkinnedPacker()
+                .pack(
+                        registry,
+                        part -> locations.get(part.mesh().mesh().slot()),
+                        material -> 0,
+                        texture -> 9,
+                        new Vector3d(),
+                        planes(),
+                        again);
+        Assertions.assertEquals(
+                0,
+                again.data
+                        .order(ByteOrder.LITTLE_ENDIAN)
+                        .getInt(decal + SkinnedPacker.MATRIX_SIZE));
+        Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> new SkinnedDecal(art, new org.joml.Matrix4f(), 8, 0, 0, 0));
     }
 
     /** Nothing posed, nothing packed. */

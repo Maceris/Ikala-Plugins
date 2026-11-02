@@ -26,6 +26,10 @@ layout(location = 8) flat out uint outShellSeed;
 // The part's tint colors, one per mask channel, and its tint mask, see skinning.glsl
 layout(location = 9) flat out uvec4 outTint;
 layout(location = 10) flat out uint outTintMask;
+// Where the vertex lies in its instance's decal's box, and how much it faces out of it, and the
+// decal's art and colors, art 0 for none; see skinning.glsl
+layout(location = 11) out vec4 outDecalCoord;
+layout(location = 12) flat out uvec4 outDecal;
 
 layout(set = 0, binding = 0) uniform Uniforms {
     mat4 projectionMatrix;
@@ -42,13 +46,15 @@ void main()
 {
     uvec4 draw = draws.draws[drawRecord(gl_InstanceIndex)];
     uvec4 fallbacks = draws.draws[drawRecord(gl_InstanceIndex) + 1u];
-    SkinnedInstance instance = data.instances[draw.x];
+    SkinnedInstance instance = data.instances[drawInstance(draw)];
     outMaterialIdx = draw.y;
     outRemaps = uvec4(0xFFFFFFFFu);
     outShellSeed = 0u;
     outTextCoord = texCoord;
     outTint = tintColors(instance, draw.z, fallbacks);
     outTintMask = draw.w;
+    outDecal = decalOf(instance, draw);
+    outDecalCoord = outDecal.x == 0u ? vec4(0.0) : decalCoord(instance, position, normal);
 
     if (regionHidden(instance)) {
         gl_Position = HIDDEN_POSITION;

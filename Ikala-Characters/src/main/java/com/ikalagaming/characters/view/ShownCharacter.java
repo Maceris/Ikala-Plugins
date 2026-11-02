@@ -10,6 +10,7 @@ import com.ikalagaming.characters.pose.Proportions;
 import com.ikalagaming.characters.pose.Skeleton;
 import com.ikalagaming.graphics.Format;
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.SkinnedDecal;
 import com.ikalagaming.graphics.SkinnedInstanceHandle;
 import com.ikalagaming.graphics.SkinnedMeshHandle;
 import com.ikalagaming.graphics.SkinnedPart;
@@ -115,6 +116,12 @@ public final class ShownCharacter implements AutoCloseable {
      * {@link SkinnedPart#fallbacks}.
      */
     private final List<int[]> partFallbacks = new ArrayList<>();
+
+    /** Whether each part shows the decal. */
+    private boolean[] partDecals = new boolean[0];
+
+    /** The decal's art, or null for none. */
+    private TextureHandle decalArt;
 
     /** The loaded textures. */
     private final List<TextureHandle> textures = new ArrayList<>();
@@ -308,7 +315,8 @@ public final class ShownCharacter implements AutoCloseable {
                             partMaterials.get(index),
                             partMasks.get(index),
                             partSlots.get(index),
-                            partFallbacks.get(index)));
+                            partFallbacks.get(index),
+                            index < partDecals.length && partDecals[index]));
         }
         parts.addAll(heldParts);
         GraphicsManager.forPlugin(plugin).skins().setParts(instance, parts);
@@ -337,6 +345,56 @@ public final class ShownCharacter implements AutoCloseable {
                         moved.max()));
         sendParts();
         skins.releaseMesh(old);
+    }
+
+    /**
+     * Show a decal, projected through a box fixed to the character at rest onto the parts that show
+     * it (see {@link #setDecalParts}), or none.
+     *
+     * @param art The art, a mask: red takes the first color, green the second, alpha covers; or
+     *     null for no decal.
+     * @param restToBox The matrix from rest space into the decal's box, see {@link
+     *     CharacterDecals#restToBox}.
+     * @param slotA The tint slot the first color takes, or -1 for its fallback.
+     * @param slotB The tint slot the second color takes, or -1.
+     * @param fallbackA The first color while its slot is unset, packed as {@link SkinnedPart#pack}
+     *     packs.
+     * @param fallbackB The second color while its slot is unset.
+     */
+    public void setDecal(
+            ImportedCharacter.ImageData art,
+            Matrix4fc restToBox,
+            int slotA,
+            int slotB,
+            int fallbackA,
+            int fallbackB) {
+        var graphics = GraphicsManager.forPlugin(plugin);
+        TextureHandle old = decalArt;
+        decalArt =
+                art == null || restToBox == null
+                        ? null
+                        : decode(
+                                graphics.textures(), art, Format.R8G8B8A8_UNORM, TextureWrap.CLAMP);
+        graphics.skins()
+                .setDecal(
+                        instance,
+                        decalArt == null
+                                ? null
+                                : new SkinnedDecal(
+                                        decalArt, restToBox, slotA, slotB, fallbackA, fallbackB));
+        if (old != null) {
+            graphics.textures().release(old);
+        }
+    }
+
+    /**
+     * Change which parts show the decal.
+     *
+     * @param showing Whether each part shows it, by part index; parts past the end don't.
+     */
+    public void setDecalParts(boolean @NonNull [] showing) {
+        partDecals = showing.clone();
+        sendParts();
     }
 
     /**
@@ -731,6 +789,23 @@ public final class ShownCharacter implements AutoCloseable {
      */
     private static TextureHandle decode(
             Textures textureApi, ImportedCharacter.ImageData image, Format format) {
+        return decode(textureApi, image, format, TextureWrap.REPEAT);
+    }
+
+    /**
+     * Decode an image and load it as a texture.
+     *
+     * @param textureApi The textures API.
+     * @param image The image.
+     * @param format The format to load it as: sRGB for colors, unsigned normalized for masks.
+     * @param wrap How it wraps past its edges.
+     * @return The texture, or null if it can't be decoded.
+     */
+    private static TextureHandle decode(
+            Textures textureApi,
+            ImportedCharacter.ImageData image,
+            Format format,
+            TextureWrap wrap) {
         BufferedImage decoded;
         try {
             decoded = ImageIO.read(new ByteArrayInputStream(image.bytes()));
@@ -756,7 +831,7 @@ public final class ShownCharacter implements AutoCloseable {
             }
         }
         pixels.flip();
-        return textureApi.load(pixels, format, width, height, TextureWrap.REPEAT);
+        return textureApi.load(pixels, format, width, height, wrap);
     }
 
     /**
@@ -796,6 +871,9 @@ public final class ShownCharacter implements AutoCloseable {
         meshes.forEach(skins::releaseMesh);
         heldMeshes.forEach(skins::releaseMesh);
         textures.forEach(graphics.textures()::release);
+        if (decalArt != null) {
+            graphics.textures().release(decalArt);
+        }
         materials.forEach(GraphicsManager.getScene().getMaterialCache()::removeMaterial);
     }
 }

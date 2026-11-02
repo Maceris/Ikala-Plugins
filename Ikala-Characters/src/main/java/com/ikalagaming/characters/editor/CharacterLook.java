@@ -3,6 +3,7 @@ package com.ikalagaming.characters.editor;
 import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.data.Range;
 import com.ikalagaming.characters.definition.BodyPlan;
+import com.ikalagaming.characters.definition.DecalUse;
 import com.ikalagaming.characters.definition.FxUse;
 import com.ikalagaming.characters.definition.Palette;
 import com.ikalagaming.characters.definition.Part;
@@ -66,6 +67,7 @@ final class CharacterLook {
      * @param style The way it moves, or null for the plan's own.
      * @param displaced What each slot's choice took off, by slot, to put back later.
      * @param bothSides Whether parts with a pair are put on along with it.
+     * @param decal The decal it wears, or null for none.
      */
     record Snapshot(
             int[] choices,
@@ -75,7 +77,8 @@ final class CharacterLook {
             List<FxUse> fx,
             Id style,
             Map<Integer, Map<Integer, Integer>> displaced,
-            boolean bothSides) {}
+            boolean bothSides,
+            DecalUse decal) {}
 
     /** The slots. */
     private final PartSlots slots;
@@ -109,6 +112,9 @@ final class CharacterLook {
 
     /** The way it moves, or null for the plan's own. */
     private Id style;
+
+    /** The decal it wears, or null for none. */
+    private DecalUse decal;
 
     /** Earlier looks, the latest first. */
     private final Deque<Snapshot> history = new ArrayDeque<>();
@@ -272,6 +278,26 @@ final class CharacterLook {
             @NonNull Map<String, Integer> startColors,
             @NonNull List<FxUse> startFx,
             Id startStyle) {
+        start(variantIndex, startValues, startColors, startFx, startStyle, null);
+    }
+
+    /**
+     * Start from a design, as {@link #start(int, Map, Map, List, Id)} does, wearing a decal.
+     *
+     * @param variantIndex The variant's position in {@link #variants()}, or -1 for the first.
+     * @param startValues Slider values by ID; sliders left out start where the variant says.
+     * @param startColors Color codes by palette channel.
+     * @param startFx The effects the design wears.
+     * @param startStyle The way it moves, or null for the plan's own.
+     * @param startDecal The decal it wears, or null for none.
+     */
+    void start(
+            int variantIndex,
+            @NonNull Map<Id, float[]> startValues,
+            @NonNull Map<String, Integer> startColors,
+            @NonNull List<FxUse> startFx,
+            Id startStyle,
+            DecalUse startDecal) {
         if (!variants.isEmpty()) {
             variant = variantIndex < 0 ? 0 : variantIndex;
             startSliders();
@@ -288,6 +314,7 @@ final class CharacterLook {
         fx.clear();
         fx.addAll(startFx);
         style = startStyle;
+        decal = startDecal;
         history.clear();
         ++version;
     }
@@ -337,7 +364,13 @@ final class CharacterLook {
      * @return The channels, in the order editors list them.
      */
     List<String> channels() {
-        return channels;
+        if (decal == null || channels.containsAll(decal.channels().values())) {
+            return channels;
+        }
+        // The decal's colors are channels too, even where no part takes them
+        List<String> all = new ArrayList<>(channels);
+        decal.channels().values().stream().filter(c -> !all.contains(c)).forEach(all::add);
+        return all;
     }
 
     /**
@@ -457,6 +490,29 @@ final class CharacterLook {
      */
     Id style() {
         return style;
+    }
+
+    /**
+     * The decal it wears.
+     *
+     * @return The decal, or null for none.
+     */
+    DecalUse decal() {
+        return decal;
+    }
+
+    /**
+     * Change the decal it wears, remembering the look before to undo.
+     *
+     * @param newDecal The decal, or null for none.
+     */
+    void setDecal(DecalUse newDecal) {
+        if (Objects.equals(decal, newDecal)) {
+            return;
+        }
+        remember();
+        decal = newDecal;
+        ++version;
     }
 
     /**
@@ -1087,7 +1143,8 @@ final class CharacterLook {
                 List.copyOf(fx),
                 style,
                 taken,
-                bothSides);
+                bothSides,
+                decal);
     }
 
     /** Remember the look now, to undo the next change. */
@@ -1134,6 +1191,7 @@ final class CharacterLook {
         fx.clear();
         fx.addAll(last.fx());
         style = last.style();
+        decal = last.decal();
         displaced.clear();
         last.displaced()
                 .forEach((slot, emptied) -> displaced.put(slot, new LinkedHashMap<>(emptied)));
@@ -1204,6 +1262,7 @@ final class CharacterLook {
         }
         displaced.clear();
         fx.clear();
+        decal = null;
         ++version;
     }
 

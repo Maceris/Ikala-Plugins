@@ -23,6 +23,10 @@ layout(location = 8) flat in uint outShellSeed;
 layout(location = 9) flat in uvec4 outTint;
 // The tint mask's bindless index, or 0 for none; read only when TINTED
 layout(location = 10) flat in uint outTintMask;
+// Where the pixel lies in its decal's box and how much it faces out of it, and the decal's art and
+// two colors, art 0 for none; read only when TINTED, see skinning.glsl
+layout(location = 11) in vec4 outDecalCoord;
+layout(location = 12) flat in uvec4 outDecal;
 
 // Whether to drop pixels the texture's alpha cuts out. Off for baked opaque geometry, so the
 // depth test can run before the shader.
@@ -228,6 +232,21 @@ void main() {
             linear *= mix(vec3(1.0), tint, mask[c]);
         }
         baseColor.rgb = linearToSRGB(linear);
+    }
+    if (TINTED && outDecal.x != 0u) {
+        // The decal over the tinted surface: red takes its first color, green its second, alpha
+        // covers; it fades out toward the box's back and front and on surfaces turning away
+        vec3 box = outDecalCoord.xyz;
+        if (all(greaterThanEqual(box, vec3(0.0, 0.0, -1.0)))
+                && all(lessThanEqual(box, vec3(1.0, 1.0, 1.0)))) {
+            vec4 art = texture(bindlessTextures[nonuniformEXT(outDecal.x)], box.xy);
+            float cover = art.a * smoothstep(0.2, 0.5, outDecalCoord.w)
+                * (1.0 - smoothstep(0.8, 1.0, abs(box.z)));
+            vec3 color = sRGBToLinear(unpackUnorm4x8(outDecal.y).rgb) * art.r
+                + sRGBToLinear(unpackUnorm4x8(outDecal.z).rgb) * art.g;
+            vec3 linear = mix(sRGBToLinear(baseColor.rgb), color, cover);
+            baseColor.rgb = linearToSRGB(linear);
+        }
     }
     if (ALPHA_TEST && averaged && outBitangent.z > 0.5) {
         // A coverage volume's shell covers as much of the pixel as its volume stops light, by a

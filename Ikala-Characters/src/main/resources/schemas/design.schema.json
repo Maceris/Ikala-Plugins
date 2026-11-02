@@ -14,6 +14,33 @@
     }
   ],
   "$defs": {
+    "DecalUse": {
+      "type": "object",
+      "description": "A decal a design wears: the art, where it goes, and the palette channels its colors take.",
+      "properties": {
+        "decal": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$",
+          "description": "The art, like \"ikala:decal/star\"."
+        },
+        "place": {
+          "type": "string",
+          "description": "The plan's decal place, like \"chest\"."
+        },
+        "channels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The palette channel each of its colors takes, like {\"r\": \"accent\", \"g\": \"primary\"}. One left out shows the decal's default."
+        }
+      },
+      "required": [
+        "decal",
+        "place"
+      ],
+      "additionalProperties": false
+    },
     "Design": {
       "type": "object",
       "description": "A saved character: its body plan and variant, the part in each slot and layer, its slider values and its colors. Slots left out fall back to the variant's default parts.",
@@ -82,6 +109,14 @@
             "$ref": "#/$defs/FxUse"
           },
           "description": "Effects it wears, like an aura, on top of its parts' own. Up to 4."
+        },
+        "decal": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/DecalUse"
+            }
+          ],
+          "description": "The decal it wears, like an emblem on the chest."
         },
         "extends": {
           "type": "string",

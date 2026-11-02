@@ -34,6 +34,9 @@ layout(location = 8) flat out uint outShellSeed;
 // wants every input it declares written
 layout(location = 9) flat out uvec4 outTint;
 layout(location = 10) flat out uint outTintMask;
+// No decals here, see scene_skinned.vert
+layout(location = 11) out vec4 outDecalCoord;
+layout(location = 12) flat out uvec4 outDecal;
 #endif
 
 layout(set = SCENE_SET, binding = 0) uniform Uniforms {
@@ -80,6 +83,8 @@ void main()
     outShellSeed = 0u;
     outTint = uvec4(0xFFFFFFFFu);
     outTintMask = 0u;
+    outDecalCoord = vec4(0.0);
+    outDecal = uvec4(0u);
 #endif
 
     mat4 modelMatrix = modelMatrices[instance.x];

@@ -38,6 +38,7 @@ import java.util.function.Function;
  * @param palette A palette whose colors fill channels without their own.
  * @param colors Colors by palette channel.
  * @param fx Effects the design wears, on top of its parts' own.
+ * @param decal The decal it wears, or null for none.
  * @author Ches Burks
  */
 @Doc(
@@ -68,8 +69,37 @@ public record Design(
         @Doc("Colors by palette channel, like {\"skin\": \"#c58c62\"}.") @Optional
                 Map<String, Color> colors,
         @Doc("Effects it wears, like an aura, on top of its parts' own. Up to 4.") @Optional
-                List<FxUse> fx)
+                List<FxUse> fx,
+        @Doc("The decal it wears, like an emblem on the chest.") @Optional DecalUse decal)
         implements Definition {
+
+    /**
+     * A design without a decal.
+     *
+     * @param id This design's ID.
+     * @param plan The body plan.
+     * @param variant The plan's variant.
+     * @param style The way it moves, or null for the plan's own.
+     * @param sliders Slider values by slider ID.
+     * @param parts Body parts by the slot they are listed under.
+     * @param layers Layer parts by layer.
+     * @param palette A palette whose colors fill channels without their own.
+     * @param colors Colors by palette channel.
+     * @param fx Effects the design wears, on top of its parts' own.
+     */
+    public Design(
+            Id id,
+            Id plan,
+            String variant,
+            Id style,
+            Map<String, List<Float>> sliders,
+            Map<String, Id> parts,
+            Map<String, Id> layers,
+            Id palette,
+            Map<String, Color> colors,
+            List<FxUse> fx) {
+        this(id, plan, variant, style, sliders, parts, layers, palette, colors, fx, null);
+    }
 
     /** The field for the plan. */
     public static final String FIELD_PLAN = "plan";
@@ -97,6 +127,9 @@ public record Design(
 
     /** The field for the effects. */
     public static final String FIELD_FX = "fx";
+
+    /** The field for the decal. */
+    public static final String FIELD_DECAL = "decal";
 
     /** The most effects a design wears itself, so crowds stay within the scene's emitters. */
     public static final int MAX_FX = 4;
@@ -264,6 +297,13 @@ public record Design(
                             (effect, path) -> lookup.find(Fx.class, effect, path),
                             report,
                             JsonPath.at(FIELD_FX, i));
+        }
+        if (decal != null) {
+            decal.check(
+                    body,
+                    (art, path) -> lookup.find(Decal.class, art, path),
+                    report,
+                    JsonPath.at(FIELD_DECAL));
         }
     }
 

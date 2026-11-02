@@ -34,6 +34,8 @@ public enum Kind {
     ANIM_STYLE(AnimStyle.class),
     /** How equippable items look. */
     ITEM(Item.class),
+    /** Art designs wear projected on a decal place, like a chest emblem. */
+    DECAL(Decal.class),
     /** Saved characters. */
     DESIGN(Design.class);
 

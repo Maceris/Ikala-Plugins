@@ -52,6 +52,11 @@
     {"id": "armored", "offset": 0.04},
     {"id": "bulky", "offset": 0.06}
   ],
+  // Decal places: a box fixed to a bone at rest, facing front, that a design's decal is projected
+  // through onto the parts filling or covering its slots; deep enough for the bulkiest form
+  "decals": [
+    {"id": "chest", "bone": "chest", "offset": [0, 0.2, 0.2], "size": 0.18, "depth": 0.26, "covers": ["torso"]}
+  ],
   "sockets": [
     {"id": "head_top", "bone": "socket.head_top", "type": "head_top"},
     {"id": "face", "bone": "socket.face", "type": "face"},

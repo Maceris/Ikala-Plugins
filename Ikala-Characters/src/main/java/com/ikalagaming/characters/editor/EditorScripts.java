@@ -163,6 +163,25 @@ public final class EditorScripts {
     }
 
     /**
+     * Wear a decal, like an emblem on the chest, or none.
+     *
+     * @param decalId The decal's ID, like "ikala:decal/star", or an empty string for none.
+     * @param place The body plan's decal place, like "chest", or an empty string for its first.
+     * @param first The palette channel its first color takes, or an empty string for its default.
+     * @param second The channel its second color takes, or an empty string.
+     * @throws IllegalStateException If nothing is shown or the body has no decal places.
+     */
+    public static void decal(
+            @NonNull String decalId,
+            @NonNull String place,
+            @NonNull String first,
+            @NonNull String second) {
+        if (!call(editor -> editor.wearDecal(decalId, place, first, second))) {
+            throw new IllegalStateException("The shown design takes no decals");
+        }
+    }
+
+    /**
      * The parts worn, as the game would show them, for checks.
      *
      * @return The part IDs in slot order, joined by commas, or an empty string.
