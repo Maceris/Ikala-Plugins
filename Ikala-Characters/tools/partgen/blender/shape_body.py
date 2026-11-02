@@ -62,11 +62,11 @@ FORM_SHARE = 0.98
 # the slot's radius
 FORM_TOLERANCE = 0.01
 # Past the thickest form over a clothed slot: rein the part in (or reject it if that is too much),
-# let it be as it is because it takes no clothing, or reject it
+# let it be as it is because it is worn bare, or reject it
 BEYOND = ("clamp", "bare", "reject")
 # Reining in a part that stands out past the thickest form over a clothed slot scales how far it
-# stands out down, as far as this share of it; one needing more is rejected unless it takes no
-# clothing
+# stands out down, as far as this share of it unless --rein-least says otherwise; one needing
+# more is rejected unless it is worn bare
 REIN_LEAST = 0.5
 # Reining in scales so this share of each clothed slot's points fits, and what is left past the
 # limit, lumps and spikes, is clamped
@@ -548,7 +548,10 @@ def main():
     parser.add_argument("--beyond", default="clamp", choices=BEYOND,
                         help="What to do with a part standing out past the thickest clothing"
                              " form over a clothed slot: rein it in (rejecting it if that is too"
-                             " much), leave it as it is because it takes no clothing, or reject it.")
+                             " much), leave it as it is because it is worn bare, or reject it.")
+    parser.add_argument("--rein-least", type=float, default=REIN_LEAST,
+                        help="The least share of how far it stands out that reining it in may"
+                             " scale it to before it is rejected.")
     args = parser.parse_args(argv)
     VOXEL = args.voxel
     os.makedirs(args.out, exist_ok=True)
@@ -618,7 +621,7 @@ def main():
         extents["rejected"] = ("needs stretching x%s to meet the floor, more than %s-%s; the fit"
                                " is likely wrong" % (extents["floor_scale"], low, high))
     # Over clothed slots a part must fit in the thickest form, a share of each slot's radius,
-    # unless it takes no clothing; it is reined in toward the body if it stands out too far, and
+    # unless it is worn bare; it is reined in toward the body if it stands out too far, and
     # rejected if that would take more than halving how far it stands out
     forms = plan_forms()
     radii = slot_radii("male")
@@ -636,11 +639,13 @@ def main():
             forms[-1][0], ", ".join("%s (%.2f of its radius)" % i for i in over.items()))
     elif over:
         needed = {s: limit / v for s, v in over.items()}
-        if min(needed.values()) < REIN_LEAST:
+        if min(needed.values()) < args.rein_least:
             extents["rejected"] = (
                 "stands out too far for clothing over %s; reining it in would take scaling it"
-                " to %s, past x%s. Brief it as taking no clothing if it is meant to be wild"
-                % (", ".join(over), ", ".join("x%.2f" % k for k in needed.values()), REIN_LEAST))
+                " to %s, past x%s. Regenerate it slimmer, or brief it \"bare\" if it is meant"
+                " to be worn without clothing"
+                % (", ".join(over), ", ".join("x%.2f" % k for k in needed.values()),
+                   args.rein_least))
         else:
             scales, moved = rein_in(part, surface, owner, names, radii, limit)
             extents["reined"] = {s: round(k, 3) for s, k in scales.items() if k < 1.0}

@@ -288,10 +288,10 @@
           },
           "description": "For layers: the body slots it really covers, like a t-shirt leaving the arms bare. Left out, all its layers cover."
         },
-        "takesClothing": {
+        "bare": {
           "type": "boolean",
-          "description": "For body parts: whether clothing can go over it. One that can't, like an arm covered in spikes, can't be worn with layers covering its slots.",
-          "default": true
+          "description": "For body parts: whether it is worn bare, like an arm covered in spikes: it can't be worn with layers covering its slots.",
+          "default": false
         },
         "extends": {
           "type": "string",

@@ -50,7 +50,8 @@ import java.util.Set;
  *     "*" for any other slot: a body part from the bare body, a layer from the body part under it.
  *     Slots left out take a body part's form's share or a layer's layer's standoff.
  * @param covers For layers, the body slots it really covers, or empty for all its layers cover.
- * @param takesClothing For body parts, whether clothing can go over it.
+ * @param bare For body parts, whether it is worn bare: clothing covering its slots can't go over
+ *     it.
  * @author Ches Burks
  */
 @Doc(
@@ -143,11 +144,10 @@ public record Part(
                 @Optional
                 List<String> covers,
         @Doc(
-                        "For body parts: whether clothing can go over it. One that can't, like an"
-                                + " arm covered in spikes, can't be worn with layers covering its"
-                                + " slots.")
-                @Default("true")
-                boolean takesClothing)
+                        "For body parts: whether it is worn bare, like an arm covered in spikes:"
+                                + " it can't be worn with layers covering its slots.")
+                @Default("false")
+                boolean bare)
         implements Definition {
 
     /** The field for the plan. */
@@ -213,8 +213,8 @@ public record Part(
     /** The field for the covered slots. */
     public static final String FIELD_COVERS = "covers";
 
-    /** The field for taking clothing. */
-    public static final String FIELD_TAKES_CLOTHING = "takesClothing";
+    /** The field for being worn bare. */
+    public static final String FIELD_BARE = "bare";
 
     /** The standoff key for any slot not given its own. */
     public static final String ANY_SLOT = "*";
@@ -557,8 +557,8 @@ public record Part(
                         "The plan has no body slot '" + covers.get(i) + "'");
             }
         }
-        if (!takesClothing && kind != PartKind.BODY) {
-            checks.error(JsonPath.at(FIELD_TAKES_CLOTHING), "Only body parts can refuse clothing");
+        if (bare && kind != PartKind.BODY) {
+            checks.error(JsonPath.at(FIELD_BARE), "Only body parts are worn bare");
         }
         standoff.forEach(
                 (slot, meters) -> {

@@ -47,7 +47,7 @@
   // Clothing forms: shells over the body that layers are fitted to, so they go over bulky body
   // parts, each a share of every slot's "radius" out (its median thickness on the male body; the
   // female variant gives her own "radii"). A body part on a "clothed" slot must fit in the thickest
-  // unless it takes no clothing
+  // unless it is worn bare
   "forms": [
     {"id": "tight", "share": 0},
     {"id": "padded", "share": 0.1},

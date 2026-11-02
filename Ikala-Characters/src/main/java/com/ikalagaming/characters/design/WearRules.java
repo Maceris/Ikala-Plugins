@@ -53,8 +53,8 @@ public final class WearRules {
     }
 
     /**
-     * Whether a body part that can't take clothing keeps a layer off: the layer covers one of its
-     * slots. A t-shirt leaving the arms bare still goes over spiked arms; a jacket doesn't.
+     * Whether a body part worn bare keeps a layer off: the layer covers one of its slots. A t-shirt
+     * leaving the arms bare still goes over spiked arms; a jacket doesn't.
      *
      * @param plan The plan.
      * @param body The body part.
@@ -64,7 +64,7 @@ public final class WearRules {
     public static boolean blocksClothing(
             @NonNull BodyPlan plan, @NonNull Part body, @NonNull Part layer) {
         if (body.kind() != Part.PartKind.BODY
-                || body.takesClothing()
+                || !body.bare()
                 || layer.kind() != Part.PartKind.LAYER) {
             return false;
         }

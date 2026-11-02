@@ -71,10 +71,11 @@ never past an outer seam's line, so the neighboring body stays the mannequin's.
 Over the body plan's clothed slots (torso, pelvis, arms and legs, not hands, feet or the head), a
 body part must fit under clothing: within the bulkiest form, a share of each slot's radius. One
 standing out further is reined in toward the body, and rejected if that would take too much. A
-part meant to stand out, like an arm covered in spikes, says "clothes": false; it is left as it
+part meant to be worn bare, like an arm covered in spikes, says "bare": true; it is left as it
 is, and clothing covering its slots can't be worn with it.
 
-Accessories are fitted on the face, head_top, back, hip, shoulder and forearm sockets. Clothing is lined up on the mannequin, cut
+Accessories are fitted on the face, head_top, back, hip, shoulder and forearm sockets. Clothing
+is lined up on the mannequin, cut
 out of its figure, shaped over the body, weighted to the rig, baked, carried over to the female
 body, and written as a layer part. Run it with any Python that has Pillow, such as TRELLIS.2's.
 """
@@ -1395,7 +1396,7 @@ def write_body_part(config, batch, brief, part, rule):
     for side, name, definition in definitions:
         if shaped.get("bare"):
             # Clothing covering its slots can't be worn with it
-            definition["takesClothing"] = False
+            definition["bare"] = True
         elif form is not None:
             definition["form"] = form
         path = content / "part" / ("%s.json" % name)
@@ -1447,6 +1448,7 @@ def fit_body_part(config, batch, brief):
     (shape_body.py), weight it (weight_body.py) and bake its textures (bake_body.py), all in
     the brief's fit folder. Gives the reports, or None if a step failed."""
     part, rule = body_of(brief)
+    fit = dict(rule, **brief.get("fit", {}))
     folder = batch.brief_folder(brief["id"])
     out = folder / "fit"
     out.mkdir(exist_ok=True)
@@ -1462,6 +1464,8 @@ def fit_body_part(config, batch, brief):
         ("shape_body.py", "shape.json",
          ["--part", out / "part.glb", "--body", body, "--out", out, "--slots", slots,
           "--triangles", rule["triangles"], "--beyond", beyond_of(brief, rule)]
+         # A brief may let a part be reined in further, like a bulky robot leg made to fit pants
+         + (["--rein-least", fit["reinLeast"]] if "reinLeast" in fit else [])
          + (["--open", left_open] if left_open else [])
          + (["--voxel", rule["voxel"]] if "voxel" in rule else [])),
         ("weight_body.py", "weights.json",
@@ -1511,9 +1515,9 @@ def fit_body_part(config, batch, brief):
 
 def beyond_of(brief, rule):
     """What to do with a body part standing out past the thickest clothing form over a clothed
-    slot: nothing for a brief whose part takes no clothing ("clothes": false, like spiked arms),
-    else what its "fit" or rule says, else rein it in, or reject it if that is too much."""
-    if brief.get("clothes", True) is False:
+    slot: nothing for a brief whose part is worn bare ("bare": true, like spiked arms), else
+    what its "fit" or rule says, else rein it in, or reject it if that is too much."""
+    if brief.get("bare", False):
         return "bare"
     return brief.get("fit", {}).get("beyond", rule.get("beyond", "clamp"))
 

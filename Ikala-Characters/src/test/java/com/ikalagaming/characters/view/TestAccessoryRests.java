@@ -205,17 +205,14 @@ class TestAccessoryRests {
     }
 
     /**
-     * A body part that takes no clothing keeps off layers covering its slots, but not a layer part
-     * that leaves those slots bare, like a t-shirt over spiked arms.
+     * A body part worn bare keeps off layers covering its slots, but not a layer part that leaves
+     * those slots uncovered, like a t-shirt over spiked arms.
      */
     @Test
-    void wildParts() {
+    void bareParts() {
         BodyPlan plan = read(PLAN, BodyPlan.class);
         Part spiked =
-                part(
-                        "spiked",
-                        "\"kind\": \"body\", \"fills\": [\"upperArm.L\"], \"takesClothing\":"
-                                + " false");
+                part("spiked", "\"kind\": \"body\", \"fills\": [\"upperArm.L\"], \"bare\": true");
         Part shirt = part("shirt", "\"kind\": \"layer\", \"fills\": [\"shirt\"]");
         Part tee =
                 part("tee", "\"kind\": \"layer\", \"fills\": [\"shirt\"], \"covers\": [\"torso\"]");
