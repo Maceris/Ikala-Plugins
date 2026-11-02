@@ -1,5 +1,5 @@
 {
-  "_comment": "How partgen sizes and places a generated accessory for each socket type of the biped (generator settings only: the part it writes is an ordinary accessory definition). head_top uses the crown fit: headwear sits with its bottom a little above the brows, its crown (the narrowest slice of its lower half, above any brim) is a little wider than the head at that height, and anything wider than maxWidth head widths is pulled in toward the crown; a hat too shallow to cover the top of the head (with topClearance) grows until it does. The others use the surface fit: the object is turned so the face the picture showed looks along \"side\" (back, front, up, or out: away from the body's middle on the socket's side), scaled so its span along \"size.axis\" (across, up, or depth: out from the body) is \"size.share\" of a body measurement, scaled down whole while any \"maxSize\" span passes its share, and moved so its inner face rests \"gap\" meters off the body's surface beside the socket, centered on it across and up. A measurement is a mannequin slot (\".?\" takes the socket's side) and one of width or depth where it crosses the socket's height, height, length (along its longest axis) or girth. \"bySocket\" changes a rule for one socket of the type. Sided sockets (.L/.R) make both sides' parts, the right mirrored. A brief's \"fit\" replaces any of these, and its \"scale\" multiplies the size.",
+  "_comment": "How partgen sizes and places a generated accessory for each socket type of the biped (generator settings only: the part it writes is an ordinary accessory definition). head_top uses the crown fit: headwear sits with its bottom a little above the brows, its crown (the narrowest slice of its lower half, above any brim) is a little wider than the head at that height, and anything wider than maxWidth head widths is pulled in toward the crown; a hat too shallow to cover the top of the head (with topClearance) grows until it does. The others use the surface fit: the object is turned so the face the picture showed looks along \"side\" (back, front, up, or out: away from the body's middle on the socket's side), scaled so its span along \"size.axis\" (across, up, or depth: out from the body) is \"size.share\" of a body measurement, scaled down whole while any \"maxSize\" span passes its share, and moved in along the side until all but a few of its points are at least \"gap\" meters off the body's surface beside the socket, centered on it across and up. A measurement is a mannequin slot (\".?\" takes the socket's side) and one of width or depth where it crosses the socket's height, height, length (along its longest axis) or girth. \"bySocket\" changes a rule for one socket of the type. Sided sockets (.L/.R) make both sides' parts, the right mirrored. A brief's \"fit\" replaces any of these, and its \"scale\" multiplies the size.",
   "head_top": {
     "fit": "crown",
     "bottomAbove": "brow.L",
@@ -17,7 +17,7 @@
     "size": {"axis": "across", "of": "torso.width", "share": 0.75},
     "maxSize": [
       {"axis": "up", "of": "torso.height", "share": 1.1},
-      {"axis": "depth", "of": "torso.width", "share": 0.4}
+      {"axis": "depth", "of": "torso.width", "share": 0.6}
     ],
     "gap": 0.01,
     "triangles": 1500,
@@ -30,7 +30,7 @@
     "size": {"axis": "across", "of": "head.width", "share": 1.05},
     "maxSize": [
       {"axis": "up", "of": "head.height", "share": 0.6},
-      {"axis": "depth", "of": "head.width", "share": 0.5}
+      {"axis": "depth", "of": "head.width", "share": 1.0}
     ],
     "gap": 0.004,
     "triangles": 1000,

@@ -46,6 +46,14 @@ NEEDLE_LENGTH = 0.2
 NEEDLE_TILT = 15
 # Fewer faces than this is a speck
 SPECK_FACES = 12
+# Spans are measured between these percentiles of an accessory's points, so a strap end or a
+# stray bit doesn't count as its size
+SPAN_PERCENTILES = (2, 98)
+# Resting an accessory on the body, the share of its points let come nearer than the gap, so a
+# strap end pressing in doesn't hold the rest of it away
+CONTACT_PERCENTILE = 3
+# How far out an accessory starts before it is moved in onto the body, in meters
+DROP_START = 0.5
 # Which way each side an accessory may sit on points, in Blender's space (the mannequin faces -Y)
 SIDES = {"front": (0, -1, 0), "back": (0, 1, 0), "up": (0, 0, 1)}
 # Slices the mesh is cut into to find its crown, and the points a slice needs to count
@@ -400,8 +408,8 @@ def place_against_body(high, mannequin, armature, bone, rule):
     points = vertices(high)
 
     def span(axis):
-        values = points @ axes[axis]
-        return float(values.max() - values.min())
+        low, high_end = np.percentile(points @ axes[axis], SPAN_PERCENTILES)
+        return float(high_end - low)
 
     wanted = rule["size"]
     scale = (measure(mannequin, wanted["of"], head) * wanted["share"]
@@ -418,17 +426,30 @@ def place_against_body(high, mannequin, armature, bone, rule):
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 
     # The body's surface beside the socket: the first hit coming in from outside along the side
-    hit, _, _, _ = body_tree(mannequin).ray_cast(head + direction * 2.0, -direction)
+    tree = body_tree(mannequin)
+    hit, _, _, _ = tree.ray_cast(head + direction * 2.0, -direction)
     surface = hit if hit is not None else head
 
+    # Across and up it centers on the socket, and starts well out from the surface
     points = vertices(high)
-    middle = (points.min(0) + points.max(0)) / 2
-    move = np.array(head) - middle
-    # Across and up it centers on the socket; along the side its inner face meets the surface
+    low, high_end = np.percentile(points, SPAN_PERCENTILES, axis=0)
+    move = np.array(head) - (low + high_end) / 2
     move -= axes["depth"] * float(move @ axes["depth"])
-    inner = float((points @ axes["depth"]).min())
-    target = float(np.array(surface) @ axes["depth"]) + rule.get("gap", 0.0)
-    move += axes["depth"] * (target - inner)
+    inner = float(np.percentile(points @ axes["depth"], SPAN_PERCENTILES[0]))
+    start = float(np.array(surface) @ axes["depth"]) + DROP_START
+    move += axes["depth"] * (start - inner)
+    points = points + move
+    # Then it moves in along the side until the body is the gap away from all but a few of its
+    # points, so it rests on the body's curve rather than on its one innermost point
+    inward = Vector((-axes["depth"]).tolist())
+    reach = []
+    for point in points[:: max(1, len(points) // 4000)]:
+        found, _, _, distance = tree.ray_cast(Vector(point.tolist()), inward)
+        if found is not None:
+            reach.append(distance)
+    gap = rule.get("gap", 0.0)
+    travel = (float(np.percentile(reach, CONTACT_PERCENTILE)) if reach else DROP_START) - gap
+    move -= axes["depth"] * travel
     high.location = Vector(move.tolist())
     select_only(high)
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
