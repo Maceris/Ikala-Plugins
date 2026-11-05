@@ -60,6 +60,10 @@ layout(location = 1) out vec2 extinction;
 
 // Opacity is kept below 1, so the extinction stays finite
 const float MAX_OPACITY = 0.999;
+// Below this much light getting through to just in front of a surface, it is lit without looking
+// around in the occupancy volume: at most this share of its light shows, so occlusion and the
+// reflection ray can't change the pixel visibly, and deep stacks of glass cost far less
+const float DETAIL_TRANSMITTANCE = 0.1;
 
 // Weighted blended OIT's depth weight, McGuire and Bavoil 2013, equation 10: nearer layers count
 // for more in the average. Matches OitMath.weight.
@@ -112,19 +116,21 @@ void main() {
     vec3 tangent = normalize(outTangent);
     vec3 bitangent = cross(normal, tangent);
 
+    float depth = -outViewPosition.z;
+    float w = voxelWeights != 0
+        ? transmittanceInFront(gl_FragCoord.xy, depth, logScale, tiles)
+        : depthWeight(alpha, depth);
+    occupancyDetail = voxelWeights == 0 || w >= DETAIL_TRANSMITTANCE;
+
     uint clusterLights;
     vec3 color = lightSurface(baseColor, material, outViewPosition.xyz, outWorldPosition.xyz, normal,
         geometricNormal, tangent, bitangent, gl_FragCoord.xy / screenSize, clusterLights);
 
-    float depth = -outViewPosition.z;
     // Seen through the fog in front of it: blended over the fogged scene behind, which is right for
     // one layer and near enough for more
     if ((fog.enabled & FOG_ENABLED) != 0) {
         color = fogApply(color, gl_FragCoord.xy, depth, fog.logScale);
     }
-    float w = voxelWeights != 0
-        ? transmittanceInFront(gl_FragCoord.xy, depth, logScale, tiles)
-        : depthWeight(alpha, depth);
     accum = vec4(color * alpha * w, alpha * w);
     extinction = vec2(-log(1.0 - alpha));
 }

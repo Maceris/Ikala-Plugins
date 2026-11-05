@@ -521,6 +521,10 @@ float pointVisibility(Light light, vec3 renderPosition, vec3 renderNormal) {
 // How much of the light from the lights the last lit surface marched rays for got through, from 0
 // to 1, or -1 when none did, for the rays view
 float lastRayVisibility = -1.0;
+// Whether lightSurface looks around in the occupancy volume: for ambient occlusion, the reflection
+// and light rays. A caller turns it off for a surface too hidden behind others for those to show;
+// it is then lit as if nothing nearby were in the way.
+bool occupancyDetail = true;
 #endif
 
 // Light a surface, in linear light. Positions, normals and tangents are in view space, except the
@@ -555,7 +559,8 @@ vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 ren
 #ifdef OCCUPANCY_SET
     vec3 renderGeometric = normalize((invViewMatrix * vec4(geometricNormal, 0)).xyz);
     // The strongest light from lights without a shadow map, strongest first, to march rays for
-    int rayBudget = occupancyEnabled != 0 ? min(occupancyRays, OCCUPANCY_MAX_RAYS) : 0;
+    int rayBudget = occupancyEnabled != 0 && occupancyDetail
+        ? min(occupancyRays, OCCUPANCY_MAX_RAYS) : 0;
     int rayCount = 0;
     uint rayLights[OCCUPANCY_MAX_RAYS];
     vec3 rayLit[OCCUPANCY_MAX_RAYS];
@@ -613,8 +618,9 @@ vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 ren
     // Ambient light arrives equally from everywhere the sky can be seen, and dimly under cover, less
     // what is in the way nearby
 #ifdef OCCUPANCY_SET
-    vec3 bentGeometric;
-    float open = occupancyAmbient(renderPosition, renderGeometric, bentGeometric);
+    vec3 bentGeometric = renderGeometric;
+    float open = occupancyDetail
+        ? occupancyAmbient(renderPosition, renderGeometric, bentGeometric) : 1.0;
 #else
     float open = 1.0;
 #endif
@@ -636,7 +642,7 @@ vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 ren
         vec3 diffuseNormal = worldNormal;
         float reflectionVisible = 1.0;
 #ifdef OCCUPANCY_SET
-        if (occupancyAoReach > 0.0 && environmentOcclusion != 0) {
+        if (occupancyAoReach > 0.0 && environmentOcclusion != 0 && occupancyDetail) {
             diffuseNormal = normalize(worldNormal + bentGeometric - renderGeometric);
             // Smooth surfaces mirror what is along the reflection; rough ones spread past it,
             // which the ambient occlusion covers
