@@ -46,6 +46,12 @@ import java.util.Set;
  * @param locksSliders Sliders it locks while worn, by ID or editor group.
  * @param hidesSockets Sockets it covers, by name or type.
  * @param form For body parts, the plan's thinnest clothing form its surface fits in.
+ * @param standoff How far it stands out over each body slot, as a share of the slot's radius, with
+ *     "*" for any other slot: a body part from the bare body, a layer from the body part under it.
+ *     Slots left out take a body part's form's share or a layer's layer's standoff.
+ * @param covers For layers, the body slots it really covers, or empty for all its layers cover.
+ * @param bare For body parts, whether it is worn bare: clothing covering its slots can't go over
+ *     it.
  * @author Ches Burks
  */
 @Doc(
@@ -122,7 +128,26 @@ public record Part(
                                 + " \"bulky\" for a robot leg, so layers over it show their mesh for"
                                 + " that form. Left out, it is the plan's first, the bare body's.")
                 @Optional
-                String form)
+                String form,
+        @Doc(
+                        "How far it stands out over each body slot, as a share of the slot's"
+                                + " radius, with \"*\" for any other slot: a body part from the"
+                                + " bare body, which clothing over it is pushed out by, a layer"
+                                + " from the body part under it. Accessories resting on the slot"
+                                + " sit on both. Slots left out take a body part's form's share or"
+                                + " a layer's layer's standoff.")
+                @Optional
+                Map<String, Float> standoff,
+        @Doc(
+                        "For layers: the body slots it really covers, like a t-shirt leaving the"
+                                + " arms bare. Left out, all its layers cover.")
+                @Optional
+                List<String> covers,
+        @Doc(
+                        "For body parts: whether it is worn bare, like an arm covered in spikes:"
+                                + " it can't be worn with layers covering its slots.")
+                @Default("false")
+                boolean bare)
         implements Definition {
 
     /** The field for the plan. */
@@ -181,6 +206,18 @@ public record Part(
 
     /** The field for the clothing form. */
     public static final String FIELD_FORM = "form";
+
+    /** The field for the standoff. */
+    public static final String FIELD_STANDOFF = "standoff";
+
+    /** The field for the covered slots. */
+    public static final String FIELD_COVERS = "covers";
+
+    /** The field for being worn bare. */
+    public static final String FIELD_BARE = "bare";
+
+    /** The standoff key for any slot not given its own. */
+    public static final String ANY_SLOT = "*";
 
     /** Joins a variant and a clothing form in a mesh key, like "female@bulky". */
     public static final String FORM_SEPARATOR = "@";
@@ -340,6 +377,21 @@ public record Part(
         public static final String FIELD_SCALE = "scale";
 
         /**
+         * This placement moved further.
+         *
+         * @param by How much further, in meters, in model space.
+         * @return The moved placement.
+         */
+        public Placement movedBy(@NonNull Vector3fc by) {
+            Vec3 moved =
+                    offset == null
+                            ? new Vec3(by.x(), by.y(), by.z())
+                            : new Vec3(
+                                    offset.x() + by.x(), offset.y() + by.y(), offset.z() + by.z());
+            return new Placement(moved, rotate, scale);
+        }
+
+        /**
          * The placement as a transform in model space.
          *
          * @param socket Where the socket bone is at rest on the rig's reference body.
@@ -360,6 +412,41 @@ public record Part(
             return out.scale(scale.x(), scale.y(), scale.z())
                     .translate(-socket.x(), -socket.y(), -socket.z());
         }
+    }
+
+    /**
+     * How far this part stands out over a body slot, as it gives it.
+     *
+     * @param slot The body slot.
+     * @return The distance in meters, or null if it gives none for the slot.
+     */
+    public Float standoffOver(@NonNull String slot) {
+        Float found = standoff.get(slot);
+        return found != null ? found : standoff.get(ANY_SLOT);
+    }
+
+    /**
+     * The body slots this layer covers.
+     *
+     * @param plan The body plan.
+     * @return Its own covered slots if it gives them, else those of the layers it fills; empty for
+     *     parts that aren't layers.
+     */
+    public Set<String> coveredSlots(@NonNull BodyPlan plan) {
+        if (kind != PartKind.LAYER) {
+            return Set.of();
+        }
+        if (!covers.isEmpty()) {
+            return new LinkedHashSet<>(covers);
+        }
+        Set<String> slots = new LinkedHashSet<>();
+        for (String fill : fills) {
+            BodyPlan.Layer layer = plan.layer(fill);
+            if (layer != null) {
+                slots.addAll(layer.covers());
+            }
+        }
+        return slots;
     }
 
     /**
@@ -457,6 +544,31 @@ public record Part(
                 checks.error(JsonPath.at(FIELD_FORM), "The plan has no form '" + form + "'");
             }
         }
+        if (!standoff.isEmpty() && kind == PartKind.ACCESSORY) {
+            checks.error(JsonPath.at(FIELD_STANDOFF), "Only body parts and layers have a standoff");
+        }
+        if (!covers.isEmpty() && kind != PartKind.LAYER) {
+            checks.error(JsonPath.at(FIELD_COVERS), "Only layers cover slots of their own");
+        }
+        for (int i = 0; i < covers.size(); ++i) {
+            if (body.slot(covers.get(i)) == null) {
+                checks.error(
+                        JsonPath.at(FIELD_COVERS, i),
+                        "The plan has no body slot '" + covers.get(i) + "'");
+            }
+        }
+        if (bare && kind != PartKind.BODY) {
+            checks.error(JsonPath.at(FIELD_BARE), "Only body parts are worn bare");
+        }
+        standoff.forEach(
+                (slot, meters) -> {
+                    String path = JsonPath.at(FIELD_STANDOFF);
+                    if (!ANY_SLOT.equals(slot) && body.slot(slot) == null) {
+                        checks.error(path, "The plan has no body slot '" + slot + "'");
+                    } else if (meters == null || meters < 0) {
+                        checks.error(path, "A standoff can't be below 0");
+                    }
+                });
         for (int i = 0; i < hidesRegions.size(); ++i) {
             if (!body.regions().contains(hidesRegions.get(i))) {
                 checks.error(

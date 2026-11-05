@@ -29,6 +29,7 @@ import com.ikalagaming.characters.pose.Proportions;
 import com.ikalagaming.characters.pose.Skeleton;
 import com.ikalagaming.characters.registry.CharacterRegistry;
 import com.ikalagaming.characters.registry.ContentSource;
+import com.ikalagaming.characters.view.AccessoryRests;
 import com.ikalagaming.characters.view.CharacterDecals;
 import com.ikalagaming.characters.view.CharacterFx;
 import com.ikalagaming.characters.view.FxEffects;
@@ -83,6 +84,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -647,6 +649,12 @@ public final class CharacterEditor {
      */
     private final Map<Integer, Map<String, Float>> pushed = new HashMap<>();
 
+    /**
+     * How far each shown accessory is moved out to rest on what is worn under it, by part index, to
+     * move one again only when that changes; see {@link AccessoryRests}.
+     */
+    private final Map<Integer, Vector3f> rested = new HashMap<>();
+
     /** The channel whose swatch the Colors tab has hovered, or null, see {@link #tickFrame}. */
     private String previewChannel;
 
@@ -930,7 +938,8 @@ public final class CharacterEditor {
                         lastWorn);
         shown.setHiddenRegions(regions.hidden(lastWorn));
         pushed.clear();
-        pushForms(lastWorn, look.slotForms(CharacterLook.NO_PREVIEW, 0));
+        rested.clear();
+        pushForms(lastWorn, look.slotStandoffs(CharacterLook.NO_PREVIEW, 0));
         equipment = Equipment.NONE;
         itemFx = List.of();
         motion.setCombat(false);
@@ -1159,7 +1168,7 @@ public final class CharacterEditor {
             return;
         }
         List<Integer> worn = look.worn(previewSlot, previewChoice);
-        pushForms(worn, look.slotForms(previewSlot, previewChoice));
+        pushForms(worn, look.slotStandoffs(previewSlot, previewChoice));
         if (!worn.equals(lastWorn)) {
             lastWorn = worn;
             shown.showParts(worn);
@@ -1168,14 +1177,15 @@ public final class CharacterEditor {
     }
 
     /**
-     * Push the shown layers that have form targets out over the slots of bulky body parts, each
-     * only when how far it is pushed changes.
+     * Push the shown layers that have form targets out over the slots of bulky body parts, and move
+     * the shown accessories out to rest on what is worn under them, each only when how far it moves
+     * changes.
      *
      * @param worn The shown parts.
-     * @param slotForms The clothing form of the body part in each slot.
+     * @param slotStandoffs How far the body part in each slot stands out, in meters.
      */
-    private void pushForms(List<Integer> worn, Map<String, String> slotForms) {
-        Map<String, Float> amounts = PartForms.amounts(plan, slotForms);
+    private void pushForms(List<Integer> worn, Map<String, Float> slotStandoffs) {
+        Map<String, Float> amounts = PartForms.shares(plan, slotStandoffs);
         ImportedCharacter character = prepared.character();
         for (int index : worn) {
             ImportedCharacter.Part part = character.parts().get(index);
@@ -1192,6 +1202,43 @@ public final class CharacterEditor {
             if (!own.equals(pushed.getOrDefault(index, Map.of()))) {
                 pushed.put(index, own);
                 shown.replaceVertices(index, PartForms.displace(part, own));
+            }
+        }
+        restAccessories(worn);
+    }
+
+    /**
+     * Move the shown accessories out to rest on what is worn under them, each only when how far it
+     * moves changes.
+     *
+     * @param worn The shown parts.
+     */
+    private void restAccessories(List<Integer> worn) {
+        List<Part> definitions = prepared.partDefinitions();
+        Set<Part> wornParts = new LinkedHashSet<>();
+        for (int index : worn) {
+            Part definition = definitions.get(index);
+            if (definition != null) {
+                wornParts.add(definition);
+            }
+        }
+        ImportedCharacter character = prepared.character();
+        for (int index : worn) {
+            Part definition = definitions.get(index);
+            ImportedCharacter.Part part = character.parts().get(index);
+            if (definition == null
+                    || definition.kind() != Part.PartKind.ACCESSORY
+                    || part.joints().length == 0) {
+                continue;
+            }
+            // The socket the mesh is on, whichever of the sockets it fits that is
+            BodyPlan.Socket socket = plan.socketOnBone(character.skeleton().name(part.joints()[0]));
+            Vector3f push =
+                    AccessoryRests.push(plan, socket, wornParts, prepared.design().variant());
+            Vector3f last = rested.get(index);
+            if (last == null ? push.lengthSquared() > 0 : !push.equals(last)) {
+                rested.put(index, push);
+                shown.replaceVertices(index, AccessoryRests.moved(part, push));
             }
         }
     }
@@ -2828,6 +2875,7 @@ public final class CharacterEditor {
         openCategory = -1;
         lastWorn = List.of();
         pushed.clear();
+        rested.clear();
         stage.leave();
         goBack.run();
     }

@@ -274,6 +274,25 @@
           "type": "string",
           "description": "For body parts: the plan's thinnest clothing form its surface fits in, like \"bulky\" for a robot leg, so layers over it show their mesh for that form. Left out, it is the plan's first, the bare body's."
         },
+        "standoff": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "How far it stands out over each body slot, as a share of the slot's radius, with \"*\" for any other slot: a body part from the bare body, which clothing over it is pushed out by, a layer from the body part under it. Accessories resting on the slot sit on both. Slots left out take a body part's form's share or a layer's layer's standoff."
+        },
+        "covers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "For layers: the body slots it really covers, like a t-shirt leaving the arms bare. Left out, all its layers cover."
+        },
+        "bare": {
+          "type": "boolean",
+          "description": "For body parts: whether it is worn bare, like an arm covered in spikes: it can't be worn with layers covering its slots.",
+          "default": false
+        },
         "extends": {
           "type": "string",
           "description": "The ID of a definition of the same kind to start from. Fields written here replace the parent's, and objects merge field by field."

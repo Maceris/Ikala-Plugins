@@ -37,10 +37,10 @@ import fit_accessory as hat  # noqa: E402
 from add_caps import CAP_INFIX, make_cap, open_loops  # noqa: E402
 from bake_body import dress_caps  # noqa: E402
 from bodies import body_meshes, merged, nearest, tree  # noqa: E402
-from fit_body import outer_seams, plan_forms, plan_slots, seam_plane  # noqa: E402
+from fit_body import outer_seams, plan_forms, plan_slots, seam_plane, slot_radii  # noqa: E402
 from fit_layer import render  # noqa: E402
 from shape_body import (bridge, close_strays, form_of, mannequin_ring, mark_rings,  # noqa: E402
-                        orient_out, trim)
+                        orient_out, slot_owners, trim)
 from shape_layer import bone_segments  # noqa: E402
 from variant_layer import carry, face_normals, import_garment, untangle  # noqa: E402
 from weight_body import PREFIX, skin_part  # noqa: E402
@@ -170,9 +170,13 @@ def main():
     count = len(part.data.vertices)
     co = np.empty(count * 3)
     part.data.vertices.foreach_get("co", co)
-    _, signed = nearest(co.reshape(-1, 3), tree(*skin))
+    points = co.reshape(-1, 3)
+    _, signed = nearest(points, tree(*skin))
+    # Its slots' radii are this body's: the variant is named by its mannequin's file
+    variant = os.path.splitext(os.path.basename(args.body))[0]
+    owner = slot_owners(points, segments, names, slots)
     report = {"welded": sorted(welded), "open": sorted(left_open), "folded_faces": folded,
-              "form": form_of(signed, plan_forms()),
+              "form": form_of(signed, plan_forms(), owner, names, slot_radii(variant)),
               "stands_out_mm": {"p95": round(float(np.percentile(signed, 95)) * 1000, 1)},
               "ring_error_mm": round(ring_error * 1000, 3),
               "open_edges": sorted(len(lp) for lp in open_loops(part.data)),

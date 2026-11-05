@@ -47,7 +47,29 @@ public final class WearRules {
         }
         return a.conflicts().contains(b.id())
                 || b.conflicts().contains(a.id())
-                || sharedExclusiveTag(plan, a, b) != null;
+                || sharedExclusiveTag(plan, a, b) != null
+                || blocksClothing(plan, a, b)
+                || blocksClothing(plan, b, a);
+    }
+
+    /**
+     * Whether a body part worn bare keeps a layer off: the layer covers one of its slots. A t-shirt
+     * leaving the arms bare still goes over spiked arms; a jacket doesn't.
+     *
+     * @param plan The plan.
+     * @param body The body part.
+     * @param layer The layer.
+     * @return True if they can't be worn together.
+     */
+    public static boolean blocksClothing(
+            @NonNull BodyPlan plan, @NonNull Part body, @NonNull Part layer) {
+        if (body.kind() != Part.PartKind.BODY
+                || !body.bare()
+                || layer.kind() != Part.PartKind.LAYER) {
+            return false;
+        }
+        Set<String> covered = layer.coveredSlots(plan);
+        return body.fills().stream().anyMatch(covered::contains);
     }
 
     /**
@@ -179,6 +201,33 @@ public final class WearRules {
             }
         }
         return forms;
+    }
+
+    /**
+     * How far the body parts worn stand out from the bare body over each body slot, which clothing
+     * over them is pushed out by (see {@link com.ikalagaming.characters.view.PartForms}): a part's
+     * own measure for the slot, else its form's share, the furthest where parts share a slot.
+     *
+     * @param plan The body plan, with its forms.
+     * @param worn The parts worn.
+     * @return The distance as a share of each slot's radius; slots the bare body's are left out.
+     */
+    public static Map<String, Float> slotStandoffs(
+            @NonNull BodyPlan plan, @NonNull Collection<Part> worn) {
+        Map<String, Float> standoffs = new LinkedHashMap<>();
+        for (Part part : worn) {
+            if (part.kind() != Part.PartKind.BODY) {
+                continue;
+            }
+            for (String slot : part.fills()) {
+                Float own = part.standoffOver(slot);
+                float standoff = own != null ? own : plan.formShare(part.form());
+                if (standoff > standoffs.getOrDefault(slot, 0f)) {
+                    standoffs.put(slot, standoff);
+                }
+            }
+        }
+        return standoffs;
     }
 
     /**

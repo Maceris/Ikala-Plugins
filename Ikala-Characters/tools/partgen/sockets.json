@@ -1,15 +1,81 @@
 {
-  "_comment": "How an accessory is sized and placed for each socket type. head_top: headwear sits with its bottom a little above the brows, its crown (the narrowest slice of its lower half, above any brim) is a little wider than the head at that height, and anything wider than maxWidth head widths is pulled in toward the crown. A hat too shallow to cover the top of the head (with topClearance) grows until it does. A brief's \"fit\" replaces any of these, and its \"scale\" multiplies the size.",
+  "_comment": "How partgen sizes and places a generated accessory for each socket type of the biped (generator settings only: the part it writes is an ordinary accessory definition). head_top uses the crown fit: headwear sits with its bottom a little above the brows, its crown (the narrowest slice of its lower half, above any brim) is a little wider than the head at that height, and anything wider than maxWidth head widths is pulled in toward the crown; a hat too shallow to cover the top of the head (with topClearance) grows until it does. The others use the surface fit: the object is turned so the face the picture showed looks along \"side\" (back, front, up, or out: along the socket bone, which points out of its limb, with up along the limb), scaled so its span along \"size.axis\" (across, up, or depth: out from the body) is \"size.share\" of a body measurement, scaled down whole while any \"maxSize\" span passes its share, and moved in along the side until all but a few of its points are at least \"gap\" meters off the body's surface beside the socket (only points in the outer \"contact\" share of its depth count, so the sides of something that wraps around, like a mask, pass beside the head), centered on it across and up, or on it moved by \"offset\" (meters, Blender's axes: Z up, -Y front). A measurement is a mannequin slot (\".?\" takes the socket's side) and one of width or depth where it crosses the socket's height, height, length (along its longest axis) or girth. \"bySocket\" changes a rule for one socket of the type. Sided sockets (.L/.R) make both sides' parts, the right mirrored. A brief's \"fit\" replaces any of these, and its \"scale\" multiplies the size.",
   "head_top": {
-    "anchor": "bottom",
+    "fit": "crown",
     "bottomAbove": "brow.L",
     "bottomOffset": 0.035,
     "topClearance": 0.012,
-    "fit": "crown",
     "clearance": 1.2,
     "maxWidth": 2.2,
     "triangles": 1200,
     "texture": 512,
     "prompt": "a single {description}, hat only, front view, seen slightly from above, centered, whole object visible"
+  },
+  "back.large": {
+    "fit": "surface",
+    "side": "back",
+    "size": {"axis": "across", "of": "torso.width", "share": 0.75},
+    "maxSize": [
+      {"axis": "up", "of": "torso.height", "share": 1.1},
+      {"axis": "depth", "of": "torso.width", "share": 0.6}
+    ],
+    "gap": 0.01,
+    "triangles": 1500,
+    "texture": 512,
+    "prompt": "a single {description}, straight-on orthographic view of its outer side as worn on the back, not angled, centered, whole object visible, nobody wearing it"
+  },
+  "face": {
+    "fit": "surface",
+    "side": "front",
+    "size": {"axis": "across", "of": "head.width", "share": 1.05},
+    "maxSize": [
+      {"axis": "up", "of": "head.height", "share": 0.6},
+      {"axis": "depth", "of": "head.width", "share": 1.0}
+    ],
+    "gap": 0.004,
+    "contact": 0.5,
+    "triangles": 1000,
+    "texture": 512,
+    "prompt": "a single {description}, straight-on orthographic front view as worn on the face, not angled, centered, whole object visible, no face or head"
+  },
+  "hip": {
+    "fit": "surface",
+    "side": "front",
+    "size": {"axis": "up", "of": "pelvis.height", "share": 0.45},
+    "maxSize": [
+      {"axis": "across", "of": "pelvis.width", "share": 0.55},
+      {"axis": "depth", "of": "pelvis.width", "share": 0.3}
+    ],
+    "gap": 0.006,
+    "bySocket": {"hip_back": {"side": "back"}, "belt_front": {"offset": [0, 0, 0.1]}},
+    "triangles": 900,
+    "texture": 512,
+    "prompt": "a single {description}, straight-on orthographic front view as worn on a belt, not angled, centered, whole object visible, nobody wearing it"
+  },
+  "shoulder": {
+    "fit": "surface",
+    "side": "up",
+    "size": {"axis": "across", "of": "upperArm.?.girth", "share": 1.5},
+    "maxSize": [
+      {"axis": "up", "of": "upperArm.?.girth", "share": 1.6},
+      {"axis": "depth", "of": "upperArm.?.girth", "share": 0.8}
+    ],
+    "gap": 0.005,
+    "triangles": 900,
+    "texture": 512,
+    "prompt": "a single {description}, straight-on orthographic view from directly above as worn on one shoulder, not angled, centered, whole object visible, nobody wearing it"
+  },
+  "forearm": {
+    "fit": "surface",
+    "side": "out",
+    "size": {"axis": "up", "of": "lowerArm.?.length", "share": 0.5},
+    "maxSize": [
+      {"axis": "across", "of": "lowerArm.?.girth", "share": 1.4},
+      {"axis": "depth", "of": "lowerArm.?.girth", "share": 0.8}
+    ],
+    "gap": 0.004,
+    "triangles": 900,
+    "texture": 512,
+    "prompt": "a single {description}, straight-on orthographic view of its outer face as worn on the forearm, not angled, centered, whole object visible, nobody wearing it"
   }
 }

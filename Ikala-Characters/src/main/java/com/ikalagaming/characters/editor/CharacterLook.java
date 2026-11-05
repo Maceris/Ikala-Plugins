@@ -1060,6 +1060,20 @@ final class CharacterLook {
     }
 
     /**
+     * How far the body part in each body slot stands out, which layers push out over slot by slot
+     * (see {@link WearRules#slotStandoffs}).
+     *
+     * @param previewSlot The slot to preview, or {@link #NO_PREVIEW}.
+     * @param previewChoice What it would hold.
+     * @return The distance in meters by slot; slots on the bare body are left out.
+     */
+    Map<String, Float> slotStandoffs(int previewSlot, int previewChoice) {
+        return plan == null
+                ? Map.of()
+                : WearRules.slotStandoffs(plan, wornParts(previewSlot, previewChoice));
+    }
+
+    /**
      * The parts chosen, with one slot showing another choice for a preview.
      *
      * @param previewSlot The slot to preview, or {@link #NO_PREVIEW}.

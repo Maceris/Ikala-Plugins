@@ -86,20 +86,46 @@ SLOT_REACH = 0.15
 RING_REACH = 1.5
 
 
-def plan_slots():
-    """The body plan's slots by name."""
+def read_plan():
+    """The body plan."""
     with open(PLAN, encoding="utf-8") as file:
         # Definitions may start with // comment lines
-        plan = json.loads("".join(line for line in file if not line.lstrip().startswith("//")))
-    return {slot["id"]: slot for slot in plan["slots"]}
+        return json.loads("".join(line for line in file if not line.lstrip().startswith("//")))
+
+
+def plan_slots():
+    """The body plan's slots by name."""
+    return {slot["id"]: slot for slot in read_plan()["slots"]}
 
 
 def plan_forms():
-    """The body plan's clothing forms, thinnest first, as (name, offset in meters): shells over
-    the body that clothing is fitted to, the thickest also the most a body part may stand out."""
-    with open(PLAN, encoding="utf-8") as file:
-        plan = json.loads("".join(line for line in file if not line.lstrip().startswith("//")))
-    return [(form["id"], float(form["offset"])) for form in plan.get("forms", [])]
+    """The body plan's clothing forms, thinnest first, as (name, share): shells over the body
+    that clothing is fitted to, each that share of every slot's radius out, the thickest also the
+    most a body part on a clothed slot may stand out."""
+    return [(form["id"], float(form["share"])) for form in read_plan().get("forms", [])]
+
+
+def slot_radii(variant):
+    """Each body slot's radius on a variant, in meters: its own if it gives one, else the
+    reference body's."""
+    plan = read_plan()
+    own = next((v.get("radii", {}) for v in plan["variants"] if v["id"] == variant), {})
+    return {slot["id"]: float(own.get(slot["id"], slot.get("radius", 0.0)))
+            for slot in plan["slots"]}
+
+
+def clothed_slots():
+    """The body slots clothing goes over."""
+    return {slot["id"] for slot in read_plan()["slots"] if slot.get("clothed")}
+
+
+def form_for(shares, forms):
+    """The thinnest form whose share is at least the largest of some slots' shares, the thickest
+    if none is; None for no slots."""
+    if not shares:
+        return None
+    most = max(shares.values())
+    return next((name for name, share in forms if most <= share), forms[-1][0] if forms else None)
 
 
 def slot_bones(names):

@@ -79,10 +79,11 @@ public record BodyPlan(
                 @Optional
                 List<String> exclusiveTags,
         @Doc(
-                        "Shapes clothing is fitted to, thinnest first: shells over the body at an"
-                                + " offset, like \"tight\" at 0 and \"bulky\" at 0.06 m. A body"
-                                + " part names the thinnest its surface fits in, and a layer shows"
-                                + " its mesh for the thickest form among the body parts under it.")
+                        "Shapes clothing is fitted to, thinnest first: shells over the body, each"
+                                + " a share of every slot's radius out, like \"tight\" at 0 and"
+                                + " \"bulky\" at 0.45. A body part names the thinnest its surface"
+                                + " fits in; on a clothed slot it must fit in the thickest unless"
+                                + " clothing can't go over it.")
                 @Optional
                 List<Form> forms,
         @Doc(
@@ -160,6 +161,7 @@ public record BodyPlan(
      * @param tags Tags of the parts it allows, or empty to allow any.
      * @param sliders Slider defaults and ranges that differ from the slider's own.
      * @param parts The part each body slot or layer starts with, by slot or layer name.
+     * @param radii Its body slots' radii, in meters, where they differ from the reference body's.
      */
     @Doc("A variant, sharing the plan's bones with its own proportions and limits.")
     public record Variant(
@@ -174,9 +176,33 @@ public record BodyPlan(
                                     + " which designs that leave a slot out fall back to. Slots"
                                     + " left out here start empty.")
                     @Optional
-                    Map<String, Id> parts) {
+                    Map<String, Id> parts,
+            @Doc(
+                            "Its body slots' radii, in meters, where they differ from the plan's"
+                                    + " reference body's.")
+                    @Optional
+                    Map<String, Float> radii) {
         /** The field for the slider settings. */
         public static final String FIELD_SLIDERS = "sliders";
+
+        /** The field for the slot radii. */
+        public static final String FIELD_RADII = "radii";
+
+        /**
+         * A variant with the reference body's slot radii.
+         *
+         * @param id The variant's name.
+         * @param tags Tags of the parts it allows, or empty to allow any.
+         * @param sliders Slider defaults and ranges that differ from the slider's own.
+         * @param parts The part each body slot or layer starts with, by slot or layer name.
+         */
+        public Variant(
+                String id,
+                List<String> tags,
+                Map<String, SliderSetting> sliders,
+                Map<String, Id> parts) {
+            this(id, tags, sliders, parts, Map.of());
+        }
 
         /** The field for the default parts. */
         public static final String FIELD_PARTS = "parts";
@@ -231,6 +257,10 @@ public record BodyPlan(
      * @param seams The seam rings at its edges.
      * @param mirrorOf The slot on the other side.
      * @param optional Whether it may be left empty, like a tail.
+     * @param clothed Whether clothing goes over its body parts, so they are held to the clothing
+     *     forms.
+     * @param radius How thick it is on the rig's reference body: the median distance of its surface
+     *     from its long axis, in meters, which forms and clothing are shares of.
      */
     @Doc("A body slot, which one body part fills.")
     public record Slot(
@@ -241,9 +271,24 @@ public record BodyPlan(
             @Doc("The matching slot on the other side, for mirrored parts.") @Optional
                     String mirrorOf,
             @Doc("Whether the slot may be left empty, like a tail.") @Default("false")
-                    boolean optional) {
+                    boolean optional,
+            @Doc(
+                            "Whether clothing goes over its body parts, like a torso or a leg but"
+                                    + " not a hand, so they must fit in the thickest clothing form"
+                                    + " unless clothing can't go over them.")
+                    @Default("false")
+                    boolean clothed,
+            @Doc(
+                            "How thick it is on the rig's reference body: the median distance of"
+                                    + " its surface from its long axis, in meters. Clothing forms"
+                                    + " and how far clothing stands out are shares of it.")
+                    @Default("0")
+                    float radius) {
         /** The field for the bones. */
         public static final String FIELD_BONES = "bones";
+
+        /** The field for the radius. */
+        public static final String FIELD_RADIUS = "radius";
 
         /** The field for the mirrored slot. */
         public static final String FIELD_MIRROR_OF = "mirrorOf";
@@ -255,6 +300,11 @@ public record BodyPlan(
      * @param id The layer's name.
      * @param covers The body slots it covers.
      * @param order Where it stacks; higher goes over lower.
+     * @param standoff How far its clothing usually stands out from the body part under it, as a
+     *     share of each slot's radius, so accessories resting on a slot it covers sit on it; a part
+     *     can give its own.
+     * @param reach The furthest out its clothing may stand from the body part under it, as a share
+     *     of each slot's radius, so layers over it cover it; null for no limit.
      */
     @Doc("A clothing or armor layer.")
     public record Layer(
@@ -262,9 +312,27 @@ public record BodyPlan(
             @Doc("The body slots it covers.") @Optional List<String> covers,
             @Doc("Where it stacks; higher goes over lower, like shirt 10 < jacket 20.")
                     @Default("0")
-                    int order) {
+                    int order,
+            @Doc(
+                            "How far its clothing usually stands out from the body part under it,"
+                                    + " as a share of each slot's radius, so accessories resting on"
+                                    + " a slot it covers sit on it. A part can give its own.")
+                    @Default("0")
+                    float standoff,
+            @Doc(
+                            "The furthest out its clothing may stand from the body part under it,"
+                                    + " as a share of each slot's radius, so the layers over it"
+                                    + " cover it. Left out, there is no limit.")
+                    @Optional
+                    Float reach) {
         /** The field for the covered slots. */
         public static final String FIELD_COVERS = "covers";
+
+        /** The field for the standoff. */
+        public static final String FIELD_STANDOFF = "standoff";
+
+        /** The field for the reach. */
+        public static final String FIELD_REACH = "reach";
     }
 
     /**
@@ -274,6 +342,8 @@ public record BodyPlan(
      * @param bone The bone it is on.
      * @param max How many items it holds.
      * @param type Its type tag, which items fit by.
+     * @param rests The body slot accessories on it rest on, and which way they move out from it, or
+     *     null if they stay where they are fitted.
      */
     @Doc("An attach point.")
     public record Socket(
@@ -281,12 +351,42 @@ public record BodyPlan(
             @Doc("The bone it is on, like \"socket.back\".") String bone,
             @Doc("How many items it holds at once.") @Default("1") int max,
             @Doc("Its type tag, which items fit by, like \"grip.1h\" or \"back.large\".") @Optional
-                    String type) {
+                    String type,
+            @Doc(
+                            "The body slot accessories on it rest on, and which way they move out"
+                                    + " as the part and clothing there stand further out than the"
+                                    + " bare body they were fitted on. Left out, they stay put.")
+                    @Optional
+                    Rest rests) {
         /** The field for the bone. */
         public static final String FIELD_BONE = "bone";
 
         /** The field for the item count. */
         public static final String FIELD_MAX = "max";
+
+        /** The field for the resting place. */
+        public static final String FIELD_RESTS = "rests";
+    }
+
+    /**
+     * Where accessories on a socket rest on the body.
+     *
+     * @param slot The body slot they rest on.
+     * @param out Which way they move out from it, in the character's space at rest (x across, y up,
+     *     z forward); its length doesn't matter.
+     */
+    @Doc("Where accessories on a socket rest on the body.")
+    public record Rest(
+            @Doc("The body slot they rest on, like \"torso\".") String slot,
+            @Doc(
+                            "Which way they move out from it, in the character's space at rest:"
+                                    + " x across, y up, z forward, like [0, 0, -1] for the back.")
+                    Vec3 out) {
+        /** The field for the slot. */
+        public static final String FIELD_SLOT = "slot";
+
+        /** The field for the direction. */
+        public static final String FIELD_OUT = "out";
     }
 
     /**
@@ -313,17 +413,18 @@ public record BodyPlan(
     }
 
     /**
-     * A shape clothing is fitted to: a shell over the body at an offset.
+     * A shape clothing is fitted to: a shell over the body, a share of each slot's radius out.
      *
      * @param id The form's name, like "bulky".
-     * @param offset How far out from the body the shell is, in meters.
+     * @param share How far out from the body the shell is, as a share of each slot's radius.
      */
-    @Doc("A shape clothing is fitted to: a shell over the body at an offset.")
+    @Doc("A shape clothing is fitted to: a shell over the body, a share of each slot's radius out.")
     public record Form(
             @Doc("The form's name, like \"bulky\".") String id,
-            @Doc("How far out from the body its shell is, in meters.") float offset) {
-        /** The field for the offset. */
-        public static final String FIELD_OFFSET = "offset";
+            @Doc("How far out from the body its shell is, as a share of each slot's radius.")
+                    float share) {
+        /** The field for the share. */
+        public static final String FIELD_SHARE = "share";
     }
 
     /**
@@ -542,6 +643,54 @@ public record BodyPlan(
     }
 
     /**
+     * Find the socket on a bone.
+     *
+     * @param bone The bone's name.
+     * @return The socket, or null if no socket is on that bone.
+     */
+    public Socket socketOnBone(@NonNull String bone) {
+        return sockets.stream().filter(s -> s.bone().equals(bone)).findFirst().orElse(null);
+    }
+
+    /**
+     * How far out from the bare body a clothing form's shell is.
+     *
+     * @param form The form's name, or null for the first.
+     * @return Its share of each slot's radius, 0 for the first form or one the plan doesn't have.
+     */
+    public float formShare(String form) {
+        int index = form == null ? -1 : formIndex(form);
+        return index < 0 ? 0 : forms.get(index).share();
+    }
+
+    /**
+     * How far out the thickest clothing form's shell is.
+     *
+     * @return Its share of each slot's radius, 0 if the plan has no forms.
+     */
+    public float bulkiestShare() {
+        return forms.isEmpty() ? 0 : forms.getLast().share();
+    }
+
+    /**
+     * How thick a body slot is on a variant.
+     *
+     * @param slot The slot's name.
+     * @param variant The variant's name.
+     * @return The variant's radius for it, else the reference body's, in meters; 0 for a slot the
+     *     plan doesn't have.
+     */
+    public float radius(@NonNull String slot, @NonNull String variant) {
+        Variant found = variant(variant);
+        Float own = found == null ? null : found.radii().get(slot);
+        if (own != null) {
+            return own;
+        }
+        Slot named = slot(slot);
+        return named == null ? 0 : named.radius();
+    }
+
+    /**
      * Find an equipment slot.
      *
      * @param name The slot's name.
@@ -633,7 +782,7 @@ public record BodyPlan(
         checkVariants(checks);
         Set<String> slotNames = checkSlots(checks, bones);
         checkLayers(checks, slotNames);
-        checkSockets(checks, bones);
+        checkSockets(checks, bones, slotNames);
         checkEquipment(checks);
         checkExtensions(checks, rigDefinition, bones);
         checkForms(checks);
@@ -703,11 +852,10 @@ public record BodyPlan(
             Form form = forms.get(i);
             String path = JsonPath.at(FIELD_FORMS, i);
             unique(checks, names, form.id(), JsonPath.field(path, FIELD_ID), "form");
-            boolean thicker =
-                    i == 0 ? form.offset() >= 0 : form.offset() > forms.get(i - 1).offset();
+            boolean thicker = i == 0 ? form.share() >= 0 : form.share() > forms.get(i - 1).share();
             if (!thicker) {
                 checks.error(
-                        JsonPath.field(path, Form.FIELD_OFFSET),
+                        JsonPath.field(path, Form.FIELD_SHARE),
                         "Forms go from thinnest to thickest, starting at 0 or more");
             }
         }
@@ -748,6 +896,20 @@ public record BodyPlan(
                                 }
                             });
             checkDefaultParts(checks, variant, JsonPath.field(path, Variant.FIELD_PARTS));
+            String radiiPath = JsonPath.field(path, Variant.FIELD_RADII);
+            variant.radii()
+                    .forEach(
+                            (slot, radius) -> {
+                                if (slot(slot) == null) {
+                                    checks.error(
+                                            JsonPath.field(radiiPath, slot),
+                                            "The plan has no body slot '" + slot + "'");
+                                } else if (radius == null || radius <= 0) {
+                                    checks.error(
+                                            JsonPath.field(radiiPath, slot),
+                                            "A slot's radius is above 0");
+                                }
+                            });
         }
     }
 
@@ -823,6 +985,11 @@ public record BodyPlan(
                             "The bone '" + bone + "' is also in the slot '" + owner + "'");
                 }
             }
+            if (slot.radius() < 0 || (slot.clothed() && slot.radius() == 0)) {
+                checks.error(
+                        JsonPath.field(path, Slot.FIELD_RADIUS),
+                        "A slot's radius can't be below 0, nor 0 on a clothed slot");
+            }
             if (slot.mirrorOf() != null) {
                 String mirrorPath = JsonPath.field(path, Slot.FIELD_MIRROR_OF);
                 Slot other = slot(slot.mirrorOf());
@@ -866,6 +1033,16 @@ public record BodyPlan(
                             "There is no slot '" + layer.covers().get(c) + "'");
                 }
             }
+            if (layer.standoff() < 0) {
+                checks.error(
+                        JsonPath.field(path, Layer.FIELD_STANDOFF),
+                        "A layer's standoff can't be below 0");
+            }
+            if (layer.reach() != null && layer.reach() < layer.standoff()) {
+                checks.error(
+                        JsonPath.field(path, Layer.FIELD_REACH),
+                        "A layer's reach can't be less than its standoff");
+            }
         }
     }
 
@@ -875,7 +1052,7 @@ public record BodyPlan(
      * @param checks Where problems go.
      * @param bones Checks that bones exist.
      */
-    private void checkSockets(Checks checks, BoneCheck bones) {
+    private void checkSockets(Checks checks, BoneCheck bones, Set<String> slotNames) {
         Set<String> names = new HashSet<>();
         for (int i = 0; i < sockets.size(); ++i) {
             Socket socket = sockets.get(i);
@@ -886,6 +1063,21 @@ public record BodyPlan(
                 checks.error(
                         JsonPath.field(path, Socket.FIELD_MAX),
                         "A socket must hold at least 1 item");
+            }
+            Rest rest = socket.rests();
+            if (rest != null) {
+                String restPath = JsonPath.field(path, Socket.FIELD_RESTS);
+                if (!slotNames.contains(rest.slot())) {
+                    checks.error(
+                            JsonPath.field(restPath, Rest.FIELD_SLOT),
+                            "The plan has no body slot '" + rest.slot() + "'");
+                }
+                Vec3 out = rest.out();
+                if (out.x() == 0 && out.y() == 0 && out.z() == 0) {
+                    checks.error(
+                            JsonPath.field(restPath, Rest.FIELD_OUT),
+                            "A resting direction can't be zero");
+                }
             }
         }
     }

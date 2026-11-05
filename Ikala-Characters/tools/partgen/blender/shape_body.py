@@ -40,7 +40,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "blender"))
 from add_caps import CAP_INFIX, make_cap, open_loops  # noqa: E402
 from bodies import load_body, merged, nearest, tree  # noqa: E402
-from fit_body import outer_seams, plan_forms, plan_slots, seam_plane  # noqa: E402
+from fit_body import (clothed_slots, form_for, outer_seams, plan_forms, plan_slots,  # noqa: E402
+                      seam_plane, slot_radii)
 from fit_layer import import_figure, render  # noqa: E402
 from shape_layer import bone_segments, points_of, reduce, set_points  # noqa: E402
 
@@ -54,14 +55,24 @@ WELD_INSETS = (0.01, 0.02, 0.03, 0.04)
 # The vertex group the ring vertices are in, which the weights keep exactly
 SEAM_GROUP = "seam"
 PART_COLOR = (0.85, 0.45, 0.15, 1)
-# A part's clothing form is the thinnest whose shell holds all but this share of its surface
-FORM_SHARE = 0.99
-# How far past a form's shell that share may stand and still count as in it, in meters
-FORM_TOLERANCE = 0.002
-# Past the thickest form: clamp the part back in, leave it bare of clothing, or reject it
+# A part's clothing form is the thinnest whose shell holds this share of its surface over each
+# slot
+FORM_SHARE = 0.98
+# How far past a form's shell that share may stand and still count as in it, as a share of
+# the slot's radius
+FORM_TOLERANCE = 0.01
+# Past the thickest form over a clothed slot: rein the part in (or reject it if that is too much),
+# let it be as it is because it is worn bare, or reject it
 BEYOND = ("clamp", "bare", "reject")
-# The most a part may stand out past the thickest form and still be clamped into it, in meters
-CLAMP_LIMIT = 0.03
+# Reining in a part that stands out past the thickest form over a clothed slot scales how far it
+# stands out down, as far as this share of it unless --rein-least says otherwise; one needing
+# more is rejected unless it is worn bare
+REIN_LEAST = 0.5
+# Reining in scales so this share of each clothed slot's points fits, and what is left past the
+# limit, lumps and spikes, is clamped
+REIN_SHARE = 0.95
+# How many times the reining in is averaged with neighbors', so it eases across slots' seams
+REIN_SMOOTH = 8
 # How far inside the limit clamping starts to ease points in, in meters
 CLAMP_KNEE = 0.01
 # How far a leg's sole may be from the floor, the mannequin's lowest point, before it is stretched
@@ -358,11 +369,83 @@ def mark_rings(part, welded):
     part.data.normals_split_custom_set_from_vertices(normals)
 
 
-def form_of(signed, forms):
-    """The thinnest clothing form a surface fits in: the first whose shell is at least as far out
-    as all but FORM_SHARE of the surface's points. None past the thickest."""
-    standing = float(np.percentile(signed, FORM_SHARE * 100))
-    return next((name for name, offset in forms if standing <= offset + FORM_TOLERANCE), None)
+def slot_owners(points, segments, names, slots):
+    """Which of some slots each point belongs to, by the nearest of the slots' bones: indices
+    into names."""
+    best = np.full(len(points), np.inf)
+    owner = np.zeros(len(points), dtype=int)
+    for i, name in enumerate(names):
+        bones = [b for b in slots[name]["bones"] if b in segments]
+        if not bones:
+            continue
+        feet = nearest_on_bones(points, segments, bones)
+        distance = np.linalg.norm(points - feet, axis=1)
+        closer = distance < best
+        best[closer] = distance[closer]
+        owner[closer] = i
+    return owner
+
+
+def slot_standing(signed, owner, names, radii, share=FORM_SHARE):
+    """How far out each slot's points stand, as that share of them do (FORM_SHARE unless given),
+    as a share of the slot's radius; slots with too few points left out."""
+    standing = {}
+    for i, name in enumerate(names):
+        mine = signed[owner == i]
+        if len(mine) >= 10 and radii.get(name, 0) > 0:
+            standing[name] = float(np.percentile(mine, share * 100)) / radii[name]
+    return standing
+
+
+def form_of(signed, forms, owner=None, names=None, radii=None):
+    """The thinnest clothing form a surface fits in over its slots: the first whose share of
+    each slot's radius is at least as far out as all but FORM_SHARE of the slot's points, over
+    the clothed slots if it has any, else all of them."""
+    if owner is None:
+        raise ValueError("form_of needs the points' slots")
+    standing = slot_standing(signed, owner, names, radii)
+    clothed = {s: v for s, v in standing.items() if s in clothed_slots()}
+    return form_for(clothed or standing, [(n, s + FORM_TOLERANCE) for n, s in forms])
+
+
+def edge_pairs(part):
+    """The part's mesh edges, as vertex index pairs."""
+    pairs = np.empty(len(part.data.edges) * 2, dtype=int)
+    part.data.edges.foreach_get("vertices", pairs)
+    return pairs.reshape(-1, 2)
+
+
+def rein_in(part, surface, owner, names, radii, limit_share):
+    """Scale how far a part stands out from the body over its clothed slots down so REIN_SHARE of
+    each slot's points are within limit_share of its radius, the scale eased across seams by
+    averaging it with neighbors'. Gives each clothed slot's scale and how many
+    points moved; the scales are 1 where nothing needed it."""
+    clothed = clothed_slots()
+    points = points_of(part)
+    closest, signed = nearest(points, surface)
+    standing = slot_standing(signed, owner, names, radii, REIN_SHARE)
+    scales = {name: min(1.0, limit_share / standing[name]) if standing.get(name, 0) > 0 else 1.0
+              for name in names if name in clothed}
+    if all(scale >= 1.0 for scale in scales.values()):
+        return scales, 0
+    per_point = np.array([scales.get(names[i], 1.0) for i in owner])
+    pairs = edge_pairs(part)
+    for _ in range(REIN_SMOOTH):
+        total = per_point.copy()
+        count = np.ones(len(per_point))
+        np.add.at(total, pairs[:, 0], per_point[pairs[:, 1]])
+        np.add.at(total, pairs[:, 1], per_point[pairs[:, 0]])
+        np.add.at(count, pairs.ravel(), 1)
+        # Never more than the slot's own, so its points still come within the limit
+        per_point = np.minimum(total / count,
+                               np.array([scales.get(names[i], 1.0) for i in owner]))
+    moving = (signed > 0) & (per_point < 1.0 - 1e-6)
+    direction = points - closest
+    length = np.linalg.norm(direction, axis=1, keepdims=True)
+    direction = direction / np.maximum(length, 1e-9)
+    points[moving] = closest[moving] + direction[moving] * (signed * per_point)[moving, None]
+    set_points(part, points)
+    return scales, int(moving.sum())
 
 
 def soft_clamp(signed, limit):
@@ -464,7 +547,11 @@ def main():
                         help="The voxel size the part is rebuilt at, in meters.")
     parser.add_argument("--beyond", default="clamp", choices=BEYOND,
                         help="What to do with a part standing out past the thickest clothing"
-                             " form: clamp it back in, leave it bare of clothing, or reject it.")
+                             " form over a clothed slot: rein it in (rejecting it if that is too"
+                             " much), leave it as it is because it is worn bare, or reject it.")
+    parser.add_argument("--rein-least", type=float, default=REIN_LEAST,
+                        help="The least share of how far it stands out that reining it in may"
+                             " scale it to before it is rejected.")
     args = parser.parse_args(argv)
     VOXEL = args.voxel
     os.makedirs(args.out, exist_ok=True)
@@ -533,25 +620,44 @@ def main():
     if extents["floor_scale"] and not low <= extents["floor_scale"] <= high:
         extents["rejected"] = ("needs stretching x%s to meet the floor, more than %s-%s; the fit"
                                " is likely wrong" % (extents["floor_scale"], low, high))
+    # Over clothed slots a part must fit in the thickest form, a share of each slot's radius,
+    # unless it is worn bare; it is reined in toward the body if it stands out too far, and
+    # rejected if that would take more than halving how far it stands out
     forms = plan_forms()
+    radii = slot_radii("male")
+    owner = slot_owners(points_of(part), segments, names, slots)
     _, signed = nearest(points_of(part), surface)
     limit = forms[-1][1] if forms else None
-    excess = 0.0 if limit is None else float(np.percentile(signed, FORM_SHARE * 100)) - limit
-    extents["past_max_mm"] = round(max(excess, 0.0) * 1000, 1)
-    if extents.get("rejected"):
+    standing = slot_standing(signed, owner, names, radii, REIN_SHARE)
+    extents["standing"] = {s: round(v, 3) for s, v in standing.items()}
+    clothed = {s: v for s, v in standing.items() if s in clothed_slots()}
+    over = {s: v for s, v in clothed.items() if limit is not None and v > limit}
+    if extents.get("rejected") or args.beyond == "bare":
         pass
-    elif excess > 0 and args.beyond == "clamp":
-        if excess > CLAMP_LIMIT:
-            extents["rejected"] = ("stands out %.0f mm past the %s form, more than clamping"
-                                   " takes (%.0f mm)" % (excess * 1000, forms[-1][0],
-                                                         CLAMP_LIMIT * 1000))
+    elif over and args.beyond == "reject":
+        extents["rejected"] = "stands out past the %s form over %s" % (
+            forms[-1][0], ", ".join("%s (%.2f of its radius)" % i for i in over.items()))
+    elif over:
+        needed = {s: limit / v for s, v in over.items()}
+        if min(needed.values()) < args.rein_least:
+            extents["rejected"] = (
+                "stands out too far for clothing over %s; reining it in would take scaling it"
+                " to %s, past x%s. Regenerate it slimmer, or brief it \"bare\" if it is meant"
+                " to be worn without clothing"
+                % (", ".join(over), ", ".join("x%.2f" % k for k in needed.values()),
+                   args.rein_least))
         else:
-            extents["clamped"] = clamp_to(part, surface, limit)
+            scales, moved = rein_in(part, surface, owner, names, radii, limit)
+            extents["reined"] = {s: round(k, 3) for s, k in scales.items() if k < 1.0}
+            extents["reined_points"] = moved
+            # What smoothing left past the limit is clamped
+            point_limit = np.array([limit * radii[names[i]] if names[i] in clothed_slots()
+                                    else np.inf for i in owner])
+            extents["clamped"] = clamp_to(part, surface, point_limit)
             _, signed = nearest(points_of(part), surface)
-    elif excess > 0 and args.beyond == "reject":
-        extents["rejected"] = "stands out %.0f mm past the %s form" % (excess * 1000, forms[-1][0])
-    extents["form"] = None if args.beyond == "bare" and excess > 0 else form_of(signed, forms)
-    extents["bare"] = args.beyond == "bare" and excess > 0
+    extents["form"] = (None if args.beyond == "bare"
+                       else form_of(signed, forms, owner, names, radii))
+    extents["bare"] = args.beyond == "bare"
 
     caps = []
     for seam, (indices, _) in welded.items():

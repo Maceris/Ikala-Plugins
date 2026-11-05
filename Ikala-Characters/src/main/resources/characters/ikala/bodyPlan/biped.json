@@ -5,72 +5,78 @@
   // Each variant starts its sliders where it says; the rest start at 0
   "variants": [
     {"id": "male", "sliders": {"ikala:slider/biped/shoulder_width": {"initial": 0.2}, "ikala:slider/biped/chest": {"initial": 0.15}, "ikala:slider/biped/bust": {"initial": -1}, "ikala:slider/biped/jaw": {"initial": 0.2}}},
-    {"id": "female", "sliders": {"ikala:slider/biped/height": {"initial": -0.2}, "ikala:slider/biped/shoulder_width": {"initial": -0.3}, "ikala:slider/biped/waist": {"initial": -0.3}, "ikala:slider/biped/hips": {"initial": 0.3}, "ikala:slider/biped/bust": {"initial": 0.3}, "ikala:slider/biped/jaw": {"initial": -0.2}}},
+    {"id": "female", "sliders": {"ikala:slider/biped/height": {"initial": -0.2}, "ikala:slider/biped/shoulder_width": {"initial": -0.3}, "ikala:slider/biped/waist": {"initial": -0.3}, "ikala:slider/biped/hips": {"initial": 0.3}, "ikala:slider/biped/bust": {"initial": 0.3}, "ikala:slider/biped/jaw": {"initial": -0.2}}, "radii": {"head": 0.059, "torso": 0.123, "pelvis": 0.11, "upperArm.L": 0.047, "lowerArm.L": 0.033, "hand.L": 0.034, "upperLeg.L": 0.069, "lowerLeg.L": 0.041, "foot.L": 0.031, "upperArm.R": 0.047, "lowerArm.R": 0.033, "hand.R": 0.034, "upperLeg.R": 0.069, "lowerLeg.R": 0.041, "foot.R": 0.031}},
     {"id": "neutral"},
     {"id": "huge", "sliders": {"ikala:slider/biped/height": {"initial": 0.9}, "ikala:slider/biped/physique": {"initial": 0.9}, "ikala:slider/biped/muscle": {"initial": 0.8}, "ikala:slider/biped/shoulder_width": {"initial": 0.8}}},
     {"id": "small", "sliders": {"ikala:slider/biped/height": {"initial": -0.9}, "ikala:slider/biped/leg_length": {"initial": -0.5}, "ikala:slider/biped/head_size": {"initial": 0.4}}}
   ],
   "slots": [
-    {"id": "head", "bones": ["head", "jaw", "eye.L", "eye.R", "brow.L", "brow.R", "lid.upper.L", "lid.upper.R", "lid.lower.L", "lid.lower.R", "mouth.corner.L", "mouth.corner.R", "lip.upper", "lip.lower", "face.brow", "face.cheek.L", "face.cheek.R", "face.nose", "face.chin", "face.cranium", "face.jaw"], "seams": ["neck"]},
-    {"id": "torso", "bones": ["spine", "chest", "neck", "clavicle.L", "clavicle.R", "girth.chest", "girth.waist", "bust.L", "bust.R", "belly"], "seams": ["neck", "shoulder.L", "shoulder.R", "waist"]},
-    {"id": "pelvis", "bones": ["hips", "girth.hips"], "seams": ["waist", "hip.L", "hip.R"]},
-    {"id": "upperArm.L", "bones": ["upperarm.L", "girth.upperarm.L", "muscle.upperarm.L"], "seams": ["shoulder.L", "elbow.L"], "mirrorOf": "upperArm.R"},
-    {"id": "lowerArm.L", "bones": ["forearm.L", "girth.forearm.L"], "seams": ["elbow.L", "wrist.L"], "mirrorOf": "lowerArm.R"},
-    {"id": "hand.L", "bones": ["hand.L", "thumb.01.L", "thumb.02.L", "thumb.03.L", "fingers.01.L", "fingers.02.L"], "seams": ["wrist.L"], "mirrorOf": "hand.R"},
-    {"id": "upperLeg.L", "bones": ["thigh.L", "girth.thigh.L", "muscle.thigh.L"], "seams": ["hip.L", "knee.L"], "mirrorOf": "upperLeg.R"},
-    {"id": "lowerLeg.L", "bones": ["shin.L", "girth.shin.L"], "seams": ["knee.L", "ankle.L"], "mirrorOf": "lowerLeg.R"},
-    {"id": "foot.L", "bones": ["foot.L", "toe.L"], "seams": ["ankle.L"], "mirrorOf": "foot.R"},
-    {"id": "upperArm.R", "bones": ["upperarm.R", "girth.upperarm.R", "muscle.upperarm.R"], "seams": ["shoulder.R", "elbow.R"], "mirrorOf": "upperArm.L"},
-    {"id": "lowerArm.R", "bones": ["forearm.R", "girth.forearm.R"], "seams": ["elbow.R", "wrist.R"], "mirrorOf": "lowerArm.L"},
-    {"id": "hand.R", "bones": ["hand.R", "thumb.01.R", "thumb.02.R", "thumb.03.R", "fingers.01.R", "fingers.02.R"], "seams": ["wrist.R"], "mirrorOf": "hand.L"},
-    {"id": "upperLeg.R", "bones": ["thigh.R", "girth.thigh.R", "muscle.thigh.R"], "seams": ["hip.R", "knee.R"], "mirrorOf": "upperLeg.L"},
-    {"id": "lowerLeg.R", "bones": ["shin.R", "girth.shin.R"], "seams": ["knee.R", "ankle.R"], "mirrorOf": "lowerLeg.L"},
-    {"id": "foot.R", "bones": ["foot.R", "toe.R"], "seams": ["ankle.R"], "mirrorOf": "foot.L"}
+    {"id": "head", "bones": ["head", "jaw", "eye.L", "eye.R", "brow.L", "brow.R", "lid.upper.L", "lid.upper.R", "lid.lower.L", "lid.lower.R", "mouth.corner.L", "mouth.corner.R", "lip.upper", "lip.lower", "face.brow", "face.cheek.L", "face.cheek.R", "face.nose", "face.chin", "face.cranium", "face.jaw"], "seams": ["neck"], "radius": 0.06},
+    {"id": "torso", "bones": ["spine", "chest", "neck", "clavicle.L", "clavicle.R", "girth.chest", "girth.waist", "bust.L", "bust.R", "belly"], "seams": ["neck", "shoulder.L", "shoulder.R", "waist"], "clothed": true, "radius": 0.126},
+    {"id": "pelvis", "bones": ["hips", "girth.hips"], "seams": ["waist", "hip.L", "hip.R"], "clothed": true, "radius": 0.113},
+    {"id": "upperArm.L", "bones": ["upperarm.L", "girth.upperarm.L", "muscle.upperarm.L"], "seams": ["shoulder.L", "elbow.L"], "mirrorOf": "upperArm.R", "clothed": true, "radius": 0.056},
+    {"id": "lowerArm.L", "bones": ["forearm.L", "girth.forearm.L"], "seams": ["elbow.L", "wrist.L"], "mirrorOf": "lowerArm.R", "clothed": true, "radius": 0.04},
+    {"id": "hand.L", "bones": ["hand.L", "thumb.01.L", "thumb.02.L", "thumb.03.L", "fingers.01.L", "fingers.02.L"], "seams": ["wrist.L"], "mirrorOf": "hand.R", "radius": 0.043},
+    {"id": "upperLeg.L", "bones": ["thigh.L", "girth.thigh.L", "muscle.thigh.L"], "seams": ["hip.L", "knee.L"], "mirrorOf": "upperLeg.R", "clothed": true, "radius": 0.07},
+    {"id": "lowerLeg.L", "bones": ["shin.L", "girth.shin.L"], "seams": ["knee.L", "ankle.L"], "mirrorOf": "lowerLeg.R", "clothed": true, "radius": 0.05},
+    {"id": "foot.L", "bones": ["foot.L", "toe.L"], "seams": ["ankle.L"], "mirrorOf": "foot.R", "radius": 0.036},
+    {"id": "upperArm.R", "bones": ["upperarm.R", "girth.upperarm.R", "muscle.upperarm.R"], "seams": ["shoulder.R", "elbow.R"], "mirrorOf": "upperArm.L", "clothed": true, "radius": 0.056},
+    {"id": "lowerArm.R", "bones": ["forearm.R", "girth.forearm.R"], "seams": ["elbow.R", "wrist.R"], "mirrorOf": "lowerArm.L", "clothed": true, "radius": 0.04},
+    {"id": "hand.R", "bones": ["hand.R", "thumb.01.R", "thumb.02.R", "thumb.03.R", "fingers.01.R", "fingers.02.R"], "seams": ["wrist.R"], "mirrorOf": "hand.L", "radius": 0.043},
+    {"id": "upperLeg.R", "bones": ["thigh.R", "girth.thigh.R", "muscle.thigh.R"], "seams": ["hip.R", "knee.R"], "mirrorOf": "upperLeg.L", "clothed": true, "radius": 0.07},
+    {"id": "lowerLeg.R", "bones": ["shin.R", "girth.shin.R"], "seams": ["knee.R", "ankle.R"], "mirrorOf": "lowerLeg.L", "clothed": true, "radius": 0.05},
+    {"id": "foot.R", "bones": ["foot.R", "toe.R"], "seams": ["ankle.R"], "mirrorOf": "foot.L", "radius": 0.036}
   ],
   "layers": [
-    {"id": "hair", "covers": ["head"], "order": 10},
-    {"id": "facialHair", "covers": ["head"], "order": 10},
-    {"id": "shirt", "covers": ["torso", "upperArm.L", "upperArm.R", "lowerArm.L", "lowerArm.R"], "order": 10},
-    {"id": "pants", "covers": ["pelvis", "upperLeg.L", "upperLeg.R", "lowerLeg.L", "lowerLeg.R"], "order": 15},
-    {"id": "gloves", "covers": ["hand.L", "hand.R"], "order": 20},
-    {"id": "boots", "covers": ["foot.L", "foot.R", "lowerLeg.L", "lowerLeg.R"], "order": 20},
-    {"id": "jacket", "covers": ["torso", "upperArm.L", "upperArm.R", "lowerArm.L", "lowerArm.R"], "order": 20},
-    {"id": "belt", "covers": ["pelvis"], "order": 25},
-    {"id": "shoulderPads.L", "covers": ["upperArm.L"], "order": 30},
-    {"id": "shoulderPads.R", "covers": ["upperArm.R"], "order": 30},
-    {"id": "helmet", "covers": ["head"], "order": 30},
+    {"id": "hair", "covers": ["head"], "order": 10, "standoff": 0.3},
+    {"id": "facialHair", "covers": ["head"], "order": 10, "standoff": 0.15},
+    {"id": "shirt", "covers": ["torso", "upperArm.L", "upperArm.R", "lowerArm.L", "lowerArm.R"], "order": 10, "standoff": 0.12, "reach": 0.25},
+    {"id": "pants", "covers": ["pelvis", "upperLeg.L", "upperLeg.R", "lowerLeg.L", "lowerLeg.R"], "order": 15, "standoff": 0.12, "reach": 0.25},
+    {"id": "gloves", "covers": ["hand.L", "hand.R"], "order": 20, "standoff": 0.1},
+    {"id": "boots", "covers": ["foot.L", "foot.R", "lowerLeg.L", "lowerLeg.R"], "order": 20, "standoff": 0.15},
+    {"id": "jacket", "covers": ["torso", "upperArm.L", "upperArm.R", "lowerArm.L", "lowerArm.R"], "order": 20, "standoff": 0.35, "reach": 0.6},
+    {"id": "belt", "covers": ["pelvis"], "order": 25, "standoff": 0.15, "reach": 0.25},
+    {"id": "shoulderPads.L", "covers": ["upperArm.L"], "order": 30, "standoff": 0.5},
+    {"id": "shoulderPads.R", "covers": ["upperArm.R"], "order": 30, "standoff": 0.5},
+    {"id": "helmet", "covers": ["head"], "order": 30, "standoff": 0.25},
     // Added later, so they come last and designs keep their layer positions
-    {"id": "cape", "covers": ["torso"], "order": 40},
-    {"id": "skirt", "covers": ["pelvis", "upperLeg.L", "upperLeg.R"], "order": 18}
+    {"id": "cape", "covers": ["torso"], "order": 40, "standoff": 0.1},
+    {"id": "skirt", "covers": ["pelvis", "upperLeg.L", "upperLeg.R"], "order": 18, "standoff": 0.2, "reach": 0.4}
   ],
   "exclusiveTags": ["cloth", "backDetail"],
   // Clothing forms: shells over the body that layers are fitted to, so they go over bulky body
-  // parts; the thickest is also the most a generated body part may stand out
+  // parts, each a share of every slot's "radius" out (its median thickness on the male body; the
+  // female variant gives her own "radii"). A body part on a "clothed" slot must fit in the thickest
+  // unless it is worn bare
   "forms": [
-    {"id": "tight", "offset": 0},
-    {"id": "padded", "offset": 0.02},
-    {"id": "armored", "offset": 0.04},
-    {"id": "bulky", "offset": 0.06}
+    {"id": "tight", "share": 0},
+    {"id": "padded", "share": 0.1},
+    {"id": "armored", "share": 0.25},
+    {"id": "bulky", "share": 0.45}
   ],
   // Decal places: a box fixed to a bone at rest, facing front, that a design's decal is projected
   // through onto the parts filling or covering its slots; deep enough for the bulkiest form
   "decals": [
     {"id": "chest", "bone": "chest", "offset": [0, 0.2, 0.2], "size": 0.18, "depth": 0.26, "covers": ["torso"]}
   ],
+  // Accessories on a socket that "rests" on a slot move "out" (x across, y up, z forward) as
+  // far as the body part there stands out plus the clothing over it, as shares of the slot's
+  // radius; a layer's "standoff" is how far its clothing usually stands out from the part under it,
+  // and its "reach" the furthest, for layers that others go over
   "sockets": [
     {"id": "head_top", "bone": "socket.head_top", "type": "head_top"},
-    {"id": "face", "bone": "socket.face", "type": "face"},
-    {"id": "back", "bone": "socket.back", "type": "back.large"},
-    {"id": "hip_back", "bone": "socket.hip_back", "type": "hip"},
-    {"id": "belt_front", "bone": "socket.belt_front", "type": "hip"},
+    {"id": "face", "bone": "socket.face", "type": "face", "rests": {"slot": "head", "out": [0, 0, 1]}},
+    {"id": "back", "bone": "socket.back", "type": "back.large", "rests": {"slot": "torso", "out": [0, 0, -1]}},
+    {"id": "hip_back", "bone": "socket.hip_back", "type": "hip", "rests": {"slot": "pelvis", "out": [0, 0, -1]}},
+    {"id": "belt_front", "bone": "socket.belt_front", "type": "hip", "rests": {"slot": "pelvis", "out": [0, 0, 1]}},
     {"id": "chest_emblem", "bone": "socket.chest_emblem", "type": "emblem"},
     {"id": "aura_center", "bone": "socket.aura_center", "type": "aura"},
-    {"id": "shoulder.L", "bone": "socket.shoulder.L", "type": "shoulder"},
+    {"id": "shoulder.L", "bone": "socket.shoulder.L", "type": "shoulder", "rests": {"slot": "upperArm.L", "out": [0, 1, 0]}},
     {"id": "grip.L", "bone": "socket.grip.L", "type": "grip.1h"},
-    {"id": "forearm_mount.L", "bone": "socket.forearm_mount.L", "type": "forearm"},
-    {"id": "shoulder.R", "bone": "socket.shoulder.R", "type": "shoulder"},
+    {"id": "forearm_mount.L", "bone": "socket.forearm_mount.L", "type": "forearm", "rests": {"slot": "lowerArm.L", "out": [1, 1, 0]}},
+    {"id": "shoulder.R", "bone": "socket.shoulder.R", "type": "shoulder", "rests": {"slot": "upperArm.R", "out": [0, 1, 0]}},
     {"id": "grip.R", "bone": "socket.grip.R", "type": "grip.1h"},
-    {"id": "forearm_mount.R", "bone": "socket.forearm_mount.R", "type": "forearm"}
+    {"id": "forearm_mount.R", "bone": "socket.forearm_mount.R", "type": "forearm", "rests": {"slot": "lowerArm.R", "out": [-1, 1, 0]}}
   ],
   "equipment": [
     {"id": "mainHand", "sockets": ["grip.R", "back", "hip_back"]},

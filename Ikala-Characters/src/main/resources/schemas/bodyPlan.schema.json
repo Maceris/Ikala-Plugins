@@ -96,7 +96,7 @@
           "items": {
             "$ref": "#/$defs/Form"
           },
-          "description": "Shapes clothing is fitted to, thinnest first: shells over the body at an offset, like \"tight\" at 0 and \"bulky\" at 0.06 m. A body part names the thinnest its surface fits in, and a layer shows its mesh for the thickest form among the body parts under it."
+          "description": "Shapes clothing is fitted to, thinnest first: shells over the body, each a share of every slot's radius out, like \"tight\" at 0 and \"bulky\" at 0.45. A body part names the thinnest its surface fits in; on a clothed slot it must fit in the thickest unless clothing can't go over it."
         },
         "decals": {
           "type": "array",
@@ -281,20 +281,20 @@
     },
     "Form": {
       "type": "object",
-      "description": "A shape clothing is fitted to: a shell over the body at an offset.",
+      "description": "A shape clothing is fitted to: a shell over the body, a share of each slot's radius out.",
       "properties": {
         "id": {
           "type": "string",
           "description": "The form's name, like \"bulky\"."
         },
-        "offset": {
+        "share": {
           "type": "number",
-          "description": "How far out from the body its shell is, in meters."
+          "description": "How far out from the body its shell is, as a share of each slot's radius."
         }
       },
       "required": [
         "id",
-        "offset"
+        "share"
       ],
       "additionalProperties": false
     },
@@ -338,6 +338,15 @@
           "type": "integer",
           "description": "Where it stacks; higher goes over lower, like shirt 10 < jacket 20.",
           "default": 0
+        },
+        "standoff": {
+          "type": "number",
+          "description": "How far its clothing usually stands out from the body part under it, as a share of each slot's radius, so accessories resting on a slot it covers sit on it. A part can give its own.",
+          "default": 0
+        },
+        "reach": {
+          "type": "number",
+          "description": "The furthest out its clothing may stand from the body part under it, as a share of each slot's radius, so the layers over it cover it. Left out, there is no limit."
         }
       },
       "required": [
@@ -378,6 +387,30 @@
       "required": [
         "bone",
         "weight"
+      ],
+      "additionalProperties": false
+    },
+    "Rest": {
+      "type": "object",
+      "description": "Where accessories on a socket rest on the body.",
+      "properties": {
+        "slot": {
+          "type": "string",
+          "description": "The body slot they rest on, like \"torso\"."
+        },
+        "out": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "Which way they move out from it, in the character's space at rest: x across, y up, z forward, like [0, 0, -1] for the back."
+        }
+      },
+      "required": [
+        "slot",
+        "out"
       ],
       "additionalProperties": false
     },
@@ -432,6 +465,16 @@
           "type": "boolean",
           "description": "Whether the slot may be left empty, like a tail.",
           "default": false
+        },
+        "clothed": {
+          "type": "boolean",
+          "description": "Whether clothing goes over its body parts, like a torso or a leg but not a hand, so they must fit in the thickest clothing form unless clothing can't go over them.",
+          "default": false
+        },
+        "radius": {
+          "type": "number",
+          "description": "How thick it is on the rig's reference body: the median distance of its surface from its long axis, in meters. Clothing forms and how far clothing stands out are shares of it.",
+          "default": 0
         }
       },
       "required": [
@@ -460,6 +503,14 @@
         "type": {
           "type": "string",
           "description": "Its type tag, which items fit by, like \"grip.1h\" or \"back.large\"."
+        },
+        "rests": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Rest"
+            }
+          ],
+          "description": "The body slot accessories on it rest on, and which way they move out as the part and clothing there stand further out than the bare body they were fitted on. Left out, they stay put."
         }
       },
       "required": [
@@ -497,6 +548,13 @@
             "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$"
           },
           "description": "The part each body slot or layer starts with, by slot or layer name, which designs that leave a slot out fall back to. Slots left out here start empty."
+        },
+        "radii": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "Its body slots' radii, in meters, where they differ from the plan's reference body's."
         }
       },
       "required": [
