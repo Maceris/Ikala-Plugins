@@ -60,10 +60,16 @@ layout(location = 1) out vec2 extinction;
 
 // Opacity is kept below 1, so the extinction stays finite
 const float MAX_OPACITY = 0.999;
-// Below this much light getting through to just in front of a surface, it is lit without looking
-// around in the occupancy volume: at most this share of its light shows, so occlusion and the
-// reflection ray can't change the pixel visibly, and deep stacks of glass cost far less
-const float DETAIL_TRANSMITTANCE = 0.1;
+// Lighting detail falls off with how much light gets through to just in front of a surface, as
+// Smolder lowers its lighting rate (SIGGRAPH 2026): only this share of the surface's light shows,
+// so what is dropped can't change the pixel visibly. On the GLASS gate, clear panes are 0.3
+// opaque: the first wall looks around in full, the second only along the normal, and the rest not
+// at all, which measured within 7/255 of full detail everywhere, blurred.
+// Below this, a surface is lit without looking around in the occupancy volume for occlusion, the
+// reflection or light rays
+const float DETAIL_TRANSMITTANCE = 0.3;
+// Below this, ambient occlusion only looks out along the normal
+const float AO_FULL_TRANSMITTANCE = 0.5;
 
 // Weighted blended OIT's depth weight, McGuire and Bavoil 2013, equation 10: nearer layers count
 // for more in the average. Matches OitMath.weight.
@@ -125,6 +131,7 @@ void main() {
 
     float w = voxelWeights != 0 ? inFront : depthWeight(alpha, depth);
     occupancyDetail = inFront >= DETAIL_TRANSMITTANCE;
+    occupancyAoNormalOnly = inFront < AO_FULL_TRANSMITTANCE;
 
     uint clusterLights;
     vec3 color = lightSurface(baseColor, material, outViewPosition.xyz, outWorldPosition.xyz, normal,

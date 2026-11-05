@@ -100,6 +100,10 @@ float occupancyFullness(vec3 renderPosition, int level)
 //
 // Also gives the bent normal: the directions averaged by how open each is, which leans away from
 // what is in the way, toward where the sky shows.
+// Whether occupancyAmbient looks out along the normal only, for a fifth of the cost: a caller
+// sets it for surfaces where the leaning of occlusion around them can't show
+bool occupancyAoNormalOnly = false;
+
 float occupancyAmbient(vec3 renderPosition, vec3 renderNormal, out vec3 bentNormal)
 {
     bentNormal = renderNormal;
@@ -126,7 +130,8 @@ float occupancyAmbient(vec3 renderPosition, vec3 renderNormal, out vec3 bentNorm
     float open = 0.0;
     float total = 0.0;
     vec3 bent = vec3(0);
-    for (int d = 0; d < 5; ++d) {
+    int directionCount = occupancyAoNormalOnly ? 1 : 5;
+    for (int d = 0; d < directionCount; ++d) {
         float weight = d == 0 ? 1.0 : AO_TILT;
         float through = 1.0;
         float reached = 0.0;
