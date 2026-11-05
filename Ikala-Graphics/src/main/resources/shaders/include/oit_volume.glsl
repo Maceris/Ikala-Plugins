@@ -14,6 +14,10 @@ const float FIRST_DEPTH = 0.5;
 const float FIXED_POINT_SCALE = 65536.0;
 // How many slices nearer than a surface its weight is read, so it doesn't dim itself
 const float SLICE_BIAS = 2.0;
+// Below this much light getting through from in front, a fragment adds nothing that shows, so it
+// is dropped before any lighting: Drobot's zero transmittance early out (SIGGRAPH 2025). Its
+// extinction goes too, which lets at most this share of the background through.
+const float MIN_VISIBLE = 1.0 / 256.0;
 
 // Where a depth (meters in front of the camera) falls among the slices, from 0 to SLICES.
 // logScale is SLICES / ln(viewDistance / FIRST_DEPTH).

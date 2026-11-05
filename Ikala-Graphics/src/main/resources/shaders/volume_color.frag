@@ -162,6 +162,9 @@ void main() {
     float inFront = voxelWeights != 0
         ? transmittanceInFront(gl_FragCoord.xy, entryDepth, logScale, tiles)
         : 1.0;
+    if (inFront < MIN_VISIBLE) {
+        discard;
+    }
     float through = 1.0;
     vec4 sum = vec4(0.0);
     float optical = 0.0;
@@ -245,7 +248,7 @@ void main() {
                 sum += vec4(color * alpha * weight, alpha * weight);
                 optical += voxel.a * segment;
                 through *= 1.0 - alpha;
-                if (through < VOLUME_OPAQUE_ENOUGH) {
+                if (through < VOLUME_OPAQUE_ENOUGH || inFront * through < MIN_VISIBLE) {
                     break;
                 }
             }

@@ -75,6 +75,13 @@ void main() {
     if (inFrontOfWaterGate(gl_FragCoord)) {
         discard;
     }
+    float depth = -outViewPosition.z;
+    float inFront = voxelWeights != 0
+        ? transmittanceInFront(gl_FragCoord.xy, depth, logScale, tiles)
+        : 1.0;
+    if (inFront < MIN_VISIBLE) {
+        discard;
+    }
     Material material = materials[outMaterialIdx];
     vec4 baseColor = material.baseColor;
     if (material.textureIndex > 0) {
@@ -116,11 +123,8 @@ void main() {
     vec3 tangent = normalize(outTangent);
     vec3 bitangent = cross(normal, tangent);
 
-    float depth = -outViewPosition.z;
-    float w = voxelWeights != 0
-        ? transmittanceInFront(gl_FragCoord.xy, depth, logScale, tiles)
-        : depthWeight(alpha, depth);
-    occupancyDetail = voxelWeights == 0 || w >= DETAIL_TRANSMITTANCE;
+    float w = voxelWeights != 0 ? inFront : depthWeight(alpha, depth);
+    occupancyDetail = inFront >= DETAIL_TRANSMITTANCE;
 
     uint clusterLights;
     vec3 color = lightSurface(baseColor, material, outViewPosition.xyz, outWorldPosition.xyz, normal,

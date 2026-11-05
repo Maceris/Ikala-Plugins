@@ -24,9 +24,6 @@
 layout(location = 0) out vec4 accum;
 layout(location = 1) out vec2 extinction;
 
-// Below this much light getting through from in front, a fragment adds nothing that shows
-const float MIN_VISIBLE = 1.0 / 256.0;
-
 // The depth weights of weighted blended transparency, as translucent.frag has them
 float depthWeight(float alpha, float depth) {
     return alpha * clamp(10.0 / (1e-5 + pow(depth / 5.0, 2.0) + pow(depth / 200.0, 6.0)), 1e-2, 3e3);
