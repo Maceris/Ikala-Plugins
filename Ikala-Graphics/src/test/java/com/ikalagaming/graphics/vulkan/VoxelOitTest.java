@@ -110,6 +110,42 @@ class VoxelOitTest {
     }
 
     @Test
+    void nothingPastTheCullDepthShows() {
+        // Panes of glass every 3 meters, as the GLASS gate's walls, at several opacities
+        for (float alpha : new float[] {0.1f, 0.3f, 0.55f, 0.9f}) {
+            int[] column = new int[VoxelOitMath.SLICES];
+            for (float depth = 2; depth < VIEW_DISTANCE; depth += 3) {
+                VoxelOitMath.splat(column, depth, LOG_SCALE, OitMath.extinction(alpha));
+            }
+            float[] transmittance = VoxelOitMath.integrate(column);
+            final int zero = VoxelOitMath.zeroSlice(transmittance);
+            assertTrue(zero < VoxelOitMath.SLICES, "Light runs out at " + alpha);
+            assertTrue(transmittance[zero] < VoxelOitMath.MIN_VISIBLE);
+            assertTrue(zero == 0 || transmittance[zero - 1] >= VoxelOitMath.MIN_VISIBLE);
+            final float cull = VoxelOitMath.cullDepth(zero, LOG_SCALE);
+            for (float depth = cull; depth < VIEW_DISTANCE * 2; depth *= 1.01f) {
+                assertTrue(
+                        VoxelOitMath.inFront(transmittance, depth, LOG_SCALE)
+                                < VoxelOitMath.MIN_VISIBLE,
+                        "Shows at " + depth + " past " + cull);
+            }
+        }
+    }
+
+    @Test
+    void clearColumnsCullNothing() {
+        float[] transmittance = VoxelOitMath.integrate(new int[VoxelOitMath.SLICES]);
+        assertEquals(VoxelOitMath.SLICES, VoxelOitMath.zeroSlice(transmittance));
+        assertEquals(
+                Float.POSITIVE_INFINITY,
+                VoxelOitMath.cullDepth(VoxelOitMath.zeroSlice(transmittance), LOG_SCALE));
+        // Too near the end for a read to reach past it
+        assertEquals(
+                Float.POSITIVE_INFINITY,
+                VoxelOitMath.cullDepth(VoxelOitMath.SLICES - 2, LOG_SCALE));
+    }
+
+    @Test
     void slicesCoverTheViewDistance() {
         assertEquals(0, VoxelOitMath.sliceCoordinate(0, LOG_SCALE));
         assertEquals(0, VoxelOitMath.sliceCoordinate(VoxelOitMath.FIRST_DEPTH, LOG_SCALE));

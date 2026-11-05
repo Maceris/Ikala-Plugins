@@ -35,10 +35,12 @@ import java.nio.LongBuffer;
  * {@link OitResolve} composites the result over the scene color.
  *
  * <p>The surfaces are depth tested against the opaque scene without writing depth, and drawn from
- * both sides. The stage reads the light stage's descriptor set (set 0), the bindless textures (set
- * 1), the scene stage's descriptor set (set 2), all written earlier in the frame, and the
- * transparency volume (set 3), which {@link OitSplat} and {@link OitIntegrate} filled this frame
- * when it weights by the volume. Particles are drawn after the surfaces, see {@link ParticleDraw}.
+ * both sides. Weighting by the volume, they test against {@link OitCullDepth}'s depth instead,
+ * which also drops layers too far behind others to show. The stage reads the light stage's
+ * descriptor set (set 0), the bindless textures (set 1), the scene stage's descriptor set (set 2),
+ * all written earlier in the frame, and the transparency volume (set 3), which {@link OitSplat} and
+ * {@link OitIntegrate} filled this frame when it weights by the volume. Particles are drawn after
+ * the surfaces, see {@link ParticleDraw}.
  */
 @Slf4j
 public class TranslucentRender implements RenderStage {
@@ -187,12 +189,21 @@ public class TranslucentRender implements RenderStage {
                     .imageLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
                     .loadOp(VK_ATTACHMENT_LOAD_OP_CLEAR)
                     .storeOp(VK_ATTACHMENT_STORE_OP_STORE);
-            // The opaque scene's depth, read only, as the light and skybox stages left it
+            // The opaque scene's depth, read only, as the light and skybox stages left it; or with
+            // the volume's weights, that brought nearer where nothing further shows, by
+            // OitCullDepth
+            final boolean culled = frameData.voxelTransparency;
             VkRenderingAttachmentInfo depthAttachment =
                     VkRenderingAttachmentInfo.calloc(stack)
                             .sType$Default()
-                            .imageView(frameData.gBuffer.depth().view)
-                            .imageLayout(VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL)
+                            .imageView(
+                                    culled
+                                            ? frameData.oitCullDepth.view
+                                            : frameData.gBuffer.depth().view)
+                            .imageLayout(
+                                    culled
+                                            ? VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL
+                                            : VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL)
                             .loadOp(VK_ATTACHMENT_LOAD_OP_LOAD)
                             .storeOp(VK_ATTACHMENT_STORE_OP_NONE);
             VkRenderingInfo renderingInfo =

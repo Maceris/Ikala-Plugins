@@ -70,6 +70,14 @@ public class OitVolume {
      */
     @Getter private SharedBuffer extinction;
 
+    /**
+     * Each tile's zero slice, the first where too little light gets through to show, written by the
+     * integration. -- GETTER -- The zero slices buffer.
+     *
+     * @return The buffer, null until it is sized.
+     */
+    @Getter private SharedBuffer zeroSlices;
+
     /** The pool the sets come from. */
     private long descriptorPool;
 
@@ -186,6 +194,11 @@ public class OitVolume {
         extinction =
                 SharedBuffer.allocateDeviceLocal(
                         cells * Integer.BYTES, state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+        zeroSlices =
+                SharedBuffer.allocateDeviceLocal(
+                        (long) tilesX * tilesY * Integer.BYTES,
+                        state,
+                        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
             PointerBuffer pointerOutput = stack.callocPointer(1);
@@ -358,6 +371,8 @@ public class OitVolume {
         imageAllocation = VK_NULL_HANDLE;
         SharedBuffer.free(extinction, state);
         extinction = null;
+        SharedBuffer.free(zeroSlices, state);
+        zeroSlices = null;
     }
 
     /**

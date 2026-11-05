@@ -40,6 +40,42 @@ public final class FullScreenPass {
             long pipelineLayout,
             int colorFormat,
             @Nullable Blend blend) {
+        return create(state, shader, pipelineLayout, colorFormat, blend);
+    }
+
+    /**
+     * Create a pipeline that draws a quad mesh over the screen into only a {@link
+     * PipelineManagerVulkan#DEPTH_FORMAT} depth target, writing whatever depth the fragment shader
+     * gives, with no test.
+     *
+     * @param state The Vulkan state.
+     * @param shader The vertex and fragment shaders.
+     * @param pipelineLayout The VkPipelineLayout.
+     * @return The VkPipeline.
+     */
+    public static long createDepthPipeline(
+            @NonNull VulkanState state, @NonNull ShaderVulkan shader, long pipelineLayout) {
+        return create(state, shader, pipelineLayout, VK_FORMAT_UNDEFINED, null);
+    }
+
+    /**
+     * Create a pipeline that draws a quad mesh over the screen.
+     *
+     * @param state The Vulkan state.
+     * @param shader The vertex and fragment shaders.
+     * @param pipelineLayout The VkPipelineLayout.
+     * @param colorFormat The VkFormat of the one color target, or VK_FORMAT_UNDEFINED to write only
+     *     depth.
+     * @param blend How to blend the output onto the color target, or null to replace it.
+     * @return The VkPipeline.
+     */
+    private static long create(
+            @NonNull VulkanState state,
+            @NonNull ShaderVulkan shader,
+            long pipelineLayout,
+            int colorFormat,
+            @Nullable Blend blend) {
+        final boolean depthOnly = colorFormat == VK_FORMAT_UNDEFINED;
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
 
@@ -87,9 +123,18 @@ public final class FullScreenPass {
                                     stack.ints(
                                             VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR));
             VkPipelineRenderingCreateInfo renderingCreateInfo =
-                    VkPipelineRenderingCreateInfo.calloc(stack)
+                    VkPipelineRenderingCreateInfo.calloc(stack).sType$Default();
+            if (depthOnly) {
+                renderingCreateInfo.depthAttachmentFormat(PipelineManagerVulkan.DEPTH_FORMAT);
+            } else {
+                renderingCreateInfo.pColorAttachmentFormats(stack.ints(colorFormat));
+            }
+            VkPipelineDepthStencilStateCreateInfo depthStencilState =
+                    VkPipelineDepthStencilStateCreateInfo.calloc(stack)
                             .sType$Default()
-                            .pColorAttachmentFormats(stack.ints(colorFormat));
+                            .depthTestEnable(depthOnly)
+                            .depthWriteEnable(depthOnly)
+                            .depthCompareOp(VK_COMPARE_OP_ALWAYS);
 
             VkPipelineColorBlendAttachmentState.Buffer blendAttachments =
                     VkPipelineColorBlendAttachmentState.calloc(1, stack);
@@ -112,9 +157,10 @@ public final class FullScreenPass {
                         .alphaBlendOp(VK_BLEND_OP_ADD);
             }
             VkPipelineColorBlendStateCreateInfo colorBlendState =
-                    VkPipelineColorBlendStateCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .pAttachments(blendAttachments);
+                    VkPipelineColorBlendStateCreateInfo.calloc(stack).sType$Default();
+            if (!depthOnly) {
+                colorBlendState.pAttachments(blendAttachments);
+            }
             VkPipelineRasterizationStateCreateInfo rasterizationState =
                     VkPipelineRasterizationStateCreateInfo.calloc(stack)
                             .sType$Default()
@@ -140,6 +186,7 @@ public final class FullScreenPass {
                     .pRasterizationState(rasterizationState)
                     .pMultisampleState(multisampleState)
                     .pColorBlendState(colorBlendState)
+                    .pDepthStencilState(depthStencilState)
                     .pDynamicState(dynamicState)
                     .layout(pipelineLayout)
                     .renderPass(VK_NULL_HANDLE);

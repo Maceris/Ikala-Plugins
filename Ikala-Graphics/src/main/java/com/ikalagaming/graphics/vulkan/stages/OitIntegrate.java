@@ -25,8 +25,9 @@ import java.nio.LongBuffer;
 /**
  * Sums what {@link OitSplat} added to each tile's slices front to back into how much light gets
  * through each slice, the image {@link TranslucentRender} reads its weights from, and clears the
- * buffer for the next frame, see {@code oit_integrate.comp} and {@link VoxelOitMath}. Does nothing
- * on frames that don't weight by the volume.
+ * buffer for the next frame, see {@code oit_integrate.comp} and {@link VoxelOitMath}. Notes each
+ * tile's zero slice too, for {@link OitCullDepth}. Does nothing on frames that don't weight by the
+ * volume.
  */
 @Slf4j
 public class OitIntegrate implements RenderStage {
@@ -135,6 +136,9 @@ public class OitIntegrate implements RenderStage {
             constants.putInt(ShaderBindings.OitVolume.PUSH_CONSTANT_TILES_OFFSET, tilesX);
             constants.putInt(
                     ShaderBindings.OitVolume.PUSH_CONSTANT_TILES_OFFSET + Integer.BYTES, tilesY);
+            constants.putLong(
+                    ShaderBindings.OitVolume.PUSH_CONSTANT_ZERO_SLICES_OFFSET,
+                    volume.getZeroSlices().deviceAddress);
             vkCmdPushConstants(
                     commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
             final int groupSize = ShaderBindings.OitVolume.WORKGROUP_SIZE;
@@ -144,13 +148,13 @@ public class OitIntegrate implements RenderStage {
                     (tilesY + groupSize - 1) / groupSize,
                     1);
 
-            // The transparent stage and the resolve read the image
+            // The transparent stage and the resolve read the image, the cull depth the zero slices
             barrier(
                     commandBuffer,
                     VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                     VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                     VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                    VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                    VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
                     stack);
         }
     }

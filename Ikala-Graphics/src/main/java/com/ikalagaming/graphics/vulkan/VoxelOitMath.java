@@ -18,6 +18,11 @@ import lombok.NonNull;
  * <p>With those weights, layers a few slices apart composite exactly like sorted blending; layers
  * closer than that see the same weight, and mix as a weighted average.
  *
+ * <p>Past where a tile's light falls under {@link #MIN_VISIBLE}, nothing drawn can show, so
+ * integrating also notes each tile's first such slice, its zero slice, and the transparent stage
+ * depth tests against {@link #cullDepth}, the paper's zero transmittance depth: layers behind it
+ * are never shaded.
+ *
  * <p>Depths are distances in front of the camera, so the negated view space z. Slice coordinates
  * are continuous: slice {@code i} covers {@code [i, i + 1)}, and its texel's center is {@code i +
  * 0.5}.
@@ -46,6 +51,18 @@ public final class VoxelOitMath {
      * slice it can read without seeing itself is two away (the paper's value for linear splats).
      */
     public static final float SLICE_BIAS = 2;
+
+    /**
+     * Below this much light getting through from in front, a surface adds nothing that shows, and
+     * isn't drawn.
+     */
+    public static final float MIN_VISIBLE = 1f / 256;
+
+    /**
+     * How many slices further than strictly needed the zero transmittance depth is put, for
+     * rounding.
+     */
+    public static final float CULL_MARGIN = 0.25f;
 
     /**
      * The scale from the log of a depth to a slice coordinate, for a view distance: the slices
@@ -137,6 +154,38 @@ public final class VoxelOitMath {
         final float fraction = read - lower;
         return texel(transmittance, lower) * (1 - fraction)
                 + texel(transmittance, lower + 1) * fraction;
+    }
+
+    /**
+     * The first slice whose transmittance is under {@link #MIN_VISIBLE}: its zero slice.
+     *
+     * @param transmittance The tile's integrated column.
+     * @return The slice, or {@link #SLICES} if light gets through all of them.
+     */
+    public static int zeroSlice(float @NonNull [] transmittance) {
+        for (int slice = 0; slice < SLICES; ++slice) {
+            if (transmittance[slice] < MIN_VISIBLE) {
+                return slice;
+            }
+        }
+        return SLICES;
+    }
+
+    /**
+     * The zero transmittance depth: past it, every surface reads under {@link #MIN_VISIBLE} from
+     * {@link #inFront}, since the read is {@link #SLICE_BIAS} slices nearer and blends the texel
+     * centers either side, and the transmittance only falls further along a column.
+     *
+     * @param zeroSlice From {@link #zeroSlice}, the furthest of every tile a read may blend.
+     * @param logScale From {@link #logScale(double)}.
+     * @return The distance in front of the camera, in meters, or infinity to cull nothing.
+     */
+    public static float cullDepth(int zeroSlice, float logScale) {
+        final float coordinate = zeroSlice + 0.5f + SLICE_BIAS + CULL_MARGIN;
+        if (zeroSlice >= SLICES || coordinate >= SLICES) {
+            return Float.POSITIVE_INFINITY;
+        }
+        return (float) (FIRST_DEPTH * Math.exp(coordinate / logScale));
     }
 
     /**

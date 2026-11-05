@@ -305,6 +305,13 @@ public class PerFrameData {
     public TextureInfoVulkan oitExtinction;
 
     /**
+     * What the transparent stage depth tests against when weighting by the voxel-based volume: the
+     * opaque scene's depth, or nearer where no light gets back from, see {@code
+     * oit_cull_depth.frag}. Written each time the transparent stages run.
+     */
+    public TextureInfoVulkan oitCullDepth;
+
+    /**
      * Whether this frame's translucent surfaces are weighted by the voxel-based transparency
      * volume, read once at the start of the transparency stages so they all agree.
      */

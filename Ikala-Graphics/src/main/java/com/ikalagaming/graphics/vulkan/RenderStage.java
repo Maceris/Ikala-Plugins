@@ -72,6 +72,7 @@ public interface RenderStage {
         OIT_SPLAT,
         OIT_SPLAT_BAKED,
         OIT_INTEGRATE,
+        OIT_CULL_DEPTH,
         VOLUME_UPLOAD,
         LOD_BAKE,
         VOLUME_SPLAT,

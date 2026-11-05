@@ -770,8 +770,32 @@ public class ShaderBindings {
         public static final int SPLAT_PUSH_CONSTANTS_SIZE =
                 PUSH_CONSTANT_FRAME_OFFSET + Integer.BYTES;
 
+        /** Device address of each tile's zero slice, integration only. */
+        public static final int PUSH_CONSTANT_ZERO_SLICES_OFFSET =
+                PUSH_CONSTANT_TILES_OFFSET + 2 * Integer.BYTES;
+
         /** The size of the integration's push constants in bytes. */
-        public static final int INTEGRATE_PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_LOG_SCALE_OFFSET;
+        public static final int INTEGRATE_PUSH_CONSTANTS_SIZE =
+                PUSH_CONSTANT_ZERO_SLICES_OFFSET + Long.BYTES;
+
+        /** Device address of each tile's zero slice, for the cull depth. */
+        public static final int CULL_ZERO_SLICES_OFFSET = 0;
+
+        /** How many tiles across and down this frame's volume holds, two uints, cull depth. */
+        public static final int CULL_TILES_OFFSET = CULL_ZERO_SLICES_OFFSET + Long.BYTES;
+
+        /** The scale from the log of a depth to a slice, cull depth. */
+        public static final int CULL_LOG_SCALE_OFFSET = CULL_TILES_OFFSET + 2 * Integer.BYTES;
+
+        /** The bindless slot of the opaque scene's depth, cull depth. */
+        public static final int CULL_DEPTH_INDEX_OFFSET = CULL_LOG_SCALE_OFFSET + Float.BYTES;
+
+        /** The projection's two entries that give depth, m22 then m32, two floats, cull depth. */
+        public static final int CULL_PROJECTION_Z_OFFSET = CULL_DEPTH_INDEX_OFFSET + Integer.BYTES;
+
+        /** The size of the cull depth's push constants in bytes. */
+        public static final int CULL_PUSH_CONSTANTS_SIZE =
+                CULL_PROJECTION_Z_OFFSET + 2 * Float.BYTES;
 
         /** The binding of the transmittance, as a storage image to integrate into or to read. */
         public static final int TRANSMITTANCE_BINDING = 0;

@@ -18,6 +18,8 @@ const float SLICE_BIAS = 2.0;
 // is dropped before any lighting: Drobot's zero transmittance early out (SIGGRAPH 2025). Its
 // extinction goes too, which lets at most this share of the background through.
 const float MIN_VISIBLE = 1.0 / 256.0;
+// How many slices further than strictly needed the zero transmittance depth is put, for rounding
+const float CULL_MARGIN = 0.25;
 
 // Where a depth (meters in front of the camera) falls among the slices, from 0 to SLICES.
 // logScale is SLICES / ln(viewDistance / FIRST_DEPTH).

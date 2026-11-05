@@ -157,6 +157,9 @@ public class PipelineManagerVulkan {
     /** Integrates the transparency volume into the weights the transparent stage reads. */
     private final OitIntegrate stageOitIntegrate;
 
+    /** Writes the depth past which no transparent layer shows, for the transparent stage. */
+    private final OitCullDepth stageOitCullDepth;
+
     /** Keeps the volume bricks up to date and lists the ones to draw. */
     private final VolumeUpload stageVolumeUpload;
 
@@ -342,6 +345,9 @@ public class PipelineManagerVulkan {
         stageParticleUpdate.initialize(state);
         stageOitIntegrate = new OitIntegrate(shaders.getShader(RenderStage.Type.OIT_INTEGRATE));
         stageOitIntegrate.initialize(state);
+        stageOitCullDepth =
+                new OitCullDepth(shaders.getShader(RenderStage.Type.OIT_CULL_DEPTH), quadMesh);
+        stageOitCullDepth.initialize(state);
         stageVolumeUpload = new VolumeUpload(shaders.getShader(RenderStage.Type.VOLUME_UPLOAD));
         stageVolumeUpload.initialize(state);
         stageLodBake = new LodBake(shaders.getShader(RenderStage.Type.LOD_BAKE));
@@ -371,6 +377,7 @@ public class PipelineManagerVulkan {
                         stageOitSplat,
                         stageVolumeSplat,
                         stageOitIntegrate,
+                        stageOitCullDepth,
                         stageTranslucentRender,
                         stageVolumeColor,
                         stageOitResolve);
@@ -1039,6 +1046,16 @@ public class PipelineManagerVulkan {
         // Read through the bindless array by the transparency resolve
         state.bindlessTextures.register(state, data.oitAccum);
         state.bindlessTextures.register(state, data.oitExtinction);
+        data.oitCullDepth =
+                createRenderTarget(
+                        state,
+                        imageExtent.width(),
+                        imageExtent.height(),
+                        DEPTH_FORMAT,
+                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                        VK_IMAGE_ASPECT_DEPTH_BIT,
+                        VK_FILTER_NEAREST,
+                        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
 
         // Transfer destination so the filter can clear it if nothing rendered to it
         data.preFilterTexture =
@@ -1100,6 +1117,7 @@ public class PipelineManagerVulkan {
         stageOitSplat.cleanup(state);
         stageParticleUpdate.cleanup(state);
         stageOitIntegrate.cleanup(state);
+        stageOitCullDepth.cleanup(state);
         stageVolumeUpload.cleanup(state);
         stageLodBake.cleanup(state);
         stageVolumeDepth.cleanup(state);
@@ -1189,6 +1207,10 @@ public class PipelineManagerVulkan {
             state.bindlessTextures.release(state, data.oitExtinction);
             data.oitExtinction.destroy(state);
             data.oitExtinction = null;
+        }
+        if (data.oitCullDepth != null) {
+            data.oitCullDepth.destroy(state);
+            data.oitCullDepth = null;
         }
         if (data.sceneColor != null) {
             state.bindlessTextures.release(state, data.sceneColor);

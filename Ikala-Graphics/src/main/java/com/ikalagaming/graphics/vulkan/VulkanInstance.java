@@ -1474,6 +1474,19 @@ public class VulkanInstance {
                                         ShaderVulkan.Location.BUNDLED)),
                         state));
         shaderMap.addShader(
+                RenderStage.Type.OIT_CULL_DEPTH,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/lights.vert",
+                                        ShaderVulkan.Type.VERTEX,
+                                        ShaderVulkan.Location.BUNDLED),
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/oit_cull_depth.frag",
+                                        ShaderVulkan.Type.FRAGMENT,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
                 RenderStage.Type.OIT_INTEGRATE,
                 new ShaderVulkan(
                         List.of(

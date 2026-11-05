@@ -185,7 +185,13 @@ class ShaderBindingsTest {
         assertEquals(20, ShaderBindings.OitVolume.PUSH_CONSTANT_VOLUME_FADE_OFFSET);
         assertEquals(28, ShaderBindings.OitVolume.PUSH_CONSTANT_FRAME_OFFSET);
         assertEquals(32, ShaderBindings.OitVolume.SPLAT_PUSH_CONSTANTS_SIZE);
-        assertEquals(16, ShaderBindings.OitVolume.INTEGRATE_PUSH_CONSTANTS_SIZE);
+        assertEquals(16, ShaderBindings.OitVolume.PUSH_CONSTANT_ZERO_SLICES_OFFSET);
+        assertEquals(24, ShaderBindings.OitVolume.INTEGRATE_PUSH_CONSTANTS_SIZE);
+        assertEquals(8, ShaderBindings.OitVolume.CULL_TILES_OFFSET);
+        assertEquals(16, ShaderBindings.OitVolume.CULL_LOG_SCALE_OFFSET);
+        assertEquals(20, ShaderBindings.OitVolume.CULL_DEPTH_INDEX_OFFSET);
+        assertEquals(24, ShaderBindings.OitVolume.CULL_PROJECTION_Z_OFFSET);
+        assertEquals(32, ShaderBindings.OitVolume.CULL_PUSH_CONSTANTS_SIZE);
         // int accumIndex; int extinctionIndex; int debugSlice;
         assertEquals(8, ShaderBindings.OitResolve.PUSH_CONSTANT_DEBUG_SLICE_OFFSET);
         assertEquals(12, ShaderBindings.OitResolve.PUSH_CONSTANTS_SIZE);

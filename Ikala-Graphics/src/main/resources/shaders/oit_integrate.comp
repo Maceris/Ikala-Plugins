@@ -3,8 +3,10 @@
 #extension GL_GOOGLE_include_directive : require
 
 // Sums each tile's slices of the voxel-based transparency volume front to back into how much light
-// gets through up to the far end of each slice, and clears them for the next frame's splats. One
-// thread per tile. VoxelOitMath.integrate has the same math in Java.
+// gets through up to the far end of each slice, and clears them for the next frame's splats. Also
+// notes each tile's zero slice, the first where less than MIN_VISIBLE gets through, for
+// oit_cull_depth.frag. One thread per tile. VoxelOitMath.integrate and zeroSlice have the same
+// math in Java.
 
 #include "oit_volume.glsl"
 
@@ -15,10 +17,16 @@ layout(buffer_reference, std430, buffer_reference_align = 4) restrict buffer Ext
     uint values[];
 };
 
+// Each tile's zero slice, x fastest, or SLICES where light gets through them all
+layout(buffer_reference, std430, buffer_reference_align = 4) writeonly buffer ZeroSlices {
+    uint zeroSlices[];
+};
+
 layout(push_constant) uniform Constants {
     Extinction extinction;
     // How many tiles across and down this frame's volume holds
     uvec2 tiles;
+    ZeroSlices zero;
 };
 
 layout(set = 0, binding = 0, r32f) uniform restrict writeonly image3D transmittance;
@@ -34,6 +42,7 @@ void main() {
     uint column = tile.x + tiles.x * tile.y;
     uint sliceStride = tiles.x * tiles.y;
     float sum = 0.0;
+    uint zeroSlice = SLICES;
     for (uint first = 0; first < SLICES; first += CHUNK) {
         uint values[CHUNK];
         for (uint i = 0; i < CHUNK; ++i) {
@@ -45,7 +54,12 @@ void main() {
                 extinction.values[column + sliceStride * (first + i)] = 0;
             }
             sum += float(values[i]) / FIXED_POINT_SCALE;
-            imageStore(transmittance, ivec3(tile, first + i), vec4(exp(-sum)));
+            float through = exp(-sum);
+            imageStore(transmittance, ivec3(tile, first + i), vec4(through));
+            if (zeroSlice == SLICES && through < MIN_VISIBLE) {
+                zeroSlice = first + i;
+            }
         }
     }
+    zero.zeroSlices[column] = zeroSlice;
 }
