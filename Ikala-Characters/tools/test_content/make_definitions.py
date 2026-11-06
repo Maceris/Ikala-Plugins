@@ -5,8 +5,10 @@ tools/blender), the modular RPG kit's clips (animations/rpg_clips.glb, its skele
 only, see clips_only.py) and the kit's weapons. This reads them and writes, beside them:
 
     part/mannequin.json   a body part per mannequin slot, the male's and female's meshes by variant
-    design/test.json      both mannequins, and each again with a hand flame and a weapon style
-                          or an aura
+    part/extensions.json  a tail, a pair of wings and a cape on the biped's extension chains
+                          (extensions/test_extensions_<variant>.glb, see test_extensions.py)
+    design/test.json      both mannequins, each again with a hand flame and a weapon style or an
+                          aura, and with a tail and wings or a cape and a tail
     effects/*.effect.yml  graphics particle effects: a flame, motes, sparks, embers and dust
     fx/test.json          an effect definition for each
     animationSet/test.json the biped's actions, from the RPG clips and the mannequin's walk
@@ -32,6 +34,11 @@ TEMPLATE = "ikala:mat/standard"
 # The mannequins from tools/blender/mannequin.py, by variant, and their eyes' material
 MANNEQUIN_FILES = {"male": "mannequin/male.glb", "female": "mannequin/female.glb"}
 MANNEQUIN_EYES = "mannequin_eyes"
+# The hand-made chain parts from tools/blender/test_extensions.py, by variant
+EXTENSION_FILES = {"male": "extensions/test_extensions_male.glb",
+                   "female": "extensions/test_extensions_female.glb"}
+# How much longer the test tail's chain is than the rig's, as test_extensions.py makes it
+TAIL_LENGTH = 1.3
 # The RPG kit's clips, without its characters, which retarget onto the biped
 RPG_CLIPS = "animations/rpg_clips.glb"
 
@@ -90,6 +97,57 @@ def mannequin_parts(root):
             other = slot[:-2] + (".R" if slot.endswith(".L") else ".L")
             parts[-1]["pair"] = f"{NAMESPACE}:part/mannequin/{other.lower()}"
     return parts
+
+
+def extension_parts():
+    """The hand-made chain parts: a tail on a longer chain, a wing per side worn as a pair, and a
+    cape layer that moves with the cape chain. Wings and capes both take the back, so they can't
+    be worn together."""
+
+    def meshes(name):
+        found = {variant: f"{file}#{name}" for variant, file in EXTENSION_FILES.items()}
+        found["*"] = found["male"]
+        return found
+
+    def material(name):
+        return [{"name": f"{name}_material", "template": TEMPLATE}]
+
+    tail = {
+        "id": f"{NAMESPACE}:part/extension/tail",
+        "plan": PLAN,
+        "kind": "accessory",
+        "extension": "tail",
+        "rigid": False,
+        "chainLength": [TAIL_LENGTH],
+        "meshes": meshes("test_tail"),
+        "materialSlots": material("test_tail"),
+        "tags": ["test"],
+    }
+    wings = [
+        {
+            "id": f"{NAMESPACE}:part/extension/wing_{side.lower()}",
+            "plan": PLAN,
+            "kind": "accessory",
+            "extension": f"wing.{side}",
+            "rigid": False,
+            "meshes": meshes(f"test_wing_{side.lower()}"),
+            "materialSlots": material(f"test_wing_{side.lower()}"),
+            "tags": ["test", "backDetail"],
+            "pair": f"{NAMESPACE}:part/extension/wing_{other.lower()}",
+        }
+        for side, other in (("L", "R"), ("R", "L"))
+    ]
+    cape = {
+        "id": f"{NAMESPACE}:part/extension/cape",
+        "plan": PLAN,
+        "kind": "layer",
+        "fills": ["cape"],
+        "extension": "cape",
+        "meshes": meshes("test_cape"),
+        "materialSlots": material("test_cape"),
+        "tags": ["test", "cloth", "backDetail"],
+    }
+    return [tail, *wings, cape]
 
 
 # Graphics particle effects, in Ikala-Graphics' YAML format (see ParticleEffectLoader), small
@@ -235,6 +293,18 @@ def designs():
             **female,
             "id": f"{NAMESPACE}:design/caster",
             "fx": [{"fx": f"{NAMESPACE}:fx/motes", "socket": "aura_center", "color": "primary"}],
+        },
+        {
+            **male,
+            "id": f"{NAMESPACE}:design/winged",
+            "extensions": {chain: f"{NAMESPACE}:part/extension/{name}" for chain, name in
+                           (("tail", "tail"), ("wing.L", "wing_l"), ("wing.R", "wing_r"))},
+        },
+        {
+            **female,
+            "id": f"{NAMESPACE}:design/caped",
+            "layers": {"cape": f"{NAMESPACE}:part/extension/cape"},
+            "extensions": {"tail": f"{NAMESPACE}:part/extension/tail"},
         },
     ]
 
@@ -413,6 +483,7 @@ def main():
     parser.add_argument("root", type=pathlib.Path, help="the test_content/characters folder")
     root = parser.parse_args().root
     write(root / "part" / "mannequin.json", mannequin_parts(root), "The mannequin's parts")
+    write(root / "part" / "extensions.json", extension_parts(), "Parts on extension chains")
     write(root / "design" / "test.json", designs(), "Designs made of the test parts")
     write(root / "fx" / "test.json", fx_definitions(), "Effects for the test characters")
     write_effects(root)

@@ -65,7 +65,14 @@ class TestTestArt {
         CharacterRegistry registry = load();
         List<Design> designs = registry.all(Design.class);
         // The generated designs, plus any the editor saved there
-        for (String name : List.of("mannequin_male", "mannequin_female", "fighter", "caster")) {
+        for (String name :
+                List.of(
+                        "mannequin_male",
+                        "mannequin_female",
+                        "fighter",
+                        "caster",
+                        "winged",
+                        "caped")) {
             Assertions.assertNotNull(
                     registry.get(Design.class, Id.parse("test:design/" + name)), name);
         }
@@ -75,8 +82,10 @@ class TestTestArt {
                     design.validate(registry, Slider.CONTEXT_PLAYER),
                     design.id().toString());
             byte[] bytes = DesignCodec.encode(design, registry);
-            Assertions.assertEquals(
-                    design.parts(), DesignCodec.decode(bytes, design.id(), registry).parts());
+            Design decoded = DesignCodec.decode(bytes, design.id(), registry);
+            Assertions.assertEquals(design.parts(), decoded.parts());
+            Assertions.assertEquals(design.layers(), decoded.layers());
+            Assertions.assertEquals(design.extensions(), decoded.extensions());
         }
     }
 
@@ -151,6 +160,108 @@ class TestTestArt {
                         .filter(name -> name.contains(PartAssembler.CAP_INFIX))
                         .toList();
         Assertions.assertEquals(List.of("mannequin_torso_cap_shoulder.L"), caps);
+    }
+
+    /**
+     * The parts on extension chains go on their chains: wings and a cape can't be worn together,
+     * and the tail, made on a chain 1.3 times the rig's, is put back on the rig's chain so posing
+     * with its longer chain puts every vertex where it was made.
+     */
+    @Test
+    void testExtensions() throws Exception {
+        CharacterRegistry registry = load();
+        Assumptions.assumeTrue(
+                Files.exists(TEST_CONTENT.resolve("extensions/test_extensions_male.glb")),
+                "No extension parts");
+        Design winged = registry.get(Design.class, Id.parse("test:design/winged"));
+        BodyPlan biped = registry.get(BodyPlan.class, winged.plan());
+        Map<String, Id> worn = winged.worn(biped, id -> registry.get(Part.class, id));
+        Assertions.assertEquals(
+                Id.parse("test:part/extension/wing_l"), worn.get("wing.L"), worn.toString());
+        Assertions.assertEquals(Id.parse("test:part/extension/tail"), worn.get("tail"));
+
+        // Wings and a cape both take the back
+        Design both =
+                new Design(
+                        winged.id(),
+                        winged.plan(),
+                        winged.variant(),
+                        null,
+                        Map.of(),
+                        winged.parts(),
+                        Map.of("cape", Id.parse("test:part/extension/cape")),
+                        null,
+                        Map.of(),
+                        List.of(),
+                        null,
+                        winged.extensions());
+        Assertions.assertFalse(both.validate(registry, Slider.CONTEXT_PLAYER).isEmpty());
+
+        Part tail = registry.get(Part.class, Id.parse("test:part/extension/tail"));
+        float[] lengths = tail.chainLengths(biped);
+        Assertions.assertNotNull(lengths);
+        Assertions.assertEquals(biped.extension("tail").bones().size(), lengths.length);
+        ImportedCharacter made =
+                com.ikalagaming.characters.gltf.GltfImporter.read(
+                                TEST_CONTENT.resolve("extensions/test_extensions_male.glb"))
+                        .onRig(
+                                registry.get(
+                                        com.ikalagaming.characters.definition.Rig.class,
+                                        biped.rig()));
+        ImportedCharacter.Part original =
+                made.parts().stream()
+                        .filter(p -> "test_tail".equals(p.name()))
+                        .findFirst()
+                        .orElseThrow();
+        com.ikalagaming.characters.pose.Skeleton skeleton = made.skeleton();
+        Map<String, float[]> chains = Map.of("tail", lengths);
+        ImportedCharacter.Part onRig = PartAssembler.onRigChain(original, skeleton, biped, chains);
+        // On the rig's chain the tail is shorter than as made
+        Assertions.assertTrue(
+                onRig.min().y() > original.min().y() + 0.1f,
+                "The tail didn't get shorter: " + onRig.min() + " " + original.min());
+
+        // Posing with the longer chain puts it back
+        com.ikalagaming.characters.pose.Proportions longer =
+                com.ikalagaming.characters.pose.Proportions.neutral(skeleton)
+                        .withChains(biped, chains);
+        com.ikalagaming.characters.pose.PoseSolver solver =
+                new com.ikalagaming.characters.pose.PoseSolver(skeleton);
+        solver.solve(new com.ikalagaming.characters.pose.Pose(skeleton), longer);
+        float[] palette =
+                new float[skeleton.size() * com.ikalagaming.characters.pose.Skeleton.MATRIX_FLOATS];
+        solver.writePalette(longer, palette, 0);
+        float[] before = original.vertices();
+        float[] after = onRig.vertices();
+        float worst = 0;
+        for (int v = 0; v * 14 < after.length; ++v) {
+            org.joml.Vector3f skinned = new org.joml.Vector3f();
+            for (int k = 0; k < 4; ++k) {
+                float weight = onRig.weights()[v * 4 + k];
+                if (weight > 0) {
+                    org.joml.Matrix4f skin =
+                            new org.joml.Matrix4f()
+                                    .set(
+                                            palette,
+                                            onRig.joints()[v * 4 + k]
+                                                    * com.ikalagaming.characters.pose.Skeleton
+                                                            .MATRIX_FLOATS);
+                    skinned.add(
+                            skin.transformPosition(
+                                            new org.joml.Vector3f(
+                                                    after[v * 14],
+                                                    after[v * 14 + 1],
+                                                    after[v * 14 + 2]))
+                                    .mul(weight));
+                }
+            }
+            worst =
+                    Math.max(
+                            worst,
+                            skinned.distance(
+                                    before[v * 14], before[v * 14 + 1], before[v * 14 + 2]));
+        }
+        Assertions.assertTrue(worst < 1e-4f, "Off by " + worst + " m");
     }
 
     /** Every weapon item finds its mesh, drawn and sheathed, on the fighter's skeleton. */

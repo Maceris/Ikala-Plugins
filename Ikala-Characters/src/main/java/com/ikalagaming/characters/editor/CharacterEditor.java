@@ -378,7 +378,7 @@ public final class CharacterEditor {
                             .filter(
                                     part ->
                                             part.plan().equals(plan.id())
-                                                    && !places(part).isEmpty()
+                                                    && !part.places().isEmpty()
                                                     && PartAssembler.meshFor(part, design.variant())
                                                             != null)
                             .sorted(Comparator.comparing(part -> !wornIds.contains(part.id())))
@@ -395,6 +395,11 @@ public final class CharacterEditor {
             plan.slots().forEach(slot -> places.add(slot.id()));
             plan.layers().forEach(layer -> places.add(layer.id()));
             plan.sockets().forEach(socket -> places.add(socket.id()));
+            // A chain named like a layer, like the cape, is that layer's place
+            plan.extensions().stream()
+                    .map(BodyPlan.Extension::id)
+                    .filter(chain -> !places.contains(chain))
+                    .forEach(places::add);
             List<PartSlots.Slot> slots = new ArrayList<>();
             List<List<Id>> optionIds = new ArrayList<>();
             List<List<Part>> optionParts = new ArrayList<>();
@@ -404,7 +409,7 @@ public final class CharacterEditor {
                 Part.PartKind wanted =
                         plan.layer(place) != null
                                 ? Part.PartKind.LAYER
-                                : plan.socket(place) != null
+                                : plan.socket(place) != null || plan.extension(place) != null
                                         ? Part.PartKind.ACCESSORY
                                         : Part.PartKind.BODY;
                 List<List<Integer>> options = new ArrayList<>();
@@ -417,7 +422,7 @@ public final class CharacterEditor {
                         candidates.stream().sorted(Comparator.comparing(Part::id)).toList()) {
                     List<Integer> meshes = assembled.partsOf(part.id());
                     if (part.kind() != wanted
-                            || !places(part).get(0).equals(place)
+                            || !part.places().get(0).equals(place)
                             || meshes.isEmpty()) {
                         continue;
                     }
@@ -457,7 +462,8 @@ public final class CharacterEditor {
             for (int p = 0; p < base.length; ++p) {
                 Part part = registry.get(Part.class, assembled.partIds().get(p));
                 base[p] = part.kind() == Part.PartKind.BODY;
-                wearable[p] = part.kind() == Part.PartKind.LAYER;
+                // A layer on a chain, like a cape, swings away from the body, so it hides none
+                wearable[p] = part.kind() == Part.PartKind.LAYER && part.extension() == null;
                 order[p] = Integer.MIN_VALUE;
                 for (String fill : part.fills()) {
                     BodyPlan.Layer layer = plan.layer(fill);
@@ -491,18 +497,6 @@ public final class CharacterEditor {
                     assembled.fallbacks(),
                     assembled.partIds().stream().map(id -> registry.get(Part.class, id)).toList(),
                     used.stream().map(all::get).toList());
-        }
-
-        /**
-         * Where a part goes: the slots or layers it fills, or for an accessory the sockets it fits
-         * by name. An accessory is placed on its socket by its mesh's weights, so one that only
-         * names a socket type has nowhere to go yet.
-         *
-         * @param part The part.
-         * @return The places, the one it is listed under first.
-         */
-        private static List<String> places(Part part) {
-            return part.kind() == Part.PartKind.ACCESSORY ? part.fits() : part.fills();
         }
 
         /**
@@ -902,7 +896,13 @@ public final class CharacterEditor {
         ImportedCharacter character = built.character();
         PartSlots slots = built.slots();
         regions = built.regions();
-        categories = PartCategories.of(character, slots);
+        Set<String> extras = new HashSet<>();
+        // Tails and wings; a chain named like a layer, like the cape, stays with the layers
+        plan.extensions().stream()
+                .map(BodyPlan.Extension::id)
+                .filter(chain -> plan.layer(chain) == null)
+                .forEach(extras::add);
+        categories = PartCategories.of(character, slots, extras);
         List<Slider> found = findSliders(plan);
         look =
                 new CharacterLook(
@@ -1029,6 +1029,7 @@ public final class CharacterEditor {
     private Design currentDesign(Id id, String variant, boolean withSliders) {
         Map<String, Id> parts = new LinkedHashMap<>();
         Map<String, Id> layers = new LinkedHashMap<>();
+        Map<String, Id> chains = new LinkedHashMap<>();
         for (int s = 0; s < look.slots().slots().size(); ++s) {
             int choice = look.choice(s);
             if (choice == CharacterLook.EMPTY) {
@@ -1040,7 +1041,13 @@ public final class CharacterEditor {
                 continue;
             }
             Id part = prepared.optionIds().get(s).get(choice);
-            (plan.layer(place) != null ? layers : parts).put(place, part);
+            if (plan.layer(place) != null) {
+                layers.put(place, part);
+            } else if (plan.extension(place) != null) {
+                chains.put(place, part);
+            } else {
+                parts.put(place, part);
+            }
         }
         Map<String, List<Float>> sliders = new LinkedHashMap<>();
         if (withSliders) {
@@ -1084,7 +1091,8 @@ public final class CharacterEditor {
                 null,
                 colors,
                 List.copyOf(look.fx()),
-                look.decal());
+                look.decal(),
+                chains);
     }
 
     /**
@@ -1538,9 +1546,18 @@ public final class CharacterEditor {
             return look != null && look.sliders().isEmpty();
         }
         try {
+            Set<Part> worn = new LinkedHashSet<>();
+            for (int index : look.worn(CharacterLook.NO_PREVIEW, 0)) {
+                Part definition = prepared.partDefinitions().get(index);
+                if (definition != null) {
+                    worn.add(definition);
+                }
+            }
+            // Parts on extension chains make their chains as long as their meshes
             Proportions proportions =
                     Proportions.fromSliders(
-                            shown.getSkeleton(), plan, look.sliders(), look.values(), 1);
+                                    shown.getSkeleton(), plan, look.sliders(), look.values(), 1)
+                            .withChains(plan, Proportions.chainLengths(plan, worn));
             shown.setProportions(proportions);
             characterHeight = heightWith(proportions);
             return true;

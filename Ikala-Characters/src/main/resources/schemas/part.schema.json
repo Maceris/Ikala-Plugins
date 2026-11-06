@@ -162,7 +162,7 @@
         },
         "extension": {
           "type": "string",
-          "description": "For skinned accessories: the extension chain it is weighted to, like \"cape\"."
+          "description": "The extension chain it is weighted to, like \"tail\": an accessory without sockets goes on the chain, and a layer, like a cape, or an accessory on a socket also moves with it."
         },
         "mirror": {
           "type": "boolean",
@@ -292,6 +292,13 @@
           "type": "boolean",
           "description": "For body parts: whether it is worn bare, like an arm covered in spikes: it can't be worn with layers covering its slots.",
           "default": false
+        },
+        "chainLength": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "description": "For parts on an extension chain: how much longer its bones are than the rig's, one number for every bone or one per bone from the root out, so a long tail's mesh fits its own chain. Its mesh is made on the longer chain."
         },
         "extends": {
           "type": "string",

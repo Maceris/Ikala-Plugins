@@ -118,6 +118,14 @@
           ],
           "description": "The decal it wears, like an emblem on the chest."
         },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[a-z0-9_-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*$"
+          },
+          "description": "Accessories on extension chains, like a tail or a wing, by chain. A chain named like a layer, like a cape, is that layer's place too."
+        },
         "extends": {
           "type": "string",
           "description": "The ID of a definition of the same kind to start from. Fields written here replace the parent's, and objects merge field by field."

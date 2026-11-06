@@ -39,6 +39,7 @@ import java.util.function.Function;
  * @param colors Colors by palette channel.
  * @param fx Effects the design wears, on top of its parts' own.
  * @param decal The decal it wears, or null for none.
+ * @param extensions Accessories on extension chains, like a tail, by chain.
  * @author Ches Burks
  */
 @Doc(
@@ -70,8 +71,45 @@ public record Design(
                 Map<String, Color> colors,
         @Doc("Effects it wears, like an aura, on top of its parts' own. Up to 4.") @Optional
                 List<FxUse> fx,
-        @Doc("The decal it wears, like an emblem on the chest.") @Optional DecalUse decal)
+        @Doc("The decal it wears, like an emblem on the chest.") @Optional DecalUse decal,
+        @Doc(
+                        "Accessories on extension chains, like a tail or a wing, by chain. A chain"
+                                + " named like a layer, like a cape, is that layer's place too.")
+                @Optional
+                Map<String, Id> extensions)
         implements Definition {
+
+    /**
+     * A design without accessories on extension chains.
+     *
+     * @param id This design's ID.
+     * @param plan The body plan.
+     * @param variant The plan's variant.
+     * @param style The way it moves, or null for the plan's own.
+     * @param sliders Slider values by slider ID.
+     * @param parts Body parts by the slot they are listed under.
+     * @param layers Layer parts by layer.
+     * @param palette A palette whose colors fill channels without their own.
+     * @param colors Colors by palette channel.
+     * @param fx Effects the design wears, on top of its parts' own.
+     * @param decal The decal it wears, or null for none.
+     */
+    public Design(
+            Id id,
+            Id plan,
+            String variant,
+            Id style,
+            Map<String, List<Float>> sliders,
+            Map<String, Id> parts,
+            Map<String, Id> layers,
+            Id palette,
+            Map<String, Color> colors,
+            List<FxUse> fx,
+            DecalUse decal) {
+        this(
+                id, plan, variant, style, sliders, parts, layers, palette, colors, fx, decal,
+                Map.of());
+    }
 
     /**
      * A design without a decal.
@@ -130,6 +168,9 @@ public record Design(
 
     /** The field for the decal. */
     public static final String FIELD_DECAL = "decal";
+
+    /** The field for the accessories on extension chains. */
+    public static final String FIELD_EXTENSIONS = "extensions";
 
     /** The most effects a design wears itself, so crowds stay within the scene's emitters. */
     public static final int MAX_FX = 4;
@@ -252,6 +293,7 @@ public record Design(
         Map<String, String> filledBy = new HashMap<>();
         checkParts(lookup, report, body, chosen, parts, FIELD_PARTS, true, used, filledBy);
         checkParts(lookup, report, body, chosen, layers, FIELD_LAYERS, false, used, filledBy);
+        checkChains(lookup, report, body, chosen, used);
         List<Map.Entry<Part, String>> found = new ArrayList<>();
         for (Map.Entry<Id, String> entry : used.entrySet()) {
             Part part = lookup.find(Part.class, entry.getKey(), entry.getValue());
@@ -380,6 +422,47 @@ public record Design(
     }
 
     /**
+     * Check the accessories listed by extension chain: each chain is the plan's, and its part is an
+     * accessory on that chain.
+     *
+     * @param lookup Finds the parts.
+     * @param report Where problems go.
+     * @param body The plan.
+     * @param chosen The variant, or null if it is missing.
+     * @param used The parts used so far, with where they are listed, added to.
+     */
+    private void checkChains(
+            Lookup lookup,
+            Report report,
+            BodyPlan body,
+            BodyPlan.Variant chosen,
+            Map<Id, String> used) {
+        String listPath = JsonPath.at(FIELD_EXTENSIONS);
+        extensions.forEach(
+                (chain, partId) -> {
+                    String path = JsonPath.field(listPath, chain);
+                    if (body.extension(chain) == null) {
+                        report.error(path, "The plan has no extension chain '" + chain + "'");
+                        return;
+                    }
+                    Part part = lookup.find(Part.class, partId, path);
+                    if (part == null) {
+                        return;
+                    }
+                    if (!part.plan().equals(body.id())) {
+                        report.error(path, partId + " is for " + part.plan());
+                    } else if (!part.onChain() || !chain.equals(part.extension())) {
+                        report.error(path, partId + " doesn't go on the chain '" + chain + "'");
+                    } else if (chosen != null && !chosen.allows(part)) {
+                        report.error(
+                                path, partId + " has none of the variant's tags " + chosen.tags());
+                    } else {
+                        used.put(partId, path);
+                    }
+                });
+    }
+
+    /**
      * Check the slider values: each slider is the plan's, has the right number of values, and they
      * are in range.
      *
@@ -439,7 +522,9 @@ public record Design(
             for (int j = i + 1; j < parts.size(); ++j) {
                 Part a = parts.get(i).getKey();
                 Part b = parts.get(j).getKey();
-                String tag = body.sharedExclusiveTag(a, b);
+                // The two sides of a pair, like wings, share their tags
+                boolean paired = b.id().equals(a.pair()) || a.id().equals(b.pair());
+                String tag = paired ? null : body.sharedExclusiveTag(a, b);
                 if (tag != null) {
                     report.error(
                             parts.get(j).getValue(),
@@ -456,7 +541,9 @@ public record Design(
 
     /**
      * The slots and layers every part fills, from the design and then the variant's defaults: the
-     * design's parts first, then each default whose places the design left empty.
+     * design's parts first, then each default whose places the design left empty. Accessories on
+     * extension chains come last, by chain; one on a chain named like a layer takes the layer's
+     * place.
      *
      * @param body The plan.
      * @param find Finds a part by ID, or gives null.
@@ -488,6 +575,13 @@ public record Design(
                                 }
                             });
         }
+        extensions.forEach(
+                (chain, partId) -> {
+                    if (find.apply(partId) != null) {
+                        worn.remove(chain);
+                        worn.put(chain, partId);
+                    }
+                });
         return worn;
     }
 }

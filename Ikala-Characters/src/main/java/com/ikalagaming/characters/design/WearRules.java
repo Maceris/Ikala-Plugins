@@ -47,9 +47,21 @@ public final class WearRules {
         }
         return a.conflicts().contains(b.id())
                 || b.conflicts().contains(a.id())
-                || sharedExclusiveTag(plan, a, b) != null
+                || (!paired(a, b) && sharedExclusiveTag(plan, a, b) != null)
                 || blocksClothing(plan, a, b)
                 || blocksClothing(plan, b, a);
+    }
+
+    /**
+     * Whether two parts are each other's other side, like a pair of wings, which are worn together
+     * even when they share an exclusive tag.
+     *
+     * @param a One part.
+     * @param b The other.
+     * @return True if either names the other as its pair.
+     */
+    public static boolean paired(@NonNull Part a, @NonNull Part b) {
+        return b.id().equals(a.pair()) || a.id().equals(b.pair());
     }
 
     /**

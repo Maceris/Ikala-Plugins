@@ -45,7 +45,8 @@ import java.util.Map;
  * <pre>
  * format (byte)
  * plan (numeric ID)   variant (index in the plan)   style (0 for none, else numeric ID + 1)
- * parts:   count, then (place index: slots then layers in plan order, part numeric ID) each
+ * parts:   count, then (place index: slots, layers, then extension chains not named like a
+ *          layer, in plan order; part numeric ID) each
  * sliders: count, then (slider numeric ID, value count byte, values as signed bytes) each
  * colors:  count, then (channel index: standard channels then the plan's own, code as 2 bytes)
  * palette (0 for none, else numeric ID + 1)
@@ -135,10 +136,12 @@ public final class DesignCodec {
                         : numeric(registry, Kind.ANIM_STYLE, design.style()) + 1);
 
         List<String> places = places(plan);
-        writeVarint(out, design.parts().size() + design.layers().size());
-        for (Map<String, Id> listed : List.of(design.parts(), design.layers())) {
+        writeVarint(
+                out, design.parts().size() + design.layers().size() + design.extensions().size());
+        for (Map<String, Id> listed :
+                List.of(design.parts(), design.layers(), design.extensions())) {
             for (Map.Entry<String, Id> part : listed.entrySet()) {
-                writeVarint(out, index(places, part.getKey(), "slot or layer"));
+                writeVarint(out, index(places, part.getKey(), "slot, layer or chain"));
                 writeVarint(out, numeric(registry, Kind.PART, part.getValue()));
             }
         }
@@ -231,12 +234,20 @@ public final class DesignCodec {
             List<String> places = places(plan);
             Map<String, Id> parts = new LinkedHashMap<>();
             Map<String, Id> layers = new LinkedHashMap<>();
+            Map<String, Id> extensions = new LinkedHashMap<>();
             int partCount = readVarint(in);
             for (int p = 0; p < partCount; ++p) {
                 int place = readVarint(in);
-                String name = element(places, place, "slot or layer");
-                Id part = definition(registry, Part.class, readVarint(in)).id();
-                (place < plan.slots().size() ? parts : layers).put(name, part);
+                String name = element(places, place, "slot, layer or chain");
+                Part part = definition(registry, Part.class, readVarint(in));
+                if (place < plan.slots().size()) {
+                    parts.put(name, part.id());
+                } else if (part.onChain()) {
+                    // A chain named like a layer shares the layer's number
+                    extensions.put(name, part.id());
+                } else {
+                    layers.put(name, part.id());
+                }
             }
 
             Map<String, List<Float>> sliders = new LinkedHashMap<>();
@@ -341,7 +352,8 @@ public final class DesignCodec {
                     paletteId,
                     colors,
                     fx,
-                    decal);
+                    decal,
+                    extensions);
         } catch (BufferUnderflowException e) {
             throw new IllegalArgumentException("The design is cut short", e);
         }
@@ -465,7 +477,8 @@ public final class DesignCodec {
     }
 
     /**
-     * A plan's slots then its layers, which design bytes refer to by position.
+     * A plan's slots, its layers, then its extension chains not named like a layer, which design
+     * bytes refer to by position. New chains go last, so older designs keep their numbers.
      *
      * @param plan The plan.
      * @return The names.
@@ -474,6 +487,10 @@ public final class DesignCodec {
         List<String> places = new ArrayList<>();
         plan.slots().forEach(slot -> places.add(slot.id()));
         plan.layers().forEach(layer -> places.add(layer.id()));
+        plan.extensions().stream()
+                .map(BodyPlan.Extension::id)
+                .filter(chain -> !places.contains(chain))
+                .forEach(places::add);
         return places;
     }
 

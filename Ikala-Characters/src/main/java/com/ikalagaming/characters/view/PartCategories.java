@@ -9,11 +9,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 /**
  * An imported character's slots sorted into the body's regions, head, upper body and lower body, by
- * how high their meshes sit at rest, until slots come from body plans that name their regions. Each
- * category also gives the box around its meshes, for the camera to frame.
+ * how high their meshes sit at rest, until slots come from body plans that name their regions, with
+ * extension chains like tails and wings last, as extras. Each category also gives the box around
+ * its meshes, for the camera to frame.
  *
  * @param categories The categories that have slots, from the head down.
  * @param min The minimum corner of the box around every part, in model space.
@@ -30,6 +32,9 @@ public record PartCategories(
 
     /** The lower body category's ID. */
     public static final String LOWER_BODY = "lower-body";
+
+    /** The extras category's ID, for extension chains. */
+    public static final String EXTRAS = "extras";
 
     /** How far up the body, as a fraction of its height, a slot's middle must be for the head. */
     static final float HEAD_FROM = 0.82f;
@@ -62,6 +67,21 @@ public record PartCategories(
      */
     public static PartCategories of(
             @NonNull ImportedCharacter character, @NonNull PartSlots slots) {
+        return of(character, slots, Set.of());
+    }
+
+    /**
+     * Sort a character's slots into categories, with some as extras whatever their height.
+     *
+     * @param character The character.
+     * @param slots Its parts sorted into slots.
+     * @param extras The slots that are extras, like extension chains, by ID.
+     * @return The categories.
+     */
+    public static PartCategories of(
+            @NonNull ImportedCharacter character,
+            @NonNull PartSlots slots,
+            @NonNull Set<String> extras) {
         List<Integer> everything = new ArrayList<>();
         for (int i = 0; i < character.parts().size(); ++i) {
             everything.add(i);
@@ -71,14 +91,16 @@ public record PartCategories(
         bounds(character, everything, min, max);
         float height = Math.max(max.y - min.y, 1e-3f);
 
-        String[] ids = {HEAD, UPPER_BODY, LOWER_BODY};
-        String[] labels = {"Head", "Upper Body", "Lower Body"};
+        String[] ids = {HEAD, UPPER_BODY, LOWER_BODY, EXTRAS};
+        String[] labels = {"Head", "Upper Body", "Lower Body", "Extras"};
         List<List<Integer>> members =
-                List.of(new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+                List.of(new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
         for (int s = 0; s < slots.slots().size(); ++s) {
             float middle = (middle(character, slots.slots().get(s)) - min.y) / height;
             int category;
-            if (middle >= HEAD_FROM) {
+            if (extras.contains(slots.slots().get(s).id())) {
+                category = 3;
+            } else if (middle >= HEAD_FROM) {
                 category = 0;
             } else if (middle >= UPPER_FROM) {
                 category = 1;

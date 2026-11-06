@@ -29,7 +29,8 @@ import java.util.Set;
  * @param fills The slots or layers it fills.
  * @param fits The sockets an accessory fits.
  * @param rigid Whether an accessory moves rigidly with its socket.
- * @param extension The extension chain a skinned accessory is weighted to.
+ * @param extension The extension chain it is weighted to: the place of an accessory without
+ *     sockets, or a chain a layer or socket accessory also moves with.
  * @param mirror Whether the converter makes the other side by mirroring.
  * @param meshes Mesh assets by variant.
  * @param materialSlots The mesh's materials.
@@ -52,6 +53,8 @@ import java.util.Set;
  * @param covers For layers, the body slots it really covers, or empty for all its layers cover.
  * @param bare For body parts, whether it is worn bare: clothing covering its slots can't go over
  *     it.
+ * @param chainLength For parts on an extension chain, how much longer its bones are than the rig's:
+ *     one scale for every bone, or one per bone from the root out; empty for the rig's lengths.
  * @author Ches Burks
  */
 @Doc(
@@ -71,7 +74,10 @@ public record Part(
         @Doc("For accessories: whether it moves rigidly with its socket, like a hat.")
                 @Default("true")
                 boolean rigid,
-        @Doc("For skinned accessories: the extension chain it is weighted to, like \"cape\".")
+        @Doc(
+                        "The extension chain it is weighted to, like \"tail\": an accessory"
+                                + " without sockets goes on the chain, and a layer, like a cape,"
+                                + " or an accessory on a socket also moves with it.")
                 @Optional
                 String extension,
         @Doc(
@@ -147,7 +153,14 @@ public record Part(
                         "For body parts: whether it is worn bare, like an arm covered in spikes:"
                                 + " it can't be worn with layers covering its slots.")
                 @Default("false")
-                boolean bare)
+                boolean bare,
+        @Doc(
+                        "For parts on an extension chain: how much longer its bones are than the"
+                                + " rig's, one number for every bone or one per bone from the root"
+                                + " out, so a long tail's mesh fits its own chain. Its mesh is made"
+                                + " on the longer chain.")
+                @Optional
+                List<Float> chainLength)
         implements Definition {
 
     /** The field for the plan. */
@@ -215,6 +228,9 @@ public record Part(
 
     /** The field for being worn bare. */
     public static final String FIELD_BARE = "bare";
+
+    /** The field for the chain length. */
+    public static final String FIELD_CHAIN_LENGTH = "chainLength";
 
     /** The standoff key for any slot not given its own. */
     public static final String ANY_SLOT = "*";
@@ -415,6 +431,51 @@ public record Part(
     }
 
     /**
+     * Whether this is an accessory that goes on an extension chain rather than a socket: one with a
+     * chain and no sockets. One with both goes on its socket and moves with the chain too.
+     *
+     * @return True for a tail, wing and the like.
+     */
+    public boolean onChain() {
+        return kind == PartKind.ACCESSORY && extension != null && fits.isEmpty();
+    }
+
+    /**
+     * Where this part is listed: the slots or layers it fills, its chain for an accessory on one,
+     * or the sockets an accessory fits by name.
+     *
+     * @return The places, the one it is listed under first.
+     */
+    public List<String> places() {
+        if (onChain()) {
+            return List.of(extension);
+        }
+        return kind == PartKind.ACCESSORY ? fits : fills;
+    }
+
+    /**
+     * How much longer each of its chain's bones is than the rig's.
+     *
+     * @param body The plan.
+     * @return One scale per bone of its chain from the root out, or null if it has no chain, the
+     *     plan lacks it, or its bones are the rig's length.
+     */
+    public float[] chainLengths(@NonNull BodyPlan body) {
+        BodyPlan.Extension chain = extension == null ? null : body.extension(extension);
+        if (chain == null || chainLength.isEmpty()) {
+            return null;
+        }
+        float[] lengths = new float[chain.bones().size()];
+        boolean longer = false;
+        for (int i = 0; i < lengths.length; ++i) {
+            Float scale = chainLength.get(chainLength.size() == 1 ? 0 : i % chainLength.size());
+            lengths[i] = scale == null ? 1 : scale;
+            longer |= lengths[i] != 1;
+        }
+        return longer ? lengths : null;
+    }
+
+    /**
      * How far this part stands out over a body slot, as it gives it.
      *
      * @param slot The body slot.
@@ -522,10 +583,12 @@ public record Part(
                         "The plan has no socket or socket type '" + fit + "'");
             }
         }
-        if (extension != null && body.extension(extension) == null) {
+        BodyPlan.Extension chain = extension == null ? null : body.extension(extension);
+        if (extension != null && chain == null) {
             checks.error(
                     JsonPath.at(FIELD_EXTENSION), "The plan has no extension '" + extension + "'");
         }
+        checkChainLength(checks, chain);
         for (String key : meshes.keySet()) {
             int at = key.indexOf(FORM_SEPARATOR);
             String variant = at < 0 ? key : key.substring(0, at);
@@ -644,27 +707,32 @@ public record Part(
                             JsonPath.at(FIELD_FILLS),
                             "A " + DataFormat.enumName(kind) + " part must fill something");
                 }
-                if (!fits.isEmpty() || extension != null || !placement.isEmpty()) {
+                if (!fits.isEmpty() || !placement.isEmpty()) {
                     checks.error(
                             JsonPath.ROOT,
-                            "Only accessories use "
-                                    + FIELD_FITS
-                                    + ", "
-                                    + FIELD_EXTENSION
-                                    + " and "
-                                    + FIELD_PLACEMENT);
+                            "Only accessories use " + FIELD_FITS + " and " + FIELD_PLACEMENT);
+                }
+                if (kind == PartKind.BODY && extension != null) {
+                    checks.error(
+                            JsonPath.at(FIELD_EXTENSION),
+                            "Only accessories and layers move with an extension chain");
                 }
             }
             case ACCESSORY -> {
                 if (!fills.isEmpty()) {
                     checks.error(
                             JsonPath.at(FIELD_FILLS),
-                            "Accessories go on sockets, so they don't fill anything");
+                            "Accessories go on sockets or chains, so they don't fill anything");
                 }
-                if (fits.isEmpty()) {
+                if (fits.isEmpty() && extension == null) {
                     checks.error(
                             JsonPath.at(FIELD_FITS),
-                            "An accessory needs at least one socket it fits");
+                            "An accessory needs a socket it fits or an extension chain");
+                }
+                if (onChain() && !placement.isEmpty()) {
+                    checks.error(
+                            JsonPath.at(FIELD_PLACEMENT),
+                            "An accessory on a chain is placed by its chain, not a placement");
                 }
                 placement.forEach(
                         (variant, place) -> {
@@ -677,6 +745,38 @@ public record Part(
                                         "A placement's scale is above 0 along every axis");
                             }
                         });
+            }
+        }
+    }
+
+    /**
+     * Check the chain length: only for parts on a chain, one scale or one per bone, each above 0.
+     *
+     * @param checks Where problems go.
+     * @param chain The part's chain, or null if it has none or the plan lacks it.
+     */
+    private void checkChainLength(Checks checks, BodyPlan.Extension chain) {
+        if (chainLength.isEmpty()) {
+            return;
+        }
+        String path = JsonPath.at(FIELD_CHAIN_LENGTH);
+        if (extension == null) {
+            checks.error(path, "Only parts on an extension chain set its length");
+            return;
+        }
+        if (chain != null
+                && chainLength.size() != 1
+                && chainLength.size() != chain.bones().size()) {
+            checks.error(
+                    path,
+                    "Give one scale, or one for each of the chain's "
+                            + chain.bones().size()
+                            + " bones");
+        }
+        for (int i = 0; i < chainLength.size(); ++i) {
+            Float scale = chainLength.get(i);
+            if (scale == null || scale <= 0) {
+                checks.error(JsonPath.at(FIELD_CHAIN_LENGTH, i), "A chain length is above 0");
             }
         }
     }
@@ -751,8 +851,8 @@ public record Part(
         if (other.pair() != null && !other.pair().equals(id)) {
             checks.error(path, "'" + pair + "' pairs with " + other.pair() + " instead");
         }
-        List<String> places = kind == PartKind.ACCESSORY ? fits : fills;
-        List<String> otherPlaces = kind == PartKind.ACCESSORY ? other.fits() : other.fills();
+        List<String> places = places();
+        List<String> otherPlaces = other.places();
         Set<String> expected = new LinkedHashSet<>();
         places.forEach(place -> expected.add(mirrored(body, place)));
         if (!new LinkedHashSet<>(otherPlaces).equals(expected)) {

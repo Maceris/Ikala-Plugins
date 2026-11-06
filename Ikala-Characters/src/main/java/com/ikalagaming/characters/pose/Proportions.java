@@ -2,6 +2,7 @@ package com.ikalagaming.characters.pose;
 
 import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.definition.BodyPlan;
+import com.ikalagaming.characters.definition.Part;
 import com.ikalagaming.characters.definition.Slider;
 
 import lombok.Getter;
@@ -9,6 +10,8 @@ import lombok.NonNull;
 import org.joml.Vector3f;
 
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -125,6 +128,68 @@ public final class Proportions {
         }
         return new Proportions(
                 skeleton, length, shape, overallScale, legScale(skeleton, plan, length));
+    }
+
+    /**
+     * These proportions with extension chains made longer for the parts worn on them. Each scale
+     * lengthens its bone by moving the next bone out, and the last bone's own vertices stretch
+     * along it, since nothing comes after it.
+     *
+     * @param plan The plan, which lists the chains' bones.
+     * @param chains How much longer each chain's bones are, from the root out, by chain; see {@link
+     *     #chainLengths}.
+     * @return New proportions, or these if no chain is longer.
+     */
+    public Proportions withChains(@NonNull BodyPlan plan, @NonNull Map<String, float[]> chains) {
+        if (chains.isEmpty()) {
+            return this;
+        }
+        float[] newLength = length.clone();
+        float[] newShape = shape.clone();
+        chains.forEach(
+                (name, scales) -> {
+                    BodyPlan.Extension chain = plan.extension(name);
+                    if (chain == null) {
+                        return;
+                    }
+                    List<String> bones = chain.bones();
+                    for (int i = 0; i < bones.size() && i < scales.length; ++i) {
+                        int bone = skeleton.index(bones.get(i));
+                        if (bone < 0) {
+                            return;
+                        }
+                        if (i + 1 < bones.size()) {
+                            int next = skeleton.index(bones.get(i + 1));
+                            if (next >= 0) {
+                                newLength[next] *= scales[i];
+                            }
+                        } else {
+                            // Bones point along their y axis
+                            newShape[bone * 3 + 1] *= scales[i];
+                        }
+                    }
+                });
+        return new Proportions(skeleton, newLength, newShape, overallScale, legScale);
+    }
+
+    /**
+     * How much longer the worn parts make their extension chains, the first part on a chain
+     * deciding.
+     *
+     * @param plan The plan.
+     * @param worn The parts worn.
+     * @return The scales of each chain's bones from the root out, by chain, for chains made longer.
+     */
+    public static Map<String, float[]> chainLengths(
+            @NonNull BodyPlan plan, @NonNull Collection<Part> worn) {
+        Map<String, float[]> chains = new LinkedHashMap<>();
+        for (Part part : worn) {
+            float[] scales = part.chainLengths(plan);
+            if (scales != null) {
+                chains.putIfAbsent(part.extension(), scales);
+            }
+        }
+        return chains;
     }
 
     /**

@@ -335,7 +335,8 @@ class TestCharacterLoader {
         Assertions.assertTrue(problems.contains("placement.female.scale"), problems);
         Assertions.assertTrue(problems.contains("A placement's scale is above 0"), problems);
         Assertions.assertFalse(problems.contains("placement.*"), problems);
-        Assertions.assertTrue(problems.contains("fits, extension and placement"), problems);
+        Assertions.assertTrue(
+                problems.contains("Only accessories use fits and placement"), problems);
         // A scale can differ by axis, but must grow along each
         Assertions.assertTrue(problems.contains("placement.male.scale"), problems);
         Assertions.assertFalse(problems.contains("$[1].placement"), problems);

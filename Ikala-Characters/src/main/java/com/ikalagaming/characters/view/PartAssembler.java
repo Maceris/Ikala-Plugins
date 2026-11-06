@@ -5,6 +5,9 @@ import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.definition.BodyPlan;
 import com.ikalagaming.characters.definition.Part;
 import com.ikalagaming.characters.gltf.ImportedCharacter;
+import com.ikalagaming.characters.pose.Pose;
+import com.ikalagaming.characters.pose.PoseSolver;
+import com.ikalagaming.characters.pose.Proportions;
 import com.ikalagaming.characters.pose.Skeleton;
 import com.ikalagaming.characters.registry.CharacterRegistry;
 import com.ikalagaming.graphics.SkinnedPart;
@@ -52,6 +55,12 @@ public final class PartAssembler {
 
     /** The tint mask channels, in order. */
     private static final List<String> MASK_CHANNELS = List.of("r", "g", "b", "a");
+
+    /** Floats in a 4x4 matrix. */
+    private static final int MATRIX_SIZE = 16;
+
+    /** Below this, a vertex's blended skinning matrix has no inverse, so the vertex stays. */
+    private static final float SINGULAR = 1e-12f;
 
     /** The most a color's channel holds, see {@link Color}. */
     private static final float COLOR_MAX = 255;
@@ -308,7 +317,7 @@ public final class PartAssembler {
             @NonNull Map<String, String> slotForms) {
         List<String> channels = plan.allChannels();
         Map<Part, List<String>> caps = cappedSeams(parts, plan);
-        Merger merger = new Merger(PartForms.amounts(plan, slotForms));
+        Merger merger = new Merger(PartForms.amounts(plan, slotForms), plan);
         // Placements turn about the sockets of the rig's reference body, read when first needed
         Skeleton[] referenceSkeleton = {null};
         for (Part part : parts) {
@@ -463,6 +472,9 @@ public final class PartAssembler {
         /** How far layers push out over each body slot; see {@link PartForms#amounts}. */
         private final Map<String, Float> amounts;
 
+        /** The plan, whose chains parts on them are made for. */
+        private final BodyPlan plan;
+
         /** The rig and rest pose, from the first character. */
         private ImportedCharacter first;
 
@@ -497,9 +509,11 @@ public final class PartAssembler {
          * A merger.
          *
          * @param amounts How far layers push out over each body slot.
+         * @param plan The plan.
          */
-        Merger(Map<String, Float> amounts) {
+        Merger(Map<String, Float> amounts, BodyPlan plan) {
             this.amounts = amounts;
+            this.plan = plan;
         }
 
         /**
@@ -541,6 +555,15 @@ public final class PartAssembler {
                 found = true;
                 if (placement != Part.Placement.NONE) {
                     piece = placed(piece, reference, placement);
+                }
+                float[] chainLengths = part.chainLengths(plan);
+                if (chainLengths != null) {
+                    piece =
+                            onRigChain(
+                                    piece,
+                                    source.skeleton(),
+                                    plan,
+                                    Map.of(part.extension(), chainLengths));
                 }
                 if (part.kind() == Part.PartKind.LAYER && !amounts.isEmpty()) {
                     piece = PartForms.displace(piece, amounts);
@@ -725,6 +748,77 @@ public final class PartAssembler {
                 piece.material(),
                 min,
                 max);
+    }
+
+    /**
+     * Move a mesh made on a longer extension chain back onto the rig's own chain, so that posing
+     * with the longer chain (see {@link Proportions#withChains}) puts it where it was made. Each
+     * vertex goes through the inverse of its weighted bones' skinning matrices for the longer
+     * chain.
+     *
+     * @param piece The mesh, made on the longer chain.
+     * @param skeleton The skeleton it is skinned to.
+     * @param plan The plan, which lists the chains' bones.
+     * @param chains How much longer each chain's bones are, by chain.
+     * @return The mesh at the rig's lengths.
+     */
+    public static ImportedCharacter.Part onRigChain(
+            @NonNull ImportedCharacter.Part piece,
+            @NonNull Skeleton skeleton,
+            @NonNull BodyPlan plan,
+            @NonNull Map<String, float[]> chains) {
+        Proportions longer = Proportions.neutral(skeleton).withChains(plan, chains);
+        PoseSolver solver = new PoseSolver(skeleton);
+        solver.solve(new Pose(skeleton), longer);
+        float[] palette = new float[skeleton.size() * Skeleton.MATRIX_FLOATS];
+        solver.writePalette(longer, palette, 0);
+        Matrix4f[] skins = new Matrix4f[skeleton.size()];
+        for (int b = 0; b < skins.length; ++b) {
+            skins[b] = new Matrix4f().set(palette, b * Skeleton.MATRIX_FLOATS);
+        }
+        float[] vertices = piece.vertices().clone();
+        Vector3f min = new Vector3f(Float.POSITIVE_INFINITY);
+        Vector3f max = new Vector3f(Float.NEGATIVE_INFINITY);
+        Vector3f v = new Vector3f();
+        Matrix4f blend = new Matrix4f();
+        Matrix3f normals = new Matrix3f();
+        float[] sum = new float[MATRIX_SIZE];
+        float[] one = new float[MATRIX_SIZE];
+        int[] joints = piece.joints();
+        float[] weights = piece.weights();
+        for (int vertex = 0; vertex * VERTEX_FLOATS < vertices.length; ++vertex) {
+            int base = vertex * VERTEX_FLOATS;
+            // The renderer blends the matrices element by element, so undo that blend
+            Arrays.fill(sum, 0);
+            for (int k = 0; k < 4; ++k) {
+                float weight = weights[vertex * 4 + k];
+                if (weight > 0) {
+                    skins[joints[vertex * 4 + k]].get(one);
+                    for (int e = 0; e < MATRIX_SIZE; ++e) {
+                        sum[e] += weight * one[e];
+                    }
+                }
+            }
+            blend.set(sum);
+            v.set(vertices[base], vertices[base + 1], vertices[base + 2]);
+            if (Math.abs(blend.determinant()) < SINGULAR) {
+                min.min(v);
+                max.max(v);
+                continue;
+            }
+            blend.invert().transformPosition(v);
+            put(v, vertices, base);
+            min.min(v);
+            max.max(v);
+            blend.normal(normals);
+            v.set(vertices[base + 3], vertices[base + 4], vertices[base + 5]);
+            put(normals.transform(v).normalize(), vertices, base + 3);
+            for (int direction = base + 6; direction < base + 12; direction += 3) {
+                v.set(vertices[direction], vertices[direction + 1], vertices[direction + 2]);
+                put(blend.transformDirection(v).normalize(), vertices, direction);
+            }
+        }
+        return piece.withVertices(vertices, min, max);
     }
 
     /**
