@@ -3,7 +3,6 @@ package com.ikalagaming.converter;
 import static com.ikalagaming.converter.gui.DefaultWindows.*;
 
 import com.ikalagaming.converter.gui.DebugToolbar;
-import com.ikalagaming.converter.gui.window.Debug;
 import com.ikalagaming.converter.gui.window.LodPrototype;
 import com.ikalagaming.converter.gui.window.MainMenu;
 import com.ikalagaming.converter.inspector.AssetInspectorWindow;
@@ -126,7 +125,6 @@ public class ConverterPlugin extends Plugin {
     public boolean onEnable() {
         guiManager = GraphicsManager.getWindowManager();
         var graphics = GraphicsManager.forPlugin(getName());
-        guiManager.addWindow(graphics, DEBUG.getName(), new Debug());
         guiManager.addWindow(graphics, IkGuiDemo.WINDOW_NAME, new IkGuiDemo());
         guiManager.addWindow(graphics, GraphicsDebug.WINDOW_NAME, new GraphicsDebug());
         UI ui = graphics.ui();
@@ -154,7 +152,7 @@ public class ConverterPlugin extends Plugin {
         ui.show(new AssetInspectorWindow(ui, sampleCount).build());
         ui.setVisible(AssetInspectorWindow.SURFACE_ID, false);
 
-        guiManager.setToolbar(graphics, new DebugToolbar(guiManager, this::setInspectorVisible));
+        guiManager.setToolbar(graphics, new DebugToolbar(guiManager));
         final String script = System.getProperty(SCRIPT_PROPERTY);
         if (script != null
                 && ScriptManager.start(

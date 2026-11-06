@@ -7,7 +7,6 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 @Getter
 public enum DefaultWindows {
-    DEBUG("Converter Debug"),
     ROOT_WINDOW("Converter Root Window");
     private final String name;
 }
