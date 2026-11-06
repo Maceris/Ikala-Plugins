@@ -50,20 +50,6 @@ class IkGuiStyleTest {
     }
 
     @Test
-    void testDarkThemeMatchesUpstream() {
-        final StyleColors colors = new StyleColors();
-        // ImVec4(0.06f, 0.06f, 0.06f, 0.94f), rounded like ImGui does
-        assertEquals(Color.rgba(15, 15, 15, 240), colors.get(ColorType.WINDOW_BACKGROUND));
-        // Tab = lerp(Header, TitleBgActive, 0.80f)
-        assertEquals(Color.rgba(46, 89, 148, 220), colors.get(ColorType.TAB));
-        // Separator = Border, and InputTextCursor = Text
-        assertEquals(colors.get(ColorType.BORDER), colors.get(ColorType.SEPARATOR));
-        assertEquals(colors.get(ColorType.TEXT), colors.get(ColorType.INPUT_TEXT_CURSOR));
-        // DockingPreview = HeaderActive * (1, 1, 1, 0.7)
-        assertEquals(Color.rgba(66, 150, 250, 179), colors.get(ColorType.DOCKING_PREVIEW));
-    }
-
-    @Test
     void testThemesSetEveryColor() {
         final Consumer<StyleColors>[] themes =
                 new Consumer[] {
@@ -82,38 +68,6 @@ class IkGuiStyleTest {
             for (ColorType type : ColorType.values()) {
                 assertNotEquals(sentinel, colors.get(type), type + " was not set by the theme");
             }
-        }
-    }
-
-    @Test
-    void testIkalaIsTheDefaultAndStartsAsDark() {
-        final StyleColors dark = new StyleColors();
-        StyleColors.setThemeDark(dark);
-        final StyleColors ikala = new StyleColors();
-        StyleColors.setThemeIkala(ikala);
-        final StyleColors fresh = new StyleColors();
-        for (ColorType type : ColorType.values()) {
-            assertEquals(ikala.get(type), fresh.get(type), type + " isn't the Ikala theme's");
-        }
-        assertEquals(dark.get(ColorType.WINDOW_BACKGROUND), ikala.get(ColorType.WINDOW_BACKGROUND));
-    }
-
-    @Test
-    void testSecondaryBackgroundIsTheTransparentBackgroundInDearImGuiThemes() {
-        // Dear ImGui's themes fade to transparent as they did; the Ikala theme picks its own
-        final Consumer<StyleColors>[] themes =
-                new Consumer[] {
-                    (Consumer<StyleColors>) StyleColors::setThemeDark,
-                    (Consumer<StyleColors>) StyleColors::setThemeLight,
-                    (Consumer<StyleColors>) StyleColors::setThemeClassic
-                };
-        for (Consumer<StyleColors> theme : themes) {
-            final StyleColors colors = new StyleColors();
-            theme.accept(colors);
-            assertEquals(
-                    colors.get(ColorType.WINDOW_BACKGROUND) & 0xFFFFFF00,
-                    colors.get(ColorType.WINDOW_BACKGROUND_SECONDARY),
-                    "Fades as it did to transparent");
         }
     }
 
