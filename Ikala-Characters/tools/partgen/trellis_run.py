@@ -16,6 +16,14 @@ ZhengPeng7 weights, not the RMBG-2.0 weights TRELLIS.2's config names (non-comme
 Each glb comes out in TRELLIS.2's space: a 1 m box around the origin, +Y up, facing +Z, with
 <out>.json beside it giving the seed it was made with.
 
+Meshes after the first in a run used to hang curtains of long thin streaks: a few hundred of
+the decoded mesh's vertices came out with garbage heights (around 1e11 m), which cleanup
+clamped to the top of the box, so each became an upright streak. It is a race on the GPU:
+something in the shape decoder isn't finished when the voxels are turned into a mesh, and
+waiting for the GPU just before that turns every run clean (4 of 4 runs curtained before, 0 of
+3 after, same image and seed, no slower). So that wait is put in below; the checks stay as a
+guard.
+
 Some seeds hang curtains of long thin streaks off a figure, from its arms and body or from the
 top of TRELLIS.2's volume, and some pose a limb their own way, like an arm hung straight down.
 On a figure (images named with --figure, like partgen's clothing and body parts, painted on the
@@ -159,6 +167,16 @@ def main():
     original = rembg.BiRefNet
     rembg.BiRefNet = lambda **kwargs: original(model_name="ZhengPeng7/BiRefNet")
     import o_voxel
+    from trellis2.models.sc_vaes import fdg_vae
+
+    # Wait for the shape decoder before its voxels become a mesh; see the curtains above
+    to_mesh = fdg_vae.flexible_dual_grid_to_mesh
+
+    def finished_to_mesh(*args, **kwargs):
+        torch.cuda.synchronize()
+        return to_mesh(*args, **kwargs)
+
+    fdg_vae.flexible_dual_grid_to_mesh = finished_to_mesh
 
     start = time.perf_counter()
     pipeline = Trellis2ImageTo3DPipeline.from_pretrained("microsoft/TRELLIS.2-4B")
