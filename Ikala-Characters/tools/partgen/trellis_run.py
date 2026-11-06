@@ -4,7 +4,8 @@ Run it with TRELLIS.2's own Python, which partgen.py does:
 
     <trellis>/.venv/Scripts/python.exe trellis_run.py --trellis <trellis folder>
         [--type 512] [--seed 0] [--faces 200000] [--texture 2048] [--online]
-        [--figure <image> ...] [--tries 4] <image> <out.glb> [<image> <out.glb>...]
+        [--figure <image> ...] [--object <image> ...] [--tries 4]
+        <image> <out.glb> [<image> <out.glb>...]
 
 It runs offline: the models load from Hugging Face's local cache without asking Hugging Face for
 newer versions, which by default it would on every run, sending any stored login token. Pass
@@ -22,7 +23,10 @@ mannequin) both show in its front outline against the image's: curtains add outl
 doesn't have, filling in the space under the arms and between the legs, and a limb posed
 elsewhere leaves the two barely overlapping. Such a mesh is made again with the next seed, up to
 --tries times, and the closest to the image kept. Objects on their own, like hats, aren't
-checked.
+checked that way, since TRELLIS.2 turns them as it likes; those named with --object, like
+partgen's tails and wings, are checked for the curtains themselves instead: long thin upright
+triangles, which a clean mesh hardly has (a meter or two of them, in TRELLIS.2's 1 m box) and a
+curtained one has hundreds of meters of.
 """
 import argparse
 import json
@@ -45,6 +49,14 @@ CURTAINS = 0.8
 MIN_OVERLAP = 0.15
 # Seeds tried at most for a figure with curtains or posed its own way
 TRIES = 4
+# How many meters of streak triangles an object's mesh may have before it counts as curtained:
+# clean meshes measure up to 2, curtained ones 300 or more
+STREAKS = 20.0
+# A streak triangle: its longest edge within this much of upright (as the cosine), longer than
+# STREAK_MIN meters, and STREAK_THIN times longer than the triangle is wide
+STREAK_UPRIGHT = 0.95
+STREAK_MIN = 0.01
+STREAK_THIN = 6
 
 
 def square(mask):
@@ -83,8 +95,26 @@ def outline_check(vertices, image):
     return extra, overlap
 
 
+def streaks(vertices, faces):
+    """How many meters of streak triangles a mesh has (see STREAKS): those whose longest edge
+    stands nearly upright (+Y), and is long and many times the triangle's width."""
+    corners = vertices[faces]
+    edges = np.stack([corners[:, 1] - corners[:, 0], corners[:, 2] - corners[:, 1],
+                      corners[:, 0] - corners[:, 2]], 1)
+    lengths = np.linalg.norm(edges, axis=-1)
+    longest = lengths.max(1)
+    area = 0.5 * np.linalg.norm(np.cross(edges[:, 0], edges[:, 2]), axis=-1)
+    width = 2 * area / np.maximum(longest, 1e-9)
+    along = edges[np.arange(len(faces)), lengths.argmax(1)] / np.maximum(longest, 1e-9)[:, None]
+    streak = ((np.abs(along[:, 1]) > STREAK_UPRIGHT) & (longest > STREAK_MIN)
+              & (longest > STREAK_THIN * width))
+    return float(longest[streak].sum())
+
+
 def badness(check):
     """How far an outline check is from passing, 1 or less if it passes."""
+    if len(check) == 1:
+        return check[0] / STREAKS
     extra, overlap = check
     return max(extra / CURTAINS, MIN_OVERLAP / max(overlap, 1e-6))
 
@@ -101,6 +131,8 @@ def main():
                              "the local cache.")
     parser.add_argument("--figure", action="append", default=[],
                         help="An image of a whole figure, checked for curtains; may repeat.")
+    parser.add_argument("--object", action="append", default=[],
+                        help="An image of an object on its own, checked for streaks; may repeat.")
     parser.add_argument("--tries", type=int, default=TRIES,
                         help="Seeds tried at most for a figure with curtains.")
     parser.add_argument("pairs", nargs="+", help="Image and glb paths, in pairs.")
@@ -135,14 +167,16 @@ def main():
     print("[trellis] loaded in %.0f s" % (time.perf_counter() - start), flush=True)
 
     figures = {os.path.abspath(f) for f in args.figure}
+    objects = {os.path.abspath(f) for f in args.object}
     for image_path, out in zip(args.pairs[0::2], args.pairs[1::2]):
         start = time.perf_counter()
         torch.cuda.reset_peak_memory_stats()
         free = torch.cuda.mem_get_info()[0]
         held = torch.cuda.memory_allocated()
         figure = os.path.abspath(image_path) in figures
+        thing = os.path.abspath(image_path) in objects
         best = None
-        for seed in range(args.seed, args.seed + (args.tries if figure else 1)):
+        for seed in range(args.seed, args.seed + (args.tries if figure or thing else 1)):
             mesh = pipeline.run(Image.open(image_path), seed=seed, pipeline_type=args.type)[0]
             mesh.simplify(16777216)  # nvdiffrast's limit
             glb = o_voxel.postprocess.to_glb(
@@ -151,26 +185,35 @@ def main():
                 aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]], decimation_target=args.faces,
                 texture_size=args.texture, remesh=True, remesh_band=1, remesh_project=0,
                 verbose=False)
-            check = outline_check(np.asarray(glb.vertices), Image.open(image_path)) \
-                if figure else None
+            check = None
+            if figure:
+                check = outline_check(np.asarray(glb.vertices), Image.open(image_path))
+            elif thing:
+                check = (streaks(np.asarray(glb.vertices), np.asarray(glb.faces)),)
             if best is None or (check is not None and badness(check) < badness(best[2])):
                 best = (glb, seed, check)
             if check is None or badness(check) <= 1:
                 break
-            print("[trellis] %s: seed %d's outline doesn't match the image's (%.2f beyond it, "
-                  "%.2f overlap): curtains or a limb posed its own way; trying the next"
-                  % (os.path.basename(image_path), seed, *check), flush=True)
+            if thing:
+                print("[trellis] %s: seed %d hung %.0f m of streaks; trying the next"
+                      % (os.path.basename(image_path), seed, check[0]), flush=True)
+            else:
+                print("[trellis] %s: seed %d's outline doesn't match the image's (%.2f beyond "
+                      "it, %.2f overlap): curtains or a limb posed its own way; trying the next"
+                      % (os.path.basename(image_path), seed, *check), flush=True)
             del mesh
             torch.cuda.empty_cache()
         glb, seed, check = best
         if check is not None and badness(check) > 1:
-            print("[trellis] %s: no seed tried matched the image's outline; keeping seed %d's"
+            print("[trellis] %s: no seed tried came out clean; keeping seed %d's"
                   % (os.path.basename(image_path), seed), flush=True)
         os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
         glb.export(out)
         with open(out + ".json", "w", encoding="utf-8") as file:
             json.dump({"seed": seed, "type": args.type,
-                       "extraOutline": check and check[0], "overlap": check and check[1]},
+                       "extraOutline": check[0] if figure else None,
+                       "overlap": check[1] if figure else None,
+                       "streaks": check[0] if thing else None},
                       file)
         print("[trellis] %s in %.0f s, seed %d, peak %.2f GB" % (
             out, time.perf_counter() - start, seed, torch.cuda.max_memory_allocated() / 1024 ** 3),

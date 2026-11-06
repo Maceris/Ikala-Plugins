@@ -1,0 +1,26 @@
+{
+  "_comment": "How parts on the body plan's extension chains are generated, by the chain's name without its side (wings are generated on the left, \"wing.L\"; the right is the left's mirror). A part is pictured on its own as an object, like an isolated body part (see ISOLATED_STYLE in partgen.py, with \"piece\" naming what it is), steered by the depth of a plain stand-in along the chain at rest, made the brief's \"length\" in meters (\"length\" here, the rig's own chain length, by default): a tapered tube for a tail, a flat membrane for a wing (see tools/blender/test_extensions.py), seen from \"view\" (\"front\", \"back\" or \"left\", the character's left side) and turned \"roll\" degrees counterclockwise, so the part comes out in the chain's pose and proportions. \"negative\" adds to the negative prompt what the part tends to drag in, like the whole animal around a tail. \"guideStrength\" and \"guideEnd\" are how hard the stand-in's depth steers and for what share of the steps: lightly, since a stand-in is only a pose and a length, not a shape; a fox's brush or a feathered wing should spread well past it. \"triangles\" and \"voxel\" are for fitting the mesh along the chain, which isn't built yet. A brief's \"fit\" replaces any of these.",
+  "tail": {
+    "piece": "a single detached tail on its own with no animal, seen from the side, hanging down and curving back",
+    "negative": "animal, whole animal, head, ears, legs, paws, torso, creature",
+    "length": 0.9,
+    "view": "left",
+    "roll": 0,
+    "guideStrength": 0.5,
+    "guideEnd": 0.45,
+    "triangles": 1800,
+    "voxel": 0.004,
+    "palette": "primary"
+  },
+  "wing": {
+    "piece": "a single left wing, spread wide, seen from behind",
+    "length": 1.1,
+    "view": "back",
+    "roll": 0,
+    "guideStrength": 0.3,
+    "guideEnd": 0.3,
+    "triangles": 2400,
+    "voxel": 0.004,
+    "palette": "primary"
+  }
+}

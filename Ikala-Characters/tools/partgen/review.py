@@ -118,7 +118,9 @@ function card(b) {
   div.innerHTML = `<div class="id"></div><div class="meta"></div>`;
   div.querySelector(".id").textContent = b.id;
   div.querySelector(".meta").textContent = `${b.kind} ${b.layers ? "in " + b.layers.join(" + ")
-      : b.layer ? "in " + b.layer : b.slots ? "for " + b.slots.join(" + ") : "on " + b.socket}` +
+      : b.layer ? "in " + b.layer : b.slots ? "for " + b.slots.join(" + ")
+      : b.chain ? "on the " + b.chain + " chain" + (b.length ? ", " + b.length + " m" : "")
+      : "on " + b.socket}` +
       (b.tags && b.tags.length ? " · " + b.tags.join(", ") : "");
   const text = document.createElement("div");
   text.textContent = b.description;

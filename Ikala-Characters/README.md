@@ -154,6 +154,43 @@ saves the scene without the GUI, and the `characters` script global drives the
 editor (`showDesign`, `settle`, `bare`, `wear`, `bothSides`, `still`, `frame`,
 `markers`, `worn`; see `EditorScripts`).
 
+## Generated tails, wings and capes
+
+Parts on the body plan's extension chains, like a tail or a wing, are briefed with
+`"kind": "extension"`, the `chain` they go on (wings on `wing.L`; the right wing will
+be its mirror) and their `length` in meters along the chain. A part pictured on its
+own has no size of its own, so the length sets it; left out, it is the rig's own
+chain length from `tools/partgen/extensions.json`:
+
+```json
+{"id": "fox_tail", "kind": "extension", "chain": "tail", "length": 0.9,
+ "description": "a bushy orange fox tail with a white tip"}
+```
+
+Its images picture it on its own, steered lightly by the depth of a plain stand-in
+along the chain at rest, made the brief's length: a tapered tube for a tail, seen
+from the side, and a flat membrane for a wing, seen from behind (the shapes from
+`tools/blender/test_extensions.py`; the rule's `view` and `roll` pick the camera). So
+it comes out in the chain's pose and proportions, and spreads past the stand-in as
+its description asks. `render_guides.py --chain tail --chain-scale 1.2` renders a
+stand-in on its own.
+
+A cape is clothing in the plan's `cape` layer: its rule in `layers.json` has
+`"view": "back"`, so its images are painted over the mannequin seen from behind,
+down past the waist (`maskDown`).
+
+```
+python partgen.py new extensions_trial briefs/extensions_trial.json --keep
+python partgen.py images extensions_trial --count 4
+```
+
+TRELLIS.2 sometimes hangs curtains of thin upright streaks off a tail or wing, the
+same seed clean on another run, so their meshes are checked for streak triangles
+and made again with the next seed (`trellis_run.py --object`). From a single wing
+it often makes a pair, or a whole bat; fitting will have to keep one side.
+
+Fitting either onto the chain isn't built yet: `fit` leaves them with their meshes.
+
 ## Previewing characters
 
 In the editor, with a 3D scene open, `character show <file.glb> [clip]` reads a

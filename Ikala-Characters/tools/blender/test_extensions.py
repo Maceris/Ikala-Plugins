@@ -18,8 +18,10 @@ import pathlib
 import bpy
 from mathutils import Vector
 
-# How much longer the test tail's chain is than the rig's
+# How much longer the test tail's chain is than the rig's, and the wings' (render_guides.py sets
+# them for its stand-ins)
 TAIL_LENGTH = 1.3
+WING_LENGTH = 1.0
 # The tail's thickness at its root and its tip, and the sides around it
 TAIL_ROOT_RADIUS = 0.055
 TAIL_TIP_RADIUS = 0.012
@@ -167,7 +169,7 @@ def sheet(name, rows, row_weights, color):
 
 def wing(arm, side):
     names = [f"wing.0{i}.{side}" for i in range(1, 5)]
-    points = joints(arm, names)
+    points = joints(arm, names, WING_LENGTH)
     leading, trailing, row_weights = [], [], []
     for index, point in enumerate(points):
         leading.append(point)
@@ -251,4 +253,6 @@ def main():
     export(out, made)
 
 
-main()
+# Imported by partgen's render_guides.py for its chains' stand-in shapes
+if __name__ == "__main__":
+    main()

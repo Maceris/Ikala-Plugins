@@ -74,6 +74,19 @@ standing out further is reined in toward the body, and rejected if that would ta
 part meant to be worn bare, like an arm covered in spikes, says "bare": true; it is left as it
 is, and clothing covering its slots can't be worn with it.
 
+A part on one of the body plan's extension chains, like a tail or a wing, names its chain (the
+left one for wings; the right is mirrored from it) and how long it is, in meters along its chain,
+since an object pictured on its own has no size of its own:
+
+    {"id": "fox_tail", "kind": "extension", "chain": "tail", "length": 0.9,
+     "description": "a bushy orange fox tail with a white tip"}
+
+Its images picture it on its own, steered by the depth of a plain stand-in along the chain at
+rest (a tapered tube for a tail, a flat membrane for a wing), seen as extensions.json's rule for
+the chain says, so it comes out in the chain's pose; "length" (the rule's by default) sets the
+stand-in's length. Fitting along the chain is not built yet. A cape is a layer, painted over the
+mannequin seen from behind (its rule's "view" in layers.json).
+
 Accessories are fitted on the face, head_top, back, hip, shoulder and forearm sockets. Clothing
 is lined up on the mannequin, cut
 out of its figure, shaped over the body, weighted to the rig, baked, carried over to the female
@@ -135,7 +148,7 @@ NEGATIVE = ("sprite sheet, collection, set, grid, multiple views, several object
 # Clothing is shown on the mannequin, so the garment can be cut out of the mesh by how far it
 # sits outside the body. The bare parts stay smooth and gray, and the head featureless.
 LAYER_STYLE = ("full body 3D render of a smooth featureless gray mannequin standing straight in "
-               "an A pose, arms out and down, seen from the front, {subject}, plain white "
+               "an A pose, arms out and down, seen from the {view}, {subject}, plain white "
                "background, soft even studio light, clean readable shapes, distinct flat "
                "material colors, PBR")
 LAYER_NEGATIVE = ("hair, face, eyes, skin texture, shoes, hat, accessories, extra clothing, "
@@ -378,6 +391,36 @@ def body_of(brief):
     return part, rule
 
 
+def extension_of(brief):
+    """Where the brief's part goes, as its body plan extension chain with the chain's length,
+    and its rule from extensions.json, picked by the chain's name without its side. Wings are
+    briefed on the left; the right is the left's mirror."""
+    plan = load_json_with_comments(PLAN)
+    name = brief.get("chain")
+    chain = next((c for c in plan.get("extensions", []) if c["id"] == name), None)
+    if chain is None:
+        raise SystemExit("%s names the chain %s; the biped's chains are %s"
+                         % (brief["id"], json.dumps(name),
+                            ", ".join(c["id"] for c in plan.get("extensions", []))))
+    if name.endswith(".R"):
+        raise SystemExit("%s is on %s: chains with sides are generated on the left only, and the "
+                         "right is mirrored from it, so brief %s.L instead"
+                         % (brief["id"], name, name[:-2]))
+    rules = json.loads((TOOLS / "extensions.json").read_text(encoding="utf8"))
+    rules.pop("_comment", None)
+    kind = name.rsplit(".", 1)[0] if name.endswith(".L") else name
+    if kind not in rules:
+        raise SystemExit("No rule for the chain %s yet (in %s); the rules are for %s"
+                         % (name, brief["id"], ", ".join(rules)))
+    rule = dict(rules[kind], **brief.get("fit", {}))
+    length = brief.get("length", rule["length"])
+    if not isinstance(length, (int, float)) or length <= 0:
+        raise SystemExit("A brief's \"length\" is meters above 0: " + brief["id"])
+    part = {"id": "chain_" + brief["id"], "chain": name, "length": float(length),
+            "scale": float(length) / rule["length"]}
+    return part, rule
+
+
 def rule_of(brief):
     """Where the brief's part goes, and its rule, by its kind."""
     if brief["kind"] == "accessory":
@@ -386,7 +429,10 @@ def rule_of(brief):
         return layer_of(brief)
     if brief["kind"] == "body":
         return body_of(brief)
-    raise SystemExit("Briefs are accessories, layers or body parts, not " + brief["kind"])
+    if brief["kind"] == "extension":
+        return extension_of(brief)
+    raise SystemExit("Briefs are accessories, layers, body parts or extensions, not "
+                     + brief["kind"])
 
 
 class Batch:
@@ -605,6 +651,7 @@ def body_frame(config, framed, roll=0.0):
     middle (x, z) and size, in meters."""
     from PIL import Image
     import numpy as np
+    # Body parts are framed on the front view's guide
     folder = guides(config)
     guide = json.loads((folder / "guide.json").read_text(encoding="utf8"))
     slots = np.asarray(Image.open(folder / "slots.png").getchannel("R"))
@@ -626,14 +673,16 @@ def body_frame(config, framed, roll=0.0):
             float(-middle_across * np.sin(turn) + middle_up * np.cos(turn)), float(side))
 
 
-def guides(config, part=None):
+def guides(config, part=None, view="front"):
     """The folder of guides rendered from the mannequin, rendered the first time: of the whole
-    body, or for a body part, framed on its limb (see frame_chain and body_frame), so the part
-    fills much more of the image, and of the figure TRELLIS makes from it. A whole limb rather
-    than the part alone, so the body it hangs from shows too and holds the figure in its pose:
-    an arm on its own, TRELLIS turns as it pleases. An isolated part's guides show its own slots
-    and nothing else, framed on them; fit_body.py works out its turn instead."""
-    name = GUIDE_VARIANT
+    body seen from the view, or for a body part, framed on its limb (see frame_chain and
+    body_frame), so the part fills much more of the image, and of the figure TRELLIS makes from
+    it. A whole limb rather than the part alone, so the body it hangs from shows too and holds the
+    figure in its pose: an arm on its own, TRELLIS turns as it pleases. An isolated part's guides
+    show its own slots and nothing else, framed on them; fit_body.py works out its turn instead.
+    A part on an extension chain gets a stand-in shape along its chain, with nothing else, seen
+    as its rule says (see chain_guides)."""
+    name = GUIDE_VARIANT if view == "front" else "%s_%s" % (GUIDE_VARIANT, view)
     frame, only, roll = None, None, 0
     if part is not None and part.get("group"):
         framed = part["covers"] if part.get("isolated") else frame_chain(part)
@@ -653,12 +702,65 @@ def guides(config, part=None):
              "--out", str(folder), "--size", str(SDXL_SIZE)]
             + (["--frame", "%.4f,%.4f,%.4f" % frame] if frame else [])
             + (["--only", ",".join(only)] if only else [])
-            + (["--roll", str(roll)] if roll else []),
+            + (["--roll", str(roll)] if roll else [])
+            + (["--view", view] if view != "front" else []),
             capture_output=True, text=True)
         if result.returncode != 0 or not source.exists():
             raise SystemExit("Rendering the guides failed:\n" + result.stdout[-2000:]
                              + result.stderr[-2000:])
     return folder
+
+
+def chain_guides(config, part, rule):
+    """The folder of guides for a part on an extension chain, rendered the first time: a plain
+    stand-in along the chain at rest, made the part's length, alone, seen from the rule's "view"
+    and turned by its "roll", framed with FRAME_PAD to spare."""
+    view, roll = rule.get("view", "front"), rule.get("roll", 0)
+    name = "%s_chain_%s_%s_x%.2f%s" % (GUIDE_VARIANT, re.sub(r"[^a-z0-9]+", "_", part["chain"]
+                                                              .lower()),
+                                      view, part["scale"], "_roll%g" % roll if roll else "")
+    folder = pathlib.Path(config["work"]) / "guides" / name
+    source = folder / "guide.json"
+    if source.exists():
+        return folder
+    # A first render, unframed, finds where the stand-in is
+    body = pathlib.Path(config["mannequin"]).with_suffix(".blend")
+    common = [config["blender"], "-b", "--factory-startup", "--python",
+              str(TOOLS / "blender" / "render_guides.py"), "--", "--body", str(body),
+              "--chain", part["chain"], "--chain-scale", "%.4f" % part["scale"], "--view", view]
+    scout = folder / "scout"
+    for out, size, extra in ((scout, 256, []), (folder, SDXL_SIZE, None)):
+        if extra is None:
+            # Joined, since a frame starting with a minus would read as an option
+            extra = ["--frame=%.4f,%.4f,%.4f" % chain_frame(scout, roll)]
+            extra += ["--roll", str(roll)] if roll else []
+        result = subprocess.run(common + ["--out", str(out), "--size", str(size)] + extra,
+                                capture_output=True, text=True)
+        if result.returncode != 0 or not (out / "guide.json").exists():
+            raise SystemExit("Rendering the chain guides failed:\n" + result.stdout[-2000:]
+                             + result.stderr[-2000:])
+    return folder
+
+
+def chain_frame(scout, roll):
+    """A view framed on a stand-in from its unframed render: the square around it, turned roll
+    degrees, with FRAME_PAD to spare. Gives its middle (along the view's right, z) and size."""
+    from PIL import Image
+    import numpy as np
+    guide = json.loads((scout / "guide.json").read_text(encoding="utf8"))
+    rows, columns = np.nonzero(np.asarray(Image.open(scout / "slots.png").getchannel("R")))
+    size, view = guide["size"], guide["view"]
+    x = np.concatenate([guide["middleX"] + ((columns + c) / size - 0.5) * view for c in (0, 1)])
+    z = np.concatenate([guide["middleHeight"] - ((rows + r) / size - 0.5) * view
+                        for r in (0, 1)])
+    turn = np.radians(roll)
+    across = x * np.cos(turn) - z * np.sin(turn)
+    up = x * np.sin(turn) + z * np.cos(turn)
+    middle_across = (across.min() + across.max()) / 2
+    middle_up = (up.min() + up.max()) / 2
+    side = max(np.ptp(across), np.ptp(up)) + 2 * FRAME_PAD
+    return (float(middle_across * np.cos(turn) + middle_up * np.sin(turn)),
+            float(-middle_across * np.sin(turn) + middle_up * np.cos(turn)), float(side))
 
 
 def bare_ends(layer):
@@ -698,6 +800,8 @@ def beyond_seams(config, folder, guide, part):
     the loop spreads least in."""
     from PIL import Image
     import numpy as np
+    if guide.get("from", "front") != "front":
+        raise SystemExit("Seam lines are only worked out on guides seen from the front")
     rings = json.loads((pathlib.Path(config["mannequin"]).parent / (SEAMS % GUIDE_VARIANT))
                        .read_text(encoding="utf8"))["seams"]
     size, view, middle = guide["size"], guide["view"], guide["middleHeight"]
@@ -734,7 +838,7 @@ def guide_inputs(config, layer, rule):
     """The images that paint a layer's clothing or a body part, in ComfyUI's input folder: the
     mannequin's render, its depth, and a mask of where it may paint. Gives their names there."""
     from PIL import Image, ImageChops, ImageFilter
-    folder = guides(config, layer)
+    folder = guides(config, layer, rule.get("view", "front"))
     guide = json.loads((folder / "guide.json").read_text(encoding="utf8"))
     inputs = pathlib.Path(config["comfy"]) / "input"
     names = {}
@@ -764,13 +868,26 @@ def guide_inputs(config, layer, rule):
     if rule.get("legGap"):
         gap = Image.fromarray(leg_gap(folder, guide).astype("uint8") * 255)
         hang = ImageChops.subtract(hang, gap)
-    names["mask"] = "partgen_mask_%s_%s.png" % (GUIDE_VARIANT, layer["id"])
+    names["mask"] = "partgen_mask_%s_%s.png" % (folder.name, layer["id"])
     hang.convert("RGB").save(inputs / names["mask"])
     return names
 
 
+def chain_input(config, part, rule):
+    """The depth of a chain part's stand-in, in ComfyUI's input folder. Gives its name there."""
+    from PIL import Image
+    folder = chain_guides(config, part, rule)
+    name = "partgen_guide_%s_%s.png" % (folder.name, GUIDE_MAP)
+    Image.open(folder / (GUIDE_MAP + ".png")).convert("RGB").save(
+        pathlib.Path(config["comfy"]) / "input" / name)
+    return name
+
+
 def isolated(brief):
-    """Whether a brief is a body part painted and meshed on its own (see ISOLATED_STYLE)."""
+    """Whether a brief is a part painted and meshed on its own (see ISOLATED_STYLE): a body part
+    its rule isolates, or a part on an extension chain."""
+    if brief["kind"] == "extension":
+        return True
     return brief["kind"] == "body" and body_of(brief)[0]["isolated"]
 
 
@@ -780,12 +897,14 @@ def prompt_for(brief):
         return ISOLATED_STYLE.format(piece=rule["piece"], subject=brief["description"])
     subject = rule["prompt"].format(description=brief["description"])
     style = {"layer": LAYER_STYLE, "body": BODY_STYLE}.get(brief["kind"], STYLE)
-    return style.format(subject=subject)
+    return style.format(subject=subject, view=rule.get("view", "front"))
 
 
 def negative_for(brief):
     if isolated(brief):
-        return ISOLATED_NEGATIVE
+        # A rule can keep out what its part tends to drag in, like the whole fox around a tail
+        extra = rule_of(brief)[1].get("negative")
+        return ISOLATED_NEGATIVE + (", " + extra if extra else "")
     return {"layer": LAYER_NEGATIVE, "body": BODY_NEGATIVE}.get(brief["kind"], NEGATIVE)
 
 
@@ -841,6 +960,11 @@ def command_images(config, batch, args):
                 painted = guide_inputs(config, layer, rule)
                 control, mode = painted[GUIDE_MAP], GUIDE_MODE
                 strength, end = rule["guideStrength"], rule["guideEnd"]
+            elif brief["kind"] == "extension":
+                # Pictured on its own, in the pose of a stand-in along its chain
+                part, rule = extension_of(brief)
+                control, mode = chain_input(config, part, rule), GUIDE_MODE
+                strength, end = rule["guideStrength"], rule["guideEnd"]
             elif brief.get("sketch"):
                 control, mode = prepare_sketch(config, batch, brief), SKETCH_MODE
                 strength = brief.get("sketchStrength", SKETCH_STRENGTH)
@@ -884,6 +1008,9 @@ def command_meshes(config, batch, args):
         # which it checks for curtains of streaks; an isolated part is an object on its own
         if brief["kind"] in ("layer", "body") and not isolated(brief):
             figures += ["--figure", image]
+        # A tail or wing is checked for the curtains themselves
+        elif brief["kind"] == "extension":
+            figures += ["--object", image]
     trellis = pathlib.Path(config["trellis"])
     subprocess.run([str(trellis / ".venv/Scripts/python.exe"), str(TOOLS / "trellis_run.py"),
                     "--trellis", str(trellis), "--type", args.type] + figures + pairs,
@@ -1548,7 +1675,15 @@ def command_fit(config, batch, args):
     briefs = ready(batch.load(), args, lambda b: b["mesh"] is not None and kept(b, "mesh", args)
                    and (args.redo or b["part"] is None))
     for brief in briefs:
+        if brief["kind"] == "extension":
+            print("Fitting parts on extension chains isn't built yet; %s keeps its mesh"
+                  % brief["id"])
+            continue
         if brief["kind"] == "layer":
+            if layer_of(brief)[1].get("view", "front") != "front":
+                print("Fitting clothing painted from the %s isn't built yet; %s keeps its mesh"
+                      % (layer_of(brief)[1]["view"], brief["id"]))
+                continue
             fit_layer(config, batch, brief)
             continue
         if brief["kind"] == "body":
