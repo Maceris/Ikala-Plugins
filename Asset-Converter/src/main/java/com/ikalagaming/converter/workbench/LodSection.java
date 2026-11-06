@@ -100,8 +100,11 @@ final class LodSection {
     /** Texels across a baked cluster's error. */
     private final int[] bakeDensity = {(int) DagBuilder.Options.DEFAULT_BAKE_DENSITY};
 
-    /** Whether to keep the lineage, to measure how faithful each level is. */
-    private final IkBoolean measureFidelity = new IkBoolean(true);
+    /**
+     * Whether to keep the lineage, to measure how faithful each level is. Off to start, since a DAG
+     * with its lineage isn't cached, so every build would start from nothing.
+     */
+    private final IkBoolean measureFidelity = new IkBoolean(false);
 
     /** Whether to draw the originals the level of detail stands for. */
     private final IkBoolean showOriginal = new IkBoolean(false);

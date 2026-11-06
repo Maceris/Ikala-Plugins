@@ -15,6 +15,7 @@ import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugLine;
 import com.ikalagaming.graphics.scene.debug.DebugShape;
 import com.ikalagaming.graphics.scene.debug.DebugSphere;
+import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
 import com.ikalagaming.graphics.vulkan.LodRenderer;
 
 import lombok.Getter;
@@ -303,8 +304,8 @@ public final class LodView implements AutoCloseable {
     private volatile boolean closed;
 
     /**
-     * The DAG on the GPU, drawn textured in the materials coloring once uploaded, or null until the
-     * worker has put it there.
+     * The DAG on the GPU, drawn by the renderer in the colorings it can do once uploaded, or null
+     * until the worker has put it there.
      */
     private volatile LodHandle world;
 
@@ -315,6 +316,12 @@ public final class LodView implements AutoCloseable {
      * @return True if the GPU picks the cut.
      */
     @Getter private boolean texturedShown;
+
+    /**
+     * Whether the scene's level of detail coloring was set for this view's mode, and is put back to
+     * textures when the view stops using it.
+     */
+    private boolean rendererColorsSet;
 
     /** A count for model IDs, so the old and new models never share one. */
     private int builds;
@@ -431,7 +438,7 @@ public final class LodView implements AutoCloseable {
         if (building) {
             return;
         }
-        // Redo the materials coloring textured once the DAG has finished uploading
+        // Hand the colorings the renderer can do to it once the DAG has finished uploading
         if (drawsTextured(settings) && !texturedShown) {
             builtSettings = null;
         }
@@ -475,17 +482,53 @@ public final class LodView implements AutoCloseable {
     }
 
     /**
-     * Whether the renderer draws the world, textured, with the cut the GPU picks: in the materials
-     * coloring, with no fixed level, once the DAG is uploaded.
+     * Whether the renderer draws the world, with the cut the GPU picks: in the colorings it can do
+     * itself, with no fixed level, once the DAG is uploaded. The others merge the CPU's cut into
+     * meshes, which on a scene the size of Bistro is hundreds of megabytes to upload each time the
+     * observer moves.
      *
      * @param settings What to show.
      * @return True if the renderer draws it.
      */
     private boolean drawsTextured(@NonNull Settings settings) {
-        return settings.mode() == Mode.MATERIALS
+        return rendererColors(settings.mode()) != null
                 && settings.fixedLevel() < 0
                 && world != null
                 && graphics.lods().isResident(world);
+    }
+
+    /**
+     * The renderer's own level of detail coloring that matches a mode.
+     *
+     * @param mode How triangles are colored.
+     * @return The coloring, or null if only this view's meshes can show it.
+     */
+    private static DebugVisualizers.LodColors rendererColors(@NonNull Mode mode) {
+        return switch (mode) {
+            case MATERIALS -> DebugVisualizers.LodColors.NONE;
+            case CLUSTERS -> DebugVisualizers.LodColors.CLUSTERS;
+            case GROUPS -> DebugVisualizers.LodColors.GROUPS;
+            case LEVELS -> DebugVisualizers.LodColors.LEVELS;
+            default -> null;
+        };
+    }
+
+    /**
+     * Color every level of detail world the renderer draws for a mode, or put back the textures
+     * this view's coloring replaced. Render thread.
+     *
+     * @param scene The scene.
+     * @param colors The coloring, or null for this view to stop coloring them.
+     */
+    private void setRendererColors(@NonNull Scene scene, DebugVisualizers.LodColors colors) {
+        final DebugVisualizers visualizers = scene.getDebugVisualizers();
+        if (colors != null && colors != DebugVisualizers.LodColors.NONE) {
+            visualizers.setLodColors(colors);
+            rendererColorsSet = true;
+        } else if (rendererColorsSet) {
+            visualizers.setLodColors(DebugVisualizers.LodColors.NONE);
+            rendererColorsSet = false;
+        }
     }
 
     /**
@@ -809,6 +852,7 @@ public final class LodView implements AutoCloseable {
         if (world != null) {
             graphics.lods().setVisible(world, built.textured());
         }
+        setRendererColors(scene, built.textured() ? rendererColors(built.mode()) : null);
         if (built.textured()) {
             // The renderer picks and draws the cut; no model is needed
             if (previous != null) {
@@ -958,6 +1002,7 @@ public final class LodView implements AutoCloseable {
         }
         world = null;
         shapes.clear();
+        setRendererColors(scene, null);
         for (Material material : palette) {
             scene.getMaterialCache().removeMaterial(material);
         }
