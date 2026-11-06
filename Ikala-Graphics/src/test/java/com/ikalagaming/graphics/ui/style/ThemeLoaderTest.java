@@ -5,6 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.ikalagaming.graphics.gui.data.StyleColors;
+import com.ikalagaming.graphics.gui.data.StyleVariables;
+import com.ikalagaming.graphics.gui.enums.ColorType;
 import com.ikalagaming.graphics.ui.Insets;
 import com.ikalagaming.graphics.ui.Length;
 
@@ -153,12 +156,54 @@ class ThemeLoaderTest {
         Theme theme = ThemeLoader.loadDefault();
 
         assertEquals("default", theme.getName());
+        // IkGui's default colors and sizes, the Ikala style
+        StyleColors colors = new StyleColors();
+        StyleVariables sizes = new StyleVariables();
+
         ComputedStyle button = compute(theme, "button");
-        // IkGui's dark style button colors
-        assertEquals(0x4296FA66, button.color(StyleKey.BACKGROUND));
-        assertEquals(0x4296FAFF, button.getInState(StyleKey.BACKGROUND, StyleState.HOVERED));
-        assertEquals(0x0F87FAFF, button.getInState(StyleKey.BACKGROUND, StyleState.HELD));
-        assertEquals(Insets.symmetric(Length.u(4), Length.u(3)), button.insets(StyleKey.PADDING));
+        assertEquals(colors.get(ColorType.BUTTON), button.color(StyleKey.BACKGROUND));
+        assertEquals(
+                colors.get(ColorType.BUTTON_HOVERED),
+                button.getInState(StyleKey.BACKGROUND, StyleState.HOVERED));
+        assertEquals(
+                colors.get(ColorType.BUTTON_ACTIVE),
+                button.getInState(StyleKey.BACKGROUND, StyleState.HELD));
+        assertEquals(colors.get(ColorType.TEXT), button.color(StyleKey.TEXT));
+        assertEquals(
+                Insets.symmetric(Length.u(sizes.framePadding.x), Length.u(sizes.framePadding.y)),
+                button.insets(StyleKey.PADDING));
+        assertEquals(Length.u(sizes.frameRounding), button.length(StyleKey.ROUNDING));
+
+        ComputedStyle input = compute(theme, "text-input");
+        assertEquals(colors.get(ColorType.FRAME_BACKGROUND), input.color(StyleKey.BACKGROUND));
+        assertEquals(
+                colors.get(ColorType.FRAME_BACKGROUND_HOVERED),
+                input.getInState(StyleKey.BACKGROUND, StyleState.HOVERED));
+        assertEquals(
+                colors.get(ColorType.FRAME_BACKGROUND_ACTIVE),
+                input.getInState(StyleKey.BACKGROUND, StyleState.HELD));
+
+        ComputedStyle selectable = compute(theme, "selectable");
+        assertEquals(
+                colors.get(ColorType.HEADER),
+                selectable.getInState(StyleKey.BACKGROUND, StyleState.SELECTED));
+        assertEquals(
+                colors.get(ColorType.HEADER_HOVERED),
+                selectable.getInState(StyleKey.BACKGROUND, StyleState.HOVERED));
+        assertEquals(
+                colors.get(ColorType.HEADER_ACTIVE),
+                selectable.getInState(StyleKey.BACKGROUND, StyleState.HELD));
+
+        ComputedStyle surface = compute(theme, "surface");
+        assertEquals(colors.get(ColorType.WINDOW_BACKGROUND), surface.color(StyleKey.BACKGROUND));
+        assertEquals(colors.get(ColorType.BORDER), surface.color(StyleKey.BORDER));
+        assertEquals(Length.u(sizes.windowRounding), surface.length(StyleKey.ROUNDING));
+        assertEquals(
+                Length.u(sizes.childRounding), compute(theme, "scroll").length(StyleKey.ROUNDING));
+
+        assertEquals(
+                colors.get(ColorType.TEXT_DISABLED),
+                compute(theme, "label", "muted").color(StyleKey.TEXT));
         assertNotNull(compute(theme, "label", "title").number(StyleKey.FONT_SIZE));
     }
 }

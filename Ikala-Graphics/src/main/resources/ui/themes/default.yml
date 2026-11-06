@@ -1,27 +1,35 @@
-# The default theme for retained UI. Its colors and sizes match IkGui's dark style, so retained UI
-# looks like the rest of IkGui until a game supplies its own theme.
+# The default theme for retained UI. Its colors and sizes match IkGui's Ikala style (its default:
+# StyleColors.setThemeIkala and StyleVariables.setIkala), so retained UI looks like the rest of
+# IkGui until a game supplies its own theme. Each color's comment names the IkGui color it matches;
+# ThemeLoaderTest checks them.
 #
 # Token names are free-form. This theme names colors by role (text, panel, accent) rather than by
 # hue, and spacing as a small scale of steps, so a theme can change them without renaming anything.
 name: default
 
 tokens:
-  color.text: "#FFFFFFFF"
-  color.text-muted: "#808080FF"
-  color.window: "#0F0F0FF0"
-  color.panel: "#1F2533FF"
-  color.border: "#6E6E8080"
+  color.text: "#FFFFFFFF" # Text
+  color.text-muted: "#666666FF" # TextDisabled
+  color.window: "#3F3F49FF" # WindowBg
+  color.border: "#1E1E23B5" # Border
   color.transparent: "#00000000"
 
-  # The accent at a few strengths: resting, hovered and pressed
-  color.accent: "#4296FA66"
-  color.accent-hovered: "#4296FAFF"
-  color.accent-pressed: "#0F87FAFF"
-  color.accent-selected: "#4296FA4F"
-  color.accent-highlight: "#4296FACC"
+  # A raised panel inside a window, and under the mouse; IkGui has no color for these, so they are
+  # the theme's tinted gray a step and two lighter than the window
+  color.panel: "#535360FF"
+  color.panel-hovered: "#6A6A7AFF"
 
-  color.field: "#294A7A8A"
-  color.field-active: "#4296FAAB"
+  # The accent at a few strengths: resting, hovered and pressed
+  color.accent: "#88889D59" # Button
+  color.accent-hovered: "#83839796" # ButtonHovered
+  color.accent-pressed: "#BFBFDDFF" # ButtonActive
+  color.accent-selected: "#60606FFF" # Header
+  color.accent-highlight: "#767689FF" # HeaderHovered
+  color.accent-selected-pressed: "#BFBFDDC4" # HeaderActive
+
+  color.field: "#6A6A7A8A" # FrameBg
+  color.field-hovered: "#6A6A7A66" # FrameBgHovered
+  color.field-active: "#8D8DA3AB" # FrameBgActive
 
   color.error: "#C2363DFF"
   color.error-hovered: "#E04B52FF"
@@ -33,7 +41,9 @@ tokens:
   spacing.small: 4
   spacing.medium: 8
   spacing.large: 16
-  corner-radius: 0
+  # Frames and child windows are rounded, windows square
+  corner-radius: 4
+  corner-radius.window: 0
   corner-radius.panel: 6
   font-size.title: 18
 
@@ -50,7 +60,7 @@ types:
     background: $color.window
     border: $color.border
     borderSize: 1
-    rounding: $corner-radius
+    rounding: $corner-radius.window
     padding: $spacing.medium
   button:
     background: $color.accent
@@ -66,13 +76,13 @@ types:
     rounding: $corner-radius
     borderSize: 0
     padding: $padding.widget
-    hovered: { background: $color.accent }
+    hovered: { background: $color.field-hovered }
     held: { background: $color.field-active }
   selectable:
     text: $color.text
     selected: { background: $color.accent-selected }
     hovered: { background: $color.accent-highlight }
-    held: { background: $color.accent-hovered }
+    held: { background: $color.accent-selected-pressed }
   label:
     text: $color.text
   scroll:
@@ -109,8 +119,8 @@ types:
     background: $color.panel
     accent: $color.accent-hovered
     rounding: $corner-radius.panel
-    hovered: { background: "#2E3A52FF" }
-    focused: { background: "#2E3A52FF" }
+    hovered: { background: $color.panel-hovered }
+    focused: { background: $color.panel-hovered }
     held: { background: $color.accent-pressed }
 
 classes:
