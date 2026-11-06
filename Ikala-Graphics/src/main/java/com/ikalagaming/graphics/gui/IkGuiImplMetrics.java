@@ -79,6 +79,15 @@ class IkGuiImplMetrics {
     /** Highlight color used to show what an inspector entry refers to. */
     private static final int HIGHLIGHT_COLOR = Color.rgba(255, 255, 0, 255);
 
+    /** What follows an inactive window's or table's name. */
+    private static final String INACTIVE_SUFFIX = " *Inactive*";
+
+    /** The label of a window's or viewport's draw list node. */
+    private static final String DRAW_LIST_LABEL = "DrawList";
+
+    /** The label of the buttons that break into the debugger. */
+    private static final String DEBUG_BREAK_LABEL = "**DebugBreak**";
+
     /** The names of the window rectangles that can be displayed. */
     private static final String[] WINDOW_RECT_NAMES = {
         "OuterRect",
@@ -942,7 +951,7 @@ class IkGuiImplMetrics {
                                     viewport.index, viewport.id));
                 }
                 viewportHasDrawList = true;
-                debugNodeDrawList(null, viewport, drawList, "DrawList");
+                debugNodeDrawList(null, viewport, drawList, DRAW_LIST_LABEL);
             }
         }
         IkGui.treePop();
@@ -1310,7 +1319,7 @@ class IkGuiImplMetrics {
                                 "MultiSelect 0x%08X in '%s'%s",
                                 storage.id,
                                 storage.window != null ? storage.window.name : "N/A",
-                                isActive ? "" : " *Inactive*"));
+                                isActive ? "" : INACTIVE_SUFFIX));
         if (!isActive) {
             IkGui.popStyleColor();
         }
@@ -1698,7 +1707,7 @@ class IkGuiImplMetrics {
                         IkGui.sameLine();
                         IkGui.pushID(keyChord);
                         if (IkGuiImplDebugTools.debugBreakButton(
-                                "**DebugBreak**", "in setShortcutRouting() for this KeyChord")) {
+                                DEBUG_BREAK_LABEL, "in setShortcutRouting() for this KeyChord")) {
                             context.debugBreakInShortcutRouting = keyChord;
                         }
                         IkGui.popID();
@@ -2424,7 +2433,7 @@ class IkGuiImplMetrics {
                                 label,
                                 tabBar.id,
                                 tabBar.tabs.size(),
-                                isActive ? "" : " *Inactive*"));
+                                isActive ? "" : INACTIVE_SUFFIX));
         for (int n = 0; n < Math.min(tabBar.tabs.size(), 3); ++n) {
             description
                     .append(n > 0 ? ", " : "")
@@ -2555,7 +2564,7 @@ class IkGuiImplMetrics {
                                 ? " CanHostOtherWindows"
                                 : ""));
         for (DrawList drawList : new ArrayList<>(viewport.drawData.drawLists)) {
-            debugNodeDrawList(null, viewport, drawList, "DrawList");
+            debugNodeDrawList(null, viewport, drawList, DRAW_LIST_LABEL);
         }
         IkGui.treePop();
     }
@@ -2612,7 +2621,7 @@ class IkGuiImplMetrics {
                         label,
                         treeNodeFlags,
                         String.format(
-                                "%s '%s'%s", label, window.name, isActive ? "" : " *Inactive*"));
+                                "%s '%s'%s", label, window.name, isActive ? "" : INACTIVE_SUFFIX));
         popInactiveColor(isActive);
         if (IkGui.isItemHovered() && isActive) {
             highlight(window, window.getRect());
@@ -2622,12 +2631,12 @@ class IkGuiImplMetrics {
         }
 
         if (context.io.configDebugIsDebuggerPresent
-                && IkGuiImplDebugTools.debugBreakButton("**DebugBreak**", "in begin()")) {
+                && IkGuiImplDebugTools.debugBreakButton(DEBUG_BREAK_LABEL, "in begin()")) {
             context.debugBreakInWindow = window.id;
         }
 
         final int flags = window.flags;
-        debugNodeDrawList(window, window.viewport, window.drawList, "DrawList");
+        debugNodeDrawList(window, window.viewport, window.drawList, DRAW_LIST_LABEL);
         IkGui.bulletText(
                 String.format(
                         "Pos: (%.1f,%.1f), Size: (%.1f,%.1f), ContentSize (%.1f,%.1f) Ideal"
@@ -2869,7 +2878,7 @@ class IkGuiImplMetrics {
                                 table.id,
                                 table.columnsCount,
                                 windowName(table.outerWindow),
-                                isActive ? "" : " *Inactive*"));
+                                isActive ? "" : INACTIVE_SUFFIX));
         popInactiveColor(isActive);
         if (IkGui.isItemHovered()) {
             highlight(table.outerWindow, table.outerRect);
@@ -2890,7 +2899,7 @@ class IkGuiImplMetrics {
                             + " instance.");
         }
         if (context.io.configDebugIsDebuggerPresent) {
-            if (IkGuiImplDebugTools.debugBreakButton("**DebugBreak**", "in beginTable()")) {
+            if (IkGuiImplDebugTools.debugBreakButton(DEBUG_BREAK_LABEL, "in beginTable()")) {
                 context.debugBreakInTable = table.id;
             }
             IkGui.sameLine();

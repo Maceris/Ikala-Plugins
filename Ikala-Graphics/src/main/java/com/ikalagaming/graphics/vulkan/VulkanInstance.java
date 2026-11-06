@@ -60,6 +60,45 @@ public class VulkanInstance {
      */
     public static final int MAX_BINDLESS_TEXTURE_COUNT = 10_000;
 
+    /** The debug fragment shader, which several stages use. */
+    private static final String DEBUG_FRAGMENT = "shaders/debug.frag";
+
+    /** The lights vertex shader, which several stages use. */
+    private static final String LIGHTS_VERTEX = "shaders/lights.vert";
+
+    /** The OIT splat fragment shader, which several stages use. */
+    private static final String OIT_SPLAT_FRAGMENT = "shaders/oit_splat.frag";
+
+    /** The particle vertex shader, which several stages use. */
+    private static final String PARTICLE_VERTEX = "shaders/particle.vert";
+
+    /** The scene fragment shader, which several stages use. */
+    private static final String SCENE_FRAGMENT = "shaders/scene.frag";
+
+    /** The shadow baked cutout vertex shader, which several stages use. */
+    private static final String SHADOW_BAKED_CUTOUT_VERTEX = "shaders/shadow_baked_cutout.vert";
+
+    /** The shadow brick vertex shader, which several stages use. */
+    private static final String SHADOW_BRICK_VERTEX = "shaders/shadow_brick.vert";
+
+    /** The shadow cutout fragment shader, which several stages use. */
+    private static final String SHADOW_CUTOUT_FRAGMENT = "shaders/shadow_cutout.frag";
+
+    /** The shadow cutout vertex shader, which several stages use. */
+    private static final String SHADOW_CUTOUT_VERTEX = "shaders/shadow_cutout.vert";
+
+    /** The translucent fragment shader, which several stages use. */
+    private static final String TRANSLUCENT_FRAGMENT = "shaders/translucent.frag";
+
+    /** The translucent vertex shader, which several stages use. */
+    private static final String TRANSLUCENT_VERTEX = "shaders/translucent.vert";
+
+    /** The translucent baked vertex shader, which several stages use. */
+    private static final String TRANSLUCENT_BAKED_VERTEX = "shaders/translucent_baked.vert";
+
+    /** The volume vertex shader, which several stages use. */
+    private static final String VOLUME_VERTEX = "shaders/volume.vert";
+
     private static final List<String> REQUIRED_INSTANCE_EXTENSION_NAMES =
             List.of(VK_KHR_SURFACE_EXTENSION_NAME);
     private static final ByteBuffer[] REQUIRED_INSTANCE_EXTENSIONS =
@@ -1176,9 +1215,7 @@ public class VulkanInstance {
         List<ShaderVulkan.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
                 new ShaderVulkan.ShaderModuleData(
-                        "shaders/lights.vert",
-                        ShaderVulkan.Type.VERTEX,
-                        ShaderVulkan.Location.BUNDLED));
+                        LIGHTS_VERTEX, ShaderVulkan.Type.VERTEX, ShaderVulkan.Location.BUNDLED));
         shaderModuleDataList.add(
                 new ShaderVulkan.ShaderModuleData(
                         "shaders/lights.frag",
@@ -1192,9 +1229,7 @@ public class VulkanInstance {
         List<ShaderVulkan.ShaderModuleData> toneMapModules = new ArrayList<>();
         toneMapModules.add(
                 new ShaderVulkan.ShaderModuleData(
-                        "shaders/lights.vert",
-                        ShaderVulkan.Type.VERTEX,
-                        ShaderVulkan.Location.BUNDLED));
+                        LIGHTS_VERTEX, ShaderVulkan.Type.VERTEX, ShaderVulkan.Location.BUNDLED));
         toneMapModules.add(
                 new ShaderVulkan.ShaderModuleData(
                         "shaders/tonemap.frag",
@@ -1224,9 +1259,7 @@ public class VulkanInstance {
         List<ShaderVulkan.ShaderModuleData> taaModules = new ArrayList<>();
         taaModules.add(
                 new ShaderVulkan.ShaderModuleData(
-                        "shaders/lights.vert",
-                        ShaderVulkan.Type.VERTEX,
-                        ShaderVulkan.Location.BUNDLED));
+                        LIGHTS_VERTEX, ShaderVulkan.Type.VERTEX, ShaderVulkan.Location.BUNDLED));
         taaModules.add(
                 new ShaderVulkan.ShaderModuleData(
                         "shaders/taa.frag",
@@ -1239,11 +1272,11 @@ public class VulkanInstance {
                 new ShaderVulkan(
                         List.of(
                                 new ShaderVulkan.ShaderModuleData(
-                                        "shaders/translucent.vert",
+                                        TRANSLUCENT_VERTEX,
                                         ShaderVulkan.Type.VERTEX,
                                         ShaderVulkan.Location.BUNDLED),
                                 new ShaderVulkan.ShaderModuleData(
-                                        "shaders/translucent.frag",
+                                        TRANSLUCENT_FRAGMENT,
                                         ShaderVulkan.Type.FRAGMENT,
                                         ShaderVulkan.Location.BUNDLED)),
                         state));
@@ -1252,11 +1285,11 @@ public class VulkanInstance {
                 new ShaderVulkan(
                         List.of(
                                 new ShaderVulkan.ShaderModuleData(
-                                        "shaders/translucent_baked.vert",
+                                        TRANSLUCENT_BAKED_VERTEX,
                                         ShaderVulkan.Type.VERTEX,
                                         ShaderVulkan.Location.BUNDLED),
                                 new ShaderVulkan.ShaderModuleData(
-                                        "shaders/translucent.frag",
+                                        TRANSLUCENT_FRAGMENT,
                                         ShaderVulkan.Type.FRAGMENT,
                                         ShaderVulkan.Location.BUNDLED)),
                         state));
@@ -1265,7 +1298,7 @@ public class VulkanInstance {
                 new ShaderVulkan(
                         List.of(
                                 new ShaderVulkan.ShaderModuleData(
-                                        "shaders/lights.vert",
+                                        LIGHTS_VERTEX,
                                         ShaderVulkan.Type.VERTEX,
                                         ShaderVulkan.Location.BUNDLED),
                                 new ShaderVulkan.ShaderModuleData(
@@ -1278,11 +1311,11 @@ public class VulkanInstance {
                 new ShaderVulkan(
                         List.of(
                                 new ShaderVulkan.ShaderModuleData(
-                                        "shaders/translucent.vert",
+                                        TRANSLUCENT_VERTEX,
                                         ShaderVulkan.Type.VERTEX,
                                         ShaderVulkan.Location.BUNDLED),
                                 new ShaderVulkan.ShaderModuleData(
-                                        "shaders/oit_splat.frag",
+                                        OIT_SPLAT_FRAGMENT,
                                         ShaderVulkan.Type.FRAGMENT,
                                         ShaderVulkan.Location.BUNDLED)),
                         state));
@@ -1291,11 +1324,11 @@ public class VulkanInstance {
                 new ShaderVulkan(
                         List.of(
                                 new ShaderVulkan.ShaderModuleData(
-                                        "shaders/translucent_baked.vert",
+                                        TRANSLUCENT_BAKED_VERTEX,
                                         ShaderVulkan.Type.VERTEX,
                                         ShaderVulkan.Location.BUNDLED),
                                 new ShaderVulkan.ShaderModuleData(
-                                        "shaders/oit_splat.frag",
+                                        OIT_SPLAT_FRAGMENT,
                                         ShaderVulkan.Type.FRAGMENT,
                                         ShaderVulkan.Location.BUNDLED)),
                         state));
@@ -1452,7 +1485,7 @@ public class VulkanInstance {
                 new ShaderVulkan(
                         List.of(
                                 new ShaderVulkan.ShaderModuleData(
-                                        "shaders/particle.vert",
+                                        PARTICLE_VERTEX,
                                         ShaderVulkan.Type.VERTEX,
                                         ShaderVulkan.Location.BUNDLED),
                                 new ShaderVulkan.ShaderModuleData(
@@ -1465,7 +1498,7 @@ public class VulkanInstance {
                 new ShaderVulkan(
                         List.of(
                                 new ShaderVulkan.ShaderModuleData(
-                                        "shaders/particle.vert",
+                                        PARTICLE_VERTEX,
                                         ShaderVulkan.Type.VERTEX,
                                         ShaderVulkan.Location.BUNDLED),
                                 new ShaderVulkan.ShaderModuleData(
@@ -1478,7 +1511,7 @@ public class VulkanInstance {
                 new ShaderVulkan(
                         List.of(
                                 new ShaderVulkan.ShaderModuleData(
-                                        "shaders/lights.vert",
+                                        LIGHTS_VERTEX,
                                         ShaderVulkan.Type.VERTEX,
                                         ShaderVulkan.Location.BUNDLED),
                                 new ShaderVulkan.ShaderModuleData(
@@ -1500,7 +1533,7 @@ public class VulkanInstance {
                 new ShaderVulkan(
                         List.of(
                                 new ShaderVulkan.ShaderModuleData(
-                                        "shaders/volume.vert",
+                                        VOLUME_VERTEX,
                                         ShaderVulkan.Type.VERTEX,
                                         ShaderVulkan.Location.BUNDLED),
                                 new ShaderVulkan.ShaderModuleData(
@@ -1513,7 +1546,7 @@ public class VulkanInstance {
                 new ShaderVulkan(
                         List.of(
                                 new ShaderVulkan.ShaderModuleData(
-                                        "shaders/volume.vert",
+                                        VOLUME_VERTEX,
                                         ShaderVulkan.Type.VERTEX,
                                         ShaderVulkan.Location.BUNDLED),
                                 new ShaderVulkan.ShaderModuleData(
@@ -1526,7 +1559,7 @@ public class VulkanInstance {
                 new ShaderVulkan(
                         List.of(
                                 new ShaderVulkan.ShaderModuleData(
-                                        "shaders/volume.vert",
+                                        VOLUME_VERTEX,
                                         ShaderVulkan.Type.VERTEX,
                                         ShaderVulkan.Location.BUNDLED),
                                 new ShaderVulkan.ShaderModuleData(
@@ -1601,9 +1634,7 @@ public class VulkanInstance {
                         ShaderVulkan.Location.BUNDLED));
         shaderModuleDataList.add(
                 new ShaderVulkan.ShaderModuleData(
-                        "shaders/scene.frag",
-                        ShaderVulkan.Type.FRAGMENT,
-                        ShaderVulkan.Location.BUNDLED));
+                        SCENE_FRAGMENT, ShaderVulkan.Type.FRAGMENT, ShaderVulkan.Location.BUNDLED));
         var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
 
         shaderMap.addShader(RenderStage.Type.SCENE, shaderProgram);
@@ -1617,9 +1648,7 @@ public class VulkanInstance {
                         ShaderVulkan.Location.BUNDLED));
         bakedModules.add(
                 new ShaderVulkan.ShaderModuleData(
-                        "shaders/scene.frag",
-                        ShaderVulkan.Type.FRAGMENT,
-                        ShaderVulkan.Location.BUNDLED));
+                        SCENE_FRAGMENT, ShaderVulkan.Type.FRAGMENT, ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(RenderStage.Type.SCENE_BAKED, new ShaderVulkan(bakedModules, state));
 
         // Level of detail clusters too, textured by projection through TRIPLANAR
@@ -1631,9 +1660,7 @@ public class VulkanInstance {
                         ShaderVulkan.Location.BUNDLED));
         lodModules.add(
                 new ShaderVulkan.ShaderModuleData(
-                        "shaders/scene.frag",
-                        ShaderVulkan.Type.FRAGMENT,
-                        ShaderVulkan.Location.BUNDLED));
+                        SCENE_FRAGMENT, ShaderVulkan.Type.FRAGMENT, ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(RenderStage.Type.SCENE_LOD, new ShaderVulkan(lodModules, state));
 
         // Coverage volumes, walked from their bricks' boxes
@@ -1659,9 +1686,7 @@ public class VulkanInstance {
                         ShaderVulkan.Location.BUNDLED));
         skinnedModules.add(
                 new ShaderVulkan.ShaderModuleData(
-                        "shaders/scene.frag",
-                        ShaderVulkan.Type.FRAGMENT,
-                        ShaderVulkan.Location.BUNDLED));
+                        SCENE_FRAGMENT, ShaderVulkan.Type.FRAGMENT, ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(
                 RenderStage.Type.SCENE_SKINNED, new ShaderVulkan(skinnedModules, state));
     }
@@ -1722,7 +1747,7 @@ public class VulkanInstance {
                         ShaderVulkan.Location.BUNDLED));
         lodCutoutModules.add(
                 new ShaderVulkan.ShaderModuleData(
-                        "shaders/shadow_cutout.frag",
+                        SHADOW_CUTOUT_FRAGMENT,
                         ShaderVulkan.Type.FRAGMENT,
                         ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(
@@ -1747,7 +1772,7 @@ public class VulkanInstance {
         List<ShaderVulkan.ShaderModuleData> brickModules = new ArrayList<>();
         brickModules.add(
                 new ShaderVulkan.ShaderModuleData(
-                        "shaders/shadow_brick.vert",
+                        SHADOW_BRICK_VERTEX,
                         ShaderVulkan.Type.VERTEX,
                         ShaderVulkan.Location.BUNDLED));
         brickModules.add(
@@ -1775,12 +1800,12 @@ public class VulkanInstance {
         List<ShaderVulkan.ShaderModuleData> cutoutModules = new ArrayList<>();
         cutoutModules.add(
                 new ShaderVulkan.ShaderModuleData(
-                        "shaders/shadow_cutout.vert",
+                        SHADOW_CUTOUT_VERTEX,
                         ShaderVulkan.Type.VERTEX,
                         ShaderVulkan.Location.BUNDLED));
         cutoutModules.add(
                 new ShaderVulkan.ShaderModuleData(
-                        "shaders/shadow_cutout.frag",
+                        SHADOW_CUTOUT_FRAGMENT,
                         ShaderVulkan.Type.FRAGMENT,
                         ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(RenderStage.Type.SHADOW_CUTOUT, new ShaderVulkan(cutoutModules, state));
@@ -1788,12 +1813,12 @@ public class VulkanInstance {
         List<ShaderVulkan.ShaderModuleData> bakedCutoutModules = new ArrayList<>();
         bakedCutoutModules.add(
                 new ShaderVulkan.ShaderModuleData(
-                        "shaders/shadow_baked_cutout.vert",
+                        SHADOW_BAKED_CUTOUT_VERTEX,
                         ShaderVulkan.Type.VERTEX,
                         ShaderVulkan.Location.BUNDLED));
         bakedCutoutModules.add(
                 new ShaderVulkan.ShaderModuleData(
-                        "shaders/shadow_cutout.frag",
+                        SHADOW_CUTOUT_FRAGMENT,
                         ShaderVulkan.Type.FRAGMENT,
                         ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(
@@ -1808,8 +1833,8 @@ public class VulkanInstance {
             translucentModules.add(
                     new ShaderVulkan.ShaderModuleData(
                             type == RenderStage.Type.TRANSLUCENT_SHADOW
-                                    ? "shaders/shadow_cutout.vert"
-                                    : "shaders/shadow_baked_cutout.vert",
+                                    ? SHADOW_CUTOUT_VERTEX
+                                    : SHADOW_BAKED_CUTOUT_VERTEX,
                             ShaderVulkan.Type.VERTEX,
                             ShaderVulkan.Location.BUNDLED));
             translucentModules.add(
@@ -1822,7 +1847,7 @@ public class VulkanInstance {
         List<ShaderVulkan.ShaderModuleData> translucentBrickModules = new ArrayList<>();
         translucentBrickModules.add(
                 new ShaderVulkan.ShaderModuleData(
-                        "shaders/shadow_brick.vert",
+                        SHADOW_BRICK_VERTEX,
                         ShaderVulkan.Type.VERTEX,
                         ShaderVulkan.Location.BUNDLED));
         translucentBrickModules.add(
@@ -1880,9 +1905,7 @@ public class VulkanInstance {
                         ShaderVulkan.Location.BUNDLED));
         shaderModuleDataList.add(
                 new ShaderVulkan.ShaderModuleData(
-                        "shaders/debug.frag",
-                        ShaderVulkan.Type.FRAGMENT,
-                        ShaderVulkan.Location.BUNDLED));
+                        DEBUG_FRAGMENT, ShaderVulkan.Type.FRAGMENT, ShaderVulkan.Location.BUNDLED));
         var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
 
         shaderMap.addShader(RenderStage.Type.DEBUG, shaderProgram);
@@ -1895,9 +1918,7 @@ public class VulkanInstance {
                         ShaderVulkan.Location.BUNDLED));
         normalsModules.add(
                 new ShaderVulkan.ShaderModuleData(
-                        "shaders/debug.frag",
-                        ShaderVulkan.Type.FRAGMENT,
-                        ShaderVulkan.Location.BUNDLED));
+                        DEBUG_FRAGMENT, ShaderVulkan.Type.FRAGMENT, ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(
                 RenderStage.Type.DEBUG_NORMALS, new ShaderVulkan(normalsModules, state));
     }

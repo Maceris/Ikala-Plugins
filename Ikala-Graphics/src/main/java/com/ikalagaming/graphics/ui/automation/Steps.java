@@ -617,11 +617,7 @@ public final class Steps {
                         ItemTarget.Lookup lookup = target.find(run);
                         if (lookup.item() == null) {
                             if (run.elapsed() >= wait) {
-                                throw new UiAutomationException(
-                                        "timed out after "
-                                                + seconds(wait)
-                                                + ": "
-                                                + lookup.problem());
+                                throw new UiAutomationException(timedOut(wait, lookup.problem()));
                             }
                             return false;
                         }
@@ -796,6 +792,17 @@ public final class Steps {
     }
 
     /**
+     * The error for a step that waited too long.
+     *
+     * @param millis How long it waited, in milliseconds.
+     * @param problem What it was still waiting for.
+     * @return The message.
+     */
+    private static String timedOut(long millis, String problem) {
+        return "timed out after " + seconds(millis) + ": " + problem;
+    }
+
+    /**
      * Find the shown node a selector picks out, scrolling a hidden one into view.
      *
      * @param run The run.
@@ -813,8 +820,7 @@ public final class Steps {
             scrollIntoView(lookup.hidden());
         }
         if (run.elapsed() >= timeout) {
-            throw new UiAutomationException(
-                    "timed out after " + seconds(timeout) + ": " + lookup.problem());
+            throw new UiAutomationException(timedOut(timeout, lookup.problem()));
         }
         return null;
     }
@@ -850,8 +856,7 @@ public final class Steps {
                 return true;
             }
             if (run.elapsed() >= timeout) {
-                throw new UiAutomationException(
-                        "timed out after " + seconds(timeout) + ": " + problem);
+                throw new UiAutomationException(timedOut(timeout, problem));
             }
             return false;
         }
@@ -1386,11 +1391,7 @@ public final class Steps {
                     ItemTarget.Lookup lookup = target.find(run);
                     if (lookup.item() == null) {
                         if (run.elapsed() >= timeout) {
-                            throw new UiAutomationException(
-                                    "timed out after "
-                                            + seconds(timeout)
-                                            + ": "
-                                            + lookup.problem());
+                            throw new UiAutomationException(timedOut(timeout, lookup.problem()));
                         }
                         return false;
                     }

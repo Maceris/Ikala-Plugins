@@ -47,6 +47,10 @@ import java.util.regex.Matcher;
  */
 @Slf4j
 public final class SpecInstance {
+
+    /** How the errors for a name the bindings lack end, after the quoted name. */
+    private static final String NOT_IN_BINDINGS = "' in the bindings";
+
     /** The manager it is shown through. */
     private final UiManager manager;
 
@@ -745,7 +749,7 @@ public final class SpecInstance {
                     split < 0 ? null : bindings.value(part.text().substring(0, split));
             if (observable == null) {
                 throw new SpecException(
-                        where + ": no observable '" + part.text() + "' in the bindings");
+                        where + ": no observable '" + part.text() + NOT_IN_BINDINGS);
             }
             Build[] holder = scope.build();
             scope.subscriptions()
@@ -800,7 +804,7 @@ public final class SpecInstance {
         }
         Consumer<SpecEvent> handler = bindings.handler(name);
         if (handler == null) {
-            throw new SpecException(where + ": no handler '" + name + "' in the bindings");
+            throw new SpecException(where + ": no handler '" + name + NOT_IN_BINDINGS);
         }
         Object item = scope.item();
         return (node, value) -> {
@@ -941,7 +945,7 @@ public final class SpecInstance {
             list = bindings.list(spec.list());
             if (list == null) {
                 throw new SpecException(
-                        spec.path() + ".list: no list '" + spec.list() + "' in the bindings");
+                        spec.path() + ".list: no list '" + spec.list() + NOT_IN_BINDINGS);
             }
         }
 
@@ -1066,7 +1070,7 @@ public final class SpecInstance {
             list = bindings.list(spec.list());
             if (list == null) {
                 throw new SpecException(
-                        spec.path() + ".list: no list '" + spec.list() + "' in the bindings");
+                        spec.path() + ".list: no list '" + spec.list() + NOT_IN_BINDINGS);
             }
         }
 

@@ -33,6 +33,9 @@ public final class DagBuilder {
     /** How far apart a projected triangle's texture repeats: once a unit, as a block's does. */
     private static final double PROJECTED_REPEAT = 1;
 
+    /** What the build's worker threads are called. */
+    private static final String BUILD_THREAD_NAME = "LOD build";
+
     /** The look of a material with no average known: mid grey, half rough, not metal. */
     private static final float[] UNKNOWN_LOOK = {0.18f, 0.18f, 0.18f, 0.5f, 0, 0.5f};
 
@@ -713,7 +716,7 @@ public final class DagBuilder {
         }
         DagBuilder builder = new DagBuilder(inputs.get(0).getOrigin().clone(), options);
         ExecutorService pool =
-                Executors.newFixedThreadPool(options.threads(), daemonThreads("LOD build"));
+                Executors.newFixedThreadPool(options.threads(), daemonThreads(BUILD_THREAD_NAME));
         try {
             builder.leaves(inputs, pool);
             builder.levels(pool);
@@ -746,7 +749,7 @@ public final class DagBuilder {
             int stopAt,
             @NonNull Options options) {
         final ExecutorService pool =
-                Executors.newFixedThreadPool(options.threads(), daemonThreads("LOD build"));
+                Executors.newFixedThreadPool(options.threads(), daemonThreads(BUILD_THREAD_NAME));
         try {
             return buildCell(sections, origin, cellMin, cellMax, stopAt, options, pool);
         } finally {
@@ -815,7 +818,7 @@ public final class DagBuilder {
             int stopAt,
             @NonNull Options options) {
         final ExecutorService pool =
-                Executors.newFixedThreadPool(options.threads(), daemonThreads("LOD build"));
+                Executors.newFixedThreadPool(options.threads(), daemonThreads(BUILD_THREAD_NAME));
         try {
             return buildParent(
                     tops, volumes, leafEdge, origin, cellMin, cellMax, stopAt, options, pool);

@@ -105,6 +105,12 @@ public final class GateBenchmark {
     /** The world's seed, fixed so every run measures the same world. */
     public static final long SEED = 20261010L;
 
+    /** The option that lights the scene with the physical sky. */
+    private static final String OPTION_PHYSICAL_SKY = "physicalSky";
+
+    /** The {@code .waterBody} value for the ocean, the default. */
+    private static final String WATER_BODY_OCEAN = "ocean";
+
     /** The most the GPU may take per frame to pass, in milliseconds: half a 60 Hz frame. */
     public static final double GPU_BUDGET_MS = 8;
 
@@ -881,7 +887,7 @@ public final class GateBenchmark {
     /** The {@code .waterBody} property's values, by what the ocean holds. */
     private static final Map<String, WaterBody> WATER_BODY_NAMES =
             Map.of(
-                    "ocean",
+                    WATER_BODY_OCEAN,
                     WaterBody.OCEAN,
                     "lake",
                     WaterBody.ofChlorophyll(1),
@@ -907,7 +913,7 @@ public final class GateBenchmark {
 
     /** The water bodies the debug window offers, in order, see {@link #setWaterBody}. */
     public static final List<String> WATER_BODY_CHOICES =
-            List.of("ocean", "lake", "green", "muddy");
+            List.of(WATER_BODY_OCEAN, "lake", "green", "muddy");
 
     /**
      * A place to look from in a preset's world, which the debug window can jump to.
@@ -950,11 +956,19 @@ public final class GateBenchmark {
 
     /** The physical sky, with height fog and haze, as the landscapes start. */
     private static final Map<String, String> HAZY =
-            Map.of("physicalSky", "true", "fog", "0.01,0.05,20", "haze", "true");
+            Map.of(OPTION_PHYSICAL_SKY, "true", "fog", "0.01,0.05,20", "haze", "true");
 
     /** {@link #HAZY}, with the world streamed around the camera. */
     private static final Map<String, String> HAZY_STREAMED =
-            Map.of("physicalSky", "true", "fog", "0.01,0.05,20", "haze", "true", "stream", "true");
+            Map.of(
+                    OPTION_PHYSICAL_SKY,
+                    "true",
+                    "fog",
+                    "0.01,0.05,20",
+                    "haze",
+                    "true",
+                    "stream",
+                    "true");
 
     /** The ready-made runs, in the order menus show them. */
     public static final List<Preset> PRESETS =
@@ -1871,7 +1885,7 @@ public final class GateBenchmark {
                                 night ? NIGHT_AMBIENT_INTENSITY : AMBIENT_INTENSITY));
         // The physical sky in place of the gray skybox, from the startup property
         previousPhysicalSky = scene.getPhysicalSky();
-        if (Boolean.parseBoolean(option("physicalSky"))) {
+        if (Boolean.parseBoolean(option(OPTION_PHYSICAL_SKY))) {
             scene.setPhysicalSky(new PhysicalSky());
         }
         previousAutoExposure = scene.isAutoExposure();
@@ -1898,7 +1912,7 @@ public final class GateBenchmark {
         if (world == null || world.getRecipe() != SyntheticTerrain.Recipe.ISLAND) {
             return;
         }
-        final String name = option("waterBody", "ocean");
+        final String name = option("waterBody", WATER_BODY_OCEAN);
         WaterBody body = WATER_BODY_NAMES.get(name.trim().toLowerCase(Locale.ROOT));
         if (body == null) {
             log.warn(

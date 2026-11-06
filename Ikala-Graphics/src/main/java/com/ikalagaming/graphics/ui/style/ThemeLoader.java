@@ -37,9 +37,30 @@ import java.util.Set;
  * </pre>
  */
 public final class ThemeLoader {
+    /** The top level key for the theme's name. */
+    public static final String KEY_NAME = "name";
+
+    /** The top level key for the theme's tokens. */
+    public static final String KEY_TOKENS = "tokens";
+
+    /** The top level key for the theme's variants, each a set of token overrides. */
+    public static final String KEY_VARIANTS = "variants";
+
+    /** The top level key for the default styles of each node type. */
+    public static final String KEY_TYPES = "types";
+
+    /** The top level key for the theme's style classes. */
+    public static final String KEY_CLASSES = "classes";
+
     /** The keys allowed at the top of a theme file. */
     private static final Set<String> TOP_LEVEL =
-            Set.of("name", "tokens", "variants", "types", "classes");
+            Set.of(KEY_NAME, KEY_TOKENS, KEY_VARIANTS, KEY_TYPES, KEY_CLASSES);
+
+    /** Between the parts of a path into the file, in messages. */
+    private static final String PATH_SEPARATOR = ".";
+
+    /** Between the tokens of a cycle, in messages. */
+    private static final String CYCLE_ARROW = " -> ";
 
     /** Path of the default theme in graphics' resources. */
     public static final String DEFAULT_THEME = "/ui/themes/default.yml";
@@ -106,24 +127,26 @@ public final class ThemeLoader {
                 throw new ThemeException(source + ": unknown key '" + key + "'");
             }
         }
-        Object name = root.getOrDefault("name", source);
+        Object name = root.getOrDefault(KEY_NAME, source);
         Theme.Builder builder = Theme.builder(String.valueOf(name));
 
         Map<String, Object> tokens = new HashMap<>(base.tokens());
         base.variants().values().forEach(tokens::putAll);
-        if (root.containsKey("tokens")) {
-            StyleParser.map(root.get("tokens"), "tokens")
+        if (root.containsKey(KEY_TOKENS)) {
+            StyleParser.map(root.get(KEY_TOKENS), KEY_TOKENS)
                     .forEach(
                             (tokenName, value) -> {
                                 builder.token(tokenName, value);
                                 tokens.put(tokenName, value);
                             });
         }
-        if (root.containsKey("variants")) {
-            StyleParser.map(root.get("variants"), "variants")
+        if (root.containsKey(KEY_VARIANTS)) {
+            StyleParser.map(root.get(KEY_VARIANTS), KEY_VARIANTS)
                     .forEach(
                             (variant, overrides) ->
-                                    StyleParser.map(overrides, "variants." + variant)
+                                    StyleParser.map(
+                                                    overrides,
+                                                    KEY_VARIANTS + PATH_SEPARATOR + variant)
                                             .forEach(
                                                     (tokenName, value) -> {
                                                         builder.variant(variant, tokenName, value);
@@ -131,24 +154,26 @@ public final class ThemeLoader {
                                                     }));
         }
         checkTokens(tokens);
-        if (root.containsKey("types")) {
-            StyleParser.map(root.get("types"), "types")
+        if (root.containsKey(KEY_TYPES)) {
+            StyleParser.map(root.get(KEY_TYPES), KEY_TYPES)
                     .forEach(
                             (type, style) ->
                                     builder.type(
                                             type,
                                             StyleParser.style(
-                                                    style, "types." + type, tokens::containsKey)));
+                                                    style,
+                                                    KEY_TYPES + PATH_SEPARATOR + type,
+                                                    tokens::containsKey)));
         }
-        if (root.containsKey("classes")) {
-            StyleParser.map(root.get("classes"), "classes")
+        if (root.containsKey(KEY_CLASSES)) {
+            StyleParser.map(root.get(KEY_CLASSES), KEY_CLASSES)
                     .forEach(
                             (className, style) ->
                                     builder.styleClass(
                                             className,
                                             StyleParser.style(
                                                     style,
-                                                    "classes." + className,
+                                                    KEY_CLASSES + PATH_SEPARATOR + className,
                                                     tokens::containsKey)));
         }
         return builder.build();
@@ -168,15 +193,17 @@ public final class ThemeLoader {
                     token != null;
                     token = StyleValues.tokenOf(value)) {
                 if (!tokens.containsKey(token.name())) {
-                    throw new ThemeException("tokens." + start + ": unknown token " + token);
+                    throw new ThemeException(
+                            KEY_TOKENS + PATH_SEPARATOR + start + ": unknown token " + token);
                 }
                 if (!seen.add(token.name())) {
                     throw new ThemeException(
-                            "tokens."
+                            KEY_TOKENS
+                                    + PATH_SEPARATOR
                                     + start
                                     + ": token cycle "
-                                    + String.join(" -> ", seen)
-                                    + " -> "
+                                    + String.join(CYCLE_ARROW, seen)
+                                    + CYCLE_ARROW
                                     + token.name());
                 }
                 value = tokens.get(token.name());

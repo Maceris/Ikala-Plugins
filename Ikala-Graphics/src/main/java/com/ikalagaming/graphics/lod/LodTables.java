@@ -25,6 +25,15 @@ final class LodTables {
     /** Percent in a whole. */
     private static final double PERCENT = 100;
 
+    /** How a share is shown, as a percentage. */
+    private static final String PERCENT_FORMAT = "%.1f%%";
+
+    /** The heading of the level column. */
+    private static final String LEVEL_COLUMN = "level";
+
+    /** The heading of the triangles column. */
+    private static final String TRIANGLES_COLUMN = "triangles";
+
     /**
      * One table.
      *
@@ -49,7 +58,7 @@ final class LodTables {
                         String.format("%,d", gpu.levelClusters()[level]),
                         String.format("%,d", gpu.levelTriangles()[level]),
                         String.format(
-                                "%.1f%%",
+                                PERCENT_FORMAT,
                                 PERCENT
                                         * gpu.levelTriangles()[level]
                                         / Math.max(1, gpu.selectedTriangles())),
@@ -58,7 +67,7 @@ final class LodTables {
         }
         return new Table(
                 "GPU cut by level",
-                new String[] {"level", "clusters", "triangles", "share", "in view"},
+                new String[] {LEVEL_COLUMN, "clusters", TRIANGLES_COLUMN, "share", "in view"},
                 rows);
     }
 
@@ -82,7 +91,7 @@ final class LodTables {
                         String.format("%.4f", l.maxQuadricError()),
                         spread(l.groupClusters()),
                         spread(l.groupTriangles()),
-                        String.format("%.1f%%", PERCENT * l.lockedShare()),
+                        String.format(PERCENT_FORMAT, PERCENT * l.lockedShare()),
                         String.format(
                                 "%.0f / %.1f / %.1f / %.1f",
                                 l.buildMillis()[0],
@@ -97,8 +106,8 @@ final class LodTables {
         return new Table(
                 "Building stopped: " + dag.getStopReason(),
                 new String[] {
-                    "level",
-                    "triangles",
+                    LEVEL_COLUMN,
+                    TRIANGLES_COLUMN,
                     "clusters",
                     "groups",
                     "halving",
@@ -147,8 +156,8 @@ final class LodTables {
                                 + " differs; unavoidable: the part one material per triangle"
                                 + " can't fix; assignment: the rest.",
                         new String[] {
-                            "level",
-                            "triangles",
+                            LEVEL_COLUMN,
+                            TRIANGLES_COLUMN,
                             "mismatch",
                             "unavoidable",
                             "assignment",
@@ -201,7 +210,7 @@ final class LodTables {
             int mapped,
             @NonNull String title) {
         final String[] headers = new String[materials.size() + 1];
-        headers[0] = "level";
+        headers[0] = LEVEL_COLUMN;
         int column = 1;
         for (int material : materials) {
             headers[column++] = materialName.apply(material);
@@ -250,7 +259,7 @@ final class LodTables {
                         + " in: from visible input to the nearest triangle its group made."
                         + " Under-bounded: groups farther than their stored error.",
                 new String[] {
-                    "level",
+                    LEVEL_COLUMN,
                     "out (mean / p95 / max)",
                     "in (mean / p95 / max)",
                     "max error",
@@ -301,7 +310,7 @@ final class LodTables {
      * @return The text.
      */
     private static String percent(double share) {
-        return String.format("%.1f%%", PERCENT * share);
+        return String.format(PERCENT_FORMAT, PERCENT * share);
     }
 
     /** Static helpers only. */

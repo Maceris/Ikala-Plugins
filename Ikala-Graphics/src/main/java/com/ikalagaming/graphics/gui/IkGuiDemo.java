@@ -17,6 +17,10 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.function.IntFunction;
 
+/** The demo window, a port of Dear ImGui's imgui_demo.cpp. */
+// The labels and IDs repeat as Dear ImGui's demo repeats them; constants would only make the
+// port harder to compare with it
+@SuppressWarnings("java:S1192")
 class IkGuiDemo {
 
     // Window options

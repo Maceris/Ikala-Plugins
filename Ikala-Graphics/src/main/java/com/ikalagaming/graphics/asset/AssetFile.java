@@ -22,6 +22,10 @@ import java.util.Optional;
  * Readers ask for the tags they understand and ignore the rest.
  */
 public final class AssetFile {
+
+    /** What a failure to read a file says, before the file. */
+    private static final String READ_FAILED = "Could not read ";
+
     /** The header. */
     private final AssetHeader header;
 
@@ -119,7 +123,7 @@ public final class AssetFile {
             }
             return read(file.flip(), known);
         } catch (IOException e) {
-            throw new UncheckedIOException("Could not read " + path, e);
+            throw new UncheckedIOException(READ_FAILED + path, e);
         }
     }
 
@@ -218,7 +222,7 @@ public final class AssetFile {
             }
             return places;
         } catch (IOException e) {
-            throw new UncheckedIOException("Could not read " + path, e);
+            throw new UncheckedIOException(READ_FAILED + path, e);
         }
     }
 
@@ -236,7 +240,7 @@ public final class AssetFile {
         try (FileChannel channel = FileChannel.open(path, StandardOpenOption.READ)) {
             return readAt(channel, offset, length, path).order(ByteOrder.LITTLE_ENDIAN);
         } catch (IOException e) {
-            throw new UncheckedIOException("Could not read " + path, e);
+            throw new UncheckedIOException(READ_FAILED + path, e);
         }
     }
 

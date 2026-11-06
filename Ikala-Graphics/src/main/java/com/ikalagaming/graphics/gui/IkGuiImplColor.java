@@ -39,6 +39,12 @@ class IkGuiImplColor {
     /** Drag and drop payload type for colors with alpha, as a float[4]. */
     static final String PAYLOAD_TYPE_COLOR_4F = "_COL4F";
 
+    /** The ID of a color widget's right click options popup. */
+    private static final String POPUP_CONTEXT = "context";
+
+    /** The ID of a color button's picker popup. */
+    private static final String POPUP_PICKER = "picker";
+
     private static final String[] COMPONENT_IDS = {"##X", "##Y", "##Z", "##W"};
 
     /** Short display, then long display for RGBA, then long display for HSVA. */
@@ -222,7 +228,8 @@ class IkGuiImplColor {
                                     dragFlags);
                 }
                 if ((flags & ColorEditFlags.NO_OPTIONS) == 0) {
-                    IkGuiImplPopups.openPopupOnItemClick("context", PopupFlags.MOUSE_BUTTON_RIGHT);
+                    IkGuiImplPopups.openPopupOnItemClick(
+                            POPUP_CONTEXT, PopupFlags.MOUSE_BUTTON_RIGHT);
                 }
             }
         } else if ((flags & ColorEditFlags.DISPLAY_HEX) != 0
@@ -255,7 +262,7 @@ class IkGuiImplColor {
                 parseHexColor(buffer.get(), alpha, i);
             }
             if ((flags & ColorEditFlags.NO_OPTIONS) == 0) {
-                IkGuiImplPopups.openPopupOnItemClick("context", PopupFlags.MOUSE_BUTTON_RIGHT);
+                IkGuiImplPopups.openPopupOnItemClick(POPUP_CONTEXT, PopupFlags.MOUSE_BUTTON_RIGHT);
             }
         }
 
@@ -273,7 +280,7 @@ class IkGuiImplColor {
                     && (flags & ColorEditFlags.NO_PICKER) == 0) {
                 // Store the current color and open a picker
                 System.arraycopy(previewColor, 0, context.colorPickerReference, 0, 4);
-                IkGuiImplPopups.openPopup("picker", PopupFlags.NONE);
+                IkGuiImplPopups.openPopup(POPUP_PICKER, PopupFlags.NONE);
                 final RectFloat buttonRect = context.lastItemData.rect;
                 IkGuiImplWindows.setNextWindowPos(
                         buttonRect.getLeft(),
@@ -283,10 +290,10 @@ class IkGuiImplColor {
                         0.0f);
             }
             if ((flags & ColorEditFlags.NO_OPTIONS) == 0) {
-                IkGuiImplPopups.openPopupOnItemClick("context", PopupFlags.MOUSE_BUTTON_RIGHT);
+                IkGuiImplPopups.openPopupOnItemClick(POPUP_CONTEXT, PopupFlags.MOUSE_BUTTON_RIGHT);
             }
 
-            if (IkGuiImplPopups.beginPopup("picker", WindowFlags.NONE)) {
+            if (IkGuiImplPopups.beginPopup(POPUP_PICKER, WindowFlags.NONE)) {
                 if (context.windowCurrent.beginCount == 1) {
                     pickerActiveWindow = context.windowCurrent;
                     if (!displayedLabel.isEmpty()) {
@@ -630,7 +637,7 @@ class IkGuiImplColor {
                 }
             }
             if ((flags & ColorEditFlags.NO_OPTIONS) == 0) {
-                IkGuiImplPopups.openPopupOnItemClick("context", PopupFlags.MOUSE_BUTTON_RIGHT);
+                IkGuiImplPopups.openPopupOnItemClick(POPUP_CONTEXT, PopupFlags.MOUSE_BUTTON_RIGHT);
             }
         } else if ((flags & ColorEditFlags.PICKER_HUE_BAR) != 0) {
             // SV rectangle logic
@@ -645,7 +652,7 @@ class IkGuiImplColor {
                 valueChangedSV = true;
             }
             if ((flags & ColorEditFlags.NO_OPTIONS) == 0) {
-                IkGuiImplPopups.openPopupOnItemClick("context", PopupFlags.MOUSE_BUTTON_RIGHT);
+                IkGuiImplPopups.openPopupOnItemClick(POPUP_CONTEXT, PopupFlags.MOUSE_BUTTON_RIGHT);
             }
 
             // Hue bar logic
@@ -1335,7 +1342,7 @@ class IkGuiImplColor {
         final boolean allowOptionInputs = (colorEditFlags & ColorEditFlags.DISPLAY_MASK) == 0;
         final boolean allowOptionDataType = (colorEditFlags & ColorEditFlags.DATA_TYPE_MASK) == 0;
         if ((!allowOptionInputs && !allowOptionDataType)
-                || !IkGuiImplPopups.beginPopup("context", WindowFlags.NONE)) {
+                || !IkGuiImplPopups.beginPopup(POPUP_CONTEXT, WindowFlags.NONE)) {
             return;
         }
 
@@ -1422,7 +1429,7 @@ class IkGuiImplColor {
                 (colorEditFlags & ColorEditFlags.NO_ALPHA) == 0
                         && (colorEditFlags & ColorEditFlags.ALPHA_BAR) == 0;
         if ((!allowOptionPicker && !allowOptionAlphaBar)
-                || !IkGuiImplPopups.beginPopup("context", WindowFlags.NONE)) {
+                || !IkGuiImplPopups.beginPopup(POPUP_CONTEXT, WindowFlags.NONE)) {
             return;
         }
 

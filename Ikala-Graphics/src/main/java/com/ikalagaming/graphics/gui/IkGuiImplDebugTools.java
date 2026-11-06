@@ -58,6 +58,9 @@ class IkGuiImplDebugTools {
     /** The color used to highlight located items. */
     private static final int DEBUG_LOCATE_ITEM_COLOR = Color.rgba(0, 255, 0, 255);
 
+    /** How IDs are shown. */
+    private static final String ID_FORMAT = "0x%08X";
+
     /** Finds IDs in log lines, which are written as 0x followed by 8 hex digits. */
     private static final Pattern ID_PATTERN =
             Pattern.compile("0[xX]([0-9a-fA-F]{8})(?![0-9a-fA-F])");
@@ -1077,7 +1080,7 @@ class IkGuiImplDebugTools {
         tool.lastActiveFrame = context.frameCount;
         final String resultPath =
                 debugItemPathQueryGetResultAsPath(query, tool.optHexEncodeNonAsciiChars.get());
-        IkGuiImplText.text(String.format("0x%08X", query.mainID));
+        IkGuiImplText.text(String.format(ID_FORMAT, query.mainID));
         IkGuiImplLayout.sameLine(0.0f, -1.0f);
         IkGuiImplMetrics.metricsHelpMarker(
                 "Hover an item with the mouse to display elements of the ID Stack leading to the"
@@ -1123,11 +1126,11 @@ class IkGuiImplDebugTools {
                 final DebugItemPathQuery.StackLevelInfo info = query.results.get(n);
                 IkGuiImplTables.tableNextColumn();
                 IkGuiImplText.text(
-                        String.format("0x%08X", n > 0 ? query.results.get(n - 1).id : 0));
+                        String.format(ID_FORMAT, n > 0 ? query.results.get(n - 1).id : 0));
                 IkGuiImplTables.tableNextColumn();
                 IkGuiImplText.textUnformatted(debugItemPathQueryFormatLevelInfo(query, n, true));
                 IkGuiImplTables.tableNextColumn();
-                IkGuiImplText.text(String.format("0x%08X", info.id));
+                IkGuiImplText.text(String.format(ID_FORMAT, info.id));
                 if (n == query.results.size() - 1) {
                     IkGuiImplTables.tableSetBackgroundColor(
                             TableBackgroundTarget.CELL_BACKGROUND,

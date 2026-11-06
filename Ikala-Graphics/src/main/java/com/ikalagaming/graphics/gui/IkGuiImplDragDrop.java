@@ -27,6 +27,10 @@ class IkGuiImplDragDrop {
     /** Internal payload type for docking windows, the payload is a {@link Window}. */
     static final String PAYLOAD_TYPE_WINDOW = "_IMWINDOW";
 
+    /** The error for starting a drag and drop source or target inside the other. */
+    private static final String NESTED_ERROR =
+            "Can't nest beginDragDropSource() and beginDragDropTarget()";
+
     /**
      * Time in milliseconds for drag-hold to activate items accepting the
      * ButtonFlags.INTERNAL_PRESSED_ON_DRAG_DROP_HOLD button behavior.
@@ -237,8 +241,7 @@ class IkGuiImplDragDrop {
         }
 
         if (context.dragDropWithinTarget) {
-            IkGuiImplDebugTools.reportError(
-                    log, "Can't nest beginDragDropSource() and beginDragDropTarget()");
+            IkGuiImplDebugTools.reportError(log, NESTED_ERROR);
             return false;
         }
         if (!sourceDragActive) {
@@ -322,8 +325,7 @@ class IkGuiImplDragDrop {
         }
 
         if (context.dragDropWithinTarget || context.dragDropWithinSource) {
-            IkGuiImplDebugTools.reportError(
-                    log, "Can't nest beginDragDropSource() and beginDragDropTarget()");
+            IkGuiImplDebugTools.reportError(log, NESTED_ERROR);
             return false;
         }
         context.dragDropTargetRect.set(displayRect);
@@ -370,8 +372,7 @@ class IkGuiImplDragDrop {
         }
 
         if (context.dragDropWithinTarget || context.dragDropWithinSource) {
-            IkGuiImplDebugTools.reportError(
-                    log, "Can't nest beginDragDropSource() and beginDragDropTarget()");
+            IkGuiImplDebugTools.reportError(log, NESTED_ERROR);
             return false;
         }
         context.dragDropTargetRect.set(bb);
@@ -412,8 +413,7 @@ class IkGuiImplDragDrop {
         }
 
         if (context.dragDropWithinTarget || context.dragDropWithinSource) {
-            IkGuiImplDebugTools.reportError(
-                    log, "Can't nest beginDragDropSource() and beginDragDropTarget()");
+            IkGuiImplDebugTools.reportError(log, NESTED_ERROR);
             return false;
         }
         context.dragDropTargetRect.set(rect);

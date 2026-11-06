@@ -35,6 +35,9 @@ public final class Fidelity {
     /** Each triangle is cut into this many rows of smaller ones, one sample in each. */
     private static final int SUBDIVISIONS = 4;
 
+    /** The heading of the tables' level column. */
+    private static final String LEVEL_COLUMN = "level";
+
     /** Samples per triangle. */
     public static final int SAMPLES = SUBDIVISIONS * SUBDIVISIONS;
 
@@ -923,7 +926,7 @@ public final class Fidelity {
                                 + " assignment over all area, then over area seen from above:%n"
                                 + "%5s %9s %26s %26s%n",
                         SAMPLES,
-                        "level",
+                        LEVEL_COLUMN,
                         "tris",
                         "all (mis/unavoid/assign)",
                         "above (mis/unavoid/assign)"));
@@ -949,7 +952,7 @@ public final class Fidelity {
                         "Distance to the input (out: from the level; in: from visible input), mean"
                                 + "/p95/max, against the stored error:%n"
                                 + "%5s %24s %24s %9s %15s %7s%n",
-                        "level", "out", "in", "error", "under-bounded", "worst"));
+                        LEVEL_COLUMN, "out", "in", "error", "under-bounded", "worst"));
         for (Level l : levels) {
             final Distance d = l.distance();
             out.append(
@@ -997,7 +1000,7 @@ public final class Fidelity {
             @NonNull IntFunction<String> materialName,
             int assigned) {
         out.append(title).append('\n');
-        out.append(String.format("%5s", "level"));
+        out.append(String.format("%5s", LEVEL_COLUMN));
         for (int material : materials) {
             out.append(String.format(" %15s", materialName.apply(material)));
         }

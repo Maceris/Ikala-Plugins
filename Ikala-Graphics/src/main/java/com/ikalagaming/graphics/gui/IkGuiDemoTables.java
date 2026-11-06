@@ -12,6 +12,9 @@ import java.util.Comparator;
 import java.util.List;
 
 /** The "Tables & Columns" section of the demo window. */
+// The labels and IDs repeat as Dear ImGui's demo repeats them; constants would only make the
+// port harder to compare with it
+@SuppressWarnings("java:S1192")
 class IkGuiDemoTables {
     /**
      * Whether to open (1) or close (0) every section this frame, or -1 to leave them as they are.

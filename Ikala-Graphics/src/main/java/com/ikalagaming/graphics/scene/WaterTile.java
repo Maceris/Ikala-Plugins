@@ -46,6 +46,9 @@ public record WaterTile(
     /** The most cells a tile has along each side. */
     public static final int MAX_CELLS = 64;
 
+    /** How the errors for arrays of the wrong length start. */
+    private static final String NEEDS = "A water tile needs ";
+
     /**
      * Check the sizes and copy the arrays in.
      *
@@ -68,12 +71,11 @@ public record WaterTile(
         }
         final int corners = (cellsX + 1) * (cellsZ + 1);
         if (heights.length != corners) {
-            throw new IllegalArgumentException(
-                    "A water tile needs " + corners + " heights, not " + heights.length);
+            throw new IllegalArgumentException(NEEDS + corners + " heights, not " + heights.length);
         }
         if (bottoms != null && bottoms.length != corners) {
             throw new IllegalArgumentException(
-                    "A water tile needs " + corners + " bottom heights, not " + bottoms.length);
+                    NEEDS + corners + " bottom heights, not " + bottoms.length);
         }
         if (mask != null && mask.length != cellsX * cellsZ) {
             throw new IllegalArgumentException(
@@ -81,7 +83,7 @@ public record WaterTile(
         }
         if (flows != null && flows.length != 2 * corners) {
             throw new IllegalArgumentException(
-                    "A water tile needs " + 2 * corners + " flow values, not " + flows.length);
+                    NEEDS + 2 * corners + " flow values, not " + flows.length);
         }
         origin = new Vector3d(origin);
         heights = heights.clone();

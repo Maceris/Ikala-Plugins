@@ -45,6 +45,18 @@ import java.util.function.BiConsumer;
 @Slf4j
 public final class NodeTypes {
 
+    /** The property for a node's text. */
+    public static final String PROPERTY_TEXT = "text";
+
+    /** The property for what a button or selectable does when clicked, a handler. */
+    public static final String PROPERTY_ON_CLICK = "onClick";
+
+    /** The property for whether a container draws a border. */
+    public static final String PROPERTY_BORDER = "border";
+
+    /** The property for a grid's cell size, one or two lengths. */
+    public static final String PROPERTY_CELL = "cell";
+
     /**
      * A registered type.
      *
@@ -61,20 +73,20 @@ public final class NodeTypes {
         builtIn("column", (id, p) -> flex(new Column(id), p));
         builtIn("row", (id, p) -> flex(new Row(id), p));
         builtIn("overlay", (id, p) -> new Overlay(id));
-        builtIn("scroll", (id, p) -> new Scroll(id).border(p.bool("border", false)));
+        builtIn("scroll", (id, p) -> new Scroll(id).border(p.bool(PROPERTY_BORDER, false)));
         builtIn(
                 "label",
                 (id, p) -> {
                     Label label = new Label(id, "");
-                    p.text("text", "", label::text);
+                    p.text(PROPERTY_TEXT, "", label::text);
                     return label;
                 });
         builtIn(
                 "button",
                 (id, p) -> {
                     Button button = new Button(id, "");
-                    p.text("text", "", button::text);
-                    button.onClick(p.handler("onClick", button));
+                    p.text(PROPERTY_TEXT, "", button::text);
+                    button.onClick(p.handler(PROPERTY_ON_CLICK, button));
                     button.autofocus(p.bool("autofocus", false));
                     return button;
                 });
@@ -82,16 +94,16 @@ public final class NodeTypes {
                 "selectable",
                 (id, p) -> {
                     Selectable selectable = new Selectable(id, "");
-                    p.text("text", "", selectable::text);
+                    p.text(PROPERTY_TEXT, "", selectable::text);
                     p.flag("selected", false, selectable::selected);
-                    selectable.onClick(p.handler("onClick", selectable));
+                    selectable.onClick(p.handler(PROPERTY_ON_CLICK, selectable));
                     return selectable;
                 });
         builtIn(
                 "text-input",
                 (id, p) -> {
                     TextInput input = new TextInput(id, "");
-                    p.text("text", "", input::text);
+                    p.text(PROPERTY_TEXT, "", input::text);
                     input.onSubmit(p.valueHandler("onSubmit", input));
                     return input;
                 });
@@ -110,9 +122,10 @@ public final class NodeTypes {
      */
     private static Grid grid(String id, SpecProperties properties) {
         Grid grid = new Grid(id).columns(columns(properties));
-        if (properties.has("cell")) {
+        if (properties.has(PROPERTY_CELL)) {
             Length[] cell =
-                    SpecValues.lengths(properties.raw("cell"), 2, properties.path() + ".cell");
+                    SpecValues.lengths(
+                            properties.raw(PROPERTY_CELL), 2, properties.path() + ".cell");
             grid.cellSize(cell[0], cell[1]);
         }
         Length gap = properties.length("gap", StyleKey.GAP);
@@ -139,16 +152,17 @@ public final class NodeTypes {
      */
     private static VirtualGrid virtualGrid(String id, SpecProperties properties) {
         VirtualGrid grid = new VirtualGrid(id).columns(columns(properties));
-        if (properties.has("cell")) {
+        if (properties.has(PROPERTY_CELL)) {
             Length[] cell =
-                    SpecValues.lengths(properties.raw("cell"), 2, properties.path() + ".cell");
+                    SpecValues.lengths(
+                            properties.raw(PROPERTY_CELL), 2, properties.path() + ".cell");
             grid.cellSize(cell[0], cell[1]);
         }
         Length gap = properties.length("gap", null);
         if (gap != null) {
             grid.gap(gap);
         }
-        grid.border(properties.bool("border", false));
+        grid.border(properties.bool(PROPERTY_BORDER, false));
         return grid;
     }
 
@@ -189,7 +203,7 @@ public final class NodeTypes {
         }
         canvas.zoom(properties.number("zoom", 1));
         canvas.draggable(properties.bool("draggable", false));
-        canvas.border(properties.bool("border", false));
+        canvas.border(properties.bool(PROPERTY_BORDER, false));
         canvas.highlight(properties.choice("highlight", Highlight.class, Highlight.EDGES));
         Length spacing = properties.length("gridSpacing", null);
         if (spacing != null) {
@@ -307,7 +321,7 @@ public final class NodeTypes {
                     }
                     node.icon((TextureHandle) value);
                 });
-        node.onActivate(properties.handler("onClick", node));
+        node.onActivate(properties.handler(PROPERTY_ON_CLICK, node));
         node.autofocus(properties.bool("autofocus", false));
         return node;
     }

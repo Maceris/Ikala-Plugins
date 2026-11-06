@@ -35,6 +35,27 @@ public final class ContainerShowcase {
     /** The ID of the surface. */
     public static final String SURFACE_ID = "graphics/ui-containers";
 
+    /** The style class of finished links and nodes. */
+    public static final String CLASS_DONE = "showcase-done";
+
+    /** The style class of links and nodes not yet reachable. */
+    public static final String CLASS_LOCKED = "showcase-locked";
+
+    /** The style class of links drawn with an arrow. */
+    public static final String CLASS_ARROW = "showcase-arrow";
+
+    /** The quest chain's first node. */
+    private static final String NODE_START = "start";
+
+    /** The quest chain's gathering node. */
+    private static final String NODE_GATHER = "gather";
+
+    /** The quest chain's crafting node. */
+    private static final String NODE_CRAFT = "craft";
+
+    /** The quest chain's delivery node. */
+    private static final String NODE_DELIVER = "deliver";
+
     /** Cells in the virtual grid. */
     private static final int VIRTUAL_CELLS = 100_000;
 
@@ -65,7 +86,7 @@ public final class ContainerShowcase {
     public static Theme styles() {
         return Theme.builder("container-showcase")
                 .styleClass(
-                        "showcase-locked",
+                        CLASS_LOCKED,
                         Style.builder()
                                 .set(StyleKey.LINE, LOCKED_LINE)
                                 .set(StyleKey.DASH, List.of(6f, 4f))
@@ -73,7 +94,7 @@ public final class ContainerShowcase {
                                 .set(StyleKey.BACKGROUND, LOCKED_BACKGROUND)
                                 .build())
                 .styleClass(
-                        "showcase-done",
+                        CLASS_DONE,
                         Style.builder()
                                 .set(StyleKey.LINE, DONE)
                                 .set(StyleKey.STROKES, 3f)
@@ -87,7 +108,7 @@ public final class ContainerShowcase {
                                         Style.builder().set(StyleKey.LINE, DONE_RELATED).build())
                                 .build())
                 .styleClass(
-                        "showcase-arrow",
+                        CLASS_ARROW,
                         Style.builder()
                                 .set(StyleKey.ARROW, "end")
                                 .set(StyleKey.CORNER, "round 8")
@@ -174,17 +195,17 @@ public final class ContainerShowcase {
                         .gridSpacing(Length.u(40))
                         .highlight(Highlight.ANCESTORS);
         canvas.add(
-                perk("root", 140, 0, "1/1", "showcase-done"),
-                perk("fire", 20, 110, "3/3", "showcase-done"),
+                perk("root", 140, 0, "1/1", CLASS_DONE),
+                perk("fire", 20, 110, "3/3", CLASS_DONE),
                 perk("ice", 140, 110, "1/3", null),
-                perk("storm", 260, 110, "0/3", "showcase-locked"),
-                perk("inferno", 20, 220, "2/2", "showcase-done"),
-                perk("glacier", 140, 220, "0/2", "showcase-locked"));
-        link(canvas, "root", "fire", "showcase-done");
+                perk("storm", 260, 110, "0/3", CLASS_LOCKED),
+                perk("inferno", 20, 220, "2/2", CLASS_DONE),
+                perk("glacier", 140, 220, "0/2", CLASS_LOCKED));
+        link(canvas, "root", "fire", CLASS_DONE);
         link(canvas, "root", "ice", null);
-        link(canvas, "root", "storm", "showcase-locked");
-        link(canvas, "fire", "inferno", "showcase-done");
-        link(canvas, "ice", "glacier", "showcase-locked");
+        link(canvas, "root", "storm", CLASS_LOCKED);
+        link(canvas, "fire", "inferno", CLASS_DONE);
+        link(canvas, "ice", "glacier", CLASS_LOCKED);
         return canvas;
     }
 
@@ -237,26 +258,24 @@ public final class ContainerShowcase {
                         .border(true)
                         .draggable(true)
                         .highlight(Highlight.DESCENDANTS);
-        String[] names = {"start", "gather", "craft", "deliver", "bonus"};
+        String[] names = {NODE_START, NODE_GATHER, NODE_CRAFT, NODE_DELIVER, "bonus"};
         float[][] places = {{0, 60}, {110, 0}, {110, 120}, {230, 60}, {340, 60}};
         for (int i = 0; i < names.length; ++i) {
             GraphNode node = new GraphNode(names[i]).shape(GraphNode.Shape.HEXAGON).label(names[i]);
             node.width(Sizing.fixed(72)).height(Sizing.fixed(40));
             node.position(places[i][0], places[i][1]);
             if (i < 2) {
-                node.classes("showcase-done");
+                node.classes(CLASS_DONE);
             }
             canvas.add(node);
         }
-        canvas.connect("start", "gather")
-                .route(Route.CURVE)
-                .classes("showcase-done", "showcase-arrow");
-        canvas.connect("start", "craft").route(Route.CURVE).classes("showcase-arrow");
-        canvas.connect("gather", "deliver").route(Route.STRAIGHT).classes("showcase-arrow");
-        canvas.connect("craft", "deliver").route(Route.STRAIGHT).classes("showcase-arrow");
-        canvas.connect("deliver", "bonus")
+        canvas.connect(NODE_START, NODE_GATHER).route(Route.CURVE).classes(CLASS_DONE, CLASS_ARROW);
+        canvas.connect(NODE_START, NODE_CRAFT).route(Route.CURVE).classes(CLASS_ARROW);
+        canvas.connect(NODE_GATHER, NODE_DELIVER).route(Route.STRAIGHT).classes(CLASS_ARROW);
+        canvas.connect(NODE_CRAFT, NODE_DELIVER).route(Route.STRAIGHT).classes(CLASS_ARROW);
+        canvas.connect(NODE_DELIVER, "bonus")
                 .route(Route.ORTHOGONAL)
-                .classes("showcase-locked", "showcase-arrow");
+                .classes(CLASS_LOCKED, CLASS_ARROW);
         return canvas;
     }
 

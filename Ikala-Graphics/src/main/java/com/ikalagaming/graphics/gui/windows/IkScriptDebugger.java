@@ -53,6 +53,12 @@ public class IkScriptDebugger extends GuiWindow {
     /** The name scripts get when they are run in the background from the debugger. */
     private static final String BACKGROUND_SCRIPT_NAME = "Script Debugger";
 
+    /** The source tab's name. */
+    private static final String TAB_SOURCE = "Source";
+
+    /** The editor tab's name. */
+    private static final String TAB_EDITOR = "Editor";
+
     /** The most instructions to run per frame when continuing, so infinite loops don't hang. */
     private static final int MAX_INSTRUCTIONS_PER_FRAME = 1000;
 
@@ -392,13 +398,13 @@ public class IkScriptDebugger extends GuiWindow {
         if (!IkGui.beginTabBar("SourceTabs")) {
             return;
         }
-        if (IkGui.beginTabItem("Editor", tabFlags("Editor"))) {
+        if (IkGui.beginTabItem(TAB_EDITOR, tabFlags(TAB_EDITOR))) {
             drawEditor();
             IkGui.endTabItem();
         }
         IkGui.setItemTooltip("Edit the script");
         IkGui.beginDisabled(runtime == null);
-        if (IkGui.beginTabItem("Source", tabFlags("Source"))) {
+        if (IkGui.beginTabItem(TAB_SOURCE, tabFlags(TAB_SOURCE))) {
             if (runtime != null) {
                 drawSourceView();
             }
@@ -877,9 +883,9 @@ public class IkScriptDebugger extends GuiWindow {
         if (compileResult.succeeded()) {
             compiledSource = text;
             compiledLines = List.of(text.split("\n", -1));
-            tabToSelect = "Source";
+            tabToSelect = TAB_SOURCE;
         } else {
-            tabToSelect = "Editor";
+            tabToSelect = TAB_EDITOR;
         }
         restart();
     }

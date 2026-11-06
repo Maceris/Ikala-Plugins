@@ -22,6 +22,9 @@ import java.util.function.Consumer;
  * The example apps of the demo, which are accessible from the "Examples" menu of the demo window.
  * This is a port of the example apps in Dear ImGui's imgui_demo.cpp.
  */
+// The labels and IDs repeat as Dear ImGui's demo repeats them; constants would only make the
+// port harder to compare with it
+@SuppressWarnings("java:S1192")
 final class IkGuiDemoExamples {
     // Examples apps (accessible from the "Examples" menu)
     static final IkBoolean showMainMenuBar = new IkBoolean(false);

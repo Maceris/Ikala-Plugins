@@ -9,6 +9,9 @@ package com.ikalagaming.graphics;
  */
 public class ShaderUniforms {
 
+    /** The name of the color field, which several structs share. */
+    private static final String COLOR_FIELD = "color";
+
     /**
      * Post-processing filter variables.
      *
@@ -55,7 +58,7 @@ public class ShaderUniforms {
          */
         public static class AmbientLight {
             /** The color of the light. */
-            public static final String COLOR = "color";
+            public static final String COLOR = COLOR_FIELD;
 
             /** The intensity, measured in candela per square meter (cd/m^2). */
             public static final String INTENSITY = "intensity";
@@ -87,7 +90,7 @@ public class ShaderUniforms {
          */
         public static class DirectionalLight {
             /** The color of the light. */
-            public static final String COLOR = "color";
+            public static final String COLOR = COLOR_FIELD;
 
             /** The direction that the light is coming from. */
             public static final String DIRECTION = "direction";
@@ -106,7 +109,7 @@ public class ShaderUniforms {
          */
         public static class Fog {
             /** The base color of the fog. */
-            public static final String COLOR = "color";
+            public static final String COLOR = COLOR_FIELD;
 
             /** How dense the fog is. */
             public static final String DENSITY = "density";

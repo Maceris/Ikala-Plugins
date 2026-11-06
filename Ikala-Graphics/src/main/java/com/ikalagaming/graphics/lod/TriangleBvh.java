@@ -18,6 +18,9 @@ final class TriangleBvh {
     /** Coordinates in a position. */
     private static final int AXES = 3;
 
+    /** The error when a search runs out of stack, which a tree this builder makes can't do. */
+    private static final String TOO_DEEP = "The tree is too deep to search";
+
     /** Values in a triangle's corners. */
     private static final int TRIANGLE_VALUES = 9;
 
@@ -226,7 +229,7 @@ final class TriangleBvh {
             }
             if (count[node] == 0) {
                 if (top + 2 > stack.length) {
-                    throw new IllegalStateException("The tree is too deep to search");
+                    throw new IllegalStateException(TOO_DEEP);
                 }
                 stack[top++] = first[node];
                 stack[top++] = first[node] + 1;
@@ -269,7 +272,7 @@ final class TriangleBvh {
             }
             if (count[node] == 0) {
                 if (top + 2 > stack.length) {
-                    throw new IllegalStateException("The tree is too deep to search");
+                    throw new IllegalStateException(TOO_DEEP);
                 }
                 stack[top++] = first[node];
                 stack[top++] = first[node] + 1;
@@ -393,7 +396,7 @@ final class TriangleBvh {
             }
             if (count[node] == 0) {
                 if (top + 2 > stack.length) {
-                    throw new IllegalStateException("The tree is too deep to search");
+                    throw new IllegalStateException(TOO_DEEP);
                 }
                 final int left = first[node];
                 final double toLeft = boxDistanceSquared(left, point);

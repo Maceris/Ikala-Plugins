@@ -24,6 +24,9 @@ import java.util.*;
 @Slf4j
 public class DrawList {
 
+    /** The warning for a line thickness that is zero, negative or not a number. */
+    private static final String INVALID_THICKNESS = "Invalid thickness {}";
+
     @Getter
     @AllArgsConstructor
     public enum ElementType {
@@ -784,7 +787,7 @@ public class DrawList {
     public void addLine(
             float p1X, float p1Y, float p2X, float p2Y, int color1, int color2, float thickness) {
         if (!Float.isFinite(thickness) || thickness <= 0) {
-            log.warn("Invalid thickness {}", thickness);
+            log.warn(INVALID_THICKNESS, thickness);
             return;
         }
 
@@ -2591,7 +2594,7 @@ public class DrawList {
             float thickness,
             int segmentCount) {
         if (!Float.isFinite(thickness) || thickness <= 0) {
-            log.warn("Invalid thickness {}", thickness);
+            log.warn(INVALID_THICKNESS, thickness);
             return;
         }
         // The curve is always within the bounds of the control points
@@ -2650,7 +2653,7 @@ public class DrawList {
             float thickness,
             int segmentCount) {
         if (!Float.isFinite(thickness) || thickness <= 0) {
-            log.warn("Invalid thickness {}", thickness);
+            log.warn(INVALID_THICKNESS, thickness);
             return;
         }
         // The curve is always within the bounds of the control points
