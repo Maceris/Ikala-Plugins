@@ -59,6 +59,8 @@ const float FOAM_ALBEDO = 0.55;
 // the pattern's range
 const float FOAM_PATCH_SIZE = 0.6;
 const float FOAM_PATCH_EDGE = 0.08;
+// How far, in meters, each cycle of a flow phase moves the foam pattern at random, see foamJump
+const float FOAM_JUMP_RANGE = 64.0;
 // Rings raindrops leave on the water, see rainRings: drawn in cells of this size, in meters, each
 // a whole number of times into WATER_PATTERN_WRAP, a ring at most a cell for every cycle of this
 // many seconds, a whole number of times into WATER_SHEET_TIME_PERIOD, in a few layers so rings
@@ -150,6 +152,17 @@ float foamPatches(vec2 rest, float share, float squeeze, float footprint) {
     float patches = smoothstep(1.0 - thick - FOAM_PATCH_EDGE, 1.0 - thick + FOAM_PATCH_EDGE,
         pattern);
     return mix(patches, thick, clamp(footprint / FOAM_PATCH_SIZE, 0.0, 1.0));
+}
+
+// Where in the foam pattern a flow phase's current cycle reads, at random: a phase fades back in at
+// the start of a new cycle, and with the same pattern every cycle, the patches it faded out would
+// come back where they began, looping. Cycles are counted from sheetTime, which spans a whole number
+// of them, so the count wraps where no phase is partway.
+vec2 foamJump(int phase) {
+    uint cycles = uint(WATER_SHEET_TIME_PERIOD / WAVE_FLOW_CYCLE);
+    uint cycle = uint(floor(sheetTime / WAVE_FLOW_CYCLE + 0.5 * float(phase))) % cycles;
+    uint seed = cycle * 2u + uint(phase) + 1u;
+    return vec2(waterRandom(seed), waterRandom(seed)) * FOAM_JUMP_RANGE;
 }
 
 // The slope rain's rings give the surface at a point at rest, relative to the camera, for a rain
@@ -302,11 +315,14 @@ void main() {
                 climateList.climates[climate].peak.z);
         }
         // The foam left behind drifts with the flow too, blended between the phases as the waves
-        // are: each phase's pattern jumps back once a cycle, while it counts for nothing
-        float left = foamPatches(outRestXZ - firstShift, outFoam, squeeze, footprint);
+        // are: each phase's pattern jumps back once a cycle, while it counts for nothing, to a new
+        // place in the pattern on flowing water, see foamJump
+        bool flowing = dot(outFlow, outFlow) > 0.0;
+        float left = foamPatches(outRestXZ - firstShift + (flowing ? foamJump(0) : vec2(0.0)),
+            outFoam, squeeze, footprint);
         if (phaseBlend > 0.0) {
-            left = mix(left, foamPatches(outRestXZ - secondShift, outFoam, squeeze, footprint),
-                phaseBlend);
+            left = mix(left, foamPatches(outRestXZ - secondShift + foamJump(1), outFoam, squeeze,
+                footprint), phaseBlend);
         }
         foam = 1.0 - (1.0 - foam) * (1.0 - left);
         normal = normalize(vec3(-gradient.x, 1.0, -gradient.y));
