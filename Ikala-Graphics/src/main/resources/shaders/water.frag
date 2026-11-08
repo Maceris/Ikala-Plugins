@@ -262,26 +262,27 @@ void main() {
         float phaseBlend = dot(outFlow, outFlow) > 0.0 ? waveFlowWeight(waveTime) : 0.0;
         float footprint = length(outRenderPosition) * pixelAngle
             / max(dot(up, toEye), MIN_FOOTPRINT_COSINE);
+        // One layer a pixel too, picked the same way: neighboring layers share all but the finest
+        // waves, so the pick only leaves grain where they differ, and it halves the work
         float layer = waveLayer(footprint);
-        int lower = int(floor(layer));
-        int upper = min(lower + 1, WAVE_LAYERS - 1);
-        float blend = layer - float(lower);
+        int lower = min(int(floor(layer)) + (waterRandom(seed) < fract(layer) ? 1 : 0),
+            WAVE_LAYERS - 1);
         vec2 amplitudes[WAVE_DIRECTIONS];
         for (int i = 0; i < WAVE_AMPLITUDE_VECTORS; ++i) {
             amplitudes[2 * i] = outAmplitudes[i].xy;
             amplitudes[2 * i + 1] = outAmplitudes[i].zw;
         }
-        field.shift = waveFlowShift(outFlow, waveTime, 0);
-        vec3 lowerSums;
-        vec3 upperSums;
-        vec3 slope = mix(waveSlope(field, amplitudes, lower, outRestXZ, lowerSums),
-            waveSlope(field, amplitudes, upper, outRestXZ, upperSums), blend);
-        vec3 sums = mix(lowerSums, upperSums, blend);
+        vec2 firstShift = waveFlowShift(outFlow, waveTime, 0);
+        vec2 secondShift = waveFlowShift(outFlow, waveTime, 1);
+        field.shift = firstShift;
+        vec3 sums;
+        vec3 slope = waveSlope(field, amplitudes, lower, outRestXZ, sums);
         if (phaseBlend > 0.0) {
-            field.shift = waveFlowShift(outFlow, waveTime, 1);
-            slope = mix(slope, mix(waveSlope(field, amplitudes, lower, outRestXZ, lowerSums),
-                waveSlope(field, amplitudes, upper, outRestXZ, upperSums), blend), phaseBlend);
-            sums = mix(sums, mix(lowerSums, upperSums, blend), phaseBlend);
+            field.shift = secondShift;
+            vec3 otherSums;
+            slope = mix(slope, waveSlope(field, amplitudes, lower, outRestXZ, otherSums),
+                phaseBlend);
+            sums = mix(sums, otherSums, phaseBlend);
         }
         slope *= outCalm;
         float variance = slope.z * outCalm;
@@ -300,7 +301,13 @@ void main() {
             foam = waveFoam(squeeze, variance, climateList.climates[climate].peak.y,
                 climateList.climates[climate].peak.z);
         }
-        float left = foamPatches(outRestXZ - field.shift, outFoam, squeeze, footprint);
+        // The foam left behind drifts with the flow too, blended between the phases as the waves
+        // are: each phase's pattern jumps back once a cycle, while it counts for nothing
+        float left = foamPatches(outRestXZ - firstShift, outFoam, squeeze, footprint);
+        if (phaseBlend > 0.0) {
+            left = mix(left, foamPatches(outRestXZ - secondShift, outFoam, squeeze, footprint),
+                phaseBlend);
+        }
         foam = 1.0 - (1.0 - foam) * (1.0 - left);
         normal = normalize(vec3(-gradient.x, 1.0, -gradient.y));
         alpha = sqrt(alpha * alpha + variance);
