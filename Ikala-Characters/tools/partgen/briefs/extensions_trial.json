@@ -1,6 +1,7 @@
 [
   {"id": "fox_tail", "kind": "extension", "chain": "tail", "length": 0.9,
-   "description": "a bushy orange fox tail with a white tip", "tags": ["tail", "fur"]},
+   "description": "a bushy orange fox tail with a white tip", "tags": ["tail", "fur"],
+   "fit": {"root": [1, -1, 0]}},
   {"id": "bat_wing", "kind": "extension", "chain": "wing.L", "length": 1.1,
    "description": "a leathery dark purple bat wing with thin finger bones and a clawed thumb",
    "tags": ["wing"]},

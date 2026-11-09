@@ -1,5 +1,5 @@
 {
-  "_comment": "How parts on the body plan's extension chains are generated, by the chain's name without its side (wings are generated on the left, \"wing.L\"; the right is the left's mirror). A part is pictured on its own as an object, like an isolated body part (see ISOLATED_STYLE in partgen.py, with \"piece\" naming what it is), steered by the depth of a plain stand-in along the chain at rest, made the brief's \"length\" in meters (\"length\" here, the rig's own chain length, by default): a tapered tube for a tail, a flat membrane for a wing (see tools/blender/test_extensions.py), seen from \"view\" (\"front\", \"back\" or \"left\", the character's left side) and turned \"roll\" degrees counterclockwise, so the part comes out in the chain's pose and proportions. \"negative\" adds to the negative prompt what the part tends to drag in, like the whole animal around a tail. \"guideStrength\" and \"guideEnd\" are how hard the stand-in's depth steers and for what share of the steps: lightly, since a stand-in is only a pose and a length, not a shape; a fox's brush or a feathered wing should spread well past it. \"triangles\" and \"voxel\" are for fitting the mesh along the chain, which isn't built yet. A brief's \"fit\" replaces any of these.",
+  "_comment": "How parts on the body plan's extension chains are generated, by the chain's name without its side (wings are generated on the left, \"wing.L\"; the right is the left's mirror). A part is pictured on its own as an object, like an isolated body part (see ISOLATED_STYLE in partgen.py, with \"piece\" naming what it is), steered by the depth of a plain stand-in along the chain at rest, made the brief's \"length\" in meters (\"length\" here, the rig's own chain length, by default): a tapered tube for a tail, a flat membrane for a wing (see tools/blender/test_extensions.py), seen from \"view\" (\"front\", \"back\" or \"left\", the character's left side) and turned \"roll\" degrees counterclockwise, so the part comes out in the chain's pose and proportions. \"negative\" adds to the negative prompt what the part tends to drag in, like the whole animal around a tail. \"guideStrength\" and \"guideEnd\" are how hard the stand-in's depth steers and for what share of the steps: lightly, since a stand-in is only a pose and a length, not a shape; a fox's brush or a feathered wing should spread well past it. Fitting (blender/fit_extension.py) lines the mesh up along the chain: \"root\" is the direction, in TRELLIS.2's space (+X the picture's right, +Y up, +Z toward the viewer), of the end that goes on the body; \"line\": \"top\" lines a wing up by its top edge, where its arm runs, rather than its middle; \"bend\": false only turns it rather than bending it along the chain, for a flat part; \"keepThin\" keeps thin spikes, which are otherwise dropped, like the pin a pictured tail stands on. \"triangles\" and \"texture\" are the fitted mesh's budget and texture size. A brief's \"fit\" replaces any of these.",
   "tail": {
     "piece": "a single detached tail on its own with no animal, seen from the side, hanging down and curving back",
     "negative": "animal, whole animal, head, ears, legs, paws, torso, creature",
@@ -8,8 +8,9 @@
     "roll": 0,
     "guideStrength": 0.5,
     "guideEnd": 0.45,
+    "root": [-1, 1, 0],
     "triangles": 1800,
-    "voxel": 0.004,
+    "texture": 1024,
     "palette": "primary"
   },
   "wing": {
@@ -19,8 +20,11 @@
     "roll": 0,
     "guideStrength": 0.3,
     "guideEnd": 0.3,
+    "root": [1, 0, 0],
+    "line": "top",
+    "bend": false,
     "triangles": 2400,
-    "voxel": 0.004,
+    "texture": 1024,
     "palette": "primary"
   }
 }

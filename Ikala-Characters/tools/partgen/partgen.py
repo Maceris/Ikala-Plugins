@@ -84,8 +84,12 @@ since an object pictured on its own has no size of its own:
 Its images picture it on its own, steered by the depth of a plain stand-in along the chain at
 rest (a tapered tube for a tail, a flat membrane for a wing), seen as extensions.json's rule for
 the chain says, so it comes out in the chain's pose; "length" (the rule's by default) sets the
-stand-in's length. Fitting along the chain is not built yet. A cape is a layer, painted over the
-mannequin seen from behind (its rule's "view" in layers.json).
+stand-in's length. Fitting lines its mesh up along the chain (see blender/fit_extension.py),
+scaled to its length, which sets the part's chainLength, and writes a wing's right side as the
+left's mirror. Where the picture put the root end the other way round, a brief's "fit" can
+point "root" at it (in TRELLIS.2's space: +X right, +Y up, +Z toward the viewer). A cape is a
+layer, painted over the mannequin seen from behind (its rule's "view" in layers.json); fitting it
+isn't built yet.
 
 Accessories are fitted on the face, head_top, back, hip, shoulder and forearm sockets. Clothing
 is lined up on the mannequin, cut
@@ -1676,8 +1680,14 @@ def command_fit(config, batch, args):
                    and (args.redo or b["part"] is None))
     for brief in briefs:
         if brief["kind"] == "extension":
-            print("Fitting parts on extension chains isn't built yet; %s keeps its mesh"
-                  % brief["id"])
+            ids = fit_extension(config, batch, brief)
+            if ids:
+                def record(entry, part_id=ids[0]):
+                    entry["part"] = part_id
+                    entry["review"]["part"] = None
+
+                batch.update(brief["id"], record)
+                print("part", " ".join(ids))
             continue
         if brief["kind"] == "layer":
             if layer_of(brief)[1].get("view", "front") != "front":
@@ -1711,6 +1721,82 @@ def command_fit(config, batch, args):
 
             batch.update(brief["id"], record)
             print("part", " ".join(ids))
+
+
+def fit_extension(config, batch, brief):
+    """Fit a brief's mesh along its extension chain (see blender/fit_extension.py and
+    extensions.json) on each body variant and write its part: an accessory on the chain, with
+    the chain made as long as the brief says. The guide's body is fitted first, from the brief's
+    length; the other bodies match its chain length, since a part has one. A wing gets a part for
+    each side, the right the left's mirror, paired. Gives the part IDs, the brief's own side
+    first, or None if a fit failed."""
+    part, rule = extension_of(brief)
+    folder = batch.brief_folder(brief["id"])
+    content = pathlib.Path(config["content"])
+    plan = load_json_with_comments(PLAN)
+    chains = {"extensions": [c for c in plan["extensions"]
+                             if c["id"] in (part["chain"], other_side(part["chain"]))]}
+    sided = part["chain"].endswith(".L")
+    names = (["%s_l" % brief["id"], "%s_r" % brief["id"]] if sided else [brief["id"]])
+    meshes = [{} for _ in names]
+    chain_scale = None
+    for variant in (GUIDE_VARIANT, "female"):
+        suffix = "" if variant == GUIDE_VARIANT else "_" + variant
+        out = content / "extension" / ("%s%s.glb" % (names[0], suffix))
+        out.parent.mkdir(parents=True, exist_ok=True)
+        renders = folder / ("fit%s" % suffix)
+        renders.mkdir(exist_ok=True)
+        log = folder / ("fit%s.log" % suffix)
+        report = folder / ("fit%s.json" % suffix)
+        mannequin = pathlib.Path(config["mannequin"]).parent / ("%s.glb" % variant)
+        size = (["--length", str(part["length"])] if chain_scale is None
+                else ["--chain-scale", str(chain_scale)])
+        with open(log, "w", encoding="utf8") as stream:
+            result = subprocess.run(
+                [config["blender"], "-b", "--factory-startup", "--python",
+                 str(TOOLS / "blender/fit_extension.py"), "--",
+                 "--mesh", str(folder / brief["mesh"]["file"]), "--mannequin", str(mannequin),
+                 "--plan", json.dumps(chains), "--chain", part["chain"],
+                 "--rule", json.dumps(rule), "--name", names[0], "--out", str(out),
+                 "--preview", str(renders), "--tints", str(folder / ("tints%s.json" % suffix)),
+                 "--report", str(report)] + size
+                + (["--mirror", names[1]] if sided else []),
+                stdout=stream, stderr=subprocess.STDOUT)
+        if result.returncode != 0 or not report.exists():
+            print("fit failed for %s on the %s body; see %s" % (brief["id"], variant, log))
+            return None
+        if chain_scale is None:
+            chain_scale = json.loads(report.read_text(encoding="utf8"))["chainLength"]
+        for side, name in enumerate(names):
+            key = "*" if variant == GUIDE_VARIANT else variant
+            # Meshes and their material keep one name on every body, as the material slot names it
+            meshes[side][key] = "extension/%s%s.glb#%s" % (name, suffix, name)
+    kind = part["chain"].rsplit(".", 1)[0] if sided else part["chain"]
+    ids = ["%s:part/%s/%s" % (config["namespace"], kind, name) for name in names]
+    tints = folder / "tints.json"
+    for side, name in enumerate(names):
+        chain = part["chain"] if side == 0 else other_side(part["chain"])
+        definition = {
+            "id": ids[side],
+            "plan": PLAN_ID,
+            "kind": "accessory",
+            "extension": chain,
+            "rigid": False,
+            "chainLength": [chain_scale],
+            "meshes": meshes[side],
+            # Both sides are one baked mesh, mirrored, so they share its material
+            "materialSlots": [dict(material_slot(names[0], tints))],
+            "tags": brief.get("tags", []),
+        }
+        if sided:
+            definition["pair"] = ids[1 - side]
+        path = content / "part" / ("%s.json" % name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        header = ("// %s, batch %s, image %d\n"
+                  "// Written by Ikala-Characters/tools/partgen/partgen.py\n"
+                  % (brief["description"], batch.name, brief["mesh"]["image"]))
+        path.write_text(header + json.dumps([definition], indent=2) + "\n", encoding="utf8")
+    return ids
 
 
 def fit_accessory(config, batch, brief):

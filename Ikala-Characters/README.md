@@ -189,7 +189,16 @@ same seed clean on another run, so their meshes are checked for streak triangles
 and made again with the next seed (`trellis_run.py --object`). From a single wing
 it often makes a pair, or a whole bat; fitting will have to keep one side.
 
-Fitting either onto the chain isn't built yet: `fit` leaves them with their meshes.
+`fit` lines a tail or wing mesh up along its chain on both mannequins
+(`tools/partgen/blender/fit_extension.py`): its middle line (a wing's top edge) runs
+from the end the rule's `root` points to, scaled to the brief's length, which sets
+the part's `chainLength`, and bent to follow the chain (a wing is only turned). It is
+rebuilt, baked and weighted along the chain's bones as accessories are, and a wing's
+right side is written as the left's mirror, the two paired. Where a picture put the
+root end the other way round, the brief's `fit` can point `root` at it, like
+`{"root": [1, -1, 0]}` (TRELLIS.2's space: +X right, +Y up, +Z toward the viewer).
+TRELLIS.2 wraps fur in a nearly clear white shell, which the fit drops before baking.
+Fitting capes isn't built yet.
 
 ## Previewing characters
 
