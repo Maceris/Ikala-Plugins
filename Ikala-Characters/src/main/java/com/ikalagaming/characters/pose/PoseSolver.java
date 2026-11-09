@@ -4,6 +4,7 @@ import lombok.NonNull;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
 import org.joml.Quaternionf;
+import org.joml.Quaternionfc;
 import org.joml.Vector3f;
 
 /**
@@ -76,6 +77,42 @@ public final class PoseSolver {
      */
     public Matrix4fc model(int bone) {
         return model[bone];
+    }
+
+    /**
+     * Turn a bone after the solve, about its own head, and everything hanging from it with it, as
+     * secondary motion does to a chain the clips posed.
+     *
+     * @param bone The bone's index.
+     * @param turn The turn, in model space.
+     */
+    public void turn(int bone, @NonNull Quaternionfc turn) {
+        model[bone].getTranslation(translation);
+        local.translation(translation)
+                .rotate(turn)
+                .translate(-translation.x, -translation.y, -translation.z);
+        // Bones come parents first, so only those after this one can hang from it
+        for (int b = bone; b < model.length; ++b) {
+            if (hangsFrom(b, bone)) {
+                local.mul(model[b], model[b]);
+            }
+        }
+    }
+
+    /**
+     * Whether a bone is another or hangs from it.
+     *
+     * @param bone The bone.
+     * @param ancestor The other bone.
+     * @return True if the bone is the other or one of its descendants.
+     */
+    private boolean hangsFrom(int bone, int ancestor) {
+        for (int b = bone; b >= 0; b = skeleton.parent(b)) {
+            if (b == ancestor) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

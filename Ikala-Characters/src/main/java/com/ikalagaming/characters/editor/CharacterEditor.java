@@ -27,6 +27,7 @@ import com.ikalagaming.characters.pose.Pose;
 import com.ikalagaming.characters.pose.PoseSolver;
 import com.ikalagaming.characters.pose.Proportions;
 import com.ikalagaming.characters.pose.Skeleton;
+import com.ikalagaming.characters.pose.SpringChains;
 import com.ikalagaming.characters.registry.CharacterRegistry;
 import com.ikalagaming.characters.registry.ContentSource;
 import com.ikalagaming.characters.view.AccessoryRests;
@@ -582,6 +583,15 @@ public final class CharacterEditor {
 
     /** The shown character's animation and the Motion tab. */
     private final CharacterMotion motion = new CharacterMotion();
+
+    /** Whether worn chains, like a cape or tail, swing on their springs. */
+    private boolean springsOn = true;
+
+    /** The chains swinging now, and the character they swing on, to set them up only on change. */
+    private Set<String> swinging = Set.of();
+
+    /** The character the chains swing on. */
+    private ShownCharacter swingingOn;
 
     /** The styles the animation was last built for. */
     private List<Id> motionStyles = List.of();
@@ -1560,11 +1570,32 @@ public final class CharacterEditor {
                             .withChains(plan, Proportions.chainLengths(plan, worn));
             shown.setProportions(proportions);
             characterHeight = heightWith(proportions);
+            swingChains(worn);
             return true;
         } catch (IllegalArgumentException e) {
             log.warn("The sliders don't fit {}: {}", shown.getCharacter().name(), e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * Swing the chains the worn parts use on their springs, setting them up again only when that
+     * changes.
+     *
+     * @param worn The parts worn.
+     */
+    private void swingChains(Set<Part> worn) {
+        Set<String> chains = new TreeSet<>();
+        if (springsOn) {
+            worn.stream().map(Part::extension).filter(Objects::nonNull).forEach(chains::add);
+        }
+        if (chains.equals(swinging) && shown == swingingOn) {
+            return;
+        }
+        swinging = chains;
+        swingingOn = shown;
+        SpringChains springs = new SpringChains(shown.getSkeleton(), plan, chains);
+        shown.setSprings(springs.isEmpty() ? null : springs);
     }
 
     /**
@@ -2589,6 +2620,10 @@ public final class CharacterEditor {
             }
             IkGui.endCombo();
         }
+        if (IkGui.checkbox("Swing chains##springs", springsOn)) {
+            springsOn = !springsOn;
+            applySliders();
+        }
         motion.draw(shownEffects, shownUses);
     }
 
@@ -3025,12 +3060,26 @@ public final class CharacterEditor {
 
     /**
      * For scripts: stand the character at rest, or let it move again. Call on the render thread.
+     * Letting it move also leaves the Body tab's rest stance, which headless scripts can't click
+     * away from; with the GUI drawn, the tab shown decides again on the next frame.
      *
      * @param still Whether it stands at rest.
      */
     void setStill(boolean still) {
         scriptStill = still;
+        if (!still) {
+            bodyTab = false;
+        }
         playClip(clipIndex);
+    }
+
+    /**
+     * For scripts: move at a speed, as the Motion tab's slider does. Call on the render thread.
+     *
+     * @param metersPerSecond The speed, 0 to stand.
+     */
+    void setSpeed(float metersPerSecond) {
+        motion.setSpeed(metersPerSecond);
     }
 
     /**

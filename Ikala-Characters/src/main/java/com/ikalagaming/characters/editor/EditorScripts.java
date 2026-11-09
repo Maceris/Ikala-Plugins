@@ -236,6 +236,20 @@ public final class EditorScripts {
     }
 
     /**
+     * Move in place at a speed, as the Motion tab's slider does, which swings chains like a cape
+     * back.
+     *
+     * @param metersPerSecond The speed, 0 to stand.
+     */
+    public static void move(double metersPerSecond) {
+        call(
+                editor -> {
+                    editor.setSpeed((float) metersPerSecond);
+                    return true;
+                });
+    }
+
+    /**
      * Look at the whole character or one part from far enough away to see it whole.
      *
      * @param partId The part to frame, or null for the whole character.

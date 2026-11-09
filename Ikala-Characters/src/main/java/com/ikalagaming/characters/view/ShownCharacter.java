@@ -8,6 +8,7 @@ import com.ikalagaming.characters.pose.Pose;
 import com.ikalagaming.characters.pose.PoseSolver;
 import com.ikalagaming.characters.pose.Proportions;
 import com.ikalagaming.characters.pose.Skeleton;
+import com.ikalagaming.characters.pose.SpringChains;
 import com.ikalagaming.graphics.Format;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.SkinnedDecal;
@@ -143,6 +144,9 @@ public final class ShownCharacter implements AutoCloseable {
 
     /** The proportions it is posed with. */
     private volatile Proportions proportions;
+
+    /** Swings its extension chains after each pose, or null to leave them as posed. */
+    private volatile SpringChains springs;
 
     /** Whether the clip's time moves on. */
     private volatile boolean playing = true;
@@ -636,6 +640,17 @@ public final class ShownCharacter implements AutoCloseable {
     }
 
     /**
+     * Swing extension chains, like a cape or tail, on their springs after each pose. Only the
+     * timer's thread uses them from then on.
+     *
+     * @param newSprings The chains, for this character's skeleton, or null to leave the chains as
+     *     the clips pose them.
+     */
+    public void setSprings(SpringChains newSprings) {
+        springs = newSprings;
+    }
+
+    /**
      * Change the proportions it is posed with.
      *
      * @param newProportions The proportions, for this character's skeleton.
@@ -744,6 +759,10 @@ public final class ShownCharacter implements AutoCloseable {
                     }
                 }
                 solver.solve(pose, current);
+                final SpringChains swinging = springs;
+                if (swinging != null) {
+                    swinging.update(passed, solver, actions == null ? 0 : actions.speed());
+                }
                 solver.writePalette(current, palette, 0);
                 for (Map.Entry<Integer, Matrix4fc> entry : adjustments.entrySet()) {
                     int b = entry.getKey();

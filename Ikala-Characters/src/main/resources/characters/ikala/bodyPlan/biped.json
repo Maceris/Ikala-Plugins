@@ -88,11 +88,25 @@
     {"id": "feet", "layer": "boots"},
     {"id": "back", "sockets": ["back"]}
   ],
+  // Chains swing on springs where clips leave them out (see BodyPlan.Spring): a cape hangs loose
+  // and trails behind when walking, kept off the legs; a tail is springier and lifts a little;
+  // wings hold their pose and only sway. Colliders act on the chains' joints, which sit inside
+  // the body at the back, so they only go round the legs; radii fit the male mannequin
   "extensions": [
-    {"id": "cape", "root": "chest", "bones": ["cape.01", "cape.02", "cape.03", "cape.04"]},
-    {"id": "wing.L", "root": "chest", "bones": ["wing.01.L", "wing.02.L", "wing.03.L", "wing.04.L"]},
-    {"id": "wing.R", "root": "chest", "bones": ["wing.01.R", "wing.02.R", "wing.03.R", "wing.04.R"]},
-    {"id": "tail", "root": "hips", "bones": ["tail.01", "tail.02", "tail.03", "tail.04", "tail.05", "tail.06"]}
+    {"id": "cape", "root": "chest", "bones": ["cape.01", "cape.02", "cape.03", "cape.04"],
+     "spring": {"stiffness": 6, "damping": 4, "gravity": 1, "drag": 1.5, "colliders": [
+       {"from": "thigh.L", "to": "shin.L", "radius": 0.085},
+       {"from": "thigh.R", "to": "shin.R", "radius": 0.085},
+       {"from": "shin.L", "to": "foot.L", "radius": 0.06},
+       {"from": "shin.R", "to": "foot.R", "radius": 0.06}]}},
+    {"id": "wing.L", "root": "chest", "bones": ["wing.01.L", "wing.02.L", "wing.03.L", "wing.04.L"],
+     "spring": {"stiffness": 120, "damping": 8, "gravity": 0.3, "drag": 0.3}},
+    {"id": "wing.R", "root": "chest", "bones": ["wing.01.R", "wing.02.R", "wing.03.R", "wing.04.R"],
+     "spring": {"stiffness": 120, "damping": 8, "gravity": 0.3, "drag": 0.3}},
+    {"id": "tail", "root": "hips", "bones": ["tail.01", "tail.02", "tail.03", "tail.04", "tail.05", "tail.06"],
+     "spring": {"stiffness": 30, "damping": 5, "gravity": 0.6, "drag": 0.5, "colliders": [
+       {"from": "thigh.L", "to": "shin.L", "radius": 0.085},
+       {"from": "thigh.R", "to": "shin.R", "radius": 0.085}]}}
   ],
   "sliders": [
     "ikala:slider/biped/*"

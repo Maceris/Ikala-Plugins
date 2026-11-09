@@ -159,6 +159,30 @@
         }
       ]
     },
+    "Collider": {
+      "type": "object",
+      "description": "A capsule around the body, from one bone's head to another's.",
+      "properties": {
+        "from": {
+          "type": "string",
+          "description": "The bone at one end, like \"thigh.L\"."
+        },
+        "to": {
+          "type": "string",
+          "description": "The bone at the other end, like \"shin.L\"."
+        },
+        "radius": {
+          "type": "number",
+          "description": "How thick it is, in meters."
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "radius"
+      ],
+      "additionalProperties": false
+    },
     "Collision": {
       "type": "object",
       "description": "How the collision capsule is placed.",
@@ -270,6 +294,14 @@
             "type": "string"
           },
           "description": "Its bones, from the root outward, each the next one's parent."
+        },
+        "spring": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Spring"
+            }
+          ],
+          "description": "How it swings on its own, following the pose clips give it. Left out, it holds its pose."
         }
       },
       "required": [
@@ -517,6 +549,40 @@
         "id",
         "bone"
       ],
+      "additionalProperties": false
+    },
+    "Spring": {
+      "type": "object",
+      "description": "How a chain swings on its own: each joint is pulled toward where clips pose it, falls, slows, trails behind as the character moves, and keeps out of the body.",
+      "properties": {
+        "stiffness": {
+          "type": "number",
+          "description": "How hard each joint is pulled toward where clips pose it, per second squared.",
+          "default": 40
+        },
+        "damping": {
+          "type": "number",
+          "description": "How much of its speed each joint loses each second.",
+          "default": 6
+        },
+        "gravity": {
+          "type": "number",
+          "description": "How much gravity pulls it, as a share of Earth's.",
+          "default": 1
+        },
+        "drag": {
+          "type": "number",
+          "description": "How much moving forward pushes it back, per second: the push is the character's speed times this.",
+          "default": 0
+        },
+        "colliders": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Collider"
+          },
+          "description": "Capsules around the body it keeps out of, like the legs for a cape."
+        }
+      },
       "additionalProperties": false
     },
     "Variant": {

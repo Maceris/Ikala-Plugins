@@ -513,15 +513,86 @@ public record BodyPlan(
      * @param id The chain's name.
      * @param root The bone it hangs from.
      * @param bones Its bones, from the root outward.
+     * @param spring How it moves on its own when clips leave it out, or null to hold its pose.
      */
     @Doc("An optional bone chain, skipped when no part uses it.")
     public record Extension(
             @Doc("The chain's name, like \"cape\".") String id,
             @Doc("The bone it hangs from.") String root,
             @Doc("Its bones, from the root outward, each the next one's parent.")
-                    List<String> bones) {
+                    List<String> bones,
+            @Doc(
+                            "How it swings on its own, following the pose clips give it. Left"
+                                    + " out, it holds its pose.")
+                    @Optional
+                    Spring spring) {
         /** The field for the bones. */
         public static final String FIELD_BONES = "bones";
+
+        /** The field for the spring. */
+        public static final String FIELD_SPRING = "spring";
+
+        /**
+         * A chain that holds its pose.
+         *
+         * @param id The chain's name.
+         * @param root The bone it hangs from.
+         * @param bones Its bones, from the root outward.
+         */
+        public Extension(String id, String root, List<String> bones) {
+            this(id, root, bones, null);
+        }
+    }
+
+    /**
+     * How an extension chain swings: each joint is pulled toward where clips pose it, falls, slows,
+     * trails behind as the character moves, and keeps out of the body's capsules.
+     *
+     * @param stiffness How hard each joint is pulled toward its posed place, per second squared.
+     * @param damping How much of its speed each joint loses each second.
+     * @param gravity How much gravity pulls it, as a share of Earth's.
+     * @param drag How much moving forward pushes it back, per second: the push is the character's
+     *     speed times this.
+     * @param colliders Capsules around the body it keeps out of.
+     */
+    @Doc(
+            "How a chain swings on its own: each joint is pulled toward where clips pose it, falls,"
+                    + " slows, trails behind as the character moves, and keeps out of the body.")
+    public record Spring(
+            @Doc("How hard each joint is pulled toward where clips pose it, per second squared.")
+                    @Default("40")
+                    float stiffness,
+            @Doc("How much of its speed each joint loses each second.") @Default("6") float damping,
+            @Doc("How much gravity pulls it, as a share of Earth's.") @Default("1") float gravity,
+            @Doc(
+                            "How much moving forward pushes it back, per second: the push is the"
+                                    + " character's speed times this.")
+                    @Default("0")
+                    float drag,
+            @Doc("Capsules around the body it keeps out of, like the legs for a cape.") @Optional
+                    List<Collider> colliders) {
+        /** The field for the colliders. */
+        public static final String FIELD_COLLIDERS = "colliders";
+    }
+
+    /**
+     * A capsule around a stretch of the body: from one bone's head to another's, so many
+     * centimeters thick.
+     *
+     * @param from The bone at one end.
+     * @param to The bone at the other end.
+     * @param radius How thick it is, in meters.
+     */
+    @Doc("A capsule around the body, from one bone's head to another's.")
+    public record Collider(
+            @Doc("The bone at one end, like \"thigh.L\".") String from,
+            @Doc("The bone at the other end, like \"shin.L\".") String to,
+            @Doc("How thick it is, in meters.") float radius) {
+        /** The field for the first bone. */
+        public static final String FIELD_FROM = "from";
+
+        /** The field for the second bone. */
+        public static final String FIELD_TO = "to";
     }
 
     /**
@@ -1134,6 +1205,24 @@ public record BodyPlan(
             chain.add(extension.root());
             chain.addAll(extension.bones());
             checkChain(checks, rigDefinition, chain, path, bones);
+            if (extension.spring() != null) {
+                String springPath = JsonPath.field(path, Extension.FIELD_SPRING);
+                Spring spring = extension.spring();
+                if (spring.stiffness() < 0 || spring.damping() < 0 || spring.drag() < 0) {
+                    checks.error(
+                            springPath, "A spring's stiffness, damping and drag can't be below 0");
+                }
+                for (int c = 0; c < spring.colliders().size(); ++c) {
+                    Collider collider = spring.colliders().get(c);
+                    String colliderPath =
+                            JsonPath.index(JsonPath.field(springPath, Spring.FIELD_COLLIDERS), c);
+                    bones.check(collider.from(), JsonPath.field(colliderPath, Collider.FIELD_FROM));
+                    bones.check(collider.to(), JsonPath.field(colliderPath, Collider.FIELD_TO));
+                    if (collider.radius() <= 0) {
+                        checks.error(colliderPath, "A collider's radius is above 0");
+                    }
+                }
+            }
         }
     }
 

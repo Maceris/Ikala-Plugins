@@ -170,6 +170,18 @@ final class CharacterMotion {
     }
 
     /**
+     * Move at a speed, as the Speed slider does.
+     *
+     * @param metersPerSecond The speed, 0 to stand.
+     */
+    void setSpeed(float metersPerSecond) {
+        speed[0] = Math.clamp(metersPerSecond, 0, MAX_SPEED);
+        if (animator != null) {
+            animator.setMovement(movementAction(), speed[0]);
+        }
+    }
+
+    /**
      * Whether actions drive the character, rather than its file's clips.
      *
      * @return True if an animator is ready.
