@@ -151,6 +151,9 @@ public record BodyPlan(
     /** The field for the collision capsule. */
     public static final String FIELD_COLLISION = "collision";
 
+    /** How the names of right side chains, slots and sockets end. */
+    public static final String RIGHT_SIDE = ".R";
+
     /** The most mask regions a plan can have, one per bit of a 64 bit mask. */
     public static final int MAX_REGIONS = 64;
 
@@ -514,6 +517,7 @@ public record BodyPlan(
      * @param root The bone it hangs from.
      * @param bones Its bones, from the root outward.
      * @param spring How it moves on its own when clips leave it out, or null to hold its pose.
+     * @param wing For a wing, how it folds, flaps and glides, or null if it isn't one.
      */
     @Doc("An optional bone chain, skipped when no part uses it.")
     public record Extension(
@@ -525,12 +529,18 @@ public record BodyPlan(
                             "How it swings on its own, following the pose clips give it. Left"
                                     + " out, it holds its pose.")
                     @Optional
-                    Spring spring) {
+                    Spring spring,
+            @Doc("For a wing: how it folds, flaps and glides, from its pose at rest, spread.")
+                    @Optional
+                    WingPoses wing) {
         /** The field for the bones. */
         public static final String FIELD_BONES = "bones";
 
         /** The field for the spring. */
         public static final String FIELD_SPRING = "spring";
+
+        /** The field for the wing poses. */
+        public static final String FIELD_WING = "wing";
 
         /**
          * A chain that holds its pose.
@@ -540,7 +550,17 @@ public record BodyPlan(
          * @param bones Its bones, from the root outward.
          */
         public Extension(String id, String root, List<String> bones) {
-            this(id, root, bones, null);
+            this(id, root, bones, null, null);
+        }
+
+        /**
+         * Whether this chain is the right side of a pair, whose wing angles are the left's
+         * mirrored.
+         *
+         * @return True if its name ends in ".R".
+         */
+        public boolean rightSide() {
+            return id.endsWith(RIGHT_SIDE);
         }
     }
 
@@ -574,6 +594,43 @@ public record BodyPlan(
         /** The field for the colliders. */
         public static final String FIELD_COLLIDERS = "colliders";
     }
+
+    /**
+     * How a wing chain moves when it isn't simply spread, as it is at rest. Angles are turns about
+     * the model's axes (x across, y up, z forward), in degrees, in that order, of each bone about
+     * its head, from the root out, for a left wing; a chain named for the right side mirrors them.
+     * Bones left out don't turn.
+     *
+     * @param fold Each bone's turn folded against the back.
+     * @param glide Each bone's turn held out to glide.
+     * @param flap How far each bone swings up and down about the forward axis when flapping, in
+     *     degrees.
+     * @param flapRate Wing beats a second.
+     * @param flapLag How far behind the bone before each bone swings, as a share of a beat.
+     * @param sway How far a gliding wing sways up and down, in degrees.
+     * @param swayRate Sways a second while gliding.
+     */
+    @Doc(
+            "How a wing chain folds, flaps and glides, from its pose at rest, spread. Angles turn"
+                    + " each bone about its head, root out, about the model's x (across), y (up)"
+                    + " and z (forward) axes, in degrees, for a left wing; a right wing's chain"
+                    + " mirrors them.")
+    public record WingPoses(
+            @Doc("Each bone's turn folded against the back, as [x, y, z] degrees.") @Optional
+                    List<Vec3> fold,
+            @Doc("Each bone's turn held out to glide, as [x, y, z] degrees.") @Optional
+                    List<Vec3> glide,
+            @Doc(
+                            "How far each bone swings up and down about the forward axis when flapping, in"
+                                    + " degrees.")
+                    @Optional
+                    List<Float> flap,
+            @Doc("Wing beats a second.") @Default("2") float flapRate,
+            @Doc("How far behind the bone before it each bone swings, as a share of a beat.")
+                    @Default("0.1")
+                    float flapLag,
+            @Doc("How far a gliding wing sways up and down, in degrees.") @Default("4") float sway,
+            @Doc("Sways a second while gliding.") @Default("0.4") float swayRate) {}
 
     /**
      * A capsule around a stretch of the body: from one bone's head to another's, so many

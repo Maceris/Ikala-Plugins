@@ -9,6 +9,7 @@ import com.ikalagaming.characters.pose.PoseSolver;
 import com.ikalagaming.characters.pose.Proportions;
 import com.ikalagaming.characters.pose.Skeleton;
 import com.ikalagaming.characters.pose.SpringChains;
+import com.ikalagaming.characters.pose.WingMotion;
 import com.ikalagaming.graphics.Format;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.SkinnedDecal;
@@ -147,6 +148,9 @@ public final class ShownCharacter implements AutoCloseable {
 
     /** Swings its extension chains after each pose, or null to leave them as posed. */
     private volatile SpringChains springs;
+
+    /** Folds, flaps and glides its wings after each pose, before the springs, or null. */
+    private volatile WingMotion wings;
 
     /** Whether the clip's time moves on. */
     private volatile boolean playing = true;
@@ -651,6 +655,17 @@ public final class ShownCharacter implements AutoCloseable {
     }
 
     /**
+     * Fold, flap or glide its wings after each pose, before any springs swing them. Only the
+     * timer's thread updates them from then on; their state can change from any thread.
+     *
+     * @param newWings The wings, for this character's skeleton, or null to leave the wings as the
+     *     clips pose them.
+     */
+    public void setWings(WingMotion newWings) {
+        wings = newWings;
+    }
+
+    /**
      * Change the proportions it is posed with.
      *
      * @param newProportions The proportions, for this character's skeleton.
@@ -759,6 +774,10 @@ public final class ShownCharacter implements AutoCloseable {
                     }
                 }
                 solver.solve(pose, current);
+                final WingMotion flapping = wings;
+                if (flapping != null) {
+                    flapping.update(passed, solver);
+                }
                 final SpringChains swinging = springs;
                 if (swinging != null) {
                     swinging.update(passed, solver, actions == null ? 0 : actions.speed());

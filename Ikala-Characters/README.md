@@ -151,7 +151,7 @@ python partgen.py capture limbs_1
 The same works for any check: `-Dikala.headless=true` (or a size like
 `-Dikala.headless=1024x1024`) renders without a window, `ui.test().saveFrame(path)`
 saves the scene without the GUI, and the `characters` script global drives the
-editor (`showDesign`, `settle`, `bare`, `wear`, `bothSides`, `still`, `move`, `frame`,
+editor (`showDesign`, `settle`, `bare`, `wear`, `bothSides`, `still`, `move`, `wings`, `frame`,
 `markers`, `worn`; see `EditorScripts`).
 
 ## Generated tails, wings and capes

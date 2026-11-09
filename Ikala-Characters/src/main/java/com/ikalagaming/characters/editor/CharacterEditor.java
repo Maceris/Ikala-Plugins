@@ -28,6 +28,7 @@ import com.ikalagaming.characters.pose.PoseSolver;
 import com.ikalagaming.characters.pose.Proportions;
 import com.ikalagaming.characters.pose.Skeleton;
 import com.ikalagaming.characters.pose.SpringChains;
+import com.ikalagaming.characters.pose.WingMotion;
 import com.ikalagaming.characters.registry.CharacterRegistry;
 import com.ikalagaming.characters.registry.ContentSource;
 import com.ikalagaming.characters.view.AccessoryRests;
@@ -592,6 +593,12 @@ public final class CharacterEditor {
 
     /** The character the chains swing on. */
     private ShownCharacter swingingOn;
+
+    /** What worn wings do, kept as parts change. */
+    private WingMotion.State wingState = WingMotion.State.FOLD;
+
+    /** The worn wings' poses, or null when no wings are worn. */
+    private WingMotion wingMotion;
 
     /** The styles the animation was last built for. */
     private List<Id> motionStyles = List.of();
@@ -1586,16 +1593,33 @@ public final class CharacterEditor {
      */
     private void swingChains(Set<Part> worn) {
         Set<String> chains = new TreeSet<>();
-        if (springsOn) {
-            worn.stream().map(Part::extension).filter(Objects::nonNull).forEach(chains::add);
-        }
-        if (chains.equals(swinging) && shown == swingingOn) {
+        worn.stream().map(Part::extension).filter(Objects::nonNull).forEach(chains::add);
+        Set<String> keyed = new TreeSet<>(chains);
+        // Turning the springs off or on sets them up again
+        keyed.add(springsOn ? "+springs" : "-springs");
+        if (keyed.equals(swinging) && shown == swingingOn) {
             return;
         }
-        swinging = chains;
+        swinging = keyed;
         swingingOn = shown;
-        SpringChains springs = new SpringChains(shown.getSkeleton(), plan, chains);
+        SpringChains springs =
+                new SpringChains(shown.getSkeleton(), plan, springsOn ? chains : Set.of());
         shown.setSprings(springs.isEmpty() ? null : springs);
+        WingMotion wings = new WingMotion(shown.getSkeleton(), plan, chains, wingState);
+        wingMotion = wings.isEmpty() ? null : wings;
+        shown.setWings(wingMotion);
+    }
+
+    /**
+     * Change what worn wings do, keeping it for wings put on later.
+     *
+     * @param state What they do.
+     */
+    void setWingState(@NonNull WingMotion.State state) {
+        wingState = state;
+        if (wingMotion != null) {
+            wingMotion.setState(state);
+        }
     }
 
     /**
@@ -2623,6 +2647,15 @@ public final class CharacterEditor {
         if (IkGui.checkbox("Swing chains##springs", springsOn)) {
             springsOn = !springsOn;
             applySliders();
+        }
+        if (wingMotion != null) {
+            IkGui.textUnformatted("Wings");
+            for (WingMotion.State state : WingMotion.State.values()) {
+                IkGui.sameLine();
+                if (IkGui.radioButton(state.key() + "##wings-" + state.key(), state == wingState)) {
+                    setWingState(state);
+                }
+            }
         }
         motion.draw(shownEffects, shownUses);
     }

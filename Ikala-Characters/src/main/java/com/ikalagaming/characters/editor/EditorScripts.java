@@ -1,5 +1,6 @@
 package com.ikalagaming.characters.editor;
 
+import com.ikalagaming.characters.pose.WingMotion;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.scripting.ScriptManager;
 import com.ikalagaming.scripting.interpreter.ScriptRuntime;
@@ -245,6 +246,21 @@ public final class EditorScripts {
         call(
                 editor -> {
                     editor.setSpeed((float) metersPerSecond);
+                    return true;
+                });
+    }
+
+    /**
+     * Fold, spread, glide or flap the worn wings, as the Motion tab does.
+     *
+     * @param state What they do: "fold", "spread", "glide" or "flap".
+     * @throws IllegalArgumentException If there is no such state.
+     */
+    public static void wings(@NonNull String state) {
+        WingMotion.State chosen = WingMotion.State.of(state);
+        call(
+                editor -> {
+                    editor.setWingState(chosen);
                     return true;
                 });
     }

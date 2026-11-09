@@ -43,9 +43,9 @@ class TestSpringChains {
             };
 
     /** The test skeleton, and a way to run chains on it. */
-    private static final class Setup {
+    static final class Setup {
         /** The test skeleton. */
-        private final Skeleton skeleton;
+        final Skeleton skeleton;
 
         /**
          * Build the test skeleton, its chain pointing along a direction at rest.

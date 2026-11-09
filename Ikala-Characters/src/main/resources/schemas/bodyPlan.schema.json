@@ -302,6 +302,14 @@
             }
           ],
           "description": "How it swings on its own, following the pose clips give it. Left out, it holds its pose."
+        },
+        "wing": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WingPoses"
+            }
+          ],
+          "description": "For a wing: how it folds, flaps and glides, from its pose at rest, spread."
         }
       },
       "required": [
@@ -626,6 +634,64 @@
       "required": [
         "id"
       ],
+      "additionalProperties": false
+    },
+    "WingPoses": {
+      "type": "object",
+      "description": "How a wing chain folds, flaps and glides, from its pose at rest, spread. Angles turn each bone about its head, root out, about the model's x (across), y (up) and z (forward) axes, in degrees, for a left wing; a right wing's chain mirrors them.",
+      "properties": {
+        "fold": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "description": "Each bone's turn folded against the back, as [x, y, z] degrees."
+        },
+        "glide": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "description": "Each bone's turn held out to glide, as [x, y, z] degrees."
+        },
+        "flap": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "description": "How far each bone swings up and down about the forward axis when flapping, in degrees."
+        },
+        "flapRate": {
+          "type": "number",
+          "description": "Wing beats a second.",
+          "default": 2
+        },
+        "flapLag": {
+          "type": "number",
+          "description": "How far behind the bone before it each bone swings, as a share of a beat.",
+          "default": 0.1
+        },
+        "sway": {
+          "type": "number",
+          "description": "How far a gliding wing sways up and down, in degrees.",
+          "default": 4
+        },
+        "swayRate": {
+          "type": "number",
+          "description": "Sways a second while gliding.",
+          "default": 0.4
+        }
+      },
       "additionalProperties": false
     }
   }
