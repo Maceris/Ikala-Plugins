@@ -174,6 +174,15 @@
         "radius": {
           "type": "number",
           "description": "How thick it is, in meters."
+        },
+        "out": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "Which way points go out, as model axes (x across, y up, z forward), like [0, 0, -1] for a cape to go behind a tail: then a point anywhere on the near side within its width, beside its length, goes round to the far side, so the chain can't cross it. Left out, straight away from the capsule's line."
         }
       },
       "required": [
@@ -589,6 +598,11 @@
             "$ref": "#/$defs/Collider"
           },
           "description": "Capsules around the body it keeps out of, like the legs for a cape."
+        },
+        "bend": {
+          "type": "number",
+          "description": "How hard each joint is pulled straight, toward the bend clips pose there, per second squared: a stiffer chain spreads a bend over the joints near it, as cloth does over a tail, rather than folding at one.",
+          "default": 0
         }
       },
       "additionalProperties": false
@@ -690,6 +704,15 @@
           "type": "number",
           "description": "Sways a second while gliding.",
           "default": 0.4
+        },
+        "offset": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "How far the wing's root moves from where the rig puts it, in every pose, as model axes in meters, like up to the shoulder blades."
         }
       },
       "additionalProperties": false

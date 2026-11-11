@@ -143,7 +143,8 @@ public final class CharacterStage {
      */
     public void showDebug(boolean show) {
         if (entered) {
-            GraphicsManager.swapPipeline(RenderConfig.WORLD.withDebug(show));
+            // Keeps the rest, like a capture script's GUI turned off
+            GraphicsManager.swapPipeline(GraphicsManager.getPipelineConfig().withDebug(show));
         }
     }
 

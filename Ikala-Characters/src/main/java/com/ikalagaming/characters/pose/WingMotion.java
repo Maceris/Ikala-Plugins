@@ -5,23 +5,36 @@ import com.ikalagaming.characters.definition.BodyPlan;
 
 import lombok.NonNull;
 import org.joml.Quaternionf;
+import org.joml.Quaternionfc;
+import org.joml.Vector3f;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Wing poses made in code for a character's wing chains: folded against the back, spread as they
  * are at rest, held out to glide with a slow sway, or flapping, each bone a little behind the one
- * before. Changing between them fades over {@value #FADE} seconds. The bones are turned after each
- * solve, before any springs swing them, so the springs follow the wings.
+ * before. Changing between them fades over {@value #FADE} seconds. A wing's root can sit away from
+ * where the rig puts it, like up on the shoulder blades, in every pose. The bones are turned after
+ * each solve, before any springs swing them, so the springs follow the wings.
  *
  * @author Ches Burks
  */
 public final class WingMotion {
     /** How long a change between poses takes, in seconds. */
     public static final float FADE = 0.4f;
+
+    /** Above this speed, in meters per second, wings that follow the motion spread. */
+    public static final float SPREAD_SPEED = 3;
+
+    /** Actions starting with these flap wings that follow the motion, like "jump". */
+    public static final List<String> FLAP_ACTIONS = List.of("jump", "fly");
+
+    /** Actions starting with these hold wings out to glide, like "fall". */
+    public static final List<String> GLIDE_ACTIONS = List.of("fall", "glide");
 
     /** What the wings do. */
     public enum State {
@@ -59,16 +72,19 @@ public final class WingMotion {
     private static final State[] STATES = State.values();
 
     /** One wing chain. */
-    private record Wing(int[] bones, BodyPlan.WingPoses poses, boolean mirrored) {}
+    private record Wing(String chain, int[] bones, BodyPlan.WingPoses poses, boolean mirrored) {}
 
-    /** The wings. */
-    private final List<Wing> wings = new ArrayList<>();
+    /** The wings, replaced whole when a wing's poses change, never changed. */
+    private volatile List<Wing> wings;
 
     /** How much each state shows, summing to 1. */
     private final float[] weights = new float[STATES.length];
 
     /** What the wings are doing, or fading to. */
     private volatile State state;
+
+    /** Whether the state follows the character's motion, see {@link #follow}. */
+    private volatile boolean automatic;
 
     /** Seconds the wings have moved, for flapping and swaying. */
     private float time;
@@ -81,6 +97,9 @@ public final class WingMotion {
 
     /** Scratch. */
     private final Quaternionf swaying = new Quaternionf();
+
+    /** Scratch. */
+    private final Vector3f shift = new Vector3f();
 
     /**
      * Set up wing poses for some of a plan's chains. Chains without wing poses, or whose bones the
@@ -96,21 +115,45 @@ public final class WingMotion {
             @NonNull BodyPlan plan,
             @NonNull Collection<String> names,
             @NonNull State start) {
+        this(skeleton, plan, names, start, Map.of());
+    }
+
+    /**
+     * Set up wing poses for some of a plan's chains, with some chains' poses replaced, like by a
+     * worn wing part's own. Chains without wing poses, or whose bones the skeleton lacks, are left
+     * alone.
+     *
+     * @param skeleton The skeleton.
+     * @param plan The plan, which gives the chains and their poses.
+     * @param names The chains, like those the parts worn use.
+     * @param start What the wings start out doing, fully.
+     * @param own Poses in place of the plan's, by chain.
+     */
+    public WingMotion(
+            @NonNull Skeleton skeleton,
+            @NonNull BodyPlan plan,
+            @NonNull Collection<String> names,
+            @NonNull State start,
+            @NonNull Map<String, BodyPlan.WingPoses> own) {
+        List<Wing> found = new ArrayList<>();
         for (String name : names) {
             BodyPlan.Extension extension = plan.extension(name);
-            if (extension == null || extension.wing() == null) {
+            BodyPlan.WingPoses poses =
+                    own.getOrDefault(name, extension == null ? null : extension.wing());
+            if (extension == null || poses == null) {
                 continue;
             }
             int[] bones = new int[extension.bones().size()];
-            boolean found = true;
+            boolean all = true;
             for (int i = 0; i < bones.length; ++i) {
                 bones[i] = skeleton.index(extension.bones().get(i));
-                found &= bones[i] >= 0;
+                all &= bones[i] >= 0;
             }
-            if (found) {
-                wings.add(new Wing(bones, extension.wing(), extension.rightSide()));
+            if (all) {
+                found.add(new Wing(name, bones, poses, extension.rightSide()));
             }
         }
+        wings = List.copyOf(found);
         state = start;
         weights[start.ordinal()] = 1;
     }
@@ -125,12 +168,134 @@ public final class WingMotion {
     }
 
     /**
-     * Change what the wings do, fading over {@link #FADE} seconds. Any thread may call this.
+     * Replace a wing's poses, as an editor does while they are tuned. Any thread may call this.
+     *
+     * @param chain The wing's chain.
+     * @param poses The poses, for the left side; a right wing mirrors them.
+     * @return False if no wing is on that chain.
+     */
+    public boolean setPoses(@NonNull String chain, BodyPlan.@NonNull WingPoses poses) {
+        List<Wing> now = wings;
+        List<Wing> changed = new ArrayList<>(now.size());
+        boolean found = false;
+        for (Wing wing : now) {
+            if (wing.chain().equals(chain)) {
+                changed.add(new Wing(chain, wing.bones(), poses, wing.mirrored()));
+                found = true;
+            } else {
+                changed.add(wing);
+            }
+        }
+        wings = List.copyOf(changed);
+        return found;
+    }
+
+    /**
+     * The poses a wing moves with now.
+     *
+     * @param chain The wing's chain.
+     * @return The poses, or null if no wing is on that chain.
+     */
+    public BodyPlan.WingPoses poses(@NonNull String chain) {
+        for (Wing wing : wings) {
+            if (wing.chain().equals(chain)) {
+                return wing.poses();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * A bone's turn in a state, in model space, as {@link #update} turns it there with no fade,
+     * leaving out a glide's sway and a flap's beat.
+     *
+     * @param angles The state's angles for each bone, for the left side, in degrees.
+     * @param bone The bone's place in the chain, from the root out.
+     * @param mirrored Whether the wing is a right one, which mirrors them.
+     * @param out Where to put the turn.
+     * @return out.
+     */
+    public static Quaternionf turn(
+            @NonNull List<Vec3> angles, int bone, boolean mirrored, @NonNull Quaternionf out) {
+        angles(angles, bone, mirrored, out);
+        return out;
+    }
+
+    /**
+     * The angles, for the left side, of a turn in model space, undoing {@link #turn}.
+     *
+     * @param turn The turn.
+     * @param mirrored Whether the wing is a right one.
+     * @return The angles about x, y and z, in degrees.
+     */
+    public static Vec3 angles(@NonNull Quaternionfc turn, boolean mirrored) {
+        Vector3f angles = turn.getEulerAnglesXYZ(new Vector3f());
+        float sign = mirrored ? -1 : 1;
+        return new Vec3(
+                (float) Math.toDegrees(angles.x),
+                (float) Math.toDegrees(angles.y) * sign,
+                (float) Math.toDegrees(angles.z) * sign);
+    }
+
+    /**
+     * Change what the wings do, fading over {@link #FADE} seconds, and stop following the
+     * character's motion. Any thread may call this.
      *
      * @param newState What they do.
      */
     public void setState(@NonNull State newState) {
+        automatic = false;
         state = newState;
+    }
+
+    /**
+     * Let the wings follow the character's motion from now on, see {@link #automatic}. Any thread
+     * may call this.
+     */
+    public void setAutomatic() {
+        automatic = true;
+    }
+
+    /**
+     * Whether the wings follow the character's motion.
+     *
+     * @return True if they do.
+     */
+    public boolean isAutomatic() {
+        return automatic;
+    }
+
+    /**
+     * Follow the character's motion, if the wings do: see {@link #automatic}. The timer that poses
+     * the character calls this before each update.
+     *
+     * @param speed How fast it moves, in meters per second.
+     * @param action The action it plays, as asked for, like "jump", or null for none.
+     */
+    public void follow(float speed, String action) {
+        if (automatic) {
+            state = automatic(speed, action);
+        }
+    }
+
+    /**
+     * What wings do for some motion: flap for jumping or flying, glide for falling, spread when
+     * running, and fold otherwise.
+     *
+     * @param speed How fast the character moves, in meters per second.
+     * @param action The action it plays, as asked for, or null for none.
+     * @return The state.
+     */
+    public static State automatic(float speed, String action) {
+        if (action != null) {
+            if (FLAP_ACTIONS.stream().anyMatch(action::startsWith)) {
+                return State.FLAP;
+            }
+            if (GLIDE_ACTIONS.stream().anyMatch(action::startsWith)) {
+                return State.GLIDE;
+            }
+        }
+        return speed > SPREAD_SPEED ? State.SPREAD : State.FOLD;
     }
 
     /**
@@ -153,6 +318,12 @@ public final class WingMotion {
         time += step;
         fade(step);
         for (Wing wing : wings) {
+            Vec3 offset = wing.poses().offset();
+            if (offset != null) {
+                // Mirrored for a right wing, across the body's middle
+                shift.set(wing.mirrored() ? -offset.x() : offset.x(), offset.y(), offset.z());
+                solver.shift(wing.bones()[0], shift);
+            }
             for (int i = 0; i < wing.bones().length; ++i) {
                 turnFor(wing, i, blended);
                 if (Math.abs(blended.w) < 1 - 1e-7f) {

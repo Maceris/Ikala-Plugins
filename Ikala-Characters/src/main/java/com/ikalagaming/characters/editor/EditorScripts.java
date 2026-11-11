@@ -183,6 +183,23 @@ public final class EditorScripts {
     }
 
     /**
+     * Where bones are posed now, after the wings and springs, for checks.
+     *
+     * @param prefix What the bones' names start with, like "cape.".
+     * @return Each bone's name, head in model space in meters and y axis, which it points along,
+     *     joined by "; ", or an empty string.
+     */
+    public static String posed(String prefix) {
+        String[] found = {""};
+        call(
+                editor -> {
+                    found[0] = editor.posedHeads(prefix);
+                    return true;
+                });
+        return found[0];
+    }
+
+    /**
      * The parts worn, as the game would show them, for checks.
      *
      * @return The part IDs in slot order, joined by commas, or an empty string.
@@ -224,6 +241,21 @@ public final class EditorScripts {
     }
 
     /**
+     * Draw the bones over the character as posed, with the extension chains and their capsules
+     * marked, or not.
+     *
+     * @param show Whether to draw them.
+     * @param names Whether to name the chains' bones.
+     */
+    public static void bones(boolean show, boolean names) {
+        call(
+                editor -> {
+                    editor.showBones(show, names);
+                    return true;
+                });
+    }
+
+    /**
      * Stand the character at rest, or let it move again.
      *
      * @param still Whether it stands at rest.
@@ -251,13 +283,16 @@ public final class EditorScripts {
     }
 
     /**
-     * Fold, spread, glide or flap the worn wings, as the Motion tab does.
+     * Fold, spread, glide or flap the worn wings, as the Motion tab does, or let them follow the
+     * motion.
      *
-     * @param state What they do: "fold", "spread", "glide" or "flap".
+     * @param state What they do: "fold", "spread", "glide" or "flap", or "auto" to follow the
+     *     motion.
      * @throws IllegalArgumentException If there is no such state.
      */
     public static void wings(@NonNull String state) {
-        WingMotion.State chosen = WingMotion.State.of(state);
+        WingMotion.State chosen =
+                CharacterEditor.WINGS_AUTO.equals(state) ? null : WingMotion.State.of(state);
         call(
                 editor -> {
                     editor.setWingState(chosen);

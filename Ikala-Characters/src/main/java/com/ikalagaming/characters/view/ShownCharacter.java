@@ -28,7 +28,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
 import org.joml.Quaternionf;
+import org.joml.Quaternionfc;
 import org.joml.Vector3d;
+import org.joml.Vector3dc;
 import org.joml.Vector3f;
 
 import java.awt.image.BufferedImage;
@@ -45,6 +47,7 @@ import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 import javax.imageio.ImageIO;
 
 /**
@@ -176,6 +179,20 @@ public final class ShownCharacter implements AutoCloseable {
      */
     private volatile Map<Integer, Matrix4fc> adjustments = Map.of();
 
+    /** Floats per bone in {@link #bones}: its head, then its y axis. */
+    public static final int BONE_FLOATS = 6;
+
+    /** Guards {@link #bones}, which the timer writes and editors read. */
+    private final ReentrantLock bonesLock = new ReentrantLock();
+
+    /**
+     * Each bone as last posed, in model space: its head, then its y axis, which bones point along.
+     */
+    private final float[] bones;
+
+    /** Whether {@link #bones} holds a pose yet. */
+    private boolean bonesPosed;
+
     /**
      * Load a character and place it, standing at rest until a clip is played.
      *
@@ -225,6 +242,7 @@ public final class ShownCharacter implements AutoCloseable {
         this.position = new Vector3d(position);
         this.facing = new Quaternionf(facing);
         skeleton = character.skeleton();
+        bones = new float[skeleton.size() * BONE_FLOATS];
         proportions = Proportions.neutral(skeleton);
         var graphics = GraphicsManager.forPlugin(plugin);
         Skins skins = graphics.skins();
@@ -689,6 +707,44 @@ public final class ShownCharacter implements AutoCloseable {
     }
 
     /**
+     * Copy each bone as last posed, after the wings and springs, for debug views.
+     *
+     * @param out Where to put them, {@value #BONE_FLOATS} floats a bone in model space: its head,
+     *     then its y axis, which bones point along.
+     * @return False if it hasn't been posed yet, leaving out alone.
+     */
+    public boolean posedBones(float @NonNull [] out) {
+        bonesLock.lock();
+        try {
+            if (!bonesPosed) {
+                return false;
+            }
+            System.arraycopy(bones, 0, out, 0, Math.min(out.length, bones.length));
+            return true;
+        } finally {
+            bonesLock.unlock();
+        }
+    }
+
+    /**
+     * Where its root stands.
+     *
+     * @return The position, which doesn't change.
+     */
+    public Vector3dc position() {
+        return position;
+    }
+
+    /**
+     * Which way it faces; characters face +Z.
+     *
+     * @return The turn, which doesn't change.
+     */
+    public Quaternionfc facing() {
+        return facing;
+    }
+
+    /**
      * Move what is weighted to a bone by an extra transform in the bone's space at rest, on top of
      * the pose, until it is changed again. Editors preview an accessory's placement this way
      * without rebuilding its mesh.
@@ -741,6 +797,9 @@ public final class ShownCharacter implements AutoCloseable {
         /** When the last update ran, in nanoseconds. */
         private long last = System.nanoTime();
 
+        /** Scratch for a bone's y axis. */
+        private final Vector3f axis = new Vector3f();
+
         /**
          * Set up the updates.
          *
@@ -748,6 +807,28 @@ public final class ShownCharacter implements AutoCloseable {
          */
         Updater(Skins skins) {
             this.skins = skins;
+        }
+
+        /** Copy the bones as posed now for {@link #posedBones}. */
+        private void publishBones() {
+            bonesLock.lock();
+            try {
+                for (int b = 0; b < skeleton.size(); ++b) {
+                    Matrix4fc model = solver.model(b);
+                    int at = b * BONE_FLOATS;
+                    model.getTranslation(bone);
+                    model.getColumn(1, axis).normalize();
+                    bones[at] = bone.x;
+                    bones[at + 1] = bone.y;
+                    bones[at + 2] = bone.z;
+                    bones[at + 3] = axis.x;
+                    bones[at + 4] = axis.y;
+                    bones[at + 5] = axis.z;
+                }
+                bonesPosed = true;
+            } finally {
+                bonesLock.unlock();
+            }
         }
 
         @Override
@@ -776,12 +857,19 @@ public final class ShownCharacter implements AutoCloseable {
                 solver.solve(pose, current);
                 final WingMotion flapping = wings;
                 if (flapping != null) {
+                    if (actions != null) {
+                        Animator.Playing acting = actions.action();
+                        flapping.follow(
+                                actions.speed(),
+                                acting == null ? null : acting.action().requested());
+                    }
                     flapping.update(passed, solver);
                 }
                 final SpringChains swinging = springs;
                 if (swinging != null) {
                     swinging.update(passed, solver, actions == null ? 0 : actions.speed());
                 }
+                publishBones();
                 solver.writePalette(current, palette, 0);
                 for (Map.Entry<Integer, Matrix4fc> entry : adjustments.entrySet()) {
                     int b = entry.getKey();

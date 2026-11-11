@@ -89,25 +89,35 @@
     {"id": "back", "sockets": ["back"]}
   ],
   // Chains swing on springs where clips leave them out (see BodyPlan.Spring): a cape hangs loose
-  // and trails behind when walking, kept off the legs; a tail is springier and lifts a little;
-  // wings hold their pose and only sway. Wings also fold, glide and flap (see BodyPlan.WingPoses;
-  // angles are for the left wing, the right mirrors them). Colliders act on the chains' joints, which sit inside
-  // the body at the back, so they only go round the legs; radii fit the male mannequin
+  // and trails behind when walking; a tail is springier and lifts a little; wings hold their pose
+  // and only sway. Wings also fold, glide and flap (see BodyPlan.WingPoses; angles are for the
+  // left wing, the right mirrors them); their roots move up from mid-back, where the rig has
+  // them, to the shoulder blades, where wings are drawn on people, and they fold down and a little
+  // out so they don't cross. Colliders act on the chains' joints, which sit inside the
+  // body at the back, so the cape's only go round the legs, and round a worn tail from where it
+  // leaves the body, as thick as the tail plus the cape's distance behind its chain. The cape's
+  // joints hang between the body and a tail, so they leave its capsules backward ("out"), going
+  // round behind it, rather than straight away from it, which pushed them into the body. The
+  // cape resists bending ("bend"), so going round a tail curves it over several joints; without
+  // it, the last joint alone took the whole turn and the cape folded into a V there. Radii
+  // fit the male mannequin
   "extensions": [
     {"id": "cape", "root": "chest", "bones": ["cape.01", "cape.02", "cape.03", "cape.04"],
-     "spring": {"stiffness": 6, "damping": 4, "gravity": 1, "drag": 1.5, "colliders": [
+     "spring": {"stiffness": 6, "damping": 4, "gravity": 1, "drag": 1.5, "bend": 400, "colliders": [
        {"from": "thigh.L", "to": "shin.L", "radius": 0.085},
        {"from": "thigh.R", "to": "shin.R", "radius": 0.085},
        {"from": "shin.L", "to": "foot.L", "radius": 0.06},
-       {"from": "shin.R", "to": "foot.R", "radius": 0.06}]}},
+       {"from": "shin.R", "to": "foot.R", "radius": 0.06},
+       {"from": "tail.02", "to": "tail.04", "radius": 0.15, "out": [0, 0, -1]},
+       {"from": "tail.04", "to": "tail.06", "radius": 0.15, "out": [0, 0, -1]}]}},
     {"id": "wing.L", "root": "chest", "bones": ["wing.01.L", "wing.02.L", "wing.03.L", "wing.04.L"],
      "spring": {"stiffness": 120, "damping": 8, "gravity": 0.3, "drag": 0.3},
-     "wing": {"fold": [[-5, 37, -79]], "glide": [[0, 0, 10]], "flap": [35, 12, 10, 6],
-       "flapRate": 2, "flapLag": 0.08}},
+     "wing": {"fold": [[-10, 26, -79]], "glide": [[0, 0, 10]], "flap": [35, 12, 10, 6],
+       "flapRate": 2, "flapLag": 0.08, "offset": [0.04, 0.07, -0.03]}},
     {"id": "wing.R", "root": "chest", "bones": ["wing.01.R", "wing.02.R", "wing.03.R", "wing.04.R"],
      "spring": {"stiffness": 120, "damping": 8, "gravity": 0.3, "drag": 0.3},
-     "wing": {"fold": [[-5, 37, -79]], "glide": [[0, 0, 10]], "flap": [35, 12, 10, 6],
-       "flapRate": 2, "flapLag": 0.08}},
+     "wing": {"fold": [[-10, 26, -79]], "glide": [[0, 0, 10]], "flap": [35, 12, 10, 6],
+       "flapRate": 2, "flapLag": 0.08, "offset": [0.04, 0.07, -0.03]}},
     {"id": "tail", "root": "hips", "bones": ["tail.01", "tail.02", "tail.03", "tail.04", "tail.05", "tail.06"],
      "spring": {"stiffness": 30, "damping": 5, "gravity": 0.6, "drag": 0.5, "colliders": [
        {"from": "thigh.L", "to": "shin.L", "radius": 0.085},

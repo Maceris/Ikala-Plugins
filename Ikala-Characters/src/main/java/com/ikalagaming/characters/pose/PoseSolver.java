@@ -6,6 +6,7 @@ import org.joml.Matrix4fc;
 import org.joml.Quaternionf;
 import org.joml.Quaternionfc;
 import org.joml.Vector3f;
+import org.joml.Vector3fc;
 
 /**
  * Turns a pose and proportions into model space bone transforms, and those into the skinning
@@ -95,6 +96,21 @@ public final class PoseSolver {
         for (int b = bone; b < model.length; ++b) {
             if (hangsFrom(b, bone)) {
                 local.mul(model[b], model[b]);
+            }
+        }
+    }
+
+    /**
+     * Move a bone after the solve, and everything hanging from it with it, like a wing's root moved
+     * up to the shoulder blades.
+     *
+     * @param bone The bone's index.
+     * @param by How far, in model space.
+     */
+    public void shift(int bone, @NonNull Vector3fc by) {
+        for (int b = bone; b < model.length; ++b) {
+            if (hangsFrom(b, bone)) {
+                model[b].translateLocal(by);
             }
         }
     }

@@ -9,14 +9,21 @@ import org.joml.Vector3f;
 import org.joml.Vector3fc;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
 
 /**
  * Secondary motion for a character's extension chains, like a cape, tail or wings: each joint of a
  * chain is a point that is pulled toward where the clips pose it, falls, slows down, trails behind
  * as the character moves and keeps out of the body's capsules, while the bones between keep their
- * lengths. After each solve the chain's bones are turned to point at the points.
+ * lengths. A capsule can run along another chain, like a tail under a cape: it counts only while
+ * that chain is worn, and the chain it is on moves first. After each solve the chain's bones are
+ * turned to point at the points.
  *
  * <p>The points step at a fixed {@value #STEPS_PER_SECOND} steps a second whatever the frame rate,
  * so a chain swings the same at 30 frames a second as at 144. They live in model space, so turning
@@ -50,8 +57,10 @@ public final class SpringChains {
      * @param from One end's bone.
      * @param to The other end's bone.
      * @param radius How thick it is, in meters.
+     * @param out For a one-way capsule, the side points are pushed to, in model space; null for one
+     *     points are pushed straight out of.
      */
-    private record Capsule(int from, int to, float radius) {}
+    public record Capsule(int from, int to, float radius, Vector3fc out) {}
 
     /** One chain being simulated. */
     private static final class Chain {
@@ -70,6 +79,9 @@ public final class SpringChains {
         /** Each point a step ago. */
         final float[] previous;
 
+        /** Scratch: the pull straightening each joint, 3 floats each. */
+        final float[] bending;
+
         /** Whether the points hold a place yet. */
         boolean started;
 
@@ -79,6 +91,7 @@ public final class SpringChains {
             this.capsules = capsules;
             points = new float[bones.length * 3];
             previous = new float[bones.length * 3];
+            bending = new float[bones.length * 3];
         }
     }
 
@@ -87,6 +100,9 @@ public final class SpringChains {
 
     /** The chains. */
     private final List<Chain> chains = new ArrayList<>();
+
+    /** Every chain's capsules, each once. */
+    private final List<Capsule> allCapsules;
 
     /** Time not stepped yet, in seconds. */
     private float pending;
@@ -126,7 +142,16 @@ public final class SpringChains {
     public SpringChains(
             @NonNull Skeleton skeleton, @NonNull BodyPlan plan, @NonNull Collection<String> names) {
         this.skeleton = skeleton;
-        for (String name : names) {
+        // Which chain each chain bone is on, so colliders on chains not worn are left out
+        Map<String, String> chainOf = new HashMap<>();
+        plan.extensions()
+                .forEach(chain -> chain.bones().forEach(bone -> chainOf.put(bone, chain.id())));
+        // Chains that others collide with go first, so the others meet them where they swung to
+        List<String> ordered = new ArrayList<>(names);
+        ordered.sort(
+                Comparator.comparing(
+                        name -> collidesWithWorn(plan.extension(name), chainOf, names)));
+        for (String name : ordered) {
             BodyPlan.Extension extension = plan.extension(name);
             if (extension == null || extension.spring() == null) {
                 continue;
@@ -141,8 +166,21 @@ public final class SpringChains {
             for (BodyPlan.Collider collider : extension.spring().colliders()) {
                 int from = skeleton.index(collider.from());
                 int to = skeleton.index(collider.to());
-                if (from >= 0 && to >= 0) {
-                    capsules.add(new Capsule(from, to, collider.radius()));
+                // A capsule along a chain no part is worn on, like a tail under a cape, isn't there
+                boolean bare =
+                        Stream.of(collider.from(), collider.to())
+                                .map(chainOf::get)
+                                .anyMatch(chain -> chain != null && !names.contains(chain));
+                if (from >= 0 && to >= 0 && !bare) {
+                    Vector3f out =
+                            collider.out() == null
+                                    ? null
+                                    : new Vector3f(
+                                                    collider.out().x(),
+                                                    collider.out().y(),
+                                                    collider.out().z())
+                                            .normalize();
+                    capsules.add(new Capsule(from, to, collider.radius(), out));
                 }
             }
             if (found && bones.length > 0) {
@@ -150,6 +188,48 @@ public final class SpringChains {
                 posed = new float[Math.max(posed.length, (bones.length + 1) * 3)];
             }
         }
+        allCapsules = chains.stream().flatMap(chain -> chain.capsules.stream()).distinct().toList();
+    }
+
+    /**
+     * The capsules the chains keep out of, for debug views.
+     *
+     * @return Every chain's capsules, each once.
+     */
+    public List<Capsule> capsules() {
+        return allCapsules;
+    }
+
+    /**
+     * The bones the chains move, for debug views.
+     *
+     * @return Each chain's bones, from the root out.
+     */
+    public List<int[]> chainBones() {
+        return chains.stream().map(chain -> chain.bones.clone()).toList();
+    }
+
+    /**
+     * Whether a chain keeps out of another worn chain, so must move after it.
+     *
+     * @param extension The chain, or null.
+     * @param chainOf The chain each chain bone is on.
+     * @param worn The chains worn.
+     * @return True if one of its colliders is on another worn chain.
+     */
+    private static boolean collidesWithWorn(
+            BodyPlan.Extension extension, Map<String, String> chainOf, Collection<String> worn) {
+        if (extension == null || extension.spring() == null) {
+            return false;
+        }
+        return extension.spring().colliders().stream()
+                .flatMap(collider -> Stream.of(collider.from(), collider.to()))
+                .map(chainOf::get)
+                .anyMatch(
+                        chain ->
+                                chain != null
+                                        && !chain.equals(extension.id())
+                                        && worn.contains(chain));
     }
 
     /**
@@ -248,6 +328,7 @@ public final class SpringChains {
         float keep = Math.max(0, 1 - spring.damping() * STEP);
         float[] points = chain.points;
         float[] previous = chain.previous;
+        boolean bent = bending(chain);
         for (int i = 0; i < chain.bones.length; ++i) {
             get(points, i, a);
             get(previous, i, b);
@@ -256,6 +337,9 @@ public final class SpringChains {
             get(posed, i + 1, c).sub(a).mul(spring.stiffness());
             c.y -= GRAVITY * spring.gravity();
             c.z -= speed * spring.drag();
+            if (bent) {
+                c.add(chain.bending[i * 3], chain.bending[i * 3 + 1], chain.bending[i * 3 + 2]);
+            }
             // Verlet: on by the last step's move, kept by the damping, plus the pull
             b.negate().add(a).mul(keep).add(a).fma(STEP * STEP, c);
             put(a, previous, i);
@@ -269,17 +353,70 @@ public final class SpringChains {
                     get(points, i - 1, b);
                 }
                 get(points, i, a);
-                keepOut(chain, solver, a);
-                // Back to the bone's length from the joint before
+                // Back to the bone's length from the joint before, then out of the capsules:
+                // pushed out first, the length pulled a point straight back in
                 a.sub(b);
                 if (a.lengthSquared() > TINY) {
                     a.normalize(length);
                 } else {
                     get(posed, i + 1, a).sub(get(posed, i, c));
                 }
-                put(a.add(b), points, i);
+                keepOut(chain, solver, a.add(b));
+                put(a, points, i);
             }
         }
+    }
+
+    /**
+     * Find the pull that straightens each joint between two bones toward the bend clips pose there,
+     * by the chain's bend stiffness, so a bend spreads over neighboring joints rather than folding
+     * at one. A joint pulled one way pulls its neighbors back half as much each, so the pulls only
+     * bend the chain, never move it.
+     *
+     * @param chain The chain.
+     * @return Whether there is any pull, in {@code chain.bending}.
+     */
+    private boolean bending(Chain chain) {
+        float stiffness = chain.spring.bend();
+        float[] bending = chain.bending;
+        Arrays.fill(bending, 0);
+        if (stiffness <= 0) {
+            return false;
+        }
+        float[] points = chain.points;
+        // Point i is bone i's tip, posed at posed[i + 1]; the joint before the first is the head
+        for (int i = 0; i + 1 < chain.bones.length; ++i) {
+            if (i == 0) {
+                get(posed, 0, a);
+            } else {
+                get(points, i - 1, a);
+            }
+            get(points, i + 1, b);
+            // How far the joint is from the middle of its neighbors, less how far clips pose it
+            a.add(b).mul(0.5f).sub(get(points, i, c));
+            get(posed, i, b).add(get(posed, i + 2, start)).mul(0.5f).sub(get(posed, i + 1, along));
+            a.sub(b).mul(stiffness);
+            add(bending, i, a, 1);
+            if (i > 0) {
+                add(bending, i - 1, a, -0.5f);
+            }
+            add(bending, i + 1, a, -0.5f);
+        }
+        return true;
+    }
+
+    /**
+     * Add a scaled vector to one of an array's vectors.
+     *
+     * @param to The array, 3 floats a vector.
+     * @param index Which vector.
+     * @param by The vector added.
+     * @param scale How much of it.
+     */
+    private static void add(float[] to, int index, Vector3f by, float scale) {
+        to[index * 3] += by.x * scale;
+        to[index * 3 + 1] += by.y * scale;
+        to[index * 3 + 2] += by.z * scale;
     }
 
     /**
@@ -294,17 +431,60 @@ public final class SpringChains {
             solver.model(capsule.from()).getTranslation(start);
             solver.model(capsule.to()).getTranslation(along).sub(start);
             float lengthSquared = along.lengthSquared();
-            float t =
-                    lengthSquared < TINY
-                            ? 0
-                            : Math.clamp(point.sub(start, away).dot(along) / lengthSquared, 0f, 1f);
+            float raw =
+                    lengthSquared < TINY ? 0 : point.sub(start, away).dot(along) / lengthSquared;
+            if (capsule.out() != null) {
+                // Beside the capsule's length only: past its ends a point is free
+                if (raw >= 0 && raw <= 1) {
+                    behind(point, start.fma(raw, along), along, capsule.radius(), capsule.out());
+                }
+                continue;
+            }
             // The nearest point on the capsule's line, and the way out from it
-            start.fma(t, along);
+            start.fma(Math.clamp(raw, 0f, 1f), along);
             point.sub(start, away);
             float distance = away.length();
             if (distance < capsule.radius() && distance > TINY) {
                 point.set(start).fma(capsule.radius() / distance, away);
             }
+        }
+    }
+
+    /**
+     * Keep a point on the out side of a one-way capsule: one inside it, or anywhere on the near
+     * side within its width, like a cape's joint between the body and a tail, moves along the way
+     * out to the capsule's far side, so the chain goes round behind it rather than through it.
+     *
+     * @param point The point, moved.
+     * @param onLine The point on the capsule's line level with it.
+     * @param line The line's direction, any length.
+     * @param radius The capsule's radius.
+     * @param out The way out, of length 1.
+     */
+    private void behind(
+            Vector3f point, Vector3fc onLine, Vector3fc line, float radius, Vector3fc out) {
+        // Across the line: the way out o, and the point's offset w, split along o and beside it
+        float lineSquared = line.lengthSquared();
+        Vector3f w = point.sub(onLine, away);
+        Vector3f o = c.set(out);
+        if (lineSquared > TINY) {
+            w.fma(-w.dot(line) / lineSquared, line);
+            o.fma(-o.dot(line) / lineSquared, line);
+        }
+        float oLength = o.length();
+        if (oLength < TINY) {
+            return;
+        }
+        o.div(oLength);
+        float ahead = w.dot(o);
+        float besideSquared = w.lengthSquared() - ahead * ahead;
+        if (besideSquared >= radius * radius) {
+            return;
+        }
+        float reach = (float) Math.sqrt(radius * radius - besideSquared);
+        if (ahead < reach) {
+            // Moving along out moves across the line oLength as far
+            point.fma((reach - ahead) / oLength, out);
         }
     }
 

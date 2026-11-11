@@ -574,6 +574,9 @@ public record BodyPlan(
      * @param drag How much moving forward pushes it back, per second: the push is the character's
      *     speed times this.
      * @param colliders Capsules around the body it keeps out of.
+     * @param bend How hard each joint is pulled straight, toward the bend clips pose there, per
+     *     second squared: a stiffer chain spreads a bend over the joints near it, as cloth does
+     *     over a tail, rather than folding at one.
      */
     @Doc(
             "How a chain swings on its own: each joint is pulled toward where clips pose it, falls,"
@@ -590,7 +593,14 @@ public record BodyPlan(
                     @Default("0")
                     float drag,
             @Doc("Capsules around the body it keeps out of, like the legs for a cape.") @Optional
-                    List<Collider> colliders) {
+                    List<Collider> colliders,
+            @Doc(
+                            "How hard each joint is pulled straight, toward the bend clips pose"
+                                    + " there, per second squared: a stiffer chain spreads a bend"
+                                    + " over the joints near it, as cloth does over a tail, rather"
+                                    + " than folding at one.")
+                    @Default("0")
+                    float bend) {
         /** The field for the colliders. */
         public static final String FIELD_COLLIDERS = "colliders";
     }
@@ -609,6 +619,8 @@ public record BodyPlan(
      * @param flapLag How far behind the bone before each bone swings, as a share of a beat.
      * @param sway How far a gliding wing sways up and down, in degrees.
      * @param swayRate Sways a second while gliding.
+     * @param offset How far the wing's root moves from where the rig puts it, in meters, in every
+     *     pose, or null to leave it.
      */
     @Doc(
             "How a wing chain folds, flaps and glides, from its pose at rest, spread. Angles turn"
@@ -630,7 +642,13 @@ public record BodyPlan(
                     @Default("0.1")
                     float flapLag,
             @Doc("How far a gliding wing sways up and down, in degrees.") @Default("4") float sway,
-            @Doc("Sways a second while gliding.") @Default("0.4") float swayRate) {}
+            @Doc("Sways a second while gliding.") @Default("0.4") float swayRate,
+            @Doc(
+                            "How far the wing's root moves from where the rig puts it, in every"
+                                    + " pose, as model axes in meters, like up to the shoulder"
+                                    + " blades.")
+                    @Optional
+                    Vec3 offset) {}
 
     /**
      * A capsule around a stretch of the body: from one bone's head to another's, so many
@@ -639,12 +657,35 @@ public record BodyPlan(
      * @param from The bone at one end.
      * @param to The bone at the other end.
      * @param radius How thick it is, in meters.
+     * @param out Which way points go out of it, in model space, or null for straight away from its
+     *     line: with a way out, a point anywhere on the near side within its width, beside its
+     *     length, also goes round to the far side, so a chain can't cross it.
      */
     @Doc("A capsule around the body, from one bone's head to another's.")
     public record Collider(
             @Doc("The bone at one end, like \"thigh.L\".") String from,
             @Doc("The bone at the other end, like \"shin.L\".") String to,
-            @Doc("How thick it is, in meters.") float radius) {
+            @Doc("How thick it is, in meters.") float radius,
+            @Doc(
+                            "Which way points go out, as model axes (x across, y up, z forward),"
+                                    + " like [0, 0, -1] for a cape to go behind a tail: then a"
+                                    + " point anywhere on the near side within its width, beside"
+                                    + " its length, goes round to the far side, so the chain can't"
+                                    + " cross it. Left out, straight away from the capsule's"
+                                    + " line.")
+                    @Optional
+                    Vec3 out) {
+        /**
+         * A capsule points leave straight away from.
+         *
+         * @param from The bone at one end.
+         * @param to The bone at the other end.
+         * @param radius How thick it is, in meters.
+         */
+        public Collider(String from, String to, float radius) {
+            this(from, to, radius, null);
+        }
+
         /** The field for the first bone. */
         public static final String FIELD_FROM = "from";
 

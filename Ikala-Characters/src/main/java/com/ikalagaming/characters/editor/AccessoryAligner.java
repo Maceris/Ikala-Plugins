@@ -42,6 +42,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
@@ -892,7 +893,7 @@ final class AccessoryAligner {
         Id id = worn.part().id();
         Path file;
         try {
-            file = findDefinition(id);
+            file = findDefinition(registry.get(), id);
         } catch (IOException e) {
             status = "Not saved: " + e.getMessage();
             return;
@@ -921,12 +922,13 @@ final class AccessoryAligner {
     /**
      * Find the file that defines a part, in its namespace's content folder.
      *
+     * @param definitions The loaded definitions, which know the content folders.
      * @param id The part's ID.
      * @return The file, or null if none on disk does.
      * @throws IOException If the folder can't be searched.
      */
-    private Path findDefinition(Id id) throws IOException {
-        Path root = registry.get().asset(id.namespace(), "");
+    static Path findDefinition(CharacterRegistry definitions, Id id) throws IOException {
+        Path root = definitions.asset(id.namespace(), "");
         if (root == null || !Files.isDirectory(root)) {
             return null;
         }
@@ -980,6 +982,30 @@ final class AccessoryAligner {
      */
     static void writePlacement(Path file, Id id, String variant, Part.Placement placement)
             throws IOException {
+        writeDefinition(
+                file,
+                id,
+                definition -> {
+                    JsonObject placements =
+                            definition.has(Part.FIELD_PLACEMENT)
+                                    ? definition.getAsJsonObject(Part.FIELD_PLACEMENT)
+                                    : new JsonObject();
+                    placements.add(variant, DataFormat.write(placement));
+                    definition.add(Part.FIELD_PLACEMENT, placements);
+                });
+    }
+
+    /**
+     * Change a part's definition in its file. Comment lines at the top of the file stay; a file
+     * with comments further down is left alone, since writing it again would drop them.
+     *
+     * @param file The file.
+     * @param id The part's ID.
+     * @param change Changes the definition's JSON.
+     * @throws IOException If the file can't be read or written.
+     * @throws IllegalArgumentException If the file has comments past its top or lacks the part.
+     */
+    static void writeDefinition(Path file, Id id, Consumer<JsonObject> change) throws IOException {
         String text = Files.readString(file, StandardCharsets.UTF_8);
         StringBuilder header = new StringBuilder();
         String[] lines = text.split("\\R", -1);
@@ -991,19 +1017,14 @@ final class AccessoryAligner {
         String rest = String.join("\n", List.of(lines).subList(body, lines.length));
         if (rest.contains("//") || rest.contains("/*")) {
             throw new IllegalArgumentException(
-                    file.getFileName() + " has comments inside; add the placement by hand");
+                    file.getFileName() + " has comments inside; change it by hand");
         }
         JsonElement json = JsonText.parse(rest, e -> {});
         JsonObject definition = definitionIn(json, id);
         if (definition == null) {
             throw new IllegalArgumentException(file.getFileName() + " doesn't define " + id);
         }
-        JsonObject placements =
-                definition.has(Part.FIELD_PLACEMENT)
-                        ? definition.getAsJsonObject(Part.FIELD_PLACEMENT)
-                        : new JsonObject();
-        placements.add(variant, DataFormat.write(placement));
-        definition.add(Part.FIELD_PLACEMENT, placements);
+        change.accept(definition);
         Files.writeString(
                 file,
                 header + new GsonBuilder().setPrettyPrinting().create().toJson(json) + "\n",

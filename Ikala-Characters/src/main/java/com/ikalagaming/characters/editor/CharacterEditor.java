@@ -585,6 +585,9 @@ public final class CharacterEditor {
     /** The shown character's animation and the Motion tab. */
     private final CharacterMotion motion = new CharacterMotion();
 
+    /** The Motion tab's wing choice that follows the motion, as scripts name it too. */
+    static final String WINGS_AUTO = "auto";
+
     /** Whether worn chains, like a cape or tail, swing on their springs. */
     private boolean springsOn = true;
 
@@ -594,11 +597,35 @@ public final class CharacterEditor {
     /** The character the chains swing on. */
     private ShownCharacter swingingOn;
 
-    /** What worn wings do, kept as parts change. */
-    private WingMotion.State wingState = WingMotion.State.FOLD;
+    /** What worn wings do, kept as parts change, or null to follow the motion. */
+    private WingMotion.State wingState;
 
     /** The worn wings' poses, or null when no wings are worn. */
     private WingMotion wingMotion;
+
+    /** The worn chains' springs, or null when none swing. */
+    private SpringChains springChains;
+
+    /** Which bones are on worn extension chains, by index. */
+    private boolean[] onChain = new boolean[0];
+
+    /** Draws the bones over the character. */
+    private final BoneView boneView;
+
+    /** Whether the bones are drawn over the character. */
+    private boolean showBones;
+
+    /** Whether the chains' bones are named, while the bones are drawn. */
+    private boolean boneNames;
+
+    /** The Align tab's wing mode. */
+    private final WingPoser wingPoser;
+
+    /** Whether the Align tab poses wings rather than lining up accessories. */
+    private boolean posingWings;
+
+    /** The wings worn, for the Align tab. */
+    private List<WingPoser.Worn> wornWings = List.of();
 
     /** The styles the animation was last built for. */
     private List<Id> motionStyles = List.of();
@@ -750,6 +777,7 @@ public final class CharacterEditor {
         this.settings = settings;
         stage = new CharacterStage(graphics);
         content = new ContentPanel(graphics.ui(), registry);
+        boneView = new BoneView(graphics.debug());
         aligner =
                 new AccessoryAligner(
                         graphics.debug(),
@@ -763,6 +791,7 @@ public final class CharacterEditor {
                                         yaw,
                                         distance),
                         () -> current.reference());
+        wingPoser = new WingPoser(registry, () -> current.reload().run(), this::setWingState);
     }
 
     /** Register the panels' node types, once, when the plugin is enabled. */
@@ -1592,11 +1621,31 @@ public final class CharacterEditor {
      * @param worn The parts worn.
      */
     private void swingChains(Set<Part> worn) {
+        // As loaded now, so the Align tab sees a wing's saved poses
+        List<WingPoser.Worn> wingsWorn = new ArrayList<>();
+        for (Part part : worn) {
+            BodyPlan.Extension extension =
+                    part.extension() == null ? null : plan.extension(part.extension());
+            if (extension != null && extension.wing() != null) {
+                wingsWorn.add(
+                        new WingPoser.Worn(
+                                extension.id(),
+                                part,
+                                extension.bones(),
+                                extension.rightSide(),
+                                extension.wing()));
+            }
+        }
+        wornWings = List.copyOf(wingsWorn);
         Set<String> chains = new TreeSet<>();
         worn.stream().map(Part::extension).filter(Objects::nonNull).forEach(chains::add);
         Set<String> keyed = new TreeSet<>(chains);
-        // Turning the springs off or on sets them up again
+        // Turning the springs off or on sets them up again, and so does another wing part, whose
+        // poses may be its own
         keyed.add(springsOn ? "+springs" : "-springs");
+        worn.stream()
+                .filter(part -> part.extension() != null)
+                .forEach(part -> keyed.add(part.id().toString()));
         if (keyed.equals(swinging) && shown == swingingOn) {
             return;
         }
@@ -1604,8 +1653,35 @@ public final class CharacterEditor {
         swingingOn = shown;
         SpringChains springs =
                 new SpringChains(shown.getSkeleton(), plan, springsOn ? chains : Set.of());
-        shown.setSprings(springs.isEmpty() ? null : springs);
-        WingMotion wings = new WingMotion(shown.getSkeleton(), plan, chains, wingState);
+        springChains = springs.isEmpty() ? null : springs;
+        shown.setSprings(springChains);
+        onChain = new boolean[shown.getSkeleton().size()];
+        for (String chain : chains) {
+            BodyPlan.Extension extension = plan.extension(chain);
+            if (extension != null) {
+                for (String name : extension.bones()) {
+                    int bone = shown.getSkeleton().index(name);
+                    if (bone >= 0) {
+                        onChain[bone] = true;
+                    }
+                }
+            }
+        }
+        // A worn wing part can fold or sit its own way
+        Map<String, BodyPlan.WingPoses> own = new HashMap<>();
+        worn.stream()
+                .filter(part -> part.extension() != null && part.wing() != null)
+                .forEach(part -> own.put(part.extension(), part.wing()));
+        WingMotion wings =
+                new WingMotion(
+                        shown.getSkeleton(),
+                        plan,
+                        chains,
+                        wingState == null ? WingMotion.State.FOLD : wingState,
+                        own);
+        if (wingState == null) {
+            wings.setAutomatic();
+        }
         wingMotion = wings.isEmpty() ? null : wings;
         shown.setWings(wingMotion);
     }
@@ -1613,11 +1689,16 @@ public final class CharacterEditor {
     /**
      * Change what worn wings do, keeping it for wings put on later.
      *
-     * @param state What they do.
+     * @param state What they do, or null to follow the character's motion.
      */
-    void setWingState(@NonNull WingMotion.State state) {
+    void setWingState(WingMotion.State state) {
         wingState = state;
-        if (wingMotion != null) {
+        if (wingMotion == null) {
+            return;
+        }
+        if (state == null) {
+            wingMotion.setAutomatic();
+        } else {
             wingMotion.setState(state);
         }
     }
@@ -1799,7 +1880,7 @@ public final class CharacterEditor {
                 IkGui.endTabItem();
             }
             if (IkGui.beginTabItem("Align")) {
-                aligner.draw(alignStage());
+                drawAlign();
                 IkGui.endTabItem();
             }
             IkGui.endTabBar();
@@ -1823,6 +1904,9 @@ public final class CharacterEditor {
         }
         showFx();
         tickMotion();
+        if (showBones && shown != null) {
+            boneView.draw(shown, onChain, springChains, boneNames);
+        }
         showColors(previewChannel, previewCode);
         // The Colors tab sets it again each frame it is drawn
         previewChannel = null;
@@ -2623,6 +2707,26 @@ public final class CharacterEditor {
         }
     }
 
+    /** Draw the Align tab: lining up accessories, or posing wings when wings are worn. */
+    private void drawAlign() {
+        if (!wornWings.isEmpty() && wingMotion != null) {
+            if (IkGui.radioButton("Accessories##align-accessories", !posingWings)) {
+                posingWings = false;
+            }
+            IkGui.sameLine();
+            if (IkGui.radioButton("Wings##align-wings", posingWings)) {
+                posingWings = true;
+            }
+        } else {
+            posingWings = false;
+        }
+        if (posingWings) {
+            wingPoser.draw(new WingPoser.Stage(shown, wornWings, wingMotion));
+        } else {
+            aligner.draw(alignStage());
+        }
+    }
+
     /** Draw the Motion tab: the style, then the movement, actions and effect states. */
     private void drawMotion() {
         List<AnimStyle> styles =
@@ -2648,8 +2752,23 @@ public final class CharacterEditor {
             springsOn = !springsOn;
             applySliders();
         }
+        IkGui.sameLine();
+        if (IkGui.checkbox("Bones##bones", showBones)) {
+            showBones = !showBones;
+        }
+        if (showBones) {
+            IkGui.sameLine();
+            if (IkGui.checkbox("Names##bone-names", boneNames)) {
+                boneNames = !boneNames;
+            }
+            IkGui.textDisabled("Orange: chains; cyan: capsules; magenta: one-way capsules");
+        }
         if (wingMotion != null) {
             IkGui.textUnformatted("Wings");
+            IkGui.sameLine();
+            if (IkGui.radioButton(WINGS_AUTO + "##wings-auto", wingState == null)) {
+                setWingState(null);
+            }
             for (WingMotion.State state : WingMotion.State.values()) {
                 IkGui.sameLine();
                 if (IkGui.radioButton(state.key() + "##wings-" + state.key(), state == wingState)) {
@@ -2913,7 +3032,8 @@ public final class CharacterEditor {
         orbit.follow(camera);
         if (IkGui.isMouseClicked(MouseButton.LEFT)) {
             // A press on the Align tab's handles drags them, not the camera
-            pressedOnStage = !io.wantCaptureMouse && !aligner.wantsMouse();
+            pressedOnStage =
+                    !io.wantCaptureMouse && !aligner.wantsMouse() && !wingPoser.wantsMouse();
         }
         if (IkGui.isMouseClicked(MouseButton.MIDDLE)) {
             middlePressedOnStage = !io.wantCaptureMouse;
@@ -3056,6 +3176,52 @@ public final class CharacterEditor {
      */
     void showMarkers(boolean show) {
         stage.showDebug(show);
+    }
+
+    /**
+     * For scripts: draw the bones over the character, or not. Call on the render thread.
+     *
+     * @param show Whether to draw them.
+     * @param names Whether to name the chains' bones.
+     */
+    void showBones(boolean show, boolean names) {
+        showBones = show;
+        boneNames = names;
+    }
+
+    /**
+     * For scripts: where bones are posed now. Call on the render thread.
+     *
+     * @param prefix What the bones' names start with.
+     * @return Each bone's name, head in model space and y axis, joined by "; ", or an empty string.
+     */
+    String posedHeads(String prefix) {
+        if (shown == null) {
+            return "";
+        }
+        Skeleton skeleton = shown.getSkeleton();
+        float[] posed = new float[skeleton.size() * ShownCharacter.BONE_FLOATS];
+        if (!shown.posedBones(posed)) {
+            return "";
+        }
+        List<String> heads = new ArrayList<>();
+        for (int b = 0; b < skeleton.size(); ++b) {
+            if (skeleton.name(b).startsWith(prefix)) {
+                int at = b * ShownCharacter.BONE_FLOATS;
+                heads.add(
+                        String.format(
+                                Locale.ROOT,
+                                "%s %.3f %.3f %.3f along %.2f %.2f %.2f",
+                                skeleton.name(b),
+                                posed[at],
+                                posed[at + 1],
+                                posed[at + 2],
+                                posed[at + 3],
+                                posed[at + 4],
+                                posed[at + 5]));
+            }
+        }
+        return String.join("; ", heads);
     }
 
     /**

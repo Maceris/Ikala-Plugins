@@ -211,7 +211,8 @@ class TestSpringChains {
     @Test
     void testKeepsOutOfCapsules() {
         Setup rig = new Setup();
-        float radius = 0.1f;
+        // Wider than the 0.1 m the hanging joints sit from the bar at rest, so it must push
+        float radius = 0.15f;
         SpringChains springs =
                 new SpringChains(
                         rig.skeleton,
@@ -238,6 +239,141 @@ class TestSpringChains {
                         "Joint " + i + " at " + p + " is inside the bar on frame " + frame);
             }
         }
+    }
+
+    /**
+     * A capsule along another chain counts only while that chain is worn: the hanging chain falls
+     * through the bar when the bar's chain isn't worn, and is kept out of it when it is.
+     */
+    @Test
+    void testCapsuleOnAnotherChain() {
+        Setup rig = new Setup();
+        // Wider than the 0.1 m the hanging joints sit from the bar at rest
+        float radius = 0.15f;
+        BodyPlan plan =
+                DataFormat.readDefinition(
+                        JsonText.parse(
+                                """
+                                { "id": "test:plan", "rig": "test:rig", "variants": [ { "id": "a" } ],
+                                  "extensions": [
+                                    { "id": "tail", "root": "hips", "bones": ["c1", "c2", "c3", "c4"],
+                                      "spring": { "stiffness": 0, "damping": 4, "gravity": 1,
+                                        "colliders": [ { "from": "barLeft", "to": "barRight",
+                                                         "radius": 0.15 } ] } },
+                                    { "id": "bar", "root": "root", "bones": ["barLeft", "barRight"] }
+                                  ] }
+                                """,
+                                error -> Assertions.fail(error.toString())),
+                        BodyPlan.class,
+                        FAIL);
+        float[] nearest = new float[2];
+        List<List<String>> worn = List.of(List.of("tail"), List.of("bar", "tail"));
+        for (int w = 0; w < worn.size(); ++w) {
+            SpringChains springs = new SpringChains(rig.skeleton, plan, worn.get(w));
+            PoseSolver solver = new PoseSolver(rig.skeleton);
+            Pose pose = new Pose(rig.skeleton);
+            Proportions neutral = Proportions.neutral(rig.skeleton);
+            nearest[w] = Float.POSITIVE_INFINITY;
+            for (int frame = 0; frame < 300; ++frame) {
+                solver.solve(pose, neutral);
+                springs.update(1 / 60f, solver, 0);
+                float[] points = springs.points(0);
+                for (int i = 0; i < 4; ++i) {
+                    Vector3f p = point(points, i);
+                    nearest[w] =
+                            Math.min(nearest[w], new Vector3f(0, p.y - 0.5f, p.z + 0.15f).length());
+                }
+            }
+        }
+        Assertions.assertTrue(nearest[0] < radius - 0.01f, "Fell through: " + nearest[0]);
+        Assertions.assertTrue(nearest[1] > radius - 0.01f, "Kept out: " + nearest[1]);
+    }
+
+    /**
+     * A one-way capsule sends points near it out its way, round to its far side, rather than
+     * straight away from its line: the chain hanging through the bar ends up behind it.
+     */
+    @Test
+    void testOneWayCapsule() {
+        Setup rig = new Setup();
+        SpringChains springs =
+                new SpringChains(
+                        rig.skeleton,
+                        Setup.plan(
+                                "{ \"stiffness\": 0, \"damping\": 4, \"gravity\": 1, \"colliders\":"
+                                        + " [ { \"from\": \"barLeft\", \"to\": \"barRight\","
+                                        + " \"radius\": 0.15, \"out\": [0, 0, -1] } ] }"),
+                        List.of("tail"));
+        PoseSolver solver = new PoseSolver(rig.skeleton);
+        Pose pose = new Pose(rig.skeleton);
+        Proportions neutral = Proportions.neutral(rig.skeleton);
+        for (int frame = 0; frame < 120; ++frame) {
+            solver.solve(pose, neutral);
+            springs.update(1 / 60f, solver, 0);
+        }
+        float[] points = springs.points(0);
+        for (int i = 0; i < 4; ++i) {
+            Vector3f p = point(points, i);
+            float across = Math.abs(p.y - 0.5f);
+            if (across < 0.15f) {
+                // Behind the bar, at least as far as its surface reaches level with the joint
+                float reach = (float) Math.sqrt(0.15f * 0.15f - across * across);
+                Assertions.assertTrue(
+                        p.z <= -0.15f - reach + 0.01f, "Joint " + i + " at " + p + " isn't behind");
+            }
+        }
+    }
+
+    /**
+     * A chain going round a one-way capsule folds at one joint unless it resists bending; a bend
+     * stiffness spreads the bend over its joints, still behind the bar.
+     */
+    @Test
+    void testBendSpreads() {
+        float[] sharpest = new float[2];
+        String[] bends = {"0", "400"};
+        for (int r = 0; r < 2; ++r) {
+            Setup rig = new Setup();
+            SpringChains springs =
+                    new SpringChains(
+                            rig.skeleton,
+                            Setup.plan(
+                                    "{ \"stiffness\": 6, \"damping\": 4, \"gravity\": 1, \"bend\": "
+                                            + bends[r]
+                                            + ", \"colliders\": [ { \"from\": \"barLeft\","
+                                            + " \"to\": \"barRight\", \"radius\": 0.15,"
+                                            + " \"out\": [0, 0, -1] } ] }"),
+                            List.of("tail"));
+            PoseSolver solver = new PoseSolver(rig.skeleton);
+            Pose pose = new Pose(rig.skeleton);
+            Proportions neutral = Proportions.neutral(rig.skeleton);
+            for (int frame = 0; frame < 240; ++frame) {
+                solver.solve(pose, neutral);
+                springs.update(1 / 60f, solver, 0);
+            }
+            float[] points = springs.points(0);
+            Vector3f before = solver.model(rig.skeleton.index("c1")).getTranslation(new Vector3f());
+            Vector3f last = null;
+            for (int i = 0; i < 4; ++i) {
+                Vector3f p = point(points, i);
+                Vector3f along = new Vector3f(p).sub(before);
+                if (last != null) {
+                    sharpest[r] = Math.max(sharpest[r], last.angle(along));
+                }
+                last = along;
+                before = p;
+            }
+            Assertions.assertTrue(
+                    point(points, 3).z < -0.15f,
+                    "The tip at " + point(points, 3) + " isn't behind");
+        }
+        Assertions.assertTrue(
+                sharpest[1] < 0.7f * sharpest[0],
+                "Sharpest bend "
+                        + Math.toDegrees(sharpest[1])
+                        + " deg with stiffness, "
+                        + Math.toDegrees(sharpest[0])
+                        + " without");
     }
 
     /** A chain settles the same at 30 frames a second as at 144. */

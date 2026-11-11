@@ -55,6 +55,7 @@ import java.util.Set;
  *     it.
  * @param chainLength For parts on an extension chain, how much longer its bones are than the rig's:
  *     one scale for every bone, or one per bone from the root out; empty for the rig's lengths.
+ * @param wing For a wing, its own poses in place of the plan's for its chain, or null.
  * @author Ches Burks
  */
 @Doc(
@@ -160,7 +161,13 @@ public record Part(
                                 + " out, so a long tail's mesh fits its own chain. Its mesh is made"
                                 + " on the longer chain.")
                 @Optional
-                List<Float> chainLength)
+                List<Float> chainLength,
+        @Doc(
+                        "For a wing on an extension chain: its own folded, gliding and flapping"
+                                + " poses and root offset, in place of the plan's for its chain,"
+                                + " for a wing that folds or sits differently.")
+                @Optional
+                BodyPlan.WingPoses wing)
         implements Definition {
 
     /** The field for the plan. */
@@ -210,6 +217,9 @@ public record Part(
 
     /** The field for the other side's part. */
     public static final String FIELD_PAIR = "pair";
+
+    /** The field for a wing's own poses. */
+    public static final String FIELD_WING = "wing";
 
     /** The field for locked sliders. */
     public static final String FIELD_LOCKS_SLIDERS = "locksSliders";
