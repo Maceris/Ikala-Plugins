@@ -18,10 +18,11 @@ import pathlib
 import bpy
 from mathutils import Vector
 
-# How much longer the test tail's chain is than the rig's, and the wings' (render_guides.py sets
-# them for its stand-ins)
+# How much longer the test tail's chain is than the rig's, and the wings' and cape's
+# (render_guides.py sets them for its stand-ins)
 TAIL_LENGTH = 1.3
 WING_LENGTH = 1.0
+CAPE_LENGTH = 1.0
 # The tail's thickness at its root and its tip, and the sides around it
 TAIL_ROOT_RADIUS = 0.055
 TAIL_TIP_RADIUS = 0.012
@@ -185,7 +186,7 @@ def wing(arm, side):
 
 def cape(arm):
     names = ["cape.01", "cape.02", "cape.03", "cape.04"]
-    points = joints(arm, names)
+    points = joints(arm, names, CAPE_LENGTH)
     chest = arm.matrix_world @ arm.data.bones["chest"].head_local
     rows, row_weights = [], []
     # The collar rides on the shoulders, in front of the chain's top

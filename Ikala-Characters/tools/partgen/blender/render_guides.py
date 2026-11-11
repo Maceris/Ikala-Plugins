@@ -12,7 +12,7 @@ both, or the hips too; slanted like an arm in the A pose, it makes the one. --vi
 from the back or from its left side instead of the front, like a cape from behind.
 
 --chain renders a stand-in for a part on one of the body plan's extension chains instead of the
-body: a plain tail or wing along the chain's bones at rest (the hand-made test shapes from
+body: a plain tail, wing or cape along the chain's bones at rest (the hand-made test shapes from
 tools/blender/test_extensions.py), --chain-scale times the rig's length, so a generated tail or
 wing comes out in the chain's pose and proportions.
 
@@ -52,7 +52,7 @@ VIEWS = {"front": ((0, 1, 0), (1, 0, 0)), "back": ((0, -1, 0), (-1, 0, 0)),
 LOOK, RIGHT = VIEWS["front"]
 # The stand-ins for the kinds of extension chain, from test_extensions.py, by the chain's name
 # without its side
-STAND_INS = ("tail", "wing")
+STAND_INS = ("tail", "wing", "cape")
 # How far the camera is turned about its view, in degrees: the body shows turned this much
 # counterclockwise
 ROLL = 0.0
@@ -275,6 +275,9 @@ def stand_in(chain, scale):
     if kind == "tail":
         test_extensions.TAIL_LENGTH = scale
         return test_extensions.tail(arm)
+    if kind == "cape":
+        test_extensions.CAPE_LENGTH = scale
+        return test_extensions.cape(arm)
     test_extensions.WING_LENGTH = scale
     return test_extensions.wing(arm, chain.rsplit(".", 1)[1])
 

@@ -8,7 +8,8 @@ Run it headless with Blender 5 or later, which partgen.py does:
         [--report <json>] [--mirror <other side's name>] [--chain-scale <times>]
 
 The generated mesh is lined up with the chain: its middle line (the middles of slices across its
-longest axis, or their top edges with the rule's "line": "top", like a wing's leading edge)
+longest axis, or their top edges with the rule's "line": "top", like a wing's leading edge, or
+their sides nearest the camera with "front", like a cape's back seen from behind)
 runs from the end the rule's "root" direction points to (in TRELLIS.2's space: +X
 the image's right, +Y up, +Z toward the viewer) out to the other, and is turned so that line lies
 along the chain at rest and its front (TRELLIS.2's +Z) faces the way the guide camera looked from
@@ -16,7 +17,11 @@ along the chain at rest and its front (TRELLIS.2's +Z) faces the way the guide c
 that many times the rig's: the part's chainLength. Then it is bent along the chain, each slice
 moved from its place on the line to the same share of the way along the chain, so a curled tail
 follows the chain's own curve; a flat part, like a wing, is only turned (the rule's "bend":
-false).
+false). A part hanging off the body, like a cape, whose chain runs inside the body, is moved the
+rule's "offset" meters toward the camera, and then pushed out to "clear" meters off the body
+wherever it is nearer, like a collar over the shoulders; with "behind", what lies further toward
+the body's front than that many meters past the chain is dropped first, like the front panels of
+a cloak.
 
 A low-poly copy is unwrapped and baked from it as accessories are (see fit_accessory.py): base
 color, normals, ORM, and tint masks. Each vertex is weighted to the chain bone it lies along,
@@ -190,8 +195,9 @@ def line_up(high, joints, rule, length):
     points = fit_accessory.vertices(high)
     centered = points - points.mean(0)
     axis = np.linalg.svd(centered, full_matrices=False)[2][0]
-    # Blender's +Z is TRELLIS.2's up, the picture's
-    top = np.array([0.0, 0.0, 1.0]) if rule.get("line") == "top" else None
+    # Blender's +Z is TRELLIS.2's up, the picture's, and its -Y TRELLIS.2's toward the viewer
+    edges = {"top": (0.0, 0.0, 1.0), "front": (0.0, -1.0, 0.0)}
+    top = np.array(edges[rule["line"]]) if rule.get("line") in edges else None
     line = middle_line(points, axis, top)
     if len(line) < 3:
         raise SystemExit("The mesh is too small to find its middle line")
@@ -213,8 +219,12 @@ def line_up(high, joints, rule, length):
     source = frame(line[-1] - line[0], np.array([0.0, -1.0, 0.0]))
     target = frame(scaled[-1] - scaled[0], -look)
     turn = target @ source.T
-    moved = ((points - line[0]) * scale) @ turn.T + scaled[0]
-    line = ((line - line[0]) * scale) @ turn.T + scaled[0]
+    # A part hanging off the body, like a cape, sits the rule's "offset" meters toward the camera
+    # from the chain, which runs inside the body
+    shift = -look * rule.get("offset", 0.0)
+    moved = ((points - line[0]) * scale) @ turn.T + scaled[0] + shift
+    line = ((line - line[0]) * scale) @ turn.T + scaled[0] + shift
+    scaled = scaled + shift
     line_lengths = polyline_lengths(line)
     scaled_lengths = polyline_lengths(scaled)
 
@@ -232,9 +242,51 @@ def line_up(high, joints, rule, length):
               for s in np.linspace(0, 1, 11)]
     high.data.vertices.foreach_set("co", bent.ravel().astype(np.float32))
     high.data.update()
+    # The chain itself, without the offset, for weighting
+    scaled = scaled - shift
     print("[fit] line %.3f m long, scaled x%.3f; chain x%.3f; line off the chain by %.3f m "
           "at most before bending" % (line_lengths[-1] / scale, scale, chain_scale, max(misfit)))
     return chain_scale, scaled, max(misfit)
+
+
+def keep_behind(high, chain, look, reach):
+    """Drop faces further toward the front of the body than reach meters past the chain, like the
+    front panels of a cloak TRELLIS.2 wrapped round a body it imagined: a cape hangs behind.
+    Gives how many were dropped."""
+    points = fit_accessory.vertices(high)
+    lengths = polyline_lengths(chain)
+    _, nearest = project(chain, lengths, points)
+    behind = (points - nearest) @ -np.asarray(look, dtype=float)
+    mesh = bmesh.new()
+    mesh.from_mesh(high.data)
+    mesh.faces.ensure_lookup_table()
+    front = [face for face in mesh.faces
+             if max(behind[v.index] for v in face.verts) < -reach]
+    bmesh.ops.delete(mesh, geom=front, context="FACES")
+    mesh.to_mesh(high.data)
+    mesh.free()
+    print("[fit] dropped %d faces in front of the body" % len(front))
+    return len(front)
+
+
+def keep_clear(high, mannequin, gap):
+    """Push every vertex nearer the body than gap meters, or inside it, out to gap meters off
+    its surface, like a cape's collar over the shoulders. Gives how many moved."""
+    tree = fit_accessory.body_tree(mannequin)
+    points = fit_accessory.vertices(high)
+    moved = 0
+    for i, point in enumerate(points):
+        found, normal, _, _ = tree.find_nearest(Vector(point.tolist()))
+        if found is None:
+            continue
+        out = Vector(point.tolist()) - found
+        if out.dot(normal) < gap:
+            points[i] = np.array(found + normal * gap)
+            moved += 1
+    high.data.vertices.foreach_set("co", points.ravel().astype(np.float32))
+    high.data.update()
+    print("[fit] pushed %d of %d vertices %.3f m clear of the body" % (moved, len(points), gap))
+    return moved
 
 
 def weight(low, bones, root, scaled):
@@ -339,6 +391,10 @@ def main():
         fit_accessory.drop_needles(high)
     high = fit_accessory.drop_slivers(high)
     chain_scale, scaled, misfit = line_up(high, joints, rule, length)
+    if "behind" in rule:
+        keep_behind(high, scaled, LOOKS[rule.get("view", "front")], rule["behind"])
+    if rule.get("clear"):
+        keep_clear(high, mannequin, rule["clear"])
     low = fit_accessory.low_poly(high, args.name, rule["triangles"])
     base, covered = fit_accessory.bake(high, low, args.name, rule.get("texture", TEXTURE),
                                        mannequin)

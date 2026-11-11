@@ -175,9 +175,8 @@ it comes out in the chain's pose and proportions, and spreads past the stand-in 
 its description asks. `render_guides.py --chain tail --chain-scale 1.2` renders a
 stand-in on its own.
 
-A cape is clothing in the plan's `cape` layer: its rule in `layers.json` has
-`"view": "back"`, so its images are painted over the mannequin seen from behind,
-down past the waist (`maskDown`).
+A cape is briefed the same way, on the `cape` chain, with its `length` from the
+shoulders to the hem; its pictures show a cape on its own from behind.
 
 ```
 python partgen.py new extensions_trial briefs/extensions_trial.json --keep
@@ -186,8 +185,9 @@ python partgen.py images extensions_trial --count 4
 
 TRELLIS.2 sometimes hangs curtains of thin upright streaks off a tail or wing, the
 same seed clean on another run, so their meshes are checked for streak triangles
-and made again with the next seed (`trellis_run.py --object`). From a single wing
-it often makes a pair, or a whole bat; fitting will have to keep one side.
+and made again with the next seed (`trellis_run.py --object`); the shape decoder's
+GPU race that caused them is fixed, so this is only a guard. From a single wing it
+sometimes makes a pair, or a whole bat; pick another image when it does.
 
 `fit` lines a tail or wing mesh up along its chain on both mannequins
 (`tools/partgen/blender/fit_extension.py`): its middle line (a wing's top edge) runs
@@ -198,7 +198,16 @@ right side is written as the left's mirror, the two paired. Where a picture put 
 root end the other way round, the brief's `fit` can point `root` at it, like
 `{"root": [1, -1, 0]}` (TRELLIS.2's space: +X right, +Y up, +Z toward the viewer).
 TRELLIS.2 wraps fur in a nearly clear white shell, which the fit drops before baking.
-Fitting capes isn't built yet.
+
+TRELLIS.2 makes a cape round a body it imagines, which never fits the mannequin,
+so a cape takes no mesh (its rule's `template`): `fit` cuts the cape out of the
+picked picture with BiRefNet (`tools/partgen/cut_out.py`) and makes the part from a
+template sheet (`tools/partgen/blender/fit_cape.py`). The sheet rides over the
+shoulders and hangs down the back, widening toward the hem; each row hangs back,
+whole, until it clears the body (the arms don't count), so it falls straight from
+the shoulder blades and the seat. The picture is projected on from behind and the
+sheet cut to its outline, so a ragged hem comes through. The part is clothing in the
+plan's `cape` layer that moves with the cape chain, its collar weighted to the chest.
 
 ## Previewing characters
 

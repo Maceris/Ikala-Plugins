@@ -5,6 +5,10 @@
   {"id": "bat_wing", "kind": "extension", "chain": "wing.L", "length": 1.1,
    "description": "a leathery dark purple bat wing with thin finger bones and a clawed thumb",
    "tags": ["wing"]},
-  {"id": "red_cape", "kind": "layer", "layer": "cape",
-   "description": "a long plain crimson wool cape", "tags": ["cape"]}
+  {"id": "crimson_cape", "kind": "extension", "chain": "cape", "length": 1.25,
+   "description": "a long plain crimson wool cape with a high collar",
+   "tags": ["cape", "cloth", "backDetail"]},
+  {"id": "tattered_cape", "kind": "extension", "chain": "cape", "length": 1.25,
+   "description": "a tattered dark gray traveler's cape with a frayed ragged hem",
+   "tags": ["cape", "cloth", "backDetail"]}
 ]

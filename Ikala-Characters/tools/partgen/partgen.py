@@ -88,8 +88,11 @@ stand-in's length. Fitting lines its mesh up along the chain (see blender/fit_ex
 scaled to its length, which sets the part's chainLength, and writes a wing's right side as the
 left's mirror. Where the picture put the root end the other way round, a brief's "fit" can
 point "root" at it (in TRELLIS.2's space: +X right, +Y up, +Z toward the viewer). A cape is a
-layer, painted over the mannequin seen from behind (its rule's "view" in layers.json); fitting it
-isn't built yet.
+part on the "cape" chain too, pictured on its own from behind; TRELLIS.2 makes capes round a body
+it imagines, so instead of a mesh a cape takes its rule's "template": a sheet hung from the
+mannequin's shoulders down its back, its picture projected on and cut to the picture's outline
+(blender/fit_cape.py, with the cape cut out of the picture by cut_out.py). Its part is clothing in
+the plan's cape layer, which moves with the chain.
 
 Accessories are fitted on the face, head_top, back, hip, shoulder and forearm sockets. Clothing
 is lined up on the mannequin, cut
@@ -993,7 +996,7 @@ def command_images(config, batch, args):
 
 def command_meshes(config, batch, args):
     def wanted(b):
-        return b["review"]["pick"] is not None and (
+        return b["review"]["pick"] is not None and not templated(b) and (
             args.redo or b["mesh"] is None or b["mesh"]["image"] != b["review"]["pick"]
             or b["mesh"]["type"] != args.type)
 
@@ -1012,8 +1015,9 @@ def command_meshes(config, batch, args):
         # which it checks for curtains of streaks; an isolated part is an object on its own
         if brief["kind"] in ("layer", "body") and not isolated(brief):
             figures += ["--figure", image]
-        # A tail or wing is checked for the curtains themselves
-        elif brief["kind"] == "extension":
+        # A tail or wing is checked for the curtains themselves; a cape's long folds would look
+        # like them
+        elif brief["kind"] == "extension" and extension_of(brief)[1].get("checkStreaks", True):
             figures += ["--object", image]
     trellis = pathlib.Path(config["trellis"])
     subprocess.run([str(trellis / ".venv/Scripts/python.exe"), str(TOOLS / "trellis_run.py"),
@@ -1676,7 +1680,9 @@ def command_fit(config, batch, args):
                            lambda b: b["kind"] == "body" and b["part"] is not None):
             measure_standoffs(config, batch, brief)
         return
-    briefs = ready(batch.load(), args, lambda b: b["mesh"] is not None and kept(b, "mesh", args)
+    briefs = ready(batch.load(), args, lambda b: (b["review"]["pick"] is not None
+                                                  if templated(b) else
+                                                  b["mesh"] is not None and kept(b, "mesh", args))
                    and (args.redo or b["part"] is None))
     for brief in briefs:
         if brief["kind"] == "extension":
@@ -1723,6 +1729,24 @@ def command_fit(config, batch, args):
             print("part", " ".join(ids))
 
 
+def templated(brief):
+    """Whether a brief's part is made from a template and its picture alone, with no mesh, like
+    a cape (an extension rule's "template")."""
+    return brief["kind"] == "extension" and bool(extension_of(brief)[1].get("template"))
+
+
+def cut_out(config, folder, pick):
+    """A mask of the picked picture's object, cut out by BiRefNet (see cut_out.py), made the
+    first time. Gives its path."""
+    mask = folder / ("cut_%d.png" % pick)
+    if not mask.exists():
+        trellis = pathlib.Path(config["trellis"])
+        subprocess.run([str(trellis / ".venv/Scripts/python.exe"), str(TOOLS / "cut_out.py"),
+                        "--trellis", str(trellis), str(folder / "images" / ("%d.png" % pick)),
+                        str(mask)], check=True)
+    return mask
+
+
 def fit_extension(config, batch, brief):
     """Fit a brief's mesh along its extension chain (see blender/fit_extension.py and
     extensions.json) on each body variant and write its part: an accessory on the chain, with
@@ -1740,6 +1764,16 @@ def fit_extension(config, batch, brief):
     names = (["%s_l" % brief["id"], "%s_r" % brief["id"]] if sided else [brief["id"]])
     meshes = [{} for _ in names]
     chain_scale = None
+    # A template part, like a cape, is made from its picture, cut out; others from their mesh
+    template = bool(rule.get("template"))
+    pick = brief["review"]["pick"] if template else brief["mesh"]["image"]
+    if template:
+        source = ["--image", str(folder / "images" / ("%d.png" % pick)),
+                  "--mask", str(cut_out(config, folder, pick))]
+        script = "blender/fit_cape.py"
+    else:
+        source = ["--mesh", str(folder / brief["mesh"]["file"]), "--chain", part["chain"]]
+        script = "blender/fit_extension.py"
     for variant in (GUIDE_VARIANT, "female"):
         suffix = "" if variant == GUIDE_VARIANT else "_" + variant
         out = content / "extension" / ("%s%s.glb" % (names[0], suffix))
@@ -1753,10 +1787,9 @@ def fit_extension(config, batch, brief):
                 else ["--chain-scale", str(chain_scale)])
         with open(log, "w", encoding="utf8") as stream:
             result = subprocess.run(
-                [config["blender"], "-b", "--factory-startup", "--python",
-                 str(TOOLS / "blender/fit_extension.py"), "--",
-                 "--mesh", str(folder / brief["mesh"]["file"]), "--mannequin", str(mannequin),
-                 "--plan", json.dumps(chains), "--chain", part["chain"],
+                [config["blender"], "-b", "--factory-startup", "--python", str(TOOLS / script),
+                 "--"] + source + [
+                 "--mannequin", str(mannequin), "--plan", json.dumps(chains),
                  "--rule", json.dumps(rule), "--name", names[0], "--out", str(out),
                  "--preview", str(renders), "--tints", str(folder / ("tints%s.json" % suffix)),
                  "--report", str(report)] + size
@@ -1776,25 +1809,28 @@ def fit_extension(config, batch, brief):
     tints = folder / "tints.json"
     for side, name in enumerate(names):
         chain = part["chain"] if side == 0 else other_side(part["chain"])
-        definition = {
-            "id": ids[side],
-            "plan": PLAN_ID,
-            "kind": "accessory",
+        definition = {"id": ids[side], "plan": PLAN_ID}
+        # A chain named like a layer, like the cape, is that layer's place, so its part is
+        # clothing in the layer that moves with the chain
+        if any(layer["id"] == chain for layer in plan["layers"]):
+            definition.update({"kind": "layer", "fills": [chain]})
+        else:
+            definition.update({"kind": "accessory", "rigid": False})
+        definition.update({
             "extension": chain,
-            "rigid": False,
             "chainLength": [chain_scale],
             "meshes": meshes[side],
             # Both sides are one baked mesh, mirrored, so they share its material
             "materialSlots": [dict(material_slot(names[0], tints))],
             "tags": brief.get("tags", []),
-        }
+        })
         if sided:
             definition["pair"] = ids[1 - side]
         path = content / "part" / ("%s.json" % name)
         path.parent.mkdir(parents=True, exist_ok=True)
         header = ("// %s, batch %s, image %d\n"
                   "// Written by Ikala-Characters/tools/partgen/partgen.py\n"
-                  % (brief["description"], batch.name, brief["mesh"]["image"]))
+                  % (brief["description"], batch.name, pick))
         path.write_text(header + json.dumps([definition], indent=2) + "\n", encoding="utf8")
     return ids
 
