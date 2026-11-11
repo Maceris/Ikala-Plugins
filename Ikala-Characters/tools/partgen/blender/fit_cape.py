@@ -33,6 +33,7 @@ import bmesh
 import bpy
 import numpy as np
 from mathutils import Vector
+from mathutils.kdtree import KDTree
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fit_accessory  # noqa: E402
@@ -46,6 +47,9 @@ COLLAR_ROWS = 4
 # chain's head the collar starts, in meters
 SHOULDER_DROP = 0.1
 COLLAR_FORWARD = 0.1
+# A grid square is kept when this many of its corners are on the cape; the others then move onto
+# the cape's outline
+KEEP_CORNERS = 2
 # How thick the sheet is made, so both sides show
 THICKNESS = 0.006
 # The mannequin's meshes are named for their slots after this, with seam caps' names holding
@@ -166,35 +170,58 @@ def cape_outline(image_path, mask_path):
 
 def project(obj, points, mask, box, size):
     """Give the sheet texture coordinates from the picture seen from behind, its outline
-    stretched over the cape's box, and cut away its faces over the background."""
-    xs = points[..., 0]
-    zs = points[..., 2]
+    stretched over the cape's box, and cut it to the picture's outline: faces over the
+    background go, and the corners left outside it move onto it, so the edge follows the
+    outline rather than the grid's steps."""
+    xs = points[..., 0].reshape(-1)
+    zs = points[..., 2].reshape(-1)
     left, top, right, bottom = box
     width, height = size
+    x_low, x_high, z_low, z_high = xs.min(), xs.max(), zs.min(), zs.max()
     # From behind, the character's left (+x) is the picture's left
-    across = (xs.max() - xs) / (xs.max() - xs.min())
-    down = (zs.max() - zs) / (zs.max() - zs.min())
-    px = left + across * (right - left)
-    py = top + down * (bottom - top)
-    uv = np.stack([px / width, 1 - py / height], axis=-1).reshape(-1, 2)
+    px = left + (x_high - xs) / (x_high - x_low) * (right - left)
+    py = top + (z_high - zs) / (z_high - z_low) * (bottom - top)
+    columns = np.clip(px, 0, width - 1).astype(int)
+    rows = np.clip(py, 0, height - 1).astype(int)
+    inside = mask[rows, columns]
+
+    # Faces mostly over the background go
     mesh = obj.data
-    layer = mesh.uv_layers.new(name="UVMap")
-    for loop in mesh.loops:
-        layer.data[loop.index].uv = uv[loop.vertex_index]
-    # Faces over the picture's background go, so its outline shows
-    flat = mask
-    columns = np.clip(px.reshape(-1), 0, width - 1).astype(int)
-    rows = np.clip(py.reshape(-1), 0, height - 1).astype(int)
-    inside = flat[rows, columns]
     bm = bmesh.new()
     bm.from_mesh(mesh)
     bm.faces.ensure_lookup_table()
-    gone = [f for f in bm.faces if sum(inside[v.index] for v in f.verts) < 3]
+    bm.verts.ensure_lookup_table()
+    gone = [f for f in bm.faces if sum(inside[v.index] for v in f.verts) < KEEP_CORNERS]
+    kept = {v.index for f in bm.faces if f not in set(gone) for v in f.verts}
+    # The corners of kept faces left outside the outline move to its nearest pixel, before the
+    # cut renumbers the vertices
+    edge = mask & ~(np.roll(mask, 1, 0) & np.roll(mask, -1, 0)
+                    & np.roll(mask, 1, 1) & np.roll(mask, -1, 1))
+    edge_rows, edge_columns = np.nonzero(edge)
+    tree = KDTree(len(edge_rows))
+    for k, (r, c) in enumerate(zip(edge_rows, edge_columns)):
+        tree.insert((c + 0.5, r + 0.5, 0), k)
+    tree.balance()
+    moved = 0
+    for vert in bm.verts:
+        i = vert.index
+        if inside[i] or i not in kept:
+            continue
+        (c, r, _), _, _ = tree.find((px[i], py[i], 0))
+        px[i], py[i] = c, r
+        vert.co.x = x_high - (c - left) / (right - left) * (x_high - x_low)
+        vert.co.z = z_high - (r - top) / (bottom - top) * (z_high - z_low)
+        moved += 1
+    uv = np.stack([px / width, 1 - py / height], axis=-1)
+    layer = bm.loops.layers.uv.new("UVMap")
+    for face in bm.faces:
+        for loop in face.loops:
+            loop[layer].uv = uv[loop.vert.index]
     bmesh.ops.delete(bm, geom=gone, context="FACES")
     bm.to_mesh(mesh)
     bm.free()
-    print("[cape] cut %d of %d faces over the background" % (len(gone), (points.shape[0] - 1)
-                                                             * (points.shape[1] - 1)))
+    print("[cape] cut %d of %d faces over the background, moved %d corners onto its outline"
+          % (len(gone), (points.shape[0] - 1) * (points.shape[1] - 1), moved))
 
 
 def material(obj, picture, name):

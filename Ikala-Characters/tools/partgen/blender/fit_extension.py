@@ -61,6 +61,9 @@ JOINT_BLEND = 0.25
 LOOKS = {"front": (0, 1, 0), "back": (0, -1, 0), "left": (-1, 0, 0)}
 # The texture size baked to, unless the rule says
 TEXTURE = 1024
+# Loose pieces whose boxes come within this share of the mesh's size count as one group (see
+# keep_one)
+TOUCHING = 0.02
 # Faces whose texture is clearer than this, on average, are dropped before fitting: TRELLIS.2
 # wraps fur in a nearly clear white shell, which would otherwise hide the fur's colors from the bake
 CLEAR = 0.5
@@ -206,7 +209,11 @@ def line_up(high, joints, rule, length):
     if root @ (line[0] - line[-1]) < 0:
         line = line[::-1]
     line_lengths = polyline_lengths(line)
-    scale = length / line_lengths[-1]
+    # A part only turned, like a wing, is measured root to tip: the line along a feathered or
+    # plated edge zigzags from tip to tip, two or three times as long as the wing, which shrank it
+    bend = rule.get("bend", True)
+    span = line_lengths[-1] if bend else float(np.linalg.norm(line[-1] - line[0]))
+    scale = length / span
 
     chain_lengths = polyline_lengths(joints)
     chain_scale = length / chain_lengths[-1]
@@ -231,7 +238,7 @@ def line_up(high, joints, rule, length):
     # Bend: each point moves as its place on the line moves to the same share along the chain.
     # A flat part, like a wing, whose line is noisy, is only turned (the rule's "bend": false)
     bent = moved.copy()
-    if rule.get("bend", True):
+    if bend:
         distance, nearest = project(line, line_lengths, moved)
         share = distance / line_lengths[-1]
         for i in range(len(moved)):
@@ -244,9 +251,58 @@ def line_up(high, joints, rule, length):
     high.data.update()
     # The chain itself, without the offset, for weighting
     scaled = scaled - shift
-    print("[fit] line %.3f m long, scaled x%.3f; chain x%.3f; line off the chain by %.3f m "
-          "at most before bending" % (line_lengths[-1] / scale, scale, chain_scale, max(misfit)))
+    print("[fit] line %.3f m long, %.3f m root to tip, scaled x%.3f; chain x%.3f; line off the "
+          "chain by %.3f m at most before bending"
+          % (line_lengths[-1] / scale, span, scale, chain_scale, max(misfit)))
     return chain_scale, scaled, max(misfit)
+
+
+def keep_one(high):
+    """Keep only the biggest group of the mesh's loose pieces, by faces, where pieces whose boxes
+    come within TOUCHING of each other group together: TRELLIS.2 sometimes makes a pair of wings
+    from one, and a wing's feathers or plates are loose pieces of their own. Gives the mesh."""
+    fit_accessory.select_only(high)
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.mesh.separate(type="LOOSE")
+    bpy.ops.object.mode_set(mode="OBJECT")
+    pieces = list(bpy.context.selected_objects)
+    boxes = []
+    for piece in pieces:
+        co = fit_accessory.vertices(piece)
+        boxes.append((co.min(0), co.max(0)))
+    size = max(float((b[1] - b[0]).max()) for b in boxes)
+    margin = size * TOUCHING
+    group = list(range(len(pieces)))
+
+    def root(i):
+        while group[i] != i:
+            group[i] = group[group[i]]
+            i = group[i]
+        return i
+
+    for i in range(len(pieces)):
+        for j in range(i + 1, len(pieces)):
+            low_i, high_i = boxes[i]
+            low_j, high_j = boxes[j]
+            if (low_i <= high_j + margin).all() and (low_j <= high_i + margin).all():
+                group[root(i)] = root(j)
+    faces = {}
+    for i, piece in enumerate(pieces):
+        faces[root(i)] = faces.get(root(i), 0) + len(piece.data.polygons)
+    best = max(faces, key=faces.get)
+    kept = [p for i, p in enumerate(pieces) if root(i) == best]
+    for i, piece in enumerate(pieces):
+        if root(i) != best:
+            bpy.data.objects.remove(piece)
+    print("[fit] kept %d of %d groups of loose pieces, %d of %d faces"
+          % (1, len(faces), faces[best], sum(faces.values())))
+    fit_accessory.select_only(*kept)
+    if len(kept) > 1:
+        bpy.ops.object.join()
+    whole = bpy.context.view_layer.objects.active
+    whole.name = "high"
+    return whole
 
 
 def keep_behind(high, chain, look, reach):
@@ -390,6 +446,8 @@ def main():
     if not rule.get("keepThin", False):
         fit_accessory.drop_needles(high)
     high = fit_accessory.drop_slivers(high)
+    if rule.get("onePiece"):
+        high = keep_one(high)
     chain_scale, scaled, misfit = line_up(high, joints, rule, length)
     if "behind" in rule:
         keep_behind(high, scaled, LOOKS[rule.get("view", "front")], rule["behind"])
