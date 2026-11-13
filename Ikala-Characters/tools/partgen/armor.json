@@ -1,0 +1,63 @@
+{
+  "_comment": "How rigid armor pieces worn as clothing are generated for the body plan layers that cover small or one-sided parts of the body, which the clothing path in layers.json, painting a garment over the whole figure, can't: gauntlets, boots and greaves, pauldrons and helmets. A brief names the layer as clothing does ({\"kind\": \"layer\", \"layer\": \"gloves\"}). Each piece is pictured on its own, as an object, so TRELLIS meshes it with all its detail, then fitted by its rule's \"fit\": \"limb\" lines it up on the left side's \"slots\" (names without the side) like an isolated body part, from a picture painted over a render of those slots alone (\"piece\" names what it is, \"roll\" slants a leg as bodyparts.json's rules do, \"maskGrow\", \"guideStrength\" and \"guideEnd\" as there), and is weighted from the skin it covers so it bends at the joints; \"openEnd\": \"away\" puts its open end away from the body, as a pauldron capping the shoulder has it, where a glove's or boot's goes toward it, and \"anchor\" then slides it along the slots until its end toward the body is that many meters past theirs, up over the shoulder; \"surface\" sits it on a socket's body surface by sockets.json's rule for \"socket\"'s type, which this rule's keys replace, rigid on the socket's bone; \"enclose\" puts it round the head: as wide and deep as the head times \"clearance\", its top \"topClearance\" over the head, reaching down at least to \"bottomOffset\" meters from the \"bottomAbove\" bone, rigid on \"bone\". A piece with a \"shell\" is made from the mannequin's own skin instead, so a glove or boot follows the hand or foot as it is, fingers spread and all: the skin of its slots and of the shell's \"extra\" slots above or beside them (sided as the piece is, if they have sides), only the skin within the shell's \"near\" meters of the lined-up piece if it says, pushed out to \"gap\" and onto the lined-up piece where that stands off the skin, as far as the shell's \"reach\" meters, and cut across the limb where the piece ends; the piece gives it its colors and detail. Every other piece is pushed out of the skin to \"gap\" meters and reduced to \"triangles\". All are baked at \"texture\" pixels and given the layer's clothing form targets. \"bothSides\" makes one part of the piece and its mirror, for a layer covering both hands or feet; a layer on one side, like shoulderPads.L, gets a part per side, paired. \"palette\" is the channel its main tint group takes. A helmet brief may say what it hides with \"hides\": {\"layers\": [...], \"regions\": [...]}, by default the hair and scalp.",
+  "gloves": {
+    "fit": "limb",
+    "slots": ["hand"],
+    "piece": "a single left armored glove, from the wrist to the fingertips, fingers together and straight",
+    "guideStrength": 0.3,
+    "guideEnd": 0.35,
+    "maskGrow": 28,
+    "gap": 0.004,
+    "shell": {"extra": ["lowerArm"], "reach": 0.02},
+    "triangles": 1600,
+    "texture": 512,
+    "palette": "secondary",
+    "bothSides": true
+  },
+  "boots": {
+    "fit": "limb",
+    "slots": ["lowerLeg", "foot"],
+    "piece": "a single left armored boot, from just below the knee to the toes",
+    "roll": 40,
+    "guideStrength": 0.3,
+    "guideEnd": 0.35,
+    "maskGrow": 28,
+    "gap": 0.005,
+    "shell": {"reach": 0.03},
+    "triangles": 2000,
+    "texture": 1024,
+    "palette": "secondary",
+    "bothSides": true
+  },
+  "shoulderPads.L": {
+    "fit": "limb",
+    "slots": ["upperArm"],
+    "openEnd": "away",
+    "anchor": 0.03,
+    "piece": "a single left armored pauldron, a curved plate guard capping the shoulder and the top of the upper arm",
+    "negative": "breastplate, cuirass, chest armor, full suit of armor, helmet, neck, collar",
+    "guideStrength": 0.3,
+    "guideEnd": 0.35,
+    "maskGrow": 48,
+    "gap": 0.008,
+    "shell": {"extra": ["torso"], "near": 0.06, "reach": 0.05},
+    "triangles": 1500,
+    "texture": 1024,
+    "palette": "primary"
+  },
+  "helmet": {
+    "fit": "enclose",
+    "bone": "head",
+    "slots": ["head"],
+    "bottomAbove": "brow.L",
+    "bottomOffset": -0.1,
+    "clearance": 1.15,
+    "topClearance": 0.015,
+    "gap": 0.006,
+    "triangles": 2000,
+    "texture": 1024,
+    "palette": "primary",
+    "hides": {"layers": ["hair"], "regions": ["scalp"]},
+    "prompt": "a single {description}, helmet only, front view, seen slightly from above, centered, whole object visible, nobody wearing it, empty inside"
+  }
+}

@@ -68,9 +68,10 @@ OVER_BUDGET = 0.25
 BARE = ("head", "hand.L", "hand.R", "foot.L", "foot.R")
 
 
-def skin_shell(slots):
+def skin_shell(slots, levels=1, simple=False):
     """The mannequin's skin in some slots, joined in world space and welded, as one object,
-    subdivided once."""
+    subdivided some times (once by default), smoothly unless simple: flat splits, which keep
+    every face where the skin's was."""
     mesh = bmesh.new()
     for obj in body_meshes():
         if obj.name.split("_", 1)[-1] not in slots:
@@ -92,10 +93,12 @@ def skin_shell(slots):
     bpy.ops.object.select_all(action="DESELECT")
     shell.select_set(True)
     bpy.context.view_layer.objects.active = shell
-    subdivide = shell.modifiers.new("subdivide", "SUBSURF")
-    subdivide.levels = 1
-    subdivide.boundary_smooth = "PRESERVE_CORNERS"
-    bpy.ops.object.modifier_apply(modifier=subdivide.name)
+    if levels:
+        subdivide = shell.modifiers.new("subdivide", "SUBSURF")
+        subdivide.levels = levels
+        subdivide.subdivision_type = "SIMPLE" if simple else "CATMULL_CLARK"
+        subdivide.boundary_smooth = "PRESERVE_CORNERS"
+        bpy.ops.object.modifier_apply(modifier=subdivide.name)
     return shell
 
 

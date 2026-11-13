@@ -94,6 +94,14 @@ mannequin's shoulders down its back, its picture projected on and cut to the pic
 (blender/fit_cape.py, with the cape cut out of the picture by cut_out.py). Its part is clothing in
 the plan's cape layer, which moves with the chain.
 
+Armor worn as clothing, in the gloves, boots, shoulderPads and helmet layers, is pictured on its
+own as an object rather than painted over the figure, and fitted by its rule in armor.json: over
+a limb's slots like an isolated body part, on a socket's body surface, or round the head; then
+pushed out of the skin, weighted, baked and given form targets (see fit_armor). A layer covering
+both hands or feet gets one part of the piece and its mirror; one on one side, like
+shoulderPads.L, is briefed on the left and gets a part per side, paired. A helmet brief may say
+what it hides, as {"hides": {"layers": ["hair"], "regions": ["scalp", "ears"]}}.
+
 Accessories are fitted on the face, head_top, back, hip, shoulder and forearm sockets. Clothing
 is lined up on the mannequin, cut
 out of its figure, shaped over the body, weighted to the rig, baked, carried over to the female
@@ -213,6 +221,13 @@ ISOLATED_NEGATIVE = ("person, body, torso, head, face, full figure, mannequin, c
                      "extra limbs, extra fingers, sprite sheet, multiple views, several objects, "
                      "cropped, text, watermark, logo, frame, border, busy background, scenery, "
                      "floor, shadow, blurry, lowres, deformed")
+# Armor pictured on its own is a glove or a boot, which the isolated parts' negative keeps out
+ARMOR_NEGATIVE = ISOLATED_NEGATIVE.replace("clothing, sleeve, glove, ", "")
+# Where generated armor's meshes go in the content folder
+ARMOR_FOLDER = "armor"
+# Blender is run headless, without the user's settings, and exits 1 when a script raises: without
+# --python-exit-code it exits 0, and a failed step looked done
+BLENDER_FLAGS = ("-b", "--factory-startup", "--python-exit-code", "1")
 # Each leg's slots, which a layer with "legGap" keeps the gap between
 LEG_SLOTS = (("upperLeg.L", "lowerLeg.L", "foot.L"), ("upperLeg.R", "lowerLeg.R", "foot.R"))
 
@@ -336,6 +351,42 @@ def layer_of(brief):
     return outfit, dict(rule, **brief.get("fit", {}))
 
 
+def armor_of(brief):
+    """Where a layer brief's armor goes and its rule from armor.json, or None if its layer has
+    no armor rule (it is clothing, see layer_of). A rule fitting on a socket's surface starts from
+    sockets.json's rule for the socket's type. Its "slots", named without the side, are the left
+    side's: armor on one side is briefed on the left, and the right is its mirror."""
+    ids = layers_of(brief)
+    rules = json.loads((TOOLS / "armor.json").read_text(encoding="utf8"))
+    rules.pop("_comment", None)
+    if len(ids) != 1 or (ids[0] not in rules and other_side(ids[0]) not in rules):
+        return None
+    layer_id = ids[0]
+    if layer_id not in rules:
+        raise SystemExit("%s is in %s: armor on one side is briefed on the left, and the right "
+                         "is mirrored from it, so brief %s instead"
+                         % (brief["id"], layer_id, other_side(layer_id)))
+    plan = load_json_with_comments(PLAN)
+    layer = next((l for l in plan["layers"] if l["id"] == layer_id), None)
+    if layer is None:
+        raise SystemExit("The biped has no layer %s" % layer_id)
+    rule = dict(rules[layer_id])
+    if rule["fit"] == "surface":
+        socket = next((s for s in plan["sockets"] if s["id"] == rule["socket"]), None)
+        if socket is None:
+            raise SystemExit("The biped has no socket " + rule["socket"])
+        base = json.loads((TOOLS / "sockets.json").read_text(encoding="utf8"))[socket["type"]]
+        rule = dict(base, **rule)
+        rule["bone"] = socket["bone"]
+    rule.update(brief.get("fit", {}))
+    known = {s["id"] for s in plan["slots"]}
+    covers = [s if s in known else s + BODY_SIDE for s in rule["slots"]]
+    part = {"id": "armor_" + brief["id"], "layer": layer, "group": "armor_" + layer_id,
+            "covers": covers, "keepsOut": [s for s in known if s not in covers],
+            "isolated": rule["fit"] == "limb", "roll": rule.get("roll", 0)}
+    return part, rule
+
+
 def outer_seams(slots):
     """The seams of the given body plan slots that only one of them has: where a part filling
     them meets the rest of the body."""
@@ -433,7 +484,7 @@ def rule_of(brief):
     if brief["kind"] == "accessory":
         return socket_of(brief)
     if brief["kind"] == "layer":
-        return layer_of(brief)
+        return armor_of(brief) or layer_of(brief)
     if brief["kind"] == "body":
         return body_of(brief)
     if brief["kind"] == "extension":
@@ -704,7 +755,7 @@ def guides(config, part=None, view="front"):
     if not source.exists():
         body = pathlib.Path(config["mannequin"]).with_suffix(".blend")
         result = subprocess.run(
-            [config["blender"], "-b", "--factory-startup", "--python",
+            [config["blender"], *BLENDER_FLAGS, "--python",
              str(TOOLS / "blender" / "render_guides.py"), "--", "--body", str(body),
              "--out", str(folder), "--size", str(SDXL_SIZE)]
             + (["--frame", "%.4f,%.4f,%.4f" % frame] if frame else [])
@@ -732,7 +783,7 @@ def chain_guides(config, part, rule):
         return folder
     # A first render, unframed, finds where the stand-in is
     body = pathlib.Path(config["mannequin"]).with_suffix(".blend")
-    common = [config["blender"], "-b", "--factory-startup", "--python",
+    common = [config["blender"], *BLENDER_FLAGS, "--python",
               str(TOOLS / "blender" / "render_guides.py"), "--", "--body", str(body),
               "--chain", part["chain"], "--chain-scale", "%.4f" % part["scale"], "--view", view]
     scout = folder / "scout"
@@ -895,7 +946,14 @@ def isolated(brief):
     its rule isolates, or a part on an extension chain."""
     if brief["kind"] == "extension":
         return True
+    if is_armor(brief):
+        return armor_of(brief)[0]["isolated"]
     return brief["kind"] == "body" and body_of(brief)[0]["isolated"]
+
+
+def is_armor(brief):
+    """Whether a brief is armor worn as clothing (see armor_of)."""
+    return brief["kind"] == "layer" and armor_of(brief) is not None
 
 
 def prompt_for(brief):
@@ -903,6 +961,9 @@ def prompt_for(brief):
     if isolated(brief):
         return ISOLATED_STYLE.format(piece=rule["piece"], subject=brief["description"])
     subject = rule["prompt"].format(description=brief["description"])
+    if is_armor(brief):
+        # Pictured on its own, as an accessory is
+        return STYLE.format(subject=subject)
     style = {"layer": LAYER_STYLE, "body": BODY_STYLE}.get(brief["kind"], STYLE)
     return style.format(subject=subject, view=rule.get("view", "front"))
 
@@ -911,7 +972,10 @@ def negative_for(brief):
     if isolated(brief):
         # A rule can keep out what its part tends to drag in, like the whole fox around a tail
         extra = rule_of(brief)[1].get("negative")
-        return ISOLATED_NEGATIVE + (", " + extra if extra else "")
+        base = ARMOR_NEGATIVE if is_armor(brief) else ISOLATED_NEGATIVE
+        return base + (", " + extra if extra else "")
+    if is_armor(brief):
+        return NEGATIVE
     return {"layer": LAYER_NEGATIVE, "body": BODY_NEGATIVE}.get(brief["kind"], NEGATIVE)
 
 
@@ -962,7 +1026,7 @@ def command_images(config, batch, args):
             # Clothing and body parts follow the mannequin's guide; accessories may follow a
             # sketch instead
             control, mode, strength, end, painted = None, None, None, None, None
-            if brief["kind"] in ("layer", "body"):
+            if brief["kind"] in ("layer", "body") and (not is_armor(brief) or isolated(brief)):
                 layer, rule = rule_of(brief)
                 painted = guide_inputs(config, layer, rule)
                 control, mode = painted[GUIDE_MAP], GUIDE_MODE
@@ -1013,7 +1077,7 @@ def command_meshes(config, batch, args):
         renders += [str(glb), str(folder / ("views_%d_%s" % (pick, args.type)))]
         # Clothing and body parts are painted on the mannequin, so TRELLIS makes the figure,
         # which it checks for curtains of streaks; an isolated part is an object on its own
-        if brief["kind"] in ("layer", "body") and not isolated(brief):
+        if brief["kind"] in ("layer", "body") and not isolated(brief) and not is_armor(brief):
             figures += ["--figure", image]
         # A tail or wing is checked for the curtains themselves; a cape's long folds would look
         # like them
@@ -1023,7 +1087,7 @@ def command_meshes(config, batch, args):
     subprocess.run([str(trellis / ".venv/Scripts/python.exe"), str(TOOLS / "trellis_run.py"),
                     "--trellis", str(trellis), "--type", args.type] + figures + pairs,
                    check=True)
-    subprocess.run([config["blender"], "-b", "--factory-startup", "--python",
+    subprocess.run([config["blender"], *BLENDER_FLAGS, "--python",
                     str(TOOLS / "blender/render_meshes.py"), "--"] + renders, check=True,
                    stdout=subprocess.DEVNULL)
     for brief in briefs:
@@ -1191,7 +1255,7 @@ def run_blender(config, script, log, *arguments):
     """Run one of the blender/ scripts headless, its output in a log. Gives whether it worked."""
     with open(log, "w", encoding="utf8") as stream:
         result = subprocess.run(
-            [config["blender"], "-b", "--factory-startup", "--python",
+            [config["blender"], *BLENDER_FLAGS, "--python",
              str(TOOLS / "blender" / script), "--"] + [str(a) for a in arguments],
             stdout=stream, stderr=subprocess.STDOUT)
     return result.returncode == 0
@@ -1209,7 +1273,7 @@ def fit_layer(config, batch, brief):
     painted = painted_area(config, brief, out)
     with open(folder / "fit.log", "w", encoding="utf8") as stream:
         result = subprocess.run(
-            [config["blender"], "-b", "--factory-startup", "--python",
+            [config["blender"], *BLENDER_FLAGS, "--python",
              str(TOOLS / "blender/fit_layer.py"), "--",
              "--mesh", str(folder / brief["mesh"]["file"]), "--body", str(body), "--out", str(out),
              "--painted", str(painted), "--painted-back", str(out / "painted_back.png"),
@@ -1222,7 +1286,7 @@ def fit_layer(config, batch, brief):
     rule = layer_of(brief)[1]
     with open(folder / "shape.log", "w", encoding="utf8") as stream:
         result = subprocess.run(
-            [config["blender"], "-b", "--factory-startup", "--python",
+            [config["blender"], *BLENDER_FLAGS, "--python",
              str(TOOLS / "blender/shape_layer.py"), "--",
              "--garment", str(out / "garment.glb"), "--body", str(body), "--out", str(out),
              "--gap", str(rule["gap"]), "--triangles", str(rule["triangles"]),
@@ -1325,7 +1389,7 @@ def layer_limits(brief):
     return slots, min(reaches) if reaches else None
 
 
-def add_form_targets(config, folder, brief, out, rule, variant, target):
+def add_form_targets(config, folder, brief, out, rule, variant, target, log_name=None):
     """Give a layer's mesh its clothing form targets in place (see form_layer.py): a move per body
     slot out to the bulkiest form, which the character code scales by how far the body part worn
     there stands out, after pulling a layer others go over in to its reach. Its report (form.json
@@ -1336,7 +1400,7 @@ def add_form_targets(config, folder, brief, out, rule, variant, target):
         return True
     mannequins = pathlib.Path(config["mannequin"]).parent
     suffix = "" if variant == GUIDE_VARIANT else "_" + variant
-    log = folder / ("form%s.log" % suffix)
+    log = folder / ("%s%s.log" % (log_name or "form", suffix))
     temporary = target.with_name(target.stem + "_forms.glb")
     slots, reach = layer_limits(brief)
     if not run_blender(config, "form_layer.py", log, "--mesh", target,
@@ -1667,8 +1731,8 @@ def thickest_form(names):
 def command_fit(config, batch, args):
     if args.forms:
         # Only the clothing forms' meshes, for layers fitted before forms
-        for brief in ready(batch.load(), args,
-                           lambda b: b["kind"] == "layer" and b["part"] is not None):
+        for brief in ready(batch.load(), args, lambda b: b["kind"] == "layer"
+                           and b["part"] is not None and not is_armor(b)):
             out = batch.brief_folder(brief["id"]) / "fit"
             part_id = write_layer_part(config, batch, brief, out, layer_of(brief)[1],
                                        only_forms=True)
@@ -1687,6 +1751,16 @@ def command_fit(config, batch, args):
     for brief in briefs:
         if brief["kind"] == "extension":
             ids = fit_extension(config, batch, brief)
+            if ids:
+                def record(entry, part_id=ids[0]):
+                    entry["part"] = part_id
+                    entry["review"]["part"] = None
+
+                batch.update(brief["id"], record)
+                print("part", " ".join(ids))
+            continue
+        if is_armor(brief):
+            ids = fit_armor(config, batch, brief)
             if ids:
                 def record(entry, part_id=ids[0]):
                     entry["part"] = part_id
@@ -1787,7 +1861,7 @@ def fit_extension(config, batch, brief):
                 else ["--chain-scale", str(chain_scale)])
         with open(log, "w", encoding="utf8") as stream:
             result = subprocess.run(
-                [config["blender"], "-b", "--factory-startup", "--python", str(TOOLS / script),
+                [config["blender"], *BLENDER_FLAGS, "--python", str(TOOLS / script),
                  "--"] + source + [
                  "--mannequin", str(mannequin), "--plan", json.dumps(chains),
                  "--rule", json.dumps(rule), "--name", names[0], "--out", str(out),
@@ -1870,7 +1944,7 @@ def fit_accessory(config, batch, brief):
             mannequin = pathlib.Path(config["mannequin"]).parent / ("%s.glb" % variant)
             with open(log, "w", encoding="utf8") as stream:
                 result = subprocess.run(
-                    [config["blender"], "-b", "--factory-startup", "--python",
+                    [config["blender"], *BLENDER_FLAGS, "--python",
                      str(TOOLS / "blender/fit_accessory.py"), "--",
                      "--mesh", str(folder / brief["mesh"]["file"]),
                      "--mannequin", str(mannequin),
@@ -1913,6 +1987,130 @@ def fit_accessory(config, batch, brief):
     return ids
 
 
+def armor_part_path(layer_id):
+    """The folder name a layer's armor parts' IDs go under: part paths are lowercase."""
+    return layer_id.split(".")[0].lower()
+
+
+def fit_armor(config, batch, brief):
+    """Fit a brief's armor and write its parts (see armor.json). Each body variant gets its own fit
+    on its own mannequin, as accessories do: a limb piece is lined up on the variant's slots by
+    blender/fit_body.py (--armor: no sliding to the seams, nothing cut off), then, like a piece on a
+    socket's surface or round the head, cleaned, placed, pushed out of the skin, reduced, baked,
+    tinted and weighted by blender/fit_accessory.py, and given the layer's form targets. A piece
+    for both sides comes out as one mesh with its mirror; one for a layer on one side gets a part
+    per side, the right mirrored, paired. Gives the part IDs, the left's first, or None if a step
+    failed."""
+    folder = batch.brief_folder(brief["id"])
+    part, rule = armor_of(brief)
+    out = folder / "fit"
+    out.mkdir(exist_ok=True)
+    content = pathlib.Path(config["content"])
+    mannequins = pathlib.Path(config["mannequin"]).parent
+    plan = load_json_with_comments(PLAN)
+    layer_id = part["layer"]["id"]
+    image = folder / "images" / ("%d.png" % brief["mesh"]["image"])
+    one_sided = layer_id.endswith(BODY_SIDE) and not rule.get("bothSides")
+    sides = [(layer_id, False)] + ([(other_side(layer_id), True)] if one_sided else [])
+    ids, parts = [], []
+    for layer, mirrored in sides:
+        name = brief["id"] if len(sides) == 1 else "%s_%s" % (brief["id"], layer[-1].lower())
+        slots = [other_side(s) if mirrored else s for s in part["covers"]]
+        side_brief = dict(brief, layer=layer)
+        side_brief.pop("layers", None)
+        meshes = {}
+        for variant in (GUIDE_VARIANT, "female"):
+            suffix = "" if variant == GUIDE_VARIANT else "_" + variant
+            relative = "%s/%s%s.glb" % (ARMOR_FOLDER, name, suffix)
+            target = content / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            renders = out / (name + suffix)
+            renders.mkdir(exist_ok=True)
+            mesh = folder / brief["mesh"]["file"]
+            if rule["fit"] == "limb" and not mirrored:
+                # Lined up on this body's slots, as an isolated body part is
+                lined = out / ("limb" + suffix)
+                log = folder / ("fit_body%s.log" % suffix)
+                if not run_blender(config, "fit_body.py", log, "--mesh", mesh,
+                                   "--body", mannequins / ("%s.blend" % variant),
+                                   "--out", lined, "--slots", ",".join(part["covers"]),
+                                   "--guide", guides(config, part) / "guide.json",
+                                   "--image", image, "--isolated", "--armor",
+                                   "--open-end", rule.get("openEnd", "toward"),
+                                   *(["--anchor", rule["anchor"]] if "anchor" in rule else []),
+                                   # The picture was painted over the guide body; the others
+                                   # take its fit, carried onto their slots
+                                   *([] if variant == GUIDE_VARIANT else
+                                     ["--like", out / "limb" / "fit.json"])):
+                    print("Lining up %s on the %s body failed; see %s"
+                          % (brief["id"], variant, log))
+                    return None
+                mesh = lined / "part.glb"
+            elif rule["fit"] == "limb":
+                # The other side's: the first side's line-up, which fit_accessory.py mirrors
+                mesh = out / ("limb" + suffix) / "part.glb"
+            bone = rule.get("bone", "")
+            if rule["fit"] == "surface" and mirrored:
+                bone = next(s["bone"] for s in plan["sockets"]
+                            if s["id"] == other_side(rule["socket"]))
+            log = folder / ("fit_%s%s.log" % (name, suffix))
+            if not run_blender(config, "fit_accessory.py", log, "--mesh", mesh,
+                               "--mannequin", mannequins / ("%s.glb" % variant),
+                               "--bone", bone, "--rule", json.dumps(rule), "--name", name,
+                               "--out", target, "--preview", renders,
+                               "--tints", out / ("tints_%s%s.json" % (name, suffix)),
+                               "--image", image, "--slots", ",".join(slots),
+                               *(["--mirror"] if mirrored else []),
+                               *(["--both-sides"] if rule.get("bothSides") else [])):
+                print("Fitting %s on the %s body failed; see %s" % (name, variant, log))
+                return None
+            if not add_form_targets(config, folder, side_brief, renders, rule, variant, target,
+                                    log_name="form_" + name):
+                return None
+            meshes["*" if variant == GUIDE_VARIANT else variant] = "%s#%s" % (relative, name)
+        layers = [layer]
+        slot = material_slot(name, out / ("tints_%s.json" % name))
+        if slot.get("channels"):
+            # The biggest color group takes the rule's palette channel, the rest the accent
+            masks = sorted(slot["channels"])
+            slot["channels"] = {mask: rule.get("palette", "primary") if i == 0
+                                else LAYER_EXTRA_CHANNEL for i, mask in enumerate(masks)}
+        part_id = "%s:part/%s/%s" % (config["namespace"], armor_part_path(layer), name)
+        definition = {
+            "id": part_id,
+            "plan": PLAN_ID,
+            "kind": "layer",
+            "fills": layers,
+            "meshes": meshes,
+            "materialSlots": [slot],
+            "tags": brief.get("tags", []),
+        }
+        hides = brief.get("hides", rule.get("hides", {}))
+        if hides.get("layers"):
+            definition["hidesLayers"] = hides["layers"]
+        if hides.get("regions"):
+            definition["hidesRegions"] = hides["regions"]
+        formed = renders.with_name(name) / "form" / "form.json"
+        if formed.exists():
+            report = json.loads(formed.read_text(encoding="utf8"))
+            if set(report.get("covers", [])) != set(layer_limits(side_brief)[0]):
+                definition["covers"] = report.get("covers", [])
+            if report.get("standoff"):
+                definition["standoff"] = report["standoff"]
+        ids.append(part_id)
+        parts.append((name, definition))
+    for name, definition in parts:
+        if len(ids) > 1:
+            definition["pair"] = next(other for other in ids if other != definition["id"])
+        path = content / "part" / ("%s.json" % name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        header = ("// %s, batch %s, image %d\n"
+                  "// Written by Ikala-Characters/tools/partgen/partgen.py\n"
+                  % (brief["description"], batch.name, brief["mesh"]["image"]))
+        path.write_text(header + json.dumps([definition], indent=2) + "\n", encoding="utf8")
+    return ids
+
+
 def command_status(config, batch, args):
     manifest = batch.load()
     print("%-28s %-6s %-7s %-6s %-6s %-6s %-6s" % ("brief", "brief", "images", "pick", "mesh",
@@ -1947,6 +2145,27 @@ def dressed_layers(config, brief, slots=None):
     return chosen
 
 
+def thickest_body(config, slot):
+    """The thickest generated body part filling a slot, by its clothing form, with its other
+    side's, or nothing if none stands out."""
+    plan = load_json_with_comments(PLAN)
+    thickness = {form["id"]: form["share"] for form in plan.get("forms", [])}
+    thickest = None
+    for path in sorted((pathlib.Path(config["content"]) / "part").glob("*.json")):
+        part = load_json_with_comments(path)[0]
+        if part.get("kind") != "body" or slot not in part.get("fills", []):
+            continue
+        depth = thickness.get(part.get("form"), 0)
+        if depth > 0 and (thickest is None or depth > thickest[0]):
+            thickest = (depth, part["id"])
+    if not thickest:
+        return []
+    under = [thickest[1]]
+    if thickest[1][-2:] in ("_l", "_r"):
+        under.append(thickest[1][:-1] + ("r" if thickest[1].endswith("_l") else "l"))
+    return under
+
+
 def under_accessory(config, brief):
     """What an accessory is shown worn over: the thickest generated body part filling the slot
     its socket rests on (both sides of a sided one), then the capture layers covering that slot.
@@ -1955,28 +2174,49 @@ def under_accessory(config, brief):
     rest = socket.get("rests")
     if not rest:
         return []
+    return thickest_body(config, rest["slot"]) + dressed_layers(config, brief, {rest["slot"]})
+
+
+def under_armor(config, brief):
+    """What armor is shown worn over: the thickest generated body part on each slot it covers,
+    then the capture layers that go under its layer and cover those slots, so it moves out over
+    both."""
+    part, _ = armor_of(brief)
     plan = load_json_with_comments(PLAN)
-    thickness = {form["id"]: form["share"] for form in plan.get("forms", [])}
-    thickest = None
-    for path in sorted((pathlib.Path(config["content"]) / "part").glob("*.json")):
-        part = load_json_with_comments(path)[0]
-        if part.get("kind") != "body" or rest["slot"] not in part.get("fills", []):
-            continue
-        depth = thickness.get(part.get("form"), 0)
-        if depth > 0 and (thickest is None or depth > thickest[0]):
-            thickest = (depth, part["id"])
+    order = {layer["id"]: layer.get("order", 0) for layer in plan["layers"]}
+    content = pathlib.Path(config["content"]) / "part"
     under = []
-    if thickest:
-        under.append(thickest[1])
-        if thickest[1][-2:] in ("_l", "_r"):
-            under.append(thickest[1][:-1] + ("r" if thickest[1].endswith("_l") else "l"))
-    return under + dressed_layers(config, brief, {rest["slot"]})
+    for slot in part["covers"]:
+        under += [i for i in thickest_body(config, slot) if i not in under]
+    for part_id in dressed_layers(config, brief, part["covers"]):
+        fills = load_json_with_comments(content / (part_id.rsplit("/", 1)[-1] + ".json"))[0] \
+            .get("fills", [])
+        if all(order.get(fill, 0) < part["layer"].get("order", 0) for fill in fills):
+            under.append(part_id)
+    return under
+
+
+def batch_armor(batch, brief):
+    """The armor fitted in a body part's batch that covers its slots, either side, one piece a
+    layer, to show the part dressed in."""
+    slots = set(brief.get("slots", []))
+    slots |= {other_side(s) for s in slots}
+    chosen, layers = [], set()
+    for other in batch.load()["briefs"]:
+        if not other.get("part") or not is_armor(other):
+            continue
+        part, _ = armor_of(other)
+        covers = set(part["covers"]) | {other_side(s) for s in part["covers"]}
+        if covers & slots and part["layer"]["id"] not in layers:
+            layers.add(part["layer"]["id"])
+            chosen += worn_ids(other)
+    return chosen
 
 
 def worn_ids(brief):
     """The part IDs a brief's part is worn as: a body part on both sides, others once."""
     part = brief["part"]
-    if brief["kind"] == "body" and part.endswith("_l"):
+    if (brief["kind"] == "body" or is_armor(brief)) and part.endswith("_l"):
         return [part, part[:-2] + "_r"]
     return [part]
 
@@ -2023,13 +2263,17 @@ def capture_script(config, batch, briefs):
             # Then dressed: clothing over a body part shows in its form for the part, and an
             # accessory moves out onto a thick body part and clothing under it
             if brief["kind"] == "body":
-                dressed = dressed_layers(config, brief)
+                # Under its batch's armor too, which moves out over it
+                dressed = dressed_layers(config, brief) + batch_armor(batch, brief)
+            elif is_armor(brief):
+                dressed = under_armor(config, brief)
             elif brief["kind"] == "accessory":
                 dressed = under_accessory(config, brief)
             else:
                 dressed = []
             lines += ["characters.wear(%s);" % json.dumps(i) for i in dressed]
-            views = (CAPTURE_DRESSED_ACCESSORY_VIEWS if brief["kind"] == "accessory"
+            views = (CAPTURE_DRESSED_ACCESSORY_VIEWS
+                     if brief["kind"] == "accessory" or is_armor(brief)
                      else CAPTURE_DRESSED_VIEWS)
             for view, framed, pitch, yaw in views if dressed else ():
                 name = "%s/%s_dressed_%s.png" % (CAPTURE_FOLDER, variant, view)
@@ -2147,7 +2391,8 @@ def zoom_boxes(config, batch):
     import numpy as np
     boxes = {}
     for brief in batch.load()["briefs"]:
-        if brief["kind"] not in ("layer", "body"):
+        # Armor is pictured on its own, filling its images as accessories do
+        if brief["kind"] not in ("layer", "body") or is_armor(brief):
             continue
         try:
             layer, rule = rule_of(brief)

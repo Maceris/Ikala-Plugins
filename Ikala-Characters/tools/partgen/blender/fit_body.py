@@ -21,6 +21,11 @@ seen edge on, and bridge the gap between the legs.
     blender -b --python fit_body.py -- --mesh <figure.glb> --body <male.blend> --out <folder>
         --slots upperArm.L,lowerArm.L,hand.L
 
+With --armor the mesh is a piece of armor worn over the slots, like a gauntlet: it is turned
+along them as an isolated part is, but sized and placed by its picture rather than fitted to
+their skin (see solve_armor), not slid to the seams, and nothing is cut off, so part.glb is the
+whole piece (see partgen.py's fit_armor).
+
 writes aligned.glb (the figure on the body, its limbs turned onto the mannequin's), part.glb (the
 part cut out of it), fit.json and renders preview_0.png and preview_1.png: the figure on the
 mannequin from the front and side, and preview_2.png and preview_3.png: the part alone.
@@ -70,6 +75,17 @@ OUTLINE_GRID = 128
 # How much an isolated part's front outline must overlap its image's, as a share of both
 # together, to count as placed right
 ISOLATED_OVERLAP = 0.5
+# Armor's open end is found with this many rays cast in along it from each end, every other one
+# this far off its axis as a share of its median radius
+OPEN_RAYS = 8
+OPEN_RADIUS = 0.4
+# Ends whose rays got within this share of the length as far in as each other are both open
+OPEN_MARGIN = 0.2
+# Armor's shading is compared with its picture's over this many of its vertices
+SHADE_SAMPLES = 20000
+# Armor turns overlapping their picture within this of the best are told apart by which way they
+# stick out
+SIDED_SLACK = 0.1
 # How far past each outer seam's plane an isolated part must reach, in meters, so the part has
 # its whole edge there to join the ring by
 SEAM_REACH = 0.005
@@ -436,6 +452,229 @@ def slot_fit(points, surface, segments, bones):
             "p90_mm": round(float(np.percentile(np.abs(signed), 90)) * 1000, 1)}
 
 
+def picture_points(image_path, guide):
+    """Where an image's shown pixels fall on the body, seen from the guide's view: across and up
+    in meters, in the guide's own (rolled) frame, like guide_pixels' columns and rows."""
+    shown = image_shown(image_path)
+    rows, columns = np.nonzero(shown)
+    size, view = guide["size"], guide["view"]
+    return np.stack([((columns + 0.5) / size - 0.5) * view,
+                     (0.5 - (rows + 0.5) / size) * view], axis=1)
+
+
+def open_end(figure, middle, axis):
+    """Which end of a piece of armor along its long axis is open, where the limb goes in: rays
+    started a little past each end, OPEN_RAYS of them over a disk round the axis, are cast in
+    along it, and the end they get furthest into before meeting the mesh, by their median, is the
+    open one (a gauntlet's cuff, not its fingertips; a boot's top, not its toe). Gives +1 or -1
+    along the axis and how far in each end's rays got, as fractions of the length."""
+    from mathutils.bvhtree import BVHTree
+    world = np.array(figure.matrix_world)
+    co = np.empty(len(figure.data.vertices) * 3)
+    figure.data.vertices.foreach_get("co", co)
+    co = co.reshape(-1, 3) @ world[:3, :3].T + world[:3, 3]
+    tree = BVHTree.FromPolygons(co.tolist(), [tuple(p.vertices) for p in figure.data.polygons])
+    along = (co - middle) @ axis
+    low, high = np.percentile(along, [OUTLIER, 100 - OUTLIER])
+    length = high - low
+    across = (co - middle) - np.outer(along, axis)
+    radius = float(np.percentile(np.linalg.norm(across, axis=1), 50)) * OPEN_RADIUS
+    side = np.cross(axis, [0.0, 0.0, 1.0] if abs(axis[2]) < 0.9 else [1.0, 0.0, 0.0])
+    side /= np.linalg.norm(side)
+    other = np.cross(axis, side)
+    depths = {}
+    for end, start in ((1, high), (-1, low)):
+        reach = []
+        for k in range(OPEN_RAYS):
+            angle = 2 * math.pi * k / OPEN_RAYS
+            offset = (side * math.cos(angle) + other * math.sin(angle)) * radius * (k % 2)
+            origin = middle + axis * (start + end * 0.05 * length) + offset
+            hit = tree.ray_cast(Vector(origin.tolist()), Vector((-end * axis).tolist()),
+                                2 * length)
+            reach.append((hit[3] if hit[0] is not None else 2 * length) - 0.05 * length)
+        depths[end] = float(np.median(reach) / max(length, 1e-9))
+    return (1 if depths[1] >= depths[-1] else -1), depths
+
+
+def slot_frame(slot_points):
+    """Slots' middle, long axis (pointing away from the body's middle, the origin side being
+    arbitrary otherwise) and length along it, to carry a fit from one body to another."""
+    middle, axis = principal(slot_points)
+    if axis @ middle < 0:
+        axis = -axis
+    return {"middle": middle.tolist(), "axis": axis.tolist(),
+            "span": float(span(slot_points, middle, axis))}
+
+
+def carried(m, before, after):
+    """A fit on one body's slots carried onto another's: turned from the first's long axis onto
+    the second's, scaled by their lengths and moved from the one's middle to the other's."""
+    turn = np.array(Vector(before["axis"]).rotation_difference(Vector(after["axis"]))
+                    .to_matrix())
+    move = np.eye(4)
+    move[:3, :3] = turn * after["span"] / before["span"]
+    move[:3, 3] = np.array(after["middle"]) - move[:3, :3] @ np.array(before["middle"])
+    return move @ m
+
+
+def vertex_shades(figure):
+    """How light each of a figure's vertices is in its own texture (the base color image wired
+    into its material's BSDF), from 0 to 1, or None if it has none."""
+    image = None
+    for slot in figure.material_slots:
+        tree = slot.material.node_tree if slot.material else None
+        for link in tree.links if tree else []:
+            if link.from_node.type == "TEX_IMAGE" and link.to_socket.name == "Base Color" \
+                and link.from_node.image is not None:
+                image = link.from_node.image
+    uv_layer = figure.data.uv_layers.active
+    if image is None or uv_layer is None:
+        return None
+    width, height = image.size
+    pixels = np.empty(width * height * 4, dtype=np.float32)
+    image.pixels.foreach_get(pixels)
+    shade = pixels.reshape(height, width, 4)[..., :3].mean(-1)
+    loops = len(figure.data.loops)
+    owner = np.empty(loops, dtype=np.int64)
+    figure.data.loops.foreach_get("vertex_index", owner)
+    uv = np.empty(loops * 2)
+    uv_layer.data.foreach_get("uv", uv)
+    uv = uv.reshape(-1, 2)
+    column = np.clip((uv[:, 0] % 1.0) * width, 0, width - 1).astype(int)
+    row = np.clip((uv[:, 1] % 1.0) * height, 0, height - 1).astype(int)
+    shades = np.zeros(len(figure.data.vertices))
+    shades[owner] = shade[row, column]
+    return shades
+
+
+def shade_match(points, shades, guide, image_path):
+    """How well a placed figure's own shading, seen from the guide's view (the nearest point in
+    each cell of an OUTLINE_GRID grid), follows its picture's there: their correlation over the
+    cells both show, from -1 to 1. Tells a piece's front from its back, which outlines can't."""
+    column, row = guide_pixels(points, guide, OUTLINE_GRID)
+    inside = (column >= 0) & (column < OUTLINE_GRID) & (row >= 0) & (row < OUTLINE_GRID)
+    cell = row[inside].astype(int) * OUTLINE_GRID + column[inside].astype(int)
+    depth = points[inside, 1]
+    # Nearest the camera, which looks along +Y: the smallest y in each cell
+    order = np.lexsort((depth, cell))
+    first = np.ones(len(order), dtype=bool)
+    first[1:] = cell[order][1:] != cell[order][:-1]
+    seen = np.full(OUTLINE_GRID * OUTLINE_GRID, np.nan)
+    seen[cell[order][first]] = shades[inside][order][first]
+    image = bpy.data.images.load(os.path.abspath(image_path), check_existing=True)
+    width, height = image.size
+    pixels = np.empty(width * height * 4, dtype=np.float32)
+    image.pixels.foreach_get(pixels)
+    light = np.flipud(pixels.reshape(height, width, 4)[..., :3].mean(-1))
+    shown = light * 255 < BACKGROUND
+    step = height // OUTLINE_GRID
+    cut = (slice(0, step * OUTLINE_GRID), slice(0, step * OUTLINE_GRID))
+    total = np.where(shown, light, 0)[cut].reshape(OUTLINE_GRID, step, OUTLINE_GRID, step) \
+        .sum((1, 3))
+    count = shown[cut].reshape(OUTLINE_GRID, step, OUTLINE_GRID, step).sum((1, 3))
+    picture = np.where(count > step * step / 2, total / np.maximum(count, 1), np.nan).ravel()
+    both = ~np.isnan(seen) & ~np.isnan(picture)
+    if both.sum() < 8 or seen[both].std() < 1e-6 or picture[both].std() < 1e-6:
+        return 0.0
+    return float(np.corrcoef(seen[both], picture[both])[0, 1])
+
+
+def lopsided(points, middle, axis):
+    """Which way points stick out from a long axis through their middle, and how far: the mean of
+    their offsets across it, each weighted by its own length, so a foot off a shin or a thumb
+    off a hand counts and a round tube cancels out."""
+    across = (points - middle) - np.outer((points - middle) @ axis, axis)
+    return (across * np.linalg.norm(across, axis=1, keepdims=True)).mean(0)
+
+
+def solve_armor(points, slot_points, guide, image_path, figure, body, opens="toward",
+                anchor=None):
+    """Where a piece of armor's mesh goes, from the picture painted over its slots' guide: like
+    an isolated body part's (see solve_turn), its long axis is laid along the slots' and turned
+    ROLLS ways about it; but a shell over the skin can't be fitted to it, which fits as well
+    either way round and shrinks it, and TRELLIS keeps neither the picture's up nor its front for
+    a piece on its own. So its open end (see open_end) goes toward the body, or away from it if
+    it opens "away" (a pauldron, capping the shoulder), either end if both are open, and each
+    turn is scaled and moved, seen from the guide's view, to spread as far and sit
+    where the picture's shown pixels do, as deep as the slots' middle. Of those whose outline
+    overlaps the picture's about as well as the best, the one whose own texture is shaded most
+    like the picture wins (see shade_match): an outline is the same from the back. With an
+    anchor, the piece is then slid along the slots until its end toward the body is that many
+    meters past theirs: a pauldron, painted over the whole upper arm, caps the shoulder. Gives
+    the fit and each candidate's overlap and shading."""
+    rng = np.random.default_rng(0)
+    chosen = rng.choice(len(points), min(SHADE_SAMPLES, len(points)), replace=False)
+    shades = vertex_shades(figure)
+    sample = points[chosen[:TURN_SAMPLES]]
+    mesh_middle, mesh_axis = principal(sample)
+    slot_middle, slot_axis = principal(slot_points)
+    mesh_side = lopsided(sample, mesh_middle, mesh_axis)
+    slot_side = lopsided(slot_points, slot_middle, slot_axis)
+    # The open end goes toward the body: the slots' end nearer its middle, as a wrist or a knee is
+    opening, depths = open_end(figure, mesh_middle, mesh_axis)
+    ends = (slot_points - slot_middle) @ slot_axis
+    toward = 1 if np.linalg.norm(slot_middle + slot_axis * ends.max() - body.mean(0)) \
+        < np.linalg.norm(slot_middle + slot_axis * ends.min() - body.mean(0)) else -1
+    print("[fit_body] open end %+d (rays got %.2f / %.2f of the length in), toward the body %+d"
+          % (opening, depths[1], depths[-1], toward))
+    flat = picture_points(image_path, guide)
+    flat_middle = flat.mean(0)
+    flat_axes = np.linalg.svd(flat - flat_middle, full_matrices=False)[2]
+    flat_span = [span(flat, flat_middle, axis) for axis in flat_axes]
+    picture = image_outline(image_path)
+    candidates = []
+    # Both ends open about as far, as a tube's are, leave it to the picture
+    wanted = opening * toward * (-1 if opens == "away" else 1)
+    ends = [wanted] if abs(depths[1] - depths[-1]) >= OPEN_MARGIN else [1, -1]
+    turns = [np.array(Matrix.Rotation(2 * math.pi * k / ROLLS, 3, Vector(slot_axis)))
+             @ np.array(Vector(mesh_axis * end).rotation_difference(Vector(slot_axis))
+                        .to_matrix())
+             for end in ends for k in range(ROLLS)]
+    for rotation in turns:
+        turned = (sample - mesh_middle) @ rotation.T
+        # Seen from the guide's view, in its frame, with no offset
+        column, row = guide_pixels(turned + np.array([guide.get("middleX", 0.0), 0.0,
+                                                      guide["middleHeight"]]), guide)
+        seen = np.stack([(column / guide["size"] - 0.5) * guide["view"],
+                         (0.5 - row / guide["size"]) * guide["view"]], axis=1)
+        seen_middle = seen.mean(0)
+        scale = float(np.mean([flat_span[i] / max(span(seen, seen_middle, axis), 1e-9)
+                               for i, axis in enumerate(flat_axes)]))
+        m = np.eye(4)
+        m[:3, :3] = scale * rotation
+        m[:3, 3] = -scale * rotation @ mesh_middle
+        # Move it across and up so its middle, seen, is the picture's, as deep as the slots
+        shift = flat_middle - scale * seen_middle
+        roll = math.radians(guide.get("roll", 0.0))
+        right = np.array(guide.get("right", (1.0, 0.0, 0.0)))
+        x = shift[0] * math.cos(roll) + shift[1] * math.sin(roll)
+        z = -shift[0] * math.sin(roll) + shift[1] * math.cos(roll)
+        m[:3, 3] += right * (guide.get("middleX", 0.0) + x)
+        m[2, 3] += guide["middleHeight"] + z
+        depth = slot_middle[1] - float(np.median(apply(m, sample)[:, 1]))
+        m[1, 3] += depth
+        outline = front_outline(apply(m, sample), guide)
+        overlap = (outline & picture).sum() / max((outline | picture).sum(), 1)
+        shading = 0.0 if shades is None else \
+            shade_match(apply(m, points[chosen]), shades[chosen], guide, image_path)
+        turned_side = rotation @ mesh_side
+        sided = float(turned_side @ slot_side / max(np.linalg.norm(turned_side)
+                                                    * np.linalg.norm(slot_side), 1e-12))
+        candidates.append((m, float(overlap), shading, sided))
+    # Of the turns overlapping about as well as the best, the one sticking out the way the slots
+    # do; the picture's shading only reported, for now
+    widest = max(c[1] for c in candidates)
+    m = max((c for c in candidates if c[1] >= widest - SIDED_SLACK), key=lambda c: c[3])[0]
+    if anchor is not None:
+        inward = slot_axis * toward
+        reach = float(np.percentile(apply(m, sample) @ inward, 100 - OUTLIER))
+        shift = float((slot_points @ inward).max()) + anchor - reach
+        m[:3, 3] += inward * shift
+        print("[fit_body] slid %.3f m toward the body, to %.3f m past the slots" % (shift, anchor))
+    return m, [{"overlap": round(c[1], 3), "shading": round(c[2], 3), "sided": round(c[3], 3)}
+               for c in candidates]
+
+
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -449,6 +688,18 @@ def main():
     parser.add_argument("--isolated", action="store_true",
                         help="The mesh is the part on its own, from an image painted over its "
                              "slots alone (render_guides.py's --only), so its turn is unknown.")
+    parser.add_argument("--armor", action="store_true",
+                        help="The mesh is armor worn over the slots: lined up, not slid to the "
+                             "seams or cut.")
+    parser.add_argument("--open-end", default="toward", choices=["toward", "away"],
+                        help="Armor: whether its open end goes toward the body (a glove's cuff) "
+                             "or away (a pauldron's).")
+    parser.add_argument("--anchor", type=float,
+                        help="Armor: slide it along the slots until its end toward the body is "
+                             "this many meters past theirs.")
+    parser.add_argument("--like", help="Armor: the fit.json of the body its picture was painted "
+                                       "over; the piece goes where it went there, carried from "
+                                       "those slots onto these.")
     args = parser.parse_args(argv)
     os.makedirs(args.out, exist_ok=True)
     slots = slot_bones([s for s in args.slots.split(",") if s])
@@ -470,7 +721,16 @@ def main():
                            variant + "_seams.json"), encoding="utf-8") as file:
         seams = json.load(file)["seams"]
     candidates, slid, centered = None, None, None
-    if args.isolated:
+    if args.armor and args.like:
+        with open(args.like, encoding="utf-8") as file:
+            like = json.load(file)
+        m = carried(np.array(like["matrix"]), like["slotFrame"], slot_frame(chosen[0]))
+        rounds, residual = 0, 0.0
+    elif args.armor:
+        m, candidates = solve_armor(points, chosen[0], guide, args.image, figure, body,
+                                    args.open_end, args.anchor)
+        rounds, residual = 0, 0.0
+    elif args.isolated:
         m, candidates = solve_turn(points, chosen[0], tree(*chosen), guide, args.image)
         m, rounds, residual = icp(points, tree(*chosen), m, scaled=False)
         m, slid, centered = reach_seams(points, m, list(slots), seams, segments,
@@ -503,7 +763,15 @@ def main():
     set_points(figure, matched)
     after = {name: slot_fit(matched, surface, segments, bones) for name, bones in slots.items()}
 
-    part, faces, planes = cut_part(figure, list(slots), seams, segments)
+    if args.armor:
+        # Armor is worn whole over its slots, past their seams if it reaches there
+        part = figure.copy()
+        part.data = figure.data.copy()
+        bpy.context.collection.objects.link(part)
+        part.name = "part"
+        faces, planes = len(part.data.polygons), {}
+    else:
+        part, faces, planes = cut_part(figure, list(slots), seams, segments)
 
     report = {
         "rounds": rounds,
@@ -523,6 +791,8 @@ def main():
         "part_faces": faces,
         "part_pct": round(faces / max(1, len(figure.data.polygons)) * 100, 1),
         "seams": planes,
+        "matrix": m.tolist(),
+        "slotFrame": slot_frame(chosen[0]),
     }
     print("[fit_body]", json.dumps(report))
     with open(os.path.join(args.out, "fit.json"), "w", encoding="utf-8") as file:

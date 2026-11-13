@@ -17,6 +17,13 @@ turns white, so the tint the shader multiplies in replaces it, and a tint mask b
 (<part>_masks/<image>.png) picks the groups, one per channel. Each group's color is written to --tints as the default for its mask channel, which
 brings the part's own look back when a design leaves the palette channel uncolored. The preview
 folder gets front and side renders on the mannequin, in those default colors.
+
+Armor worn as clothing (see armor.json and partgen.py's fit_armor) comes this way too, with the
+body slots it covers in --slots: its low-poly copy is pushed out of the skin to the rule's "gap",
+a piece over a limb ("fit": "limb", already lined up by fit_body.py --armor) is weighted from the
+skin of those slots so it bends with them rather than to one bone, a helmet ("fit": "enclose") is
+put round the head, and --both-sides adds the piece's mirror, weighted from the other side's skin,
+as one mesh with it, for a layer covering both hands or feet.
 """
 import argparse
 import json
@@ -30,6 +37,9 @@ import bpy
 import numpy as np
 from mathutils import Matrix, Vector
 from mathutils.bvhtree import BVHTree
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from shell_layer import conform, push_faces, skin_shell  # noqa: E402
 
 # A part of the generated mesh this thin across, and this many times longer, is a sliver
 SLIVER_THICKNESS = 0.003
@@ -74,12 +84,31 @@ SLICE_POINTS = 30
 # band above it, as fractions of the height
 BRIM_REGION = 0.4
 CROWN_BAND = (0.08, 0.35)
+# Armor weighted from the skin takes each vertex's weights from this many nearest skin vertices,
+# and keeps this many bones
+SKIN_NEIGHBORS = 4
+SKIN_BONES = 4
+# A skin shell is cut across the limb this percent of the generated piece short of its end
+# toward the body, leaving out stray bits past it
+SHELL_END_PERCENTILE = 1
+# A skin shell is split flat at most this many times
+SHELL_MAX_LEVELS = 2
+# The skin kept near a piece is closed up by this many rings of faces
+NEAR_CLOSE = 2
+# A skin shell's bake rays start this far beyond its reach out, in meters
+SHELL_BAKE_MARGIN = 0.015
+# Pushing armor out of the skin spreads each round's moves over the mesh with this many rounds
+# of averaging, and is done this many times
+PUSH_SPREAD = 8
+PUSH_ROUNDS = 4
 # Bake rays reach this far from the low-poly surface, as a fraction of the part's size
 BAKE_REACH = 0.08
 # How far ambient occlusion looks for cover, as a share of the part's size
 OCCLUSION_REACH = 0.15
 # What texels the bake doesn't reach hold
 UNBAKED = (1.0, 0.0, 1.0, 1.0)
+# And this color in a second bake, to find the texels only partly baked
+UNBAKED_AGAIN = (0.0, 1.0, 0.0, 1.0)
 # A tangent-space normal map's flat normal, for texels the bake doesn't reach
 FLAT_NORMAL = (0.5, 0.5, 1.0, 1.0)
 # The node group the glTF exporter reads occlusion from
@@ -341,15 +370,12 @@ def place_bottom_crown(high, mannequin, armature, rule):
 
 
 def mirror_x(obj):
-    """Mirror a mesh across the body's middle, keeping its faces turned out."""
+    """Mirror a mesh across the body's middle, keeping its faces turned out: applying a negative
+    scale turns its faces back itself (reversing them again, as this once did, left mirrored
+    sides inside out, their baked normals shading them dark)."""
     obj.scale = (-1, 1, 1)
     select_only(obj)
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-    mesh = bmesh.new()
-    mesh.from_mesh(obj.data)
-    bmesh.ops.reverse_faces(mesh, faces=mesh.faces)
-    mesh.to_mesh(obj.data)
-    mesh.free()
 
 
 def picture_outline(path):
@@ -591,6 +617,145 @@ def pull_in_brim(obj, center, crown, top, limit):
     print("[fit] pulled the brim in from %.3f m to %.3f m across" % (widest * 2, limit * 2))
 
 
+def place_enclose(high, mannequin, armature, rule):
+    """Size and place a helmet round the head: centered on the head across and front to back,
+    as wide and deep as the head (from the rule's bottom up) times "clearance", its top
+    "topClearance" over the head's, and reaching down at least to "bottomOffset" from the
+    "bottomAbove" bone. Gives a report of what was done."""
+    head = next((obj for obj in mannequin if "head" in obj.name.lower()), None)
+    if head is None:
+        raise SystemExit("The mannequin has no head mesh among %s" % [o.name for o in mannequin])
+    skull = vertices(head)
+    bones = armature.data.bones
+    bottom = (armature.matrix_world @ bones[rule["bottomAbove"]].head_local).z \
+        + rule["bottomOffset"]
+    top = float(skull[:, 2].max()) + rule["topClearance"]
+    above = skull[skull[:, 2] >= bottom]
+    low_end, high_end = above.min(0), above.max(0)
+    head_span = high_end - low_end
+    head_middle = (low_end + high_end) / 2
+    points = vertices(high)
+    lowest, highest = np.percentile(points, SPAN_PERCENTILES, axis=0)
+    span = highest - lowest
+    middle = (lowest + highest) / 2
+    scale = max(head_span[0] * rule["clearance"] / max(span[0], 1e-6),
+                head_span[1] * rule["clearance"] / max(span[1], 1e-6),
+                (top - bottom) / max(span[2], 1e-6))
+    scale *= rule.get("scale", 1.0)
+    high.scale = (scale, scale, scale)
+    high.location = (float(head_middle[0] - middle[0] * scale),
+                     float(head_middle[1] - middle[1] * scale),
+                     float(top - points[:, 2].max() * scale))
+    select_only(high)
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    report = {"scale": round(scale, 4), "head": [round(float(v), 4) for v in head_span],
+              "bottom": round(float(bottom), 4), "top": round(top, 4)}
+    print("[fit] round the head:", json.dumps(report))
+    return report
+
+
+def push_out_of_skin(obj, mannequin, gap):
+    """Move a mesh out of the body, so armor shows over it: every vertex inside the body, or
+    nearer its skin than gap, needs to go out along the skin's normal to gap from it, and the
+    rest of the mesh is carried along, the moves spread over it by PUSH_SPREAD rounds of
+    averaging with neighbors, so the piece moves out whole rather than its vertices each snapping
+    to the nearest bit of skin and tearing it. That is done PUSH_ROUNDS times, as the carried
+    vertices can need moving in turn. Gives how many vertices needed moving at first."""
+    tree = body_tree(mannequin)
+    co = vertices(obj)
+    edges = np.empty(len(obj.data.edges) * 2, dtype=np.int64)
+    obj.data.edges.foreach_get("vertices", edges)
+    edges = edges.reshape(-1, 2)
+    count = np.zeros(len(co))
+    np.add.at(count, edges.ravel(), 1)
+    count = np.maximum(count, 1)[:, None]
+    first = None
+    for _ in range(PUSH_ROUNDS):
+        need = np.zeros_like(co)
+        for i, point in enumerate(co):
+            location, normal, _, _ = tree.find_nearest(Vector(point.tolist()))
+            if location is None:
+                continue
+            outside = (Vector(point.tolist()) - location).dot(normal)
+            if outside < gap:
+                need[i] = np.array(location + normal * gap) - point
+        pinned = np.linalg.norm(need, axis=1) > 0
+        if first is None:
+            first = int(pinned.sum())
+        if not pinned.any():
+            break
+        field = need.copy()
+        for _ in range(PUSH_SPREAD):
+            total = np.zeros_like(field)
+            np.add.at(total, edges[:, 0], field[edges[:, 1]])
+            np.add.at(total, edges[:, 1], field[edges[:, 0]])
+            field = np.where(pinned[:, None], need, total / count)
+        co = co + field
+    inverse = np.array(obj.matrix_world.inverted())
+    local = co @ inverse[:3, :3].T + inverse[:3, 3]
+    obj.data.vertices.foreach_set("co", local.ravel())
+    obj.data.update()
+    print("[fit] pushed %d of %d vertices out of the skin to %.3f m, %d left after"
+          % (first, len(co), gap, int(pinned.sum()) if pinned.any() else 0))
+    return first
+
+
+def add_mirror(low):
+    """Join a mirror of a mesh, across the body's middle, to it: the other hand's or foot's copy,
+    sharing its texture."""
+    other = low.copy()
+    other.data = low.data.copy()
+    bpy.context.scene.collection.objects.link(other)
+    mirror_x(other)
+    select_only(low, other)
+    bpy.context.view_layer.objects.active = low
+    bpy.ops.object.join()
+
+
+def rig_skin(low, armature, mannequin, slots):
+    """Weight each vertex like the skin it covers: from its SKIN_NEIGHBORS nearest vertices of
+    the mannequin's meshes for those slots, nearer ones counting more, keeping the SKIN_BONES
+    heaviest bones; then put the mesh on the armature."""
+    from mathutils.kdtree import KDTree
+    skins = [obj for obj in mannequin if obj.name in {"mannequin_" + s for s in slots}]
+    if not skins:
+        raise SystemExit("The mannequin has no meshes for %s among %s"
+                         % (slots, [o.name for o in mannequin]))
+    points, weights = [], []
+    for obj in skins:
+        names = {group.index: group.name for group in obj.vertex_groups}
+        points.append(vertices(obj))
+        for vertex in obj.data.vertices:
+            weights.append({names[g.group]: g.weight for g in vertex.groups if g.weight > 0})
+    points = np.concatenate(points)
+    kd = KDTree(len(points))
+    for i, point in enumerate(points):
+        kd.insert(point.tolist(), i)
+    kd.balance()
+    groups = {}
+    for vertex, point in zip(low.data.vertices, vertices(low)):
+        blend = {}
+        for _, index, distance in kd.find_n(point.tolist(), SKIN_NEIGHBORS):
+            share = 1.0 / max(distance, 1e-4)
+            for bone, weight in weights[index].items():
+                blend[bone] = blend.get(bone, 0.0) + weight * share
+        kept = sorted(blend.items(), key=lambda pair: -pair[1])[:SKIN_BONES]
+        total = sum(weight for _, weight in kept)
+        for bone, weight in kept:
+            if bone not in armature.data.bones:
+                continue
+            if bone not in groups:
+                groups[bone] = low.vertex_groups.new(name=bone)
+            groups[bone].add([vertex.index], weight / total, "REPLACE")
+    modifier = low.modifiers.new("Armature", "ARMATURE")
+    modifier.object = armature
+    world = low.matrix_world.copy()
+    low.parent = armature
+    low.matrix_parent_inverse = armature.matrix_world.inverted()
+    low.matrix_world = world
+    print("[fit] weighted from the skin of %s: %s" % (", ".join(slots), ", ".join(sorted(groups))))
+
+
 def apply_modifier(obj, kind, **settings):
     select_only(obj)
     modifier = obj.modifiers.new(kind, kind)
@@ -619,8 +784,15 @@ def low_poly(high, name, triangles):
         if faces <= triangles * 1.05:
             break
         apply_modifier(low, "DECIMATE", ratio=triangles / faces)
+    unwrap(low)
+    print("[fit] low poly: %d triangles" % len(low.data.polygons))
+    return low
+
+
+def unwrap(low):
+    """Triangulate, shade smooth (so the normal map is baked against the normals the game
+    interpolates) and unwrap a low-poly mesh afresh, with no materials."""
     apply_modifier(low, "TRIANGULATE")
-    # Smooth, so the normal map is baked against the normals the game interpolates
     select_only(low)
     bpy.ops.object.shade_smooth()
     low.data.materials.clear()
@@ -631,8 +803,126 @@ def low_poly(high, name, triangles):
     bpy.ops.mesh.select_all(action="SELECT")
     bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.02)
     bpy.ops.object.mode_set(mode="OBJECT")
-    print("[fit] low poly: %d triangles" % len(low.data.polygons))
+
+
+def skin_low(high, mannequin, slots, rule, name):
+    """Armor made from the mannequin's own skin rather than the generated mesh, for a glove or
+    a boot, which has to follow the hand or foot as it is, fingers spread and all: the skin of
+    its slots and of the "extra" ones above them (shell_layer.py's skin_shell), pushed out by the
+    rule's gap and onto the generated piece, lined up over it, where that stands off the skin, as
+    far as the rule's "reach" (a flared cuff, a fur fold, a pauldron's plates), its faces kept
+    the gap across as well as at their corners (shell_layer.py's push_faces), then cut across
+    the limb where the piece ends, both ends. With the shell's "near", only the skin that near
+    the piece is kept (see keep_near). The skin is split flat (SHELL_MAX_LEVELS) only as
+    far as the rule's "triangles" allow. Its colors and detail are baked from the piece as
+    usual."""
+    shell_rule = rule["shell"]
+    covered = shell_slots(slots, shell_rule, mannequin)
+    # The skin as it is never sags inside itself, as smooth subdivision does on a calf or a
+    # heel; split flat as many times as the triangle budget allows, to follow the piece closer
+    low = skin_shell(set(covered), levels=0)
+    if shell_rule.get("near"):
+        keep_near(low, high, shell_rule["near"])
+    triangles = sum(len(p.vertices) - 2 for p in low.data.polygons)
+    levels = 0
+    while levels < SHELL_MAX_LEVELS and triangles * 4 ** (levels + 1) <= rule["triangles"]:
+        levels += 1
+    if levels:
+        apply_modifier(low, "SUBSURF", levels=levels, subdivision_type="SIMPLE")
+    low.name = name
+    low.data.name = name
+    surface = body_tree(mannequin)
+    onto = conform(low, high, surface, rule.get("gap", 0.0), shell_rule.get("reach"))
+    # Faces that sag between their corners are pushed out, then any vertex still inside or
+    # nearer than the gap, a crease at an ankle or a knuckle, carrying its neighbors along
+    sag = push_faces(low, surface, rule.get("gap", 0.0))
+    push_out_of_skin(low, mannequin, rule.get("gap", 0.0))
+    # Across the limb where the piece ends, at both ends, leaving out stray bits past them
+    points = vertices(low)
+    piece = vertices(high)
+    middle, axis = points.mean(0), np.linalg.svd(points - points.mean(0),
+                                                 full_matrices=False)[2][0]
+    # Pointing toward the body's middle, as a wrist's or a knee's end does
+    body = np.concatenate([vertices(obj) for obj in mannequin]).mean(0)
+    if np.linalg.norm(middle + axis - body) > np.linalg.norm(middle - axis - body):
+        axis = -axis
+    along = (piece - middle) @ axis
+    end = float(np.percentile(along, 100 - SHELL_END_PERCENTILE))
+    start = float(np.percentile(along, SHELL_END_PERCENTILE))
+    mesh = bmesh.new()
+    mesh.from_mesh(low.data)
+    for at, facing in ((end, axis), (start, -axis)):
+        bmesh.ops.bisect_plane(mesh, geom=mesh.verts[:] + mesh.edges[:] + mesh.faces[:],
+                               plane_co=Vector((middle + axis * at).tolist()),
+                               plane_no=Vector(facing.tolist()), clear_outer=True)
+    mesh.to_mesh(low.data)
+    mesh.free()
+    unwrap(low)
+    print("[fit] skin shell over %s: split %d times, %d triangles, %d vertices onto the piece, "
+          "sagging faces pushed out up to %.1f mm, cut %.3f m toward the body and %.3f m away "
+          "from the middle" % (", ".join(covered), levels, len(low.data.polygons), onto,
+                               sag * 1000, end, -start))
     return low
+
+
+def other_side(slot):
+    """A sided slot's name on the body's other side (hand.L, hand.R), or the slot as it is."""
+    if slot.endswith((".L", ".R")):
+        return slot[:-1] + ("R" if slot.endswith(".L") else "L")
+    return slot
+
+
+def shell_slots(slots, shell_rule, mannequin):
+    """The slots a skin shell is made of: the piece's own and its shell's "extra" ones, each on
+    the sides the piece's slots are on if the mannequin has it sided (a lowerArm.L), else as
+    named (the torso)."""
+    names = {obj.name for obj in mannequin}
+    sides = sorted({s[-2:] for s in slots if s.endswith((".L", ".R"))}) or [""]
+    extras = []
+    for extra in shell_rule.get("extra", []):
+        sided = [extra + side for side in sides if "mannequin_" + extra + side in names]
+        extras += sided or [extra]
+    return slots + [extra for extra in extras if extra not in slots]
+
+
+def keep_near(low, high, near):
+    """Keep only the faces of a skin shell whose middles lie within near meters of the
+    generated piece, as a pauldron covers the top and outside of the arm, not its inside."""
+    piece = BVHTree.FromPolygons([high.matrix_world @ v.co for v in high.data.vertices],
+                                 [tuple(p.vertices) for p in high.data.polygons])
+    mesh = bmesh.new()
+    mesh.from_mesh(low.data)
+    mesh.faces.ensure_lookup_table()
+    world = low.matrix_world
+    kept = {face.index for face in mesh.faces
+            if piece.find_nearest(world @ face.calc_center_median(), near)[0] is not None}
+    # Closed up: grown by NEAR_CLOSE rings of faces and shrunk back as far, which fills holes
+    # where the piece stands further off, as a scooped plate's middle does, and smooths the edge
+    neighbors = {face.index: {other.index for edge in face.edges for other in edge.link_faces
+                              if other is not face} for face in mesh.faces}
+    for _ in range(NEAR_CLOSE):
+        kept |= {other for index in kept for other in neighbors[index]}
+    for _ in range(NEAR_CLOSE):
+        kept = {index for index in kept if neighbors[index] <= kept}
+    far = [face for face in mesh.faces if face.index not in kept]
+    bmesh.ops.delete(mesh, geom=far, context="FACES")
+    mesh.to_mesh(low.data)
+    mesh.free()
+    low.data.update()
+    print("[fit] kept the skin within %.3f m of the piece: %d faces left out"
+          % (near, len(far)))
+
+
+def fill_unbaked(base, covered):
+    """Give the texels a bake missed the covered ones' median color, so a skin shell reaching
+    where the generated piece doesn't, like a spread finger, shows its color rather than the
+    unbaked one."""
+    if covered.all() or not covered.any():
+        return
+    pixels = np.array(base.pixels[:]).reshape(-1, 4)
+    pixels[~covered, :3] = np.median(pixels[covered, :3], axis=0)
+    base.pixels.foreach_set(pixels.ravel().astype(np.float32))
+    covered[:] = True
 
 
 def metal_roughness_image(high):
@@ -709,18 +999,18 @@ def emit(obj, source):
         tree.links.new(emission.outputs["Emission"], output.inputs["Surface"])
 
 
-def bake_into(kind, high, low, tree, image):
-    """Bake one kind of map from the generated mesh into an image of the low-poly copy."""
+def bake_into(kind, high, low, tree, image, cage=None):
+    """Bake one kind of map from the generated mesh into an image of the low-poly copy, its rays
+    cast in from cage meters out from it, by default a share of its size (see BAKE_REACH)."""
     node = tree.nodes.new("ShaderNodeTexImage")
     node.image = image
     tree.nodes.active = node
     select_only(low)
     high.select_set(True)
     bpy.context.view_layer.objects.active = low
-    extent = max(low.dimensions)
-    bpy.ops.object.bake(type=kind, use_selected_to_active=True,
-                        cage_extrusion=extent * BAKE_REACH * 0.5,
-                        max_ray_distance=extent * BAKE_REACH, margin=8)
+    cage = max(low.dimensions) * BAKE_REACH * 0.5 if cage is None else cage
+    bpy.ops.object.bake(type=kind, use_selected_to_active=True, cage_extrusion=cage,
+                        max_ray_distance=cage * 2, margin=8)
     return node
 
 
@@ -742,10 +1032,11 @@ def occlusion_output(tree):
     return node
 
 
-def bake(high, low, name, size, hidden):
+def bake(high, low, name, size, hidden, cage=None):
     """Bake base color, normals and an ORM map (occlusion, roughness, metalness) from the
-    generated mesh onto the low-poly copy. The hidden objects, like the mannequin, are left out
-    of the occlusion. Gives the base color image and which of its texels the bake covered."""
+    generated mesh onto the low-poly copy, its rays cast in from cage meters out (see
+    bake_into). The hidden objects, like the mannequin, are left out of the occlusion. Gives the
+    base color image and which of its texels the bake covered."""
     enable_gpu()
     scene = bpy.context.scene
     scene.cycles.samples = 8
@@ -762,11 +1053,19 @@ def bake(high, low, name, size, hidden):
     # Texels the bake doesn't reach keep this color, so they can be told apart
     base_image = new_image("%s_emit" % name, size, "sRGB", UNBAKED)
     emit(high, lambda tree, bsdf: None)
-    base = bake_into("EMIT", high, low, tree, base_image)
+    base = bake_into("EMIT", high, low, tree, base_image, cage)
     covered = np.abs(np.array(base_image.pixels[:]).reshape(-1, 4)[:, :3]
                      - np.array(UNBAKED[:3])).max(1) > 1e-3
+    if cage is not None:
+        # A texel only some of whose rays met the piece is the unbaked color blended in, and
+        # still counts as baked above: baked again over another color, it comes out different
+        again = new_image("%s_emit_again" % name, size, "sRGB", UNBAKED_AGAIN)
+        tree.nodes.remove(bake_into("EMIT", high, low, tree, again, cage))
+        covered &= np.abs(np.array(again.pixels[:]).reshape(-1, 4)[:, :3]
+                          - np.array(base_image.pixels[:]).reshape(-1, 4)[:, :3]).max(1) < 1e-3
+        bpy.data.images.remove(again)
     normals = bake_into("NORMAL", high, low, tree,
-                        new_image("%s_normal" % name, size, "Non-Color", FLAT_NORMAL))
+                        new_image("%s_normal" % name, size, "Non-Color", FLAT_NORMAL), cage)
 
     metallic, roughness = average_metal_roughness(high)
     orm = np.empty((size * size, 4))
@@ -777,12 +1076,12 @@ def bake(high, low, name, size, hidden):
             (n for n in tree.nodes if n.type == "TEX_IMAGE" and n.image == source.image),
             source).outputs["Color"])
         values = new_image("%s_mr" % name, size, "Non-Color")
-        bake_into("EMIT", high, low, tree, values)
+        bake_into("EMIT", high, low, tree, values, cage)
         orm[covered, 1:3] = np.array(values.pixels[:]).reshape(-1, 4)[covered, 1:3]
     scene.world = scene.world or bpy.data.worlds.new("bake")
     scene.world.light_settings.distance = max(low.dimensions) * OCCLUSION_REACH
     occlusion = new_image("%s_ao" % name, size, "Non-Color")
-    bake_into("AO", high, low, tree, occlusion)
+    bake_into("AO", high, low, tree, occlusion, cage)
     orm[covered, 0] = np.array(occlusion.pixels[:]).reshape(-1, 4)[covered, 0]
     orm_image = new_image("%s_orm" % name, size, "Non-Color")
     orm_image.pixels.foreach_set(orm.ravel().astype(np.float32))
@@ -1012,7 +1311,13 @@ def main():
     parser.add_argument("--mirror", action="store_true",
                         help="Mirror the mesh across the body's middle first, for the other "
                              "side's copy of a sided accessory.")
+    parser.add_argument("--slots", help="Armor: the body slots it covers, comma-separated; its "
+                                        "low-poly copy is pushed out of the skin to the rule's "
+                                        "gap, and a limb piece is weighted from their skin.")
+    parser.add_argument("--both-sides", action="store_true",
+                        help="Armor: add the piece's mirror as one mesh with it.")
     args = parser.parse_args(argv)
+    slots = [s for s in (args.slots or "").split(",") if s]
     rule = json.loads(args.rule)
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -1027,15 +1332,15 @@ def main():
     high = drop_slivers(high)
     if args.mirror and rule["fit"] != "surface":
         # The other side's copy: mirrored across the body's middle before placing
-        high.scale = (-1, 1, 1)
-        select_only(high)
-        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-        mesh = bmesh.new()
-        mesh.from_mesh(high.data)
-        bmesh.ops.reverse_faces(mesh, faces=mesh.faces)
-        mesh.to_mesh(high.data)
-        mesh.free()
-    if rule["fit"] == "crown":
+        mirror_x(high)
+    if rule["fit"] == "limb":
+        # Lined up on the slots already, by fit_body.py --armor
+        pass
+    elif rule["fit"] == "enclose":
+        if args.image:
+            face_as_pictured(high, args.image)
+        place_enclose(high, mannequin, armature, rule)
+    elif rule["fit"] == "crown":
         place_bottom_crown(high, mannequin, armature, rule)
     elif rule["fit"] == "surface":
         if args.image:
@@ -1045,12 +1350,49 @@ def main():
         place_against_body(high, mannequin, armature, args.bone, rule)
     else:
         raise SystemExit("No fitting called %s yet" % rule["fit"])
-    low = low_poly(high, args.name, rule["triangles"])
-    base, covered = bake(high, low, args.name, rule["texture"], mannequin)
+    if rule.get("shell"):
+        low = skin_low(high, mannequin, slots, rule, args.name)
+        if args.both_sides:
+            # The other hand or foot is not quite the mirror of this one, so its shell is made
+            # from its own skin, over the piece's mirror, and both are baked together
+            other_slots = [other_side(s) for s in slots]
+            other_high = high.copy()
+            other_high.data = high.data.copy()
+            bpy.context.scene.collection.objects.link(other_high)
+            mirror_x(other_high)
+            other = skin_low(other_high, mannequin, other_slots, rule, args.name + "_other")
+            select_only(low, other)
+            bpy.context.view_layer.objects.active = low
+            bpy.ops.object.join()
+            unwrap(low)
+            select_only(high, other_high)
+            bpy.context.view_layer.objects.active = high
+            bpy.ops.object.join()
+            slots = slots + other_slots
+        # Weighted from all the skin it was made of
+        slots = shell_slots(slots, rule["shell"], mannequin)
+    else:
+        low = low_poly(high, args.name, rule["triangles"])
+        if slots:
+            push_out_of_skin(low, mannequin, rule.get("gap", 0.0))
+    # A skin shell lies under the piece, which stands off it by up to its reach: its rays start
+    # outside all of it, so they meet its outside rather than its inside
+    cage = rule["shell"].get("reach", 0.0) + SHELL_BAKE_MARGIN if rule.get("shell") else None
+    base, covered = bake(high, low, args.name, rule["texture"], mannequin, cage)
+    if rule.get("shell"):
+        fill_unbaked(base, covered)
     out = pathlib.Path(args.out)
     defaults, original = tint_masks(base, covered, out.with_name(out.stem + MASK_FOLDER_SUFFIX))
     base.pack()
-    rig(low, armature, args.bone)
+    if args.both_sides and not rule.get("shell"):
+        add_mirror(low)
+        mirrored = [s[:-2] + (".R" if s.endswith(".L") else ".L") for s in slots
+                    if s.endswith((".L", ".R"))]
+        slots = slots + [s for s in mirrored if s not in slots]
+    if rule["fit"] == "limb":
+        rig_skin(low, armature, mannequin, slots)
+    else:
+        rig(low, armature, args.bone)
     export(args.out, low, armature)
     if args.tints:
         with open(args.tints, "w", encoding="utf8") as stream:
