@@ -1285,7 +1285,7 @@ public final class DagBuilder {
         for (int id : active) {
             edgeCount += dag.clusters().get(id).corners().length / AXES;
         }
-        final Grouping.EdgeTable uses = new Grouping.EdgeTable(edgeCount);
+        final Grouping.EdgeTable uses = Grouping.EdgeTable.take(edgeCount);
         for (int id : active) {
             final float[] corners = dag.clusters().get(id).corners();
             for (int t = 0; t < corners.length; t += TRIANGLE_VALUES) {
@@ -1317,6 +1317,7 @@ public final class DagBuilder {
                 }
             }
         }
+        Grouping.EdgeTable.give(uses);
         return out;
     }
 

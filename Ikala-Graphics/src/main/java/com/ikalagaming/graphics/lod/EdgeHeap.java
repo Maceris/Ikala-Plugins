@@ -10,6 +10,16 @@ import java.util.Arrays;
  */
 final class EdgeHeap {
 
+    /**
+     * The most entries a thread keeps room for between simplifications: past it, a heap is let go,
+     * so a rare huge mesh doesn't hold its arrays for good on every worker. Typical groups fit, and
+     * growing a new heap for each was a chain of humongous arrays the garbage collector paused for.
+     */
+    private static final int KEPT_CAPACITY = 1 << 17;
+
+    /** Each thread's heap between uses, or null while one is taken. */
+    private static final ThreadLocal<EdgeHeap> SPARE = ThreadLocal.withInitial(EdgeHeap::new);
+
     /** Ints per entry: two vertices and their two versions. */
     private static final int ENTRY_INTS = 4;
 
@@ -39,6 +49,35 @@ final class EdgeHeap {
 
     /** The popped entry's cost. */
     double cost;
+
+    /**
+     * Take this thread's heap, empty, or a new one if it is taken already. Give it back with {@link
+     * #give} when done.
+     *
+     * @return An empty heap.
+     */
+    static EdgeHeap take() {
+        final EdgeHeap heap = SPARE.get();
+        SPARE.set(null);
+        if (heap == null) {
+            return new EdgeHeap();
+        }
+        heap.size = 0;
+        return heap;
+    }
+
+    /**
+     * Give a heap from {@link #take} back to this thread, unless it grew too large to keep.
+     *
+     * @param heap The heap, not used after this.
+     */
+    static void give(EdgeHeap heap) {
+        if (heap.costs.length <= KEPT_CAPACITY) {
+            SPARE.set(heap);
+        } else {
+            SPARE.set(new EdgeHeap());
+        }
+    }
 
     /**
      * Whether there is nothing left.

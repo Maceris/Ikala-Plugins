@@ -55,7 +55,7 @@ public final class Grouping {
         for (int id : active) {
             edgeCount += dag.clusters().get(id).corners().length / AXES;
         }
-        final EdgeTable firstUse = new EdgeTable(edgeCount);
+        final EdgeTable firstUse = EdgeTable.take(edgeCount);
         for (int i = 0; i < n; ++i) {
             final LodDag.Cluster cluster = dag.clusters().get(active[i]);
             final float[] corners = cluster.corners();
@@ -74,6 +74,7 @@ public final class Grouping {
             }
             builder.position(i, cluster.bound()[0], cluster.bound()[1], cluster.bound()[2]);
         }
+        EdgeTable.give(firstUse);
         addNearest(dag, active, builder);
         final int[] part = GraphPartitioner.partition(builder.build(), MAX_CLUSTERS);
         final int parts = GraphPartitioner.partCount(part);
@@ -288,23 +289,81 @@ public final class Grouping {
         private int size;
 
         /**
+         * How many slots the table has now, a power of two: the arrays may be larger, kept from an
+         * earlier use of this thread's table, and only this many of their slots are looked in.
+         */
+        private int slots;
+
+        /**
+         * The most slots a thread keeps between uses: past it, a table is let go, so a rare huge
+         * group doesn't hold its arrays for good on every worker. Making a table for every group
+         * was a stream of humongous arrays the garbage collector paused for.
+         */
+        private static final int KEPT_SLOTS = 1 << 17;
+
+        /** Each thread's table between uses, or null while one is taken. */
+        private static final ThreadLocal<EdgeTable> SPARE = new ThreadLocal<>();
+
+        /**
          * Make a table.
          *
          * @param expected How many edges it may get, for its first size.
          */
         EdgeTable(int expected) {
-            allocate(Integer.highestOneBit(Math.max(4, expected * 2 - 1)) << 1);
+            allocate(slotsFor(expected));
+        }
+
+        /**
+         * Take this thread's table, empty and sized for some edges, or a new one if it is taken
+         * already or too small. Give it back with {@link #give} when done.
+         *
+         * @param expected How many edges it may get.
+         * @return An empty table.
+         */
+        static EdgeTable take(int expected) {
+            final EdgeTable table = SPARE.get();
+            SPARE.set(null);
+            final int wanted = slotsFor(expected);
+            if (table == null || table.values.length < wanted) {
+                return new EdgeTable(expected);
+            }
+            Arrays.fill(table.values, 0, wanted, -1);
+            table.slots = wanted;
+            table.size = 0;
+            return table;
+        }
+
+        /**
+         * Give a table from {@link #take} back to this thread, unless it is too large to keep.
+         *
+         * @param table The table, not used after this.
+         */
+        static void give(@NonNull EdgeTable table) {
+            if (table.values.length <= KEPT_SLOTS) {
+                SPARE.set(table);
+            }
+        }
+
+        /**
+         * The slots for some edges: a power of two, at most half full.
+         *
+         * @param expected How many edges.
+         * @return The slots.
+         */
+        private static int slotsFor(int expected) {
+            return Integer.highestOneBit(Math.max(4, expected * 2 - 1)) << 1;
         }
 
         /**
          * Make the table empty at a size.
          *
-         * @param slots The size, a power of two.
+         * @param count The size, a power of two.
          */
-        private void allocate(int slots) {
-            keys = new int[slots * KEY];
-            values = new int[slots];
+        private void allocate(int count) {
+            keys = new int[count * KEY];
+            values = new int[count];
             Arrays.fill(values, -1);
+            slots = count;
             size = 0;
         }
 
@@ -359,7 +418,7 @@ public final class Grouping {
 
         /** Note a new edge, growing the table to keep it at most half full. */
         private void added() {
-            if (++size * 2 > values.length) {
+            if (++size * 2 > slots) {
                 grow();
             }
         }
@@ -387,7 +446,7 @@ public final class Grouping {
             final int bx = pFirst ? qx : px;
             final int by = pFirst ? qy : py;
             final int bz = pFirst ? qz : pz;
-            final int mask = values.length - 1;
+            final int mask = slots - 1;
             int at = hash(ax, ay, az, bx, by, bz) & mask;
             while (values[at] >= 0) {
                 final int k = at * KEY;
@@ -438,9 +497,10 @@ public final class Grouping {
         private void grow() {
             final int[] oldKeys = keys;
             final int[] oldValues = values;
-            allocate(oldValues.length * 2);
-            final int mask = values.length - 1;
-            for (int old = 0; old < oldValues.length; ++old) {
+            final int oldSlots = slots;
+            allocate(oldSlots * 2);
+            final int mask = slots - 1;
+            for (int old = 0; old < oldSlots; ++old) {
                 if (oldValues[old] < 0) {
                     continue;
                 }

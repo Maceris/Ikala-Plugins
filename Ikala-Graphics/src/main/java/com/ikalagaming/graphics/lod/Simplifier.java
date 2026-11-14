@@ -352,8 +352,8 @@ public final class Simplifier {
     /** The vertices joined to each vertex by a seam edge. */
     private final IntArrayList[] seamNeighbors;
 
-    /** Candidate collapses. */
-    private final EdgeHeap heap = new EdgeHeap();
+    /** Candidate collapses, this thread's heap while the simplification runs. */
+    private final EdgeHeap heap = EdgeHeap.take();
 
     /** The options. */
     private final Options options;
@@ -470,9 +470,13 @@ public final class Simplifier {
      */
     public static Result simplify(@NonNull LodMesh input, @NonNull Options options) {
         Simplifier simplifier = new Simplifier(input, options);
-        final int virtualEdges = simplifier.connect();
-        simplifier.run();
-        return simplifier.result(virtualEdges);
+        try {
+            final int virtualEdges = simplifier.connect();
+            simplifier.run();
+            return simplifier.result(virtualEdges);
+        } finally {
+            EdgeHeap.give(simplifier.heap);
+        }
     }
 
     /**
