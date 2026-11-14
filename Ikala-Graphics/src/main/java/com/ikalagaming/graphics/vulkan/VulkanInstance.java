@@ -1991,6 +1991,11 @@ public class VulkanInstance {
         state.frameCapture.collect(state.frameIndex);
         // What only some scenes need, once a frame needed it
         pipelineManager.createWhenNeeded(state);
+        // More room for volume bricks, before this frame records anything with their set: changing
+        // it would spoil a command buffer that already used it
+        if (state.volumeBricks != null) {
+            state.volumeBricks.grow(state);
+        }
         if (headless) {
             renderHeadless(scene, sceneWindow, gui.get(sceneWindow));
             return;

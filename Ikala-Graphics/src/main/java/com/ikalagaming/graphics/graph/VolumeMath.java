@@ -56,8 +56,17 @@ public final class VolumeMath {
     /** Brick slots along the atlas's z. */
     public static final int SLOTS_Z = 24;
 
-    /** How many bricks the atlas holds. */
+    /** How many bricks the atlas holds at most. */
     public static final int SLOTS = SLOTS_X * SLOTS_Y * SLOTS_Z;
+
+    /**
+     * How many brick slots one layer of the atlas, a brick deep, holds. Slots go in layer by layer,
+     * see {@link #slotOrigin}, so the atlas grows by layers without moving any brick.
+     */
+    public static final int SLOTS_PER_LAYER = SLOTS_X * SLOTS_Y;
+
+    /** How many layers the atlas starts with, until bricks fill them. */
+    public static final int FIRST_LAYERS = 1;
 
     /**
      * How long the hand over from sections' own blocks to their bricks is, in meters, centered on
@@ -69,8 +78,12 @@ public final class VolumeMath {
     /** Bytes per voxel in the atlas: color and extinction, a byte each. */
     public static final int BYTES_PER_VOXEL = 4;
 
-    /** The atlas's size in bytes. */
-    public static final long ATLAS_BYTES = (long) SLOTS * BRICK * BRICK * BRICK * BYTES_PER_VOXEL;
+    /** The size of one layer of the atlas, in bytes. */
+    public static final long LAYER_BYTES =
+            (long) SLOTS_PER_LAYER * BRICK * BRICK * BRICK * BYTES_PER_VOXEL;
+
+    /** The atlas's largest size, in bytes, with every layer. */
+    public static final long ATLAS_BYTES = LAYER_BYTES * SLOTS_Z;
 
     /**
      * The optical depth of crossing a surface once: how much it blocks, as -ln of what it lets

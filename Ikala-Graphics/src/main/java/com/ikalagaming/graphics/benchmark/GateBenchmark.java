@@ -23,7 +23,6 @@ import com.ikalagaming.graphics.bake.SectionBaker;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.SunShadowCache;
-import com.ikalagaming.graphics.graph.VolumeMath;
 import com.ikalagaming.graphics.lod.CrackCheck;
 import com.ikalagaming.graphics.lod.LodCache;
 import com.ikalagaming.graphics.lod.LodStore;
@@ -3567,7 +3566,7 @@ public final class GateBenchmark {
                 live == null ? "0" : mib(live.loadedBytes()),
                 mib(arena.usedBytes()),
                 mib(arena.capacityBytes()),
-                mib(VolumeMath.ATLAS_BYTES));
+                mib(renderer().getState().volumeBricks.atlasBytes()));
         log.info(
                 "Gate benchmark memory, CPU: {} MiB of heap used of {} MiB (max {} MiB); section"
                         + " bake requests {} MiB, level of detail store {} MiB",
@@ -3604,7 +3603,7 @@ public final class GateBenchmark {
                     bricks.queuedCount(),
                     bricks.withoutSlotCount(),
                     bricks.drawCount(renderer().getState().frameIndex),
-                    VolumeMath.ATLAS_BYTES / BYTES_PER_MIB,
+                    bricks.atlasBytes() / BYTES_PER_MIB,
                     renderer().getState().sections.getPlacedTriangles());
         }
         final int[] checks = renderer().getState().sections.getCheckCounts();

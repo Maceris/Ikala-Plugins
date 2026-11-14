@@ -148,6 +148,15 @@ public class VolumeBricks {
     /** The view of the whole atlas. */
     private long view;
 
+    /**
+     * How many layers of slots the atlas has now, each {@link VolumeMath#SLOTS_PER_LAYER} bricks;
+     * up to {@link VolumeMath#SLOTS_Z}, see {@link #grow}.
+     */
+    private int layers;
+
+    /** Whether a section waits for a slot while the atlas can still grow. */
+    private boolean growWanted;
+
     /** Filters within a brick, clamped at the atlas's edge. */
     private long sampler;
 
@@ -330,6 +339,15 @@ public class VolumeBricks {
 
     /** Where the camera was when the draw order was sorted, or null. */
     private Vector3d sortedAt;
+
+    /**
+     * The atlas grows once fewer slots than one part in this many of a layer are free, ahead of
+     * running out.
+     */
+    private static final int GROW_AHEAD_SHARE = 8;
+
+    /** Bytes in a mebibyte, for logs. */
+    private static final long BYTES_PER_MIB = 1024L * 1024;
 
     /** Whether the atlas was full, so it is only said once. */
     private boolean warnedFull;
@@ -529,59 +547,13 @@ public class VolumeBricks {
      * @param state The Vulkan state.
      */
     public VolumeBricks(@NonNull VulkanState state) {
-        for (int slot = 0; slot < VolumeMath.SLOTS; ++slot) {
+        layers = VolumeMath.FIRST_LAYERS;
+        for (int slot = 0; slot < layers * VolumeMath.SLOTS_PER_LAYER; ++slot) {
             free.add(slot);
         }
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
-            PointerBuffer pointerOutput = stack.callocPointer(1);
-            VkImageCreateInfo imageInfo =
-                    VkImageCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .imageType(VK_IMAGE_TYPE_3D)
-                            .format(FORMAT)
-                            .extent(
-                                    e ->
-                                            e.set(
-                                                    VolumeMath.SLOTS_X * VolumeMath.BRICK,
-                                                    VolumeMath.SLOTS_Y * VolumeMath.BRICK,
-                                                    VolumeMath.SLOTS_Z * VolumeMath.BRICK))
-                            .mipLevels(1)
-                            .arrayLayers(1)
-                            .samples(VK_SAMPLE_COUNT_1_BIT)
-                            .tiling(VK_IMAGE_TILING_OPTIMAL)
-                            .usage(
-                                    VK_IMAGE_USAGE_STORAGE_BIT
-                                            | VK_IMAGE_USAGE_SAMPLED_BIT
-                                            | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-                            .initialLayout(VK_IMAGE_LAYOUT_UNDEFINED);
-            VmaAllocationCreateInfo allocInfo =
-                    VmaAllocationCreateInfo.calloc(stack)
-                            .flags(VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT)
-                            .usage(VMA_MEMORY_USAGE_AUTO);
-            checkError(
-                    vmaCreateImage(
-                            state.vmaAllocator,
-                            imageInfo,
-                            allocInfo,
-                            longOutput,
-                            pointerOutput,
-                            null));
-            image = longOutput.get(0);
-            imageAllocation = pointerOutput.get(0);
-            VkImageViewCreateInfo viewInfo =
-                    VkImageViewCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .image(image)
-                            .viewType(VK_IMAGE_VIEW_TYPE_3D)
-                            .format(FORMAT)
-                            .subresourceRange(
-                                    range ->
-                                            range.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
-                                                    .levelCount(1)
-                                                    .layerCount(1));
-            checkError(vkCreateImageView(state.device.logical, viewInfo, null, longOutput));
-            view = longOutput.get(0);
+            createAtlas(state, layers, stack);
             VkSamplerCreateInfo samplerInfo =
                     VkSamplerCreateInfo.calloc(stack)
                             .sType$Default()
@@ -664,9 +636,9 @@ public class VolumeBricks {
             maskInfo.get(0).buffer(masks.buffer).offset(0).range(VK_WHOLE_SIZE);
             materials =
                     SharedBuffer.allocateDeviceLocal(
-                            (long) VolumeMath.SLOTS * MATERIALS_SIZE,
+                            (long) layers * VolumeMath.SLOTS_PER_LAYER * MATERIALS_SIZE,
                             state,
-                            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+                            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
             surfaces =
                     SharedBuffer.allocateDeviceLocal(
                             (long) VolumeMath.SLOTS * SURFACES_SIZE,
@@ -723,6 +695,62 @@ public class VolumeBricks {
     }
 
     /**
+     * Create an atlas image and its view, cleared to nothing by {@link #clear} before use.
+     *
+     * @param state The Vulkan state.
+     * @param atlasLayers How many layers of slots it holds.
+     * @param stack The stack to allocate on.
+     */
+    private void createAtlas(
+            @NonNull VulkanState state, int atlasLayers, @NonNull MemoryStack stack) {
+        LongBuffer longOutput = stack.callocLong(1);
+        PointerBuffer pointerOutput = stack.callocPointer(1);
+        VkImageCreateInfo imageInfo =
+                VkImageCreateInfo.calloc(stack)
+                        .sType$Default()
+                        .imageType(VK_IMAGE_TYPE_3D)
+                        .format(FORMAT)
+                        .extent(
+                                e ->
+                                        e.set(
+                                                VolumeMath.SLOTS_X * VolumeMath.BRICK,
+                                                VolumeMath.SLOTS_Y * VolumeMath.BRICK,
+                                                atlasLayers * VolumeMath.BRICK))
+                        .mipLevels(1)
+                        .arrayLayers(1)
+                        .samples(VK_SAMPLE_COUNT_1_BIT)
+                        .tiling(VK_IMAGE_TILING_OPTIMAL)
+                        .usage(
+                                VK_IMAGE_USAGE_STORAGE_BIT
+                                        | VK_IMAGE_USAGE_SAMPLED_BIT
+                                        | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+                                        | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+                        .initialLayout(VK_IMAGE_LAYOUT_UNDEFINED);
+        VmaAllocationCreateInfo allocInfo =
+                VmaAllocationCreateInfo.calloc(stack)
+                        .flags(VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT)
+                        .usage(VMA_MEMORY_USAGE_AUTO);
+        checkError(
+                vmaCreateImage(
+                        state.vmaAllocator, imageInfo, allocInfo, longOutput, pointerOutput, null));
+        image = longOutput.get(0);
+        imageAllocation = pointerOutput.get(0);
+        VkImageViewCreateInfo viewInfo =
+                VkImageViewCreateInfo.calloc(stack)
+                        .sType$Default()
+                        .image(image)
+                        .viewType(VK_IMAGE_VIEW_TYPE_3D)
+                        .format(FORMAT)
+                        .subresourceRange(
+                                range ->
+                                        range.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                                                .levelCount(1)
+                                                .layerCount(1));
+        checkError(vkCreateImageView(state.device.logical, viewInfo, null, longOutput));
+        view = longOutput.get(0);
+    }
+
+    /**
      * Move the new atlas to the general layout and clear it.
      *
      * @param commandBuffer The command buffer.
@@ -770,6 +798,179 @@ public class VolumeBricks {
         vkCmdPipelineBarrier2(
                 commandBuffer,
                 VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barrier));
+    }
+
+    /**
+     * Add layers to the atlas, twice as many up to {@link VolumeMath#SLOTS_Z}, if a section waits
+     * for a slot. Slots go in layer by layer, so every brick keeps its place: the device goes idle,
+     * the bricks and their materials are copied into the larger atlas and buffer, and the set is
+     * pointed at them. That happens only a few times as a world fills in. Render thread, at the
+     * start of a frame before anything is recorded, since changing the set spoils a command buffer
+     * that used it; {@link #rebalance} then hands out the new slots.
+     *
+     * @param state The Vulkan state.
+     */
+    public void grow(@NonNull VulkanState state) {
+        if (!growWanted) {
+            return;
+        }
+        growWanted = false;
+        if (layers >= VolumeMath.SLOTS_Z) {
+            return;
+        }
+        final int oldLayers = layers;
+        final int newLayers = Math.min(VolumeMath.SLOTS_Z, 2 * layers);
+        checkError(vkDeviceWaitIdle(state.device.logical));
+        final long oldImage = image;
+        final long oldAllocation = imageAllocation;
+        final long oldView = view;
+        final SharedBuffer oldMaterials = materials;
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            createAtlas(state, newLayers, stack);
+            materials =
+                    SharedBuffer.allocateDeviceLocal(
+                            (long) newLayers * VolumeMath.SLOTS_PER_LAYER * MATERIALS_SIZE,
+                            state,
+                            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+            state.immediateCommands.submit(
+                    state,
+                    commandBuffer -> {
+                        try (MemoryStack inner = MemoryStack.stackPush()) {
+                            clear(commandBuffer, inner);
+                            // What the frames wrote to the old atlas and materials, and the
+                            // clear, come before the copies
+                            memoryBarrier(
+                                    commandBuffer,
+                                    VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                                    VK_ACCESS_2_MEMORY_WRITE_BIT,
+                                    VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
+                                    VK_ACCESS_2_TRANSFER_READ_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                    inner);
+                            VkImageCopy.Buffer region = VkImageCopy.calloc(1, inner);
+                            region.get(0)
+                                    .srcSubresource(
+                                            sub ->
+                                                    sub.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                                                            .layerCount(1))
+                                    .dstSubresource(
+                                            sub ->
+                                                    sub.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                                                            .layerCount(1))
+                                    .extent(
+                                            e ->
+                                                    e.set(
+                                                            VolumeMath.SLOTS_X * VolumeMath.BRICK,
+                                                            VolumeMath.SLOTS_Y * VolumeMath.BRICK,
+                                                            oldLayers * VolumeMath.BRICK));
+                            vkCmdCopyImage(
+                                    commandBuffer,
+                                    oldImage,
+                                    VK_IMAGE_LAYOUT_GENERAL,
+                                    image,
+                                    VK_IMAGE_LAYOUT_GENERAL,
+                                    region);
+                            VkBufferCopy.Buffer bytes = VkBufferCopy.calloc(1, inner);
+                            bytes.get(0)
+                                    .size(
+                                            (long) oldLayers
+                                                    * VolumeMath.SLOTS_PER_LAYER
+                                                    * MATERIALS_SIZE);
+                            vkCmdCopyBuffer(
+                                    commandBuffer, oldMaterials.buffer, materials.buffer, bytes);
+                            memoryBarrier(
+                                    commandBuffer,
+                                    VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
+                                    VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
+                                            | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                                    VK_ACCESS_2_SHADER_STORAGE_READ_BIT
+                                            | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+                                            | VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                                    inner);
+                        }
+                    });
+            VkDescriptorImageInfo.Buffer storage = VkDescriptorImageInfo.calloc(1, stack);
+            storage.get(0).imageView(view).imageLayout(VK_IMAGE_LAYOUT_GENERAL);
+            VkDescriptorImageInfo.Buffer sampled = VkDescriptorImageInfo.calloc(1, stack);
+            sampled.get(0).sampler(sampler).imageView(view).imageLayout(VK_IMAGE_LAYOUT_GENERAL);
+            VkDescriptorBufferInfo.Buffer materialInfo = VkDescriptorBufferInfo.calloc(1, stack);
+            materialInfo.get(0).buffer(materials.buffer).offset(0).range(VK_WHOLE_SIZE);
+            VkWriteDescriptorSet.Buffer writes = VkWriteDescriptorSet.calloc(3, stack);
+            writes.get(0)
+                    .sType$Default()
+                    .dstSet(set)
+                    .dstBinding(STORAGE_BINDING)
+                    .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+                    .descriptorCount(1)
+                    .pImageInfo(storage);
+            writes.get(1)
+                    .sType$Default()
+                    .dstSet(set)
+                    .dstBinding(SAMPLED_BINDING)
+                    .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                    .descriptorCount(1)
+                    .pImageInfo(sampled);
+            writes.get(2)
+                    .sType$Default()
+                    .dstSet(set)
+                    .dstBinding(MATERIALS_BINDING)
+                    .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                    .descriptorCount(1)
+                    .pBufferInfo(materialInfo);
+            vkUpdateDescriptorSets(state.device.logical, writes, null);
+        }
+        vkDestroyImageView(state.device.logical, oldView, null);
+        vmaDestroyImage(state.vmaAllocator, oldImage, oldAllocation);
+        SharedBuffer.free(oldMaterials, state);
+        for (int slot = oldLayers * VolumeMath.SLOTS_PER_LAYER;
+                slot < newLayers * VolumeMath.SLOTS_PER_LAYER;
+                ++slot) {
+            free.add(slot);
+        }
+        layers = newLayers;
+        log.debug(
+                "The volume atlas grew to {} layers, {} bricks, {} MiB",
+                layers,
+                layers * VolumeMath.SLOTS_PER_LAYER,
+                layers * VolumeMath.LAYER_BYTES / BYTES_PER_MIB);
+    }
+
+    /**
+     * A global memory barrier.
+     *
+     * @param commandBuffer The command buffer.
+     * @param srcStage The source VkPipelineStageFlags2.
+     * @param srcAccess The source VkAccessFlags2.
+     * @param dstStage The destination VkPipelineStageFlags2.
+     * @param dstAccess The destination VkAccessFlags2.
+     * @param stack The stack to allocate on.
+     */
+    private static void memoryBarrier(
+            @NonNull VkCommandBuffer commandBuffer,
+            long srcStage,
+            long srcAccess,
+            long dstStage,
+            long dstAccess,
+            @NonNull MemoryStack stack) {
+        VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
+        barrier.get(0)
+                .sType$Default()
+                .srcStageMask(srcStage)
+                .srcAccessMask(srcAccess)
+                .dstStageMask(dstStage)
+                .dstAccessMask(dstAccess);
+        vkCmdPipelineBarrier2(
+                commandBuffer,
+                VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));
+    }
+
+    /**
+     * How big the atlas is now.
+     *
+     * @return Its size in bytes.
+     */
+    public long atlasBytes() {
+        return layers * VolumeMath.LAYER_BYTES;
     }
 
     /**
@@ -827,6 +1028,13 @@ public class VolumeBricks {
      */
     private void giveSlot(LodStore.@NonNull SectionPos key, VolumeVoxelizer.@NonNull Brick brick) {
         if (!slots.containsKey(key)) {
+            if (free.isEmpty() && layers < VolumeMath.SLOTS_Z) {
+                // It waits a frame, until the atlas grows
+                growWanted = true;
+                withoutSlot.add(key);
+                waitingChanged = true;
+                return;
+            }
             if (free.isEmpty()) {
                 if (!warnedFull) {
                     log.warn(
@@ -842,6 +1050,11 @@ public class VolumeBricks {
             }
             take(key);
             withoutSlot.remove(key);
+            // Grow before it runs out, so sections seldom wait a frame for a slot
+            if (free.size() < VolumeMath.SLOTS_PER_LAYER / GROW_AHEAD_SHARE
+                    && layers < VolumeMath.SLOTS_Z) {
+                growWanted = true;
+            }
         }
         uploads.put(key, brick);
     }
