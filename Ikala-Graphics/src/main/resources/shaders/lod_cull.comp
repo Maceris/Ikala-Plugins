@@ -139,6 +139,12 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Vi
 // Every level of the depth pyramid, the farthest depth under each texel
 layout(set = 0, binding = 0) uniform sampler2D pyramid;
 
+// How many draw commands each list has room for, see LodCullMath.listRoom, then where each starts
+// in the commands, LIST_SLOTS of each; written each frame before culling, see LodCull
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer ListLayout {
+    uint values[];
+};
+
 layout(push_constant) uniform Constants {
     Clusters clusterTable;
     History historyTable;
@@ -156,8 +162,10 @@ layout(push_constant) uniform Constants {
     // How many entries the cluster table has
     uint capacity;
     Pairs pairTable;
-    // How many entries the pair table has; each list has room for capacity + pairCapacity commands
+    // How many entries the pair table has
     uint pairCapacity;
+    // Each list's room and start in the commands, see LodRenderer
+    ListLayout listLayout;
 };
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
@@ -319,13 +327,17 @@ bool stale(uint cell)
 void draw(uint list, Mesh mesh, uint drawId)
 {
     uint index = atomicAdd(countList.counts[list], 1u);
+    // Past the list's room it is only counted, so the CPU makes more room for next time
+    if (index >= listLayout.values[list]) {
+        return;
+    }
     Command command;
     command.indexCount = mesh.info.z;
     command.instanceCount = 1;
     command.firstIndex = mesh.info.y;
     command.vertexOffset = int(mesh.info.x);
     command.firstInstance = drawId;
-    commandList.commands[list * (capacity + pairCapacity) + index] = command;
+    commandList.commands[listLayout.values[LIST_SLOTS + list] + index] = command;
 }
 
 // See LodCullMath

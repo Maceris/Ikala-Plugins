@@ -139,8 +139,8 @@ public class PerFrameData {
 
     /**
      * Indirect draw commands for level of detail clusters this frame, written by the culling pass:
-     * {@link LodRenderer#LIST_SLOTS} lists of {@link #lodCapacity} plus {@link #lodPairCapacity}
-     * commands each.
+     * {@link LodRenderer#LIST_SLOTS} lists, each from {@link #lodListStarts} with room for {@link
+     * #lodListRooms} commands.
      */
     public SharedBuffer lodDrawCommands;
 
@@ -159,11 +159,24 @@ public class PerFrameData {
     /** How many entries the cluster table has. */
     public int lodCapacity;
 
-    /**
-     * How many entries the pair table has; each level of detail list has room for {@link
-     * #lodCapacity} plus this many commands.
-     */
+    /** How many entries the pair table has. */
     public int lodPairCapacity;
+
+    /**
+     * How many draw commands each level of detail list has room for this frame, see {@link
+     * LodCullMath#listRoom}.
+     */
+    public final int[] lodListRooms = new int[LodRenderer.LIST_SLOTS];
+
+    /** Where each level of detail list starts in {@link #lodDrawCommands}, in commands. */
+    public final int[] lodListStarts = new int[LodRenderer.LIST_SLOTS];
+
+    /**
+     * {@link #lodListRooms} then {@link #lodListStarts} on the GPU, for the culling pass, which
+     * reads them for every command; copied in each frame, see {@link
+     * LodRenderer#LIST_LAYOUT_BYTES}.
+     */
+    public SharedBuffer lodListLayout;
 
     /**
      * Models drawn from CPU-written commands this frame, which culling doesn't handle: animated

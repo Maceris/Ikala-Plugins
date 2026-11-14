@@ -163,6 +163,12 @@ public class LodRenderer {
     /** How many counters there are. */
     public static final int COUNTER_COUNT = COUNTER_LEVELS + LEVEL_COUNTERS * COUNTERS_PER_LEVEL;
 
+    /**
+     * The size of the lists' layout, which the culling pass reads: how many commands each list may
+     * hold, see {@link LodCullMath#listRoom}, then where each starts in the commands.
+     */
+    public static final int LIST_LAYOUT_BYTES = 2 * LIST_SLOTS * Integer.BYTES;
+
     /** How many words of coverage volume bricks the brick table starts with room for. */
     private static final int INITIAL_BRICK_WORDS = 4096;
 
@@ -262,6 +268,9 @@ public class LodRenderer {
 
     /** Streaming unit slots, shared by every world. Render thread. */
     private final Slots unitSlots = new Slots();
+
+    /** How many draw commands each list has room for, see {@link LodCullMath#listRoom}. */
+    private final int[] listRooms = new int[LIST_SLOTS];
 
     /** When this frame's mesh registration stops, see {@link #REGISTER_NANOS_PER_FRAME}. */
     private long registerUntil;
@@ -3395,6 +3404,27 @@ public class LodRenderer {
         final IntBuffer counts =
                 MemoryUtil.memIntBuffer(
                         frameData.lodCounts.allocationInfo.pMappedData(), COUNTER_COUNT);
+        final int slotCount = ranges.getCapacity() + Math.max(1, pairRanges.getCapacity());
+        for (int list = 0; list < LIST_SLOTS; ++list) {
+            final int count = frameData.lodWorldCount > 0 ? counts.get(list) : 0;
+            if (count > frameData.lodListRooms[list] && frameData.lodListRooms[list] > 0) {
+                log.debug(
+                        "Level of detail list {} wanted {} commands with room for {}",
+                        list,
+                        count,
+                        frameData.lodListRooms[list]);
+            }
+            listRooms[list] = LodCullMath.listRoom(listRooms[list], count, slotCount);
+        }
+        // After a camera cut the occlusion history is stale, and most of the cut moves from the
+        // early lists to the late ones, which are otherwise small: each late list keeps room for
+        // what its early one draws
+        for (int kind = 0; kind < LIST_SLOTS; kind += LIST_COUNT) {
+            listRooms[kind + InstanceDrawUpdate.LIST_SCENE_LATE] =
+                    Math.max(
+                            listRooms[kind + InstanceDrawUpdate.LIST_SCENE_LATE],
+                            listRooms[kind + InstanceDrawUpdate.LIST_SCENE_EARLY]);
+        }
         if (frameData.lodWorldCount > 0) {
             stats =
                     new Stats(
@@ -3437,10 +3467,16 @@ public class LodRenderer {
         final int pairCapacity = Math.max(1, pairRanges.getCapacity());
         frameData.lodCapacity = capacity;
         frameData.lodPairCapacity = pairCapacity;
+        long commands = 0;
+        for (int list = 0; list < LIST_SLOTS; ++list) {
+            final int room = Math.min(listRooms[list], Math.max(1, capacity) + pairCapacity);
+            frameData.lodListRooms[list] = room;
+            frameData.lodListStarts[list] = (int) commands;
+            commands += room;
+        }
         frameData.lodWorlds.ensureCapacity(
                 (long) Math.max(1, slots) * LodCullMath.WORLD_ENTRY_SIZE, state);
-        frameData.lodDrawCommands.ensureCapacity(
-                ((long) Math.max(1, capacity) + pairCapacity) * LIST_SLOTS * COMMAND_SIZE, state);
+        frameData.lodDrawCommands.ensureCapacity(commands * COMMAND_SIZE, state);
         final ByteBuffer table =
                 MemoryUtil.memByteBuffer(
                         frameData.lodWorlds.allocationInfo.pMappedData(),
@@ -3688,12 +3724,10 @@ public class LodRenderer {
             vkCmdDrawIndexedIndirectCount(
                     commandBuffer,
                     frameData.lodDrawCommands.buffer,
-                    (long) list
-                            * (frameData.lodCapacity + frameData.lodPairCapacity)
-                            * COMMAND_SIZE,
+                    (long) frameData.lodListStarts[list] * COMMAND_SIZE,
                     frameData.lodCounts.buffer,
                     (long) list * Integer.BYTES,
-                    frameData.lodCapacity + frameData.lodPairCapacity,
+                    frameData.lodListRooms[list],
                     COMMAND_SIZE);
         }
     }

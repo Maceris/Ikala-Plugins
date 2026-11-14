@@ -573,6 +573,35 @@ public final class LodCullMath {
                 thresholdPixels);
     }
 
+    /**
+     * The fewest draw commands a list has room for. A list's room is what it last held, twice over,
+     * rounded up to a power of two, rather than every cluster and pair slot: the cut only ever
+     * draws a small share of what is loaded, the lists differ a lot, and the slots double as the
+     * tables grow, which made each frame's command buffer 256 MiB on the Jumble walk.
+     */
+    public static final int MIN_LIST_ROOM = 1024;
+
+    /**
+     * How many draw commands a list has room for, given what it held the last time the counts were
+     * read. It only grows, so a cut that briefly shrinks doesn't make the buffers grow again, and
+     * never past every slot, which no list can outgrow. A list that held more than its room drew
+     * only that many clusters that frame.
+     *
+     * @param room The room now.
+     * @param busiest The commands the list was given, its count, even past the room.
+     * @param slots The cluster and pair slots, the most any list can be given.
+     * @return The room from now on.
+     */
+    public static int listRoom(int room, int busiest, int slots) {
+        long wanted = Math.max(room, MIN_LIST_ROOM);
+        final long needed = 2L * busiest;
+        if (needed > wanted) {
+            // The next power of two at or above it
+            wanted = Long.highestOneBit(needed - 1) << 1;
+        }
+        return (int) Math.max(1, Math.min(wanted, slots));
+    }
+
     /** Static helpers only. */
     private LodCullMath() {}
 }

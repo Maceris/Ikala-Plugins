@@ -911,6 +911,11 @@ public class PipelineManagerVulkan {
                                 DEFERRED_UNTIL_LATER,
                                 state,
                                 VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | STORAGE);
+                state.perFrameData[i].lodListLayout =
+                        SharedBuffer.allocateDeviceLocal(
+                                LodRenderer.LIST_LAYOUT_BYTES,
+                                state,
+                                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
                 state.perFrameData[i].lodCounts =
                         SharedBuffer.allocate(
                                 DEFERRED_UNTIL_LATER,
@@ -1298,6 +1303,8 @@ public class PipelineManagerVulkan {
         data.lodDrawCommands = null;
         SharedBuffer.free(data.lodCounts, state);
         data.lodCounts = null;
+        SharedBuffer.free(data.lodListLayout, state);
+        data.lodListLayout = null;
         SharedBuffer.free(data.lodWorlds, state);
         data.lodWorlds = null;
         data.lodWorldCount = 0;

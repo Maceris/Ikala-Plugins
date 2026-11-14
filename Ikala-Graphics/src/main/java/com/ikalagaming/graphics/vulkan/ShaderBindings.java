@@ -205,16 +205,17 @@ public class ShaderBindings {
         /** How many entries the pair table has. */
         public static final int PUSH_CONSTANT_PAIR_CAPACITY_OFFSET = 13 * Long.BYTES;
 
-        /**
-         * How many entries the cluster table has; each list has room for this many commands plus
-         * the pair table's.
-         */
+        /** How many entries the cluster table has. */
         public static final int PUSH_CONSTANT_CAPACITY_OFFSET =
                 PUSH_CONSTANT_PHASE_OFFSET + Integer.BYTES;
 
+        /**
+         * Device address of each list's room and start, see {@link LodRenderer#LIST_LAYOUT_BYTES}.
+         */
+        public static final int PUSH_CONSTANT_LIST_LAYOUT_OFFSET = 14 * Long.BYTES;
+
         /** The size of the push constants in bytes. */
-        public static final int PUSH_CONSTANTS_SIZE =
-                PUSH_CONSTANT_PAIR_CAPACITY_OFFSET + Integer.BYTES;
+        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_LIST_LAYOUT_OFFSET + Long.BYTES;
 
         /** The number of clusters each compute workgroup handles. */
         public static final int WORKGROUP_SIZE = 64;

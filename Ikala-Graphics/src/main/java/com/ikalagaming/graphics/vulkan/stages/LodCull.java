@@ -24,6 +24,7 @@ import org.lwjgl.vulkan.VkPipelineLayoutCreateInfo;
 import org.lwjgl.vulkan.VkPushConstantRange;
 
 import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 
 /**
@@ -121,6 +122,22 @@ public class LodCull implements RenderStage {
         final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
         final LodRenderer lods = state.lods;
         try (MemoryStack stack = MemoryStack.stackPush()) {
+            if (phase == ShaderBindings.Cull.PHASE_EARLY) {
+                // The lists' layout into device memory, which every command written reads
+                final IntBuffer layout = stack.mallocInt(2 * LodRenderer.LIST_SLOTS);
+                layout.put(frameData.lodListRooms).put(frameData.lodListStarts).flip();
+                vkCmdUpdateBuffer(commandBuffer, frameData.lodListLayout.buffer, 0, layout);
+                VkMemoryBarrier2.Buffer copied = VkMemoryBarrier2.calloc(1, stack);
+                copied.get(0)
+                        .sType$Default()
+                        .srcStageMask(VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT)
+                        .srcAccessMask(VK_ACCESS_2_TRANSFER_WRITE_BIT)
+                        .dstStageMask(VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+                        .dstAccessMask(VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
+                vkCmdPipelineBarrier2(
+                        commandBuffer,
+                        VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(copied));
+            }
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
             vkCmdBindDescriptorSets(
                     commandBuffer,
@@ -172,6 +189,9 @@ public class LodCull implements RenderStage {
             constants.putInt(
                     ShaderBindings.LodCull.PUSH_CONSTANT_PAIR_CAPACITY_OFFSET,
                     frameData.lodPairCapacity);
+            constants.putLong(
+                    ShaderBindings.LodCull.PUSH_CONSTANT_LIST_LAYOUT_OFFSET,
+                    frameData.lodListLayout.deviceAddress);
             vkCmdPushConstants(
                     commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
             // One thread per entry of the cluster table, over every world at once, then one per
