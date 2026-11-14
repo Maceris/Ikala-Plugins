@@ -109,6 +109,8 @@ OCCLUSION_REACH = 0.15
 UNBAKED = (1.0, 0.0, 1.0, 1.0)
 # And this color in a second bake, to find the texels only partly baked
 UNBAKED_AGAIN = (0.0, 1.0, 0.0, 1.0)
+# Baked colors are spread this many texels over the partly baked ones beside them
+BAKE_GROW = 8
 # A tangent-space normal map's flat normal, for texels the bake doesn't reach
 FLAT_NORMAL = (0.5, 0.5, 1.0, 1.0)
 # The node group the glTF exporter reads occlusion from
@@ -865,13 +867,6 @@ def skin_low(high, mannequin, slots, rule, name):
     return low
 
 
-def other_side(slot):
-    """A sided slot's name on the body's other side (hand.L, hand.R), or the slot as it is."""
-    if slot.endswith((".L", ".R")):
-        return slot[:-1] + ("R" if slot.endswith(".L") else "L")
-    return slot
-
-
 def shell_slots(slots, shell_rule, mannequin):
     """The slots a skin shell is made of: the piece's own and its shell's "extra" ones, each on
     the sides the piece's slots are on if the mannequin has it sided (a lowerArm.L), else as
@@ -911,6 +906,37 @@ def keep_near(low, high, near):
     low.data.update()
     print("[fit] kept the skin within %.3f m of the piece: %d faces left out"
           % (near, len(far)))
+
+
+def grow_baked(image, covered, size):
+    """Spread the baked colors over the texels beside them that the bake only partly reached or
+    missed, BAKE_GROW texels deep, each taking the mean of its baked neighbors, and count those
+    as baked: island edges and their margins, which kept the unbaked color blended in."""
+    pixels = np.array(image.pixels[:]).reshape(size, size, 4)
+    done = covered.reshape(size, size).copy()
+    grown = 0
+    for _ in range(BAKE_GROW):
+        total = np.zeros_like(pixels[..., :3])
+        count = np.zeros((size, size))
+        for axis, step in ((0, 1), (0, -1), (1, 1), (1, -1)):
+            shifted = np.roll(pixels[..., :3] * done[..., None], step, axis=axis)
+            near = np.roll(done, step, axis=axis)
+            # No wrapping round the image's edges
+            edge = [slice(None), slice(None)]
+            edge[axis] = 0 if step == 1 else -1
+            shifted[tuple(edge)] = 0
+            near[tuple(edge)] = False
+            total += shifted
+            count += near
+        fill = ~done & (count > 0)
+        if not fill.any():
+            break
+        pixels[fill, :3] = total[fill] / count[fill][:, None]
+        done |= fill
+        grown += int(fill.sum())
+    image.pixels.foreach_set(pixels.ravel().astype(np.float32))
+    covered[:] = done.ravel()
+    return grown
 
 
 def fill_unbaked(base, covered):
@@ -1056,14 +1082,18 @@ def bake(high, low, name, size, hidden, cage=None):
     base = bake_into("EMIT", high, low, tree, base_image, cage)
     covered = np.abs(np.array(base_image.pixels[:]).reshape(-1, 4)[:, :3]
                      - np.array(UNBAKED[:3])).max(1) > 1e-3
-    if cage is not None:
-        # A texel only some of whose rays met the piece is the unbaked color blended in, and
-        # still counts as baked above: baked again over another color, it comes out different
-        again = new_image("%s_emit_again" % name, size, "sRGB", UNBAKED_AGAIN)
-        tree.nodes.remove(bake_into("EMIT", high, low, tree, again, cage))
-        covered &= np.abs(np.array(again.pixels[:]).reshape(-1, 4)[:, :3]
-                          - np.array(base_image.pixels[:]).reshape(-1, 4)[:, :3]).max(1) < 1e-3
-        bpy.data.images.remove(again)
+    # A texel only some of whose rays met the mesh is the unbaked color blended in, and still
+    # counts as baked above: baked again over another color, it comes out different. Left in,
+    # those edge texels were numerous enough to make a tint group of their own, hot pink
+    again = new_image("%s_emit_again" % name, size, "sRGB", UNBAKED_AGAIN)
+    tree.nodes.remove(bake_into("EMIT", high, low, tree, again, cage))
+    covered &= np.abs(np.array(again.pixels[:]).reshape(-1, 4)[:, :3]
+                      - np.array(base_image.pixels[:]).reshape(-1, 4)[:, :3]).max(1) < 1e-3
+    bpy.data.images.remove(again)
+    partly = int((~covered).sum())
+    grown = grow_baked(base_image, covered, size)
+    print("[fit] %d texels not or only partly baked, %d of them given their neighbors' colors"
+          % (partly, grown))
     normals = bake_into("NORMAL", high, low, tree,
                         new_image("%s_normal" % name, size, "Non-Color", FLAT_NORMAL), cage)
 
@@ -1352,23 +1382,6 @@ def main():
         raise SystemExit("No fitting called %s yet" % rule["fit"])
     if rule.get("shell"):
         low = skin_low(high, mannequin, slots, rule, args.name)
-        if args.both_sides:
-            # The other hand or foot is not quite the mirror of this one, so its shell is made
-            # from its own skin, over the piece's mirror, and both are baked together
-            other_slots = [other_side(s) for s in slots]
-            other_high = high.copy()
-            other_high.data = high.data.copy()
-            bpy.context.scene.collection.objects.link(other_high)
-            mirror_x(other_high)
-            other = skin_low(other_high, mannequin, other_slots, rule, args.name + "_other")
-            select_only(low, other)
-            bpy.context.view_layer.objects.active = low
-            bpy.ops.object.join()
-            unwrap(low)
-            select_only(high, other_high)
-            bpy.context.view_layer.objects.active = high
-            bpy.ops.object.join()
-            slots = slots + other_slots
         # Weighted from all the skin it was made of
         slots = shell_slots(slots, rule["shell"], mannequin)
     else:
@@ -1384,7 +1397,7 @@ def main():
     out = pathlib.Path(args.out)
     defaults, original = tint_masks(base, covered, out.with_name(out.stem + MASK_FOLDER_SUFFIX))
     base.pack()
-    if args.both_sides and not rule.get("shell"):
+    if args.both_sides:
         add_mirror(low)
         mirrored = [s[:-2] + (".R" if s.endswith(".L") else ".L") for s in slots
                     if s.endswith((".L", ".R"))]
