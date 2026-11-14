@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.lod;
 
+import java.util.Arrays;
+
 /**
  * A map from long keys to int values, with open addressing and no boxing. Keys here are usually two
  * ints packed into a long, whose own hash (the two halves XORed) collides badly; this mixes every
@@ -156,6 +158,12 @@ public final class LongIntMap {
                 values[j] = oldValues[i];
             }
         }
+    }
+
+    /** Take every key out, keeping the room, so the map can be filled again without allocating. */
+    public void clear() {
+        Arrays.fill(used, false);
+        size = 0;
     }
 
     /**

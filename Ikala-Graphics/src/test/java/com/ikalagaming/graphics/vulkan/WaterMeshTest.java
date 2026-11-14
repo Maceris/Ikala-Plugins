@@ -139,4 +139,61 @@ class WaterMeshTest {
         // The masked corner cell takes two outer sides and leaves two facing it
         assertEquals((24 + 4 * 5 - 2 + 2) * QUAD, mesh.indexCount());
     }
+
+    /**
+     * A builder used again, with what it built given back, builds exactly what a new one does, for
+     * tiles bigger and smaller than before, and its cell data matches too.
+     */
+    @Test
+    void testReusedBuilderMatchesANewOne() {
+        final WaterTile small = WaterTile.flat(new Vector3d(0, 0, 0), 1, 3, 3, 0.875f, STILL);
+        final WaterTile west = WaterTile.flat(new Vector3d(0, 0, 0), 1, 6, 6, 0.875f, STILL);
+        final WaterTile lower = WaterTile.flat(new Vector3d(6, -1, 0), 1, 6, 6, 0.875f, STILL);
+        final List<List<WaterTile>> versions =
+                List.of(List.of(small), List.of(west, lower), List.of(small), List.of(lower));
+        final WaterMesh reused = new WaterMesh();
+        WaterMesh.Mesh last = null;
+        WaterMesh.CellData lastCells = null;
+        for (List<WaterTile> tiles : versions) {
+            if (last != null) {
+                reused.recycle(last);
+                reused.recycle(lastCells);
+            }
+            final List<Integer> climates = tiles.stream().map(t -> -1).toList();
+            last = reused.mesh(tiles);
+            lastCells = reused.cellData(tiles, climates);
+            final WaterMesh.Mesh fresh = WaterMesh.build(tiles);
+            assertEquals(fresh.count(), last.count());
+            assertEquals(fresh.indexCount(), last.indexCount());
+            assertEquals(fresh.surfaceIndexCount(), last.surfaceIndexCount());
+            assertTrue(
+                    Arrays.equals(
+                            fresh.vertices(),
+                            0,
+                            fresh.count() * WaterMesh.VERTEX_FLOATS,
+                            last.vertices(),
+                            0,
+                            last.count() * WaterMesh.VERTEX_FLOATS));
+            assertTrue(
+                    Arrays.equals(
+                            fresh.indices(),
+                            0,
+                            fresh.indexCount(),
+                            last.indices(),
+                            0,
+                            last.indexCount()));
+            final WaterMesh.CellData freshCells = WaterMesh.waterCellData(tiles, climates);
+            assertEquals(freshCells.size(), lastCells.size());
+            for (int z = -2; z < 8; ++z) {
+                for (int x = -2; x < 14; ++x) {
+                    final int a = freshCells.row(x, z);
+                    final int b = lastCells.row(x, z);
+                    assertEquals(a < 0, b < 0, x + ", " + z);
+                    for (int v = 0; a >= 0 && v < WaterMesh.CELL_DATA; ++v) {
+                        assertEquals(freshCells.value(a, v), lastCells.value(b, v));
+                    }
+                }
+            }
+        }
+    }
 }

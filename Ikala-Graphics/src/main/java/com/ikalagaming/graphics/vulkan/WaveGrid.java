@@ -97,9 +97,6 @@ public class WaveGrid {
      */
     private final float[] mask = new float[CELLS * MASK_VALUES];
 
-    /** The world cells water covers and their flow and depth, as of {@link #maskVersion}. */
-    private WaterMesh.CellData waterCells = WaterMesh.CellData.EMPTY;
-
     /** The tiles' version the mask was worked out for, -1 for none. */
     private long maskVersion = -1;
 
@@ -366,11 +363,12 @@ public class WaveGrid {
     private void updateMask(long tilesVersion, Supplier<WaterMesh.CellData> water) {
         final boolean all = tilesVersion != maskVersion;
         if (all) {
-            waterCells = water.get();
             maskVersion = tilesVersion;
         } else if (cornerX == maskCornerX && cornerZ == maskCornerZ) {
             return;
         }
+        // The water's newest, read now rather than kept, since a replaced one is filled again
+        final WaterMesh.CellData waterCells = water.get();
         for (int z = 0; z < WaveletMath.GRID_SIZE; ++z) {
             final int worldZ = cornerZ + z;
             final boolean newRow =
@@ -383,13 +381,19 @@ public class WaveGrid {
                                 || worldX >= maskCornerX + WaveletMath.GRID_SIZE;
                 if (all || newCell) {
                     final int at = slot(worldX, worldZ) * MASK_VALUES;
-                    final float[] data = waterCells.get(worldX, worldZ);
-                    mask[at] = data == null ? 0 : MASK_CLIMATE_BASE + data[WaterMesh.CELL_CLIMATE];
+                    final int row = waterCells.row(worldX, worldZ);
+                    final boolean dry = row < 0;
+                    mask[at] =
+                            dry
+                                    ? 0
+                                    : MASK_CLIMATE_BASE
+                                            + waterCells.value(row, WaterMesh.CELL_CLIMATE);
                     for (int i = 0; i < MASK_COPIED; ++i) {
-                        mask[at + 1 + i] = data == null ? 0 : data[i];
+                        mask[at + 1 + i] = dry ? 0 : waterCells.value(row, i);
                     }
-                    mask[at + MASK_PLUNGE] = data == null ? 0 : data[WaterMesh.CELL_PLUNGE];
-                    mask[at + MASK_SURFACE] = data == null ? 0 : data[WaterMesh.CELL_SURFACE];
+                    mask[at + MASK_PLUNGE] = dry ? 0 : waterCells.value(row, WaterMesh.CELL_PLUNGE);
+                    mask[at + MASK_SURFACE] =
+                            dry ? 0 : waterCells.value(row, WaterMesh.CELL_SURFACE);
                 }
             }
         }

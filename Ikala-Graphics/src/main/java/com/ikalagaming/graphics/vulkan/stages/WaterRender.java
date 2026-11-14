@@ -276,6 +276,13 @@ public class WaterRender implements RenderStage {
     /** What each one meter cell of the drawn tiles holds, for the wave grid. */
     private WaterMesh.CellData cellData = WaterMesh.CellData.EMPTY;
 
+    /**
+     * Builds the tiles' surfaces and cell data, used again for every version so streamed lakes
+     * don't allocate a new set of large arrays each time. Used on the water mesh thread, one build
+     * at a time; given back what is replaced on the render thread.
+     */
+    private final WaterMesh meshBuilder = new WaterMesh();
+
     /** The build of the newest tiles under way, or null. Render thread. */
     private CompletableFuture<Built> building;
 
@@ -907,14 +914,14 @@ public class WaterRender implements RenderStage {
      * @param list The tiles.
      * @return The build.
      */
-    private static Built build(long version, @NonNull List<WaterTile> list) {
+    private Built build(long version, @NonNull List<WaterTile> list) {
         final Climates found = findClimates(list);
         return new Built(
                 version,
                 list,
                 found,
-                WaterMesh.build(list),
-                WaterMesh.waterCellData(list, found.tileClimates()));
+                meshBuilder.mesh(list),
+                meshBuilder.cellData(list, found.tileClimates()));
     }
 
     /**
@@ -930,6 +937,11 @@ public class WaterRender implements RenderStage {
         for (WaterTile tile : tiles) {
             optics.add(WaterMath.optics(tile.body()));
         }
+        // What was drawn goes back to be filled by the next build: nothing reads it after this
+        if (mesh != null) {
+            meshBuilder.recycle(mesh);
+        }
+        meshBuilder.recycle(cellData);
         mesh = built.mesh();
         cellData = built.cells();
         useClimates(built.climates());
