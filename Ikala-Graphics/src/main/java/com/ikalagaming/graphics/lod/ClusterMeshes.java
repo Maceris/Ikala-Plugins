@@ -5,8 +5,6 @@ import lombok.NonNull;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Turns clusters into meshes in the {@link LodVertex} format. Projected triangles are flat, their
@@ -27,10 +25,68 @@ public final class ClusterMeshes {
     private static final int TRIANGLE_VALUES = Clusters.TRIANGLE_VALUES;
 
     /**
-     * How a vertex is told apart from the rest: position, material and, for a textured triangle,
-     * its attributes, which are all zero for a projected one.
+     * Values in a vertex's key, how it is told apart from the rest: position, material and, for a
+     * textured triangle, its attributes (normal, tangent, texture coordinates), which are all zero
+     * for a projected one.
      */
-    private record Key(int x, int y, int z, int material, int normal, int tangent, int uv) {}
+    private static final int KEY = 7;
+
+    /**
+     * The most triangles a thread keeps scratch room for between meshes: clusters have at most
+     * {@link Clusters#MAX_TRIANGLES}, so a larger body is rare and gets room of its own.
+     */
+    private static final int KEPT_TRIANGLES = 4 * Clusters.MAX_TRIANGLES;
+
+    /**
+     * Room a thread reuses for each mesh it makes. Clusters are turned into meshes by the hundred
+     * thousand while a world streams, and a map of key records for each was a large share of
+     * everything allocated.
+     */
+    private static final class Scratch {
+        /** The vertices, before they are copied out at their size. */
+        private ByteBuffer vertices;
+
+        /** The indices, before they are copied out. */
+        private int[] indices;
+
+        /** Each vertex's key, {@link #KEY} values each. */
+        private int[] keys;
+
+        /** Open addressing table of vertex indices plus one, 0 where empty: a power of two. */
+        private int[] table;
+
+        /** The current mesh's grid corners. */
+        private final int[][] grid = new int[CORNERS][AXES];
+
+        /** The current triangle's normal. */
+        private final float[] normal = new float[AXES];
+
+        /** The key being looked up. */
+        private final int[] key = new int[KEY];
+
+        /**
+         * Room for a mesh of some triangles, its table emptied.
+         *
+         * @param triangles How many triangles.
+         */
+        private void ready(int triangles) {
+            final int corners = triangles * CORNERS;
+            if (indices == null || indices.length < corners) {
+                vertices =
+                        ByteBuffer.allocate(corners * LodVertex.SIZE)
+                                .order(ByteOrder.LITTLE_ENDIAN);
+                indices = new int[corners];
+                keys = new int[corners * KEY];
+                // At most half full
+                table = new int[Integer.highestOneBit(Math.max(4, corners * 2 - 1)) << 1];
+            }
+            vertices.clear();
+            Arrays.fill(table, 0);
+        }
+    }
+
+    /** Each thread's scratch. */
+    private static final ThreadLocal<Scratch> SCRATCH = ThreadLocal.withInitial(Scratch::new);
 
     /** The material an averaged vertex's key has, whatever its triangle's. */
     private static final int AVERAGED_MATERIAL = -1;
@@ -70,13 +126,16 @@ public final class ClusterMeshes {
     public static Mesh of(LodDag.@NonNull Cluster cluster) {
         final float[] corners = cluster.corners();
         final int triangles = cluster.triangleCount();
-        ByteBuffer vertices =
-                ByteBuffer.allocate(triangles * CORNERS * LodVertex.SIZE)
-                        .order(ByteOrder.LITTLE_ENDIAN);
-        final int[] indices = new int[triangles * CORNERS];
-        final Map<Key, Integer> seen = new HashMap<>();
-        final int[][] grid = new int[CORNERS][AXES];
-        final float[] normal = new float[AXES];
+        final Scratch scratch = triangles <= KEPT_TRIANGLES ? SCRATCH.get() : new Scratch();
+        scratch.ready(triangles);
+        final ByteBuffer vertices = scratch.vertices;
+        final int[] indices = scratch.indices;
+        final int[] keys = scratch.keys;
+        final int[] table = scratch.table;
+        final int mask = table.length - 1;
+        final int[] key = scratch.key;
+        final int[][] grid = scratch.grid;
+        final float[] normal = scratch.normal;
         final float[] min = {Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE};
         final float[] max = {-Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
         int vertexCount = 0;
@@ -99,23 +158,35 @@ public final class ClusterMeshes {
                 final int first = t * Attributes.PER_TRIANGLE + corner * Attributes.VALUES;
                 // An averaged vertex carries its own color, so its material matters little and
                 // isn't told apart by: one material's copy serves the triangles of every other
-                final Key key =
-                        textured
-                                ? new Key(
-                                        at[0],
-                                        at[1],
-                                        at[2],
-                                        Attributes.isAveraged(attributes, first)
-                                                ? AVERAGED_MATERIAL
-                                                : material,
-                                        attributes[first],
-                                        attributes[first + 1],
-                                        attributes[first + 2])
-                                : new Key(at[0], at[1], at[2], material, 0, 0, 0);
-                Integer index = seen.get(key);
-                if (index == null) {
+                key[0] = at[0];
+                key[1] = at[1];
+                key[2] = at[2];
+                if (textured) {
+                    key[3] =
+                            Attributes.isAveraged(attributes, first) ? AVERAGED_MATERIAL : material;
+                    key[4] = attributes[first];
+                    key[5] = attributes[first + 1];
+                    key[6] = attributes[first + 2];
+                } else {
+                    key[3] = material;
+                    key[4] = 0;
+                    key[5] = 0;
+                    key[6] = 0;
+                }
+                int slot = hash(key) & mask;
+                int index = -1;
+                while (table[slot] != 0) {
+                    final int found = table[slot] - 1;
+                    if (Arrays.equals(keys, found * KEY, found * KEY + KEY, key, 0, KEY)) {
+                        index = found;
+                        break;
+                    }
+                    slot = (slot + 1) & mask;
+                }
+                if (index < 0) {
                     index = vertexCount++;
-                    seen.put(key, index);
+                    table[slot] = index + 1;
+                    System.arraycopy(key, 0, keys, index * KEY, KEY);
                     LodVertex.put(
                             vertices, index, at, material, textured ? attributes : null, first);
                     for (int axis = 0; axis < AXES; ++axis) {
@@ -131,8 +202,26 @@ public final class ClusterMeshes {
             Arrays.fill(min, 0);
             Arrays.fill(max, 0);
         }
-        vertices.limit(vertexCount * LodVertex.SIZE);
-        return new Mesh(vertices, vertexCount, Arrays.copyOf(indices, indexCount), min, max);
+        // Copied out at their size: the scratch is kept, and room for three per triangle would be
+        // kept with the mesh until it is drawn
+        final ByteBuffer kept =
+                ByteBuffer.allocate(vertexCount * LodVertex.SIZE).order(ByteOrder.LITTLE_ENDIAN);
+        kept.put(0, vertices, 0, vertexCount * LodVertex.SIZE);
+        return new Mesh(kept, vertexCount, Arrays.copyOf(indices, indexCount), min, max);
+    }
+
+    /**
+     * Mix a vertex key into a hash.
+     *
+     * @param key The key, {@link #KEY} values.
+     * @return The hash, its low bits spread.
+     */
+    private static int hash(int @NonNull [] key) {
+        int h = 0;
+        for (int i = 0; i < KEY; ++i) {
+            h = (h ^ key[i]) * 0x9E3779B1;
+        }
+        return h ^ (h >>> 15);
     }
 
     /**
@@ -143,17 +232,17 @@ public final class ClusterMeshes {
      * @return False if the triangle has no area on the grid.
      */
     private static boolean normalOf(int @NonNull [] @NonNull [] grid, float @NonNull [] out) {
-        final long[] e1 = new long[AXES];
-        final long[] e2 = new long[AXES];
-        for (int axis = 0; axis < AXES; ++axis) {
-            e1[axis] = (long) grid[1][axis] - grid[0][axis];
-            e2[axis] = (long) grid[2][axis] - grid[0][axis];
-        }
         // In doubles: products of grid differences pass a long's range for triangles kilometers
         // wide
-        final double x = (double) e1[1] * e2[2] - (double) e1[2] * e2[1];
-        final double y = (double) e1[2] * e2[0] - (double) e1[0] * e2[2];
-        final double z = (double) e1[0] * e2[1] - (double) e1[1] * e2[0];
+        final double e1x = (double) grid[1][0] - grid[0][0];
+        final double e1y = (double) grid[1][1] - grid[0][1];
+        final double e1z = (double) grid[1][2] - grid[0][2];
+        final double e2x = (double) grid[2][0] - grid[0][0];
+        final double e2y = (double) grid[2][1] - grid[0][1];
+        final double e2z = (double) grid[2][2] - grid[0][2];
+        final double x = e1y * e2z - e1z * e2y;
+        final double y = e1z * e2x - e1x * e2z;
+        final double z = e1x * e2y - e1y * e2x;
         final double length = Math.sqrt(x * x + y * y + z * z);
         if (length == 0) {
             return false;

@@ -41,4 +41,19 @@ public record VolumeMaterials(float @NonNull [] colors, int version) {
         System.arraycopy(colors, material * VALUES, out, 0, VALUES);
         return out;
     }
+
+    /**
+     * Read a material's color and opacity into an array, for a caller that looks up many.
+     *
+     * @param material The material's index.
+     * @param out Receives its linear red, green and blue and its opacity, {@link #VALUES} values.
+     * @return False if it isn't in this snapshot, leaving the array as it was.
+     */
+    public boolean color(int material, float @NonNull [] out) {
+        if (material < 0 || material >= count()) {
+            return false;
+        }
+        System.arraycopy(colors, material * VALUES, out, 0, VALUES);
+        return true;
+    }
 }

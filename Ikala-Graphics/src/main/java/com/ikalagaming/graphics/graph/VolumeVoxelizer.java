@@ -7,6 +7,7 @@ import lombok.NonNull;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -166,19 +167,42 @@ public final class VolumeVoxelizer {
     /** Which surfaces touch each voxel, packed as {@link Brick#surfaces}. */
     private final int[] surfaces = new int[SURFACE_INTS];
 
-    /** The material table colors are looked up in. */
-    private final VolumeMaterials table;
+    /** The material table colors are looked up in, for the brick being built. */
+    private VolumeMaterials table;
 
     /** Whether a material wasn't in the table. */
     private boolean missingMaterial;
 
+    /** The current surface's color and opacity, see {@link VolumeMaterials#color(int, float[])}. */
+    private final float[] color = new float[COLOR_VALUES];
+
     /**
-     * Set up a voxelizer for one brick.
-     *
-     * @param table Each material's color and opacity.
+     * Each thread's voxelizer, cleared for each brick: a new one's arrays, a couple of hundred
+     * kilobytes, for every section voxelized was a large share of what streaming allocated.
      */
-    private VolumeVoxelizer(@NonNull VolumeMaterials table) {
-        this.table = table;
+    private static final ThreadLocal<VolumeVoxelizer> VOXELIZERS =
+            ThreadLocal.withInitial(VolumeVoxelizer::new);
+
+    /** Make a voxelizer, set up for a brick by {@link #start}. */
+    private VolumeVoxelizer() {}
+
+    /**
+     * Clear what the last brick gathered, to build another.
+     *
+     * @param materials Each material's color and opacity.
+     */
+    private void start(@NonNull VolumeMaterials materials) {
+        table = materials;
+        missingMaterial = false;
+        Arrays.fill(surfaceDepth, 0);
+        Arrays.fill(weighted, 0);
+        Arrays.fill(weight, 0);
+        Arrays.fill(faceBits, 0);
+        Arrays.fill(faceDepth, 0);
+        Arrays.fill(faceArea, 0);
+        Arrays.fill(faceMaterial, 0);
+        Arrays.fill(blocked, false);
+        Arrays.fill(surfaces, 0);
     }
 
     /**
@@ -189,13 +213,17 @@ public final class VolumeVoxelizer {
      * @return The brick, or null if the meshes have no surfaces and no material was missing.
      */
     public static Brick voxelize(@NonNull List<Input> inputs, @NonNull VolumeMaterials table) {
-        final VolumeVoxelizer voxelizer = new VolumeVoxelizer(table);
+        final VolumeVoxelizer voxelizer = VOXELIZERS.get();
+        voxelizer.start(table);
         boolean any = false;
         for (Input input : inputs) {
             // Opaque blocks only end fills; they give a brick nothing to draw
             any |= voxelizer.add(input) && !input.blocker();
         }
-        return any || voxelizer.missingMaterial ? voxelizer.resolve() : null;
+        final Brick brick = any || voxelizer.missingMaterial ? voxelizer.resolve() : null;
+        // Not kept past the brick
+        voxelizer.table = null;
+        return brick;
     }
 
     /**
@@ -287,12 +315,12 @@ public final class VolumeVoxelizer {
         }
         // The surface's average color and opacity, as the scene takes the texture over the color;
         // where it is marked counts even if it stops no light
-        final float[] color = table.color(material);
-        if (color == null && !blocker) {
+        final boolean known = table.color(material, color);
+        if (!known && !blocker) {
             missingMaterial = true;
         }
         final double opacity =
-                color == null ? 0 : Math.clamp(color[COLOR_VALUES - 1], 0, VolumeMath.MAX_OPACITY);
+                !known ? 0 : Math.clamp(color[COLOR_VALUES - 1], 0, VolumeMath.MAX_OPACITY);
         final double opticalDepth = opacity <= 0 ? 0 : VolumeMath.opticalDepth(opacity);
         final int surface = translucent ? TRANSLUCENT_SURFACE : CUTOUT_SURFACE;
 
