@@ -12,8 +12,10 @@ import java.util.*;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
@@ -325,6 +327,24 @@ public final class LodStore {
      */
     @Getter private final int cellsAtOnce;
 
+    /**
+     * How long a worker of {@link #cellWorkers} or {@link #groupWorkers} waits for more work before
+     * it ends, in seconds: long enough to outlast the gaps while a world streams, so its scratch
+     * memory is used again, and an idle or dropped store holds no threads.
+     */
+    private static final int WORKER_IDLE_SECONDS = 30;
+
+    /**
+     * The workers cells are built on, kept between builds: a new pool for each batch meant new
+     * threads, so the per-thread scratch of reading and simplifying was made over and over.
+     */
+    private final ExecutorService cellWorkers;
+
+    /**
+     * The workers every cell's groups are built on, kept between builds like {@link #cellWorkers}.
+     */
+    private final ExecutorService groupWorkers;
+
     /** Level 0 cells whose sections changed since they were built. */
     private final SortedSet<CellKey> dirty = new TreeSet<>();
 
@@ -464,6 +484,8 @@ public final class LodStore {
         // The options' threads go to cells built at once, each with a few for its groups; together
         // more threads than that, since most of them wait most of the time
         cellsAtOnce = Math.max(1, options.threads() / THREADS_PER_CELL_AT_ONCE);
+        cellWorkers = lasting(cellsAtOnce, "LOD cell");
+        groupWorkers = lasting(options.threads(), "LOD build");
         this.options =
                 new DagBuilder.Options(
                                 options.virtualEdgeFactor(),
@@ -1303,25 +1325,19 @@ public final class LodStore {
     private <J> List<Cell> buildAll(
             @NonNull List<J> jobs, @NonNull BiFunction<J, Workers, Cell> build) {
         final List<Cell> out = new ArrayList<>(jobs.size());
+        // Every cell's groups go to one pool of all the threads, so the cells still building when
+        // others are done get their workers, rather than each keeping its share to the end
+        final Workers each = new Workers(options, groupWorkers);
         if (jobs.size() <= 1 || cellsAtOnce <= 1) {
             for (J job : jobs) {
-                out.add(build.apply(job, new Workers(options, null)));
+                out.add(build.apply(job, each));
             }
             return out;
         }
-        // Every cell's groups go to one pool of all the threads, so the cells still building when
-        // others are done get their workers, rather than each keeping its share to the end
-        final int atOnce = Math.min(cellsAtOnce, jobs.size());
-        final ExecutorService groups =
-                Executors.newFixedThreadPool(
-                        options.threads(), DagBuilder.daemonThreads("LOD build"));
-        final Workers each = new Workers(options, groups);
-        final ExecutorService pool =
-                Executors.newFixedThreadPool(atOnce, DagBuilder.daemonThreads("LOD cell"));
+        final List<Future<Cell>> futures = new ArrayList<>(jobs.size());
         try {
-            final List<Future<Cell>> futures = new ArrayList<>(jobs.size());
             for (J job : jobs) {
-                futures.add(pool.submit(() -> build.apply(job, each)));
+                futures.add(cellWorkers.submit(() -> build.apply(job, each)));
             }
             for (Future<Cell> future : futures) {
                 out.add(future.get());
@@ -1333,10 +1349,30 @@ public final class LodStore {
         } catch (ExecutionException e) {
             throw new IllegalStateException("A level of detail cell failed to build", e.getCause());
         } finally {
-            // Interrupts the cells still building if one failed or this thread was interrupted
-            pool.shutdownNow();
-            groups.shutdownNow();
+            // Interrupts the cells still building if one failed or this thread was interrupted;
+            // each cancels its own groups, see DagBuilder.cancelAll
+            DagBuilder.cancelAll(futures);
         }
+    }
+
+    /**
+     * Make a pool whose workers end once idle for {@link #WORKER_IDLE_SECONDS}.
+     *
+     * @param threads How many workers at most.
+     * @param name What its threads are called.
+     * @return The pool.
+     */
+    private static ExecutorService lasting(int threads, @NonNull String name) {
+        final ThreadPoolExecutor pool =
+                new ThreadPoolExecutor(
+                        threads,
+                        threads,
+                        WORKER_IDLE_SECONDS,
+                        TimeUnit.SECONDS,
+                        new LinkedBlockingQueue<>(),
+                        DagBuilder.daemonThreads(name));
+        pool.allowCoreThreadTimeOut(true);
+        return pool;
     }
 
     /**

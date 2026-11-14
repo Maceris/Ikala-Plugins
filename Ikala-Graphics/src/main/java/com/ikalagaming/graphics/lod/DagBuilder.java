@@ -909,6 +909,18 @@ public final class DagBuilder {
     }
 
     /**
+     * Cancel futures, interrupting the ones running, for a wait that gave up: their pool may be
+     * shared and kept, so nothing else stops them.
+     *
+     * @param futures The futures; the finished ones are left alone.
+     */
+    static void cancelAll(@NonNull List<? extends Future<?>> futures) {
+        for (Future<?> future : futures) {
+            future.cancel(true);
+        }
+    }
+
+    /**
      * Merge each input's coplanar triangles, on the workers.
      *
      * @param inputs The meshes.
@@ -927,8 +939,10 @@ public final class DagBuilder {
                 out.add(future.get());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                cancelAll(futures);
                 throw new IllegalStateException("Interrupted merging planar triangles", e);
             } catch (java.util.concurrent.ExecutionException e) {
+                cancelAll(futures);
                 throw new IllegalStateException("Merging planar triangles failed", e.getCause());
             }
         }
@@ -1115,9 +1129,11 @@ public final class DagBuilder {
                     builts.add(future.get());
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
+                    cancelAll(futures);
                     dag.setStopReason("interrupted");
                     return;
                 } catch (ExecutionException e) {
+                    cancelAll(futures);
                     throw new IllegalStateException("A LOD group failed to build", e.getCause());
                 }
             }
@@ -1406,8 +1422,10 @@ public final class DagBuilder {
                 future.get();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                cancelAll(placing);
                 return new Meetings(Set.of(), index);
             } catch (ExecutionException e) {
+                cancelAll(placing);
                 throw new IllegalStateException("Placing edges failed", e.getCause());
             }
         }
@@ -1498,8 +1516,10 @@ public final class DagBuilder {
                 found = future.get();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                cancelAll(futures);
                 return faces;
             } catch (ExecutionException e) {
+                cancelAll(futures);
                 throw new IllegalStateException("Finding face contacts failed", e.getCause());
             }
             for (Contact contact : found) {
