@@ -354,19 +354,27 @@ public final class LodCellFile {
         if (place == null) {
             throw new IllegalArgumentException(file + " has no clusters");
         }
-        final ByteBuffer in = AssetFile.read(file, place.offset(), Math.toIntExact(place.length()));
-        final int count = count(in.getInt());
-        final long[] starts = new long[count + 1];
-        for (int i = 0; i < count; ++i) {
-            final int at = in.position();
-            starts[i] = place.offset() + at;
-            in.position(at + in.getInt(at));
-        }
-        starts[count] = place.offset() + in.position();
-        if (in.position() > place.length()) {
-            throw new IllegalArgumentException(file + "'s cluster records run past their section");
-        }
-        return starts;
+        final AssetFile.Place clusters = place;
+        // Only the records' lengths are kept, so the section can be read into a reused buffer
+        return AssetFile.withBytes(
+                file,
+                clusters.offset(),
+                Math.toIntExact(clusters.length()),
+                in -> {
+                    final int count = count(in.getInt());
+                    final long[] starts = new long[count + 1];
+                    for (int i = 0; i < count; ++i) {
+                        final int at = in.position();
+                        starts[i] = clusters.offset() + at;
+                        in.position(at + in.getInt(at));
+                    }
+                    starts[count] = clusters.offset() + in.position();
+                    if (in.position() > clusters.length()) {
+                        throw new IllegalArgumentException(
+                                file + "'s cluster records run past their section");
+                    }
+                    return starts;
+                });
     }
 
     /**

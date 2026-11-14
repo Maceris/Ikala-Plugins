@@ -354,4 +354,46 @@ class AssetFileTest {
         writer().write(path);
         assertEquals(1, AssetFile.open(path, KNOWN).sections().size());
     }
+
+    @Test
+    void reusedBuffersReadWhatOpenAndReadDo(@TempDir Path directory) {
+        Path small = directory.resolve("small" + EXTENSION);
+        Path large = directory.resolve("large" + EXTENSION);
+        writer().section(VERT, 3, true, floats(1.5f, -2f, 3.25f)).write(small);
+        final float[] many = new float[4096];
+        for (int i = 0; i < many.length; ++i) {
+            many[i] = i * 0.5f;
+        }
+        writer().section(VERT, 3, true, floats(many)).write(large);
+        // Larger, then smaller, then larger again on one thread: the buffer is used again
+        for (Path path : List.of(large, small, large)) {
+            final AssetFile opened = AssetFile.open(path, KNOWN);
+            final List<Section> sections = opened.sections();
+            assertEquals(
+                    sections.stream().map(Section::data).toList(),
+                    AssetFile.withFile(
+                            path,
+                            KNOWN,
+                            file -> file.sections().stream().map(Section::data).toList()));
+            final Section vert = opened.section(VERT).orElseThrow();
+            final int length = vert.data().remaining();
+            final long offset =
+                    AssetFile.locate(path).stream()
+                            .filter(place -> place.tag() == VERT)
+                            .findFirst()
+                            .orElseThrow()
+                            .offset();
+            assertEquals(
+                    AssetFile.read(path, offset, length),
+                    AssetFile.withBytes(
+                            path,
+                            offset,
+                            length,
+                            bytes ->
+                                    ByteBuffer.allocate(length)
+                                            .put(bytes)
+                                            .flip()
+                                            .order(ByteOrder.LITTLE_ENDIAN)));
+        }
+    }
 }

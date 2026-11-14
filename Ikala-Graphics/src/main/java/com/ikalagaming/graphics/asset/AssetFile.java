@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * A container that has been read and checked. Section payloads are views of the original buffer, so
@@ -25,6 +26,17 @@ public final class AssetFile {
 
     /** What a failure to read a file says, before the file. */
     private static final String READ_FAILED = "Could not read ";
+
+    /**
+     * The largest read buffer a thread keeps between {@link #withFile} and {@link #withBytes}
+     * reads: past it, a buffer is let go, so a rare huge file doesn't hold memory on every thread.
+     * Level of detail cells are a megabyte or two, read over and over while a world streams, and a
+     * new array for each was a stream of humongous allocations the garbage collector paused for.
+     */
+    private static final int KEPT_SCRATCH_BYTES = 4 * 1024 * 1024;
+
+    /** Each thread's read buffer between reads, or null while one is in use. */
+    private static final ThreadLocal<ByteBuffer> SCRATCH = new ThreadLocal<>();
 
     /** The header. */
     private final AssetHeader header;
@@ -224,6 +236,122 @@ public final class AssetFile {
         } catch (IOException e) {
             throw new UncheckedIOException(READ_FAILED + path, e);
         }
+    }
+
+    /**
+     * Read a container from a file into this thread's read buffer, and use it, for a reader that
+     * keeps nothing of it: its sections are views into the buffer, which the next read on this
+     * thread fills again, so the use must copy out whatever it keeps.
+     *
+     * @param path The file to read.
+     * @param known The sections the reader understands.
+     * @param use What to do with the container.
+     * @param <T> What the use makes.
+     * @return What the use made.
+     * @throws AssetFormatException If the file breaks the format.
+     * @throws UncheckedIOException If the file can't be read.
+     */
+    public static <T> T withFile(
+            @NonNull Path path, @NonNull KnownSections known, @NonNull Function<AssetFile, T> use) {
+        final ByteBuffer file;
+        try (FileChannel channel = FileChannel.open(path, StandardOpenOption.READ)) {
+            final long size = channel.size();
+            if (size > Integer.MAX_VALUE) {
+                throw new AssetFormatException(
+                        path + " is " + size + " bytes, larger than supported");
+            }
+            file = takeScratch((int) size);
+            readInto(channel, 0, file, path);
+        } catch (IOException e) {
+            throw new UncheckedIOException(READ_FAILED + path, e);
+        }
+        try {
+            return use.apply(read(file, known));
+        } finally {
+            giveScratch(file);
+        }
+    }
+
+    /**
+     * Read part of a file into this thread's read buffer, and use it, for a reader that keeps
+     * nothing of it: the next read on this thread fills the buffer again.
+     *
+     * @param path The file.
+     * @param offset Where to start, in bytes.
+     * @param length How many bytes.
+     * @param use What to do with the bytes, little endian, positioned at 0.
+     * @param <T> What the use makes.
+     * @return What the use made.
+     * @throws AssetFormatException If the file ends before them.
+     * @throws UncheckedIOException If the file can't be read.
+     */
+    public static <T> T withBytes(
+            @NonNull Path path, long offset, int length, @NonNull Function<ByteBuffer, T> use) {
+        final ByteBuffer bytes = takeScratch(length);
+        try {
+            try (FileChannel channel = FileChannel.open(path, StandardOpenOption.READ)) {
+                readInto(channel, offset, bytes, path);
+            } catch (IOException e) {
+                throw new UncheckedIOException(READ_FAILED + path, e);
+            }
+            return use.apply(bytes.order(ByteOrder.LITTLE_ENDIAN));
+        } finally {
+            giveScratch(bytes);
+        }
+    }
+
+    /**
+     * Take this thread's read buffer, or a new one if it is in use or too small, cleared to a
+     * length.
+     *
+     * @param length How many bytes it must hold.
+     * @return The buffer, its limit at the length.
+     */
+    private static ByteBuffer takeScratch(int length) {
+        ByteBuffer buffer = SCRATCH.get();
+        SCRATCH.set(null);
+        if (buffer == null || buffer.capacity() < length) {
+            // A little room over, so a slightly larger file next time fits too
+            final int room =
+                    length <= KEPT_SCRATCH_BYTES
+                            ? Math.min(KEPT_SCRATCH_BYTES, Math.max(length, length + length / 4))
+                            : length;
+            buffer = ByteBuffer.allocate(room);
+        }
+        buffer.clear().limit(length);
+        return buffer;
+    }
+
+    /**
+     * Give a buffer from {@link #takeScratch} back to this thread, unless it is too large to keep.
+     *
+     * @param buffer The buffer, not used after this.
+     */
+    private static void giveScratch(@NonNull ByteBuffer buffer) {
+        if (buffer.capacity() <= KEPT_SCRATCH_BYTES) {
+            SCRATCH.set(buffer);
+        }
+    }
+
+    /**
+     * Fill a buffer from an offset of a file, then flip it to be read.
+     *
+     * @param channel The file.
+     * @param offset Where to start.
+     * @param out The buffer, filled from its position to its limit.
+     * @param path The file's path, for messages.
+     * @throws IOException If reading fails.
+     */
+    private static void readInto(
+            @NonNull FileChannel channel, long offset, @NonNull ByteBuffer out, @NonNull Path path)
+            throws IOException {
+        final int length = out.remaining();
+        while (out.hasRemaining()) {
+            if (channel.read(out, offset + out.position()) < 0) {
+                throw new AssetFormatException(path + " ends before byte " + (offset + length));
+            }
+        }
+        out.flip();
     }
 
     /**

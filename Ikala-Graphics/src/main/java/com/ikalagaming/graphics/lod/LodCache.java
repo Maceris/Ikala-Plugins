@@ -143,8 +143,12 @@ public final class LodCache {
             return null;
         }
         try {
-            final AssetFile asset = AssetFile.open(file, LodCellFile.known());
-            final LodCellFile.Stored stored = LodCellFile.decode(asset, key, builderVersion);
+            // Decoding copies everything out, so the file can be read into a reused buffer
+            final LodCellFile.Stored stored =
+                    AssetFile.withFile(
+                            file,
+                            LodCellFile.known(),
+                            asset -> LodCellFile.decode(asset, key, builderVersion));
             bytesRead.addAndGet(Files.size(file));
             // Used now, so the last to go
             Files.setLastModifiedTime(file, FileTime.fromMillis(System.currentTimeMillis()));
