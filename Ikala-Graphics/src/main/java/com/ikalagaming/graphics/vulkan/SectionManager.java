@@ -2090,6 +2090,14 @@ public class SectionManager {
         section.placed = placed;
     }
 
+    /** Every transparency kind, in order, for walking a section's buckets without entries. */
+    private static final Material.Transparency[] TRANSPARENCY_KINDS =
+            Material.Transparency.values();
+
+    /** The kinds {@link #updateResidency} wants back for a section, reused. Render thread. */
+    private final Set<Material.Transparency> residencyWanted =
+            EnumSet.noneOf(Material.Transparency.class);
+
     /**
      * Take a section's meshes that are only needed nearby off the GPU once it is past their reach,
      * and bake them again once it comes back within it. Hold the lock.
@@ -2104,10 +2112,16 @@ public class SectionManager {
     private double updateResidency(
             @NonNull VulkanState state, long id, @NonNull Section section, @NonNull Vector3dc eye) {
         final Version current = section.current;
-        final Set<Material.Transparency> wanted = EnumSet.noneOf(Material.Transparency.class);
+        final Set<Material.Transparency> wanted = residencyWanted;
+        wanted.clear();
         double wait = Double.POSITIVE_INFINITY;
-        for (Map.Entry<Material.Transparency, MeshData> bucket : current.buckets().entrySet()) {
-            final Material.Transparency kind = bucket.getKey();
+        // By kind rather than over the entries, whose iteration makes an entry for each
+        final Map<Material.Transparency, MeshData> buckets = current.buckets();
+        for (Material.Transparency kind : TRANSPARENCY_KINDS) {
+            final MeshData bucket = buckets.get(kind);
+            if (bucket == null) {
+                continue;
+            }
             final boolean opaque = kind == Material.Transparency.OPAQUE;
             if ((opaque ? current.opaqueModel() : current.nearModel()) == null) {
                 continue;
@@ -2137,10 +2151,10 @@ public class SectionManager {
                                     && state.volumeBricks != null
                                     && state.volumeBricks.isCurrent(section.position);
             if (unused) {
-                final MeshHandle mesh = bucket.getValue().getMesh();
+                final MeshHandle mesh = bucket.getMesh();
                 releasing.add(mesh);
                 current.meshes().remove(mesh);
-                bucket.getValue().setMesh(null);
+                bucket.setMesh(null);
                 current.offGpu().add(kind);
                 wait = Math.min(wait, gap - reach - RESTORE_MARGIN);
             } else {
@@ -2150,7 +2164,7 @@ public class SectionManager {
         }
         updateStandIn(section);
         if (!wanted.isEmpty() && !section.restoring) {
-            restoreLater(id, section, wanted);
+            restoreLater(id, section, EnumSet.copyOf(wanted));
         }
         return wait;
     }

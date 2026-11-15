@@ -163,8 +163,10 @@ public class SceneRender implements RenderStage {
         // Its average look, for far stand-ins that name it: its textures' averages, worked out
         // on the CPU as level of detail blends materials, or UNKNOWN for a texture whose average
         // couldn't be, like BC7's, which shaders then take from its smallest mip
-        final float[] texture = textures.average(material.getTexture());
-        final float[] packed = textures.average(material.getOcclusionRoughnessMetal());
+        final float[][] kept = AVERAGES.get();
+        final float[] texture = textures.average(material.getTexture(), kept[0]) ? kept[0] : null;
+        final float[] packed =
+                textures.average(material.getOcclusionRoughnessMetal(), kept[1]) ? kept[1] : null;
         final boolean packedUnknown =
                 packed == null && material.getOcclusionRoughnessMetal() != null;
         final boolean colorUnknown = texture == null && material.getTexture() != null;
@@ -184,6 +186,13 @@ public class SceneRender implements RenderStage {
                         : packedUnknown ? UNKNOWN : material.getRoughness());
     }
 
+    /**
+     * Each thread's arrays the texture and packed averages are read into: materials are written
+     * every frame, and a copy of each average was most of what that made.
+     */
+    private static final ThreadLocal<float[][]> AVERAGES =
+            ThreadLocal.withInitial(() -> new float[2][SceneRender.COLORS + 1]);
+
     /** An average the CPU couldn't work out, see {@code material_average.glsl}. */
     private static final float UNKNOWN = -1;
 
@@ -195,6 +204,9 @@ public class SceneRender implements RenderStage {
 
     /** Where metalness is in a packed texture's average: its blue. */
     private static final int PACKED_METALLIC = 2;
+
+    /** The buffers {@link #updateBindings} points the descriptors at, refilled each frame. */
+    private final SharedBuffer[] bindingBuffers = new SharedBuffer[3];
 
     /** The shader to use for rendering. */
     @NonNull @Setter private ShaderVulkan shader;
@@ -984,9 +996,10 @@ public class SceneRender implements RenderStage {
      * @param frameData The data for the current frame.
      */
     private void updateBindings(@NonNull VulkanState state, @NonNull PerFrameData frameData) {
-        final SharedBuffer[] buffers = {
-            frameData.sceneModelMatrices, frameData.materials, frameData.visibleInstances
-        };
+        final SharedBuffer[] buffers = bindingBuffers;
+        buffers[0] = frameData.sceneModelMatrices;
+        buffers[1] = frameData.materials;
+        buffers[2] = frameData.visibleInstances;
         writeStorageBindings(
                 state,
                 descriptorSets[state.frameIndex],

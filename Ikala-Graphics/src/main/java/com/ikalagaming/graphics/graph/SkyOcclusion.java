@@ -48,6 +48,12 @@ public class SkyOcclusion {
     /** Where the map is in the world, and what it holds. */
     private final SunShadowCache.Placement placement = new SunShadowCache.Placement();
 
+    /** Where the map would be this frame, before it is compared with where it is. */
+    private final SunShadowCache.Placement wantedScratch = new SunShadowCache.Placement();
+
+    /** Temporaries for placing the map. */
+    private final SunShadowCache.PlaceScratch placeScratch = new SunShadowCache.PlaceScratch();
+
     /** The texels to draw again, min x, min y, max x, max y; empty while max <= min. */
     private final int[] dirty = new int[RECT_VALUES];
 
@@ -104,7 +110,8 @@ public class SkyOcclusion {
             @NonNull Vector3dc cameraPosition,
             double viewDistance) {
         final SunShadowCache.Placement wanted =
-                SunShadowCache.place(viewDistance, DOWN, cameraPosition, MAP_SIZE);
+                SunShadowCache.place(
+                        viewDistance, DOWN, cameraPosition, MAP_SIZE, wantedScratch, placeScratch);
         final boolean moved =
                 !placement.valid
                         || !wanted.center.equals(placement.center)
@@ -127,7 +134,7 @@ public class SkyOcclusion {
         } else {
             view.redraw = SunShadowCache.Redraw.NONE;
         }
-        SunShadowCache.fill(view, placement, cameraPosition, 0);
+        SunShadowCache.fill(view, placement, cameraPosition, 0, placeScratch);
     }
 
     /**

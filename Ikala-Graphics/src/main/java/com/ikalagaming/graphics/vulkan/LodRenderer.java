@@ -3195,6 +3195,10 @@ public class LodRenderer {
         if (world == null || world.cellOf == null) {
             return;
         }
+        // The same overrides make the same stale cells: usually the case, frame after frame
+        if (overrides.equals(world.hidden)) {
+            return;
+        }
         final Set<LodStore.CellKey> stale = new HashSet<>();
         for (LodStore.SectionPos section : overrides) {
             LodStore.CellKey key = world.cellOf.apply(section);
@@ -3215,11 +3219,19 @@ public class LodRenderer {
      * Render thread.
      */
     private void updateFlags() {
-        final int[] wantFlags = new int[cellSlots.bound()];
-        final int[] wantWords =
-                new int
-                        [(sectionSlots.bound() + LodCullMath.BITS_PER_WORD - 1)
-                                / LodCullMath.BITS_PER_WORD];
+        final int flagCount = cellSlots.bound();
+        final int wordCount =
+                (sectionSlots.bound() + LodCullMath.BITS_PER_WORD - 1) / LodCullMath.BITS_PER_WORD;
+        if (wantFlagsScratch.length < flagCount) {
+            wantFlagsScratch = new int[Math.max(flagCount, wantFlagsScratch.length * 2)];
+        }
+        if (wantWordsScratch.length < wordCount) {
+            wantWordsScratch = new int[Math.max(wordCount, wantWordsScratch.length * 2)];
+        }
+        final int[] wantFlags = wantFlagsScratch;
+        final int[] wantWords = wantWordsScratch;
+        Arrays.fill(wantFlags, 0, flagCount, 0);
+        Arrays.fill(wantWords, 0, wordCount, 0);
         for (World world : snapshotWorlds()) {
             int stale = 0;
             for (Map.Entry<LodStore.CellKey, Integer> entry : world.cells.entrySet()) {
@@ -3241,13 +3253,19 @@ public class LodRenderer {
             world.staleCount = stale;
             world.hiddenCount = hidden;
         }
-        for (int slot = 0; slot < Math.max(wantFlags.length, flags.length); ++slot) {
-            setFlag(slot, slot < wantFlags.length ? wantFlags[slot] : 0);
+        for (int slot = 0; slot < Math.max(flagCount, flags.length); ++slot) {
+            setFlag(slot, slot < flagCount ? wantFlags[slot] : 0);
         }
-        for (int word = 0; word < Math.max(wantWords.length, hiddenWords.length); ++word) {
-            setWord(word, word < wantWords.length ? wantWords[word] : 0);
+        for (int word = 0; word < Math.max(wordCount, hiddenWords.length); ++word) {
+            setWord(word, word < wordCount ? wantWords[word] : 0);
         }
     }
+
+    /** What {@link #updateFlags} wants each cell slot's flags to be, kept between frames. */
+    private int[] wantFlagsScratch = new int[0];
+
+    /** What {@link #updateFlags} wants each hidden section word to be, kept between frames. */
+    private int[] wantWordsScratch = new int[0];
 
     /**
      * Set a cell slot's flags, noting the change.

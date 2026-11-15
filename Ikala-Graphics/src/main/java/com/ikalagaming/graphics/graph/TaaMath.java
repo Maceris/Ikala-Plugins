@@ -74,9 +74,40 @@ public final class TaaMath {
             @NonNull Matrix4fc previousProjection,
             @NonNull Matrix4fc previousView,
             @NonNull Vector3dc cameraMove) {
-        final Matrix4d toRender = new Matrix4d(projection).mul(new Matrix4d(view)).invert();
-        return new Matrix4d(previousProjection)
-                .mul(new Matrix4d(previousView))
+        return reprojection(
+                projection,
+                view,
+                previousProjection,
+                previousView,
+                cameraMove,
+                new Matrix4d(),
+                new Matrix4d());
+    }
+
+    /**
+     * The reprojection matrix, see {@link #reprojection(Matrix4fc, Matrix4fc, Matrix4fc, Matrix4fc,
+     * Vector3dc)}, into a matrix.
+     *
+     * @param projection This frame's projection, without jitter.
+     * @param view This frame's view matrix, which only rotates.
+     * @param previousProjection Last frame's projection, without jitter.
+     * @param previousView Last frame's view matrix.
+     * @param cameraMove How far the camera moved since last frame, this position less the last.
+     * @param out Receives the matrix.
+     * @param temp A matrix to work in.
+     * @return The output.
+     */
+    public static Matrix4d reprojection(
+            @NonNull Matrix4fc projection,
+            @NonNull Matrix4fc view,
+            @NonNull Matrix4fc previousProjection,
+            @NonNull Matrix4fc previousView,
+            @NonNull Vector3dc cameraMove,
+            @NonNull Matrix4d out,
+            @NonNull Matrix4d temp) {
+        final Matrix4d toRender = temp.set(projection).mul(view).invert();
+        return out.set(previousProjection)
+                .mul(previousView)
                 .translate(cameraMove.x(), cameraMove.y(), cameraMove.z())
                 .mul(toRender);
     }

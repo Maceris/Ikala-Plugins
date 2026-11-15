@@ -188,6 +188,27 @@ public class TextureRegistry {
      * @return Its average linear red, green and blue and its average opacity, or null if the handle
      *     is null or stale or its average wasn't worked out.
      */
+    public boolean average(@Nullable TextureHandle handle, float @NonNull [] out) {
+        lock.lock();
+        try {
+            if (!isValidLocked(handle) || averages[handle.slot()] == null) {
+                return false;
+            }
+            final float[] average = averages[handle.slot()];
+            System.arraycopy(average, 0, out, 0, Math.min(average.length, out.length));
+            return true;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * A texture's average color.
+     *
+     * @param handle The texture.
+     * @return Its average linear red, green and blue and its average opacity, or null if the handle
+     *     is null or stale or its average wasn't worked out.
+     */
     public float[] average(@Nullable TextureHandle handle) {
         lock.lock();
         try {

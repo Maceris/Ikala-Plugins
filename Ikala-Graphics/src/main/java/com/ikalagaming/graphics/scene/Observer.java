@@ -57,6 +57,19 @@ public final class Observer {
     }
 
     /**
+     * Whether this is what a camera sees now, so it can be handed out again rather than made anew.
+     *
+     * @param camera The camera.
+     * @param projection The projection used with the camera.
+     * @return Whether the position, view and jittered projection all match.
+     */
+    boolean matches(@NonNull Camera camera, @NonNull Projection projection) {
+        return position.equals(camera.getPosition())
+                && viewMatrix.equals(camera.getViewMatrix())
+                && projectionMatrix.equals(projection.getJitteredProjectionMatrix());
+    }
+
+    /**
      * The inverse of projection × view, mapping clip space to world space, in double precision so
      * it stays exact far from the origin.
      *

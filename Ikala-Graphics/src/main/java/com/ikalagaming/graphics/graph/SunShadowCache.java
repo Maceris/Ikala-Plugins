@@ -145,6 +145,32 @@ public class SunShadowCache {
         int mapSize;
     }
 
+    /**
+     * Temporaries for {@link #place}, kept so placing each cascade every frame makes nothing new.
+     */
+    static final class PlaceScratch {
+        /** The light's rotation. */
+        final Matrix4d rotation = new Matrix4d();
+
+        /** Its inverse. */
+        final Matrix4d inverse = new Matrix4d();
+
+        /** The center being snapped. */
+        final Vector3d center = new Vector3d();
+
+        /** The light view's up direction. */
+        final Vector3d up = new Vector3d();
+    }
+
+    /** Where each cached cascade would be this frame, before it is compared with where it is. */
+    private final Placement wanted = new Placement();
+
+    /** The way a cascade is placed facing this frame. */
+    private final Vector3d facing = new Vector3d();
+
+    /** {@link #place}'s temporaries. */
+    private final PlaceScratch placeScratch = new PlaceScratch();
+
     /** Each cascade's placement; unused for those that aren't cached. */
     private final Placement[] placements;
 
@@ -433,16 +459,14 @@ public class SunShadowCache {
             }
             final Placement placement = placements[i];
             boolean catchUp = placement.valid && sunBehind[i] && !sunRedrawn;
-            final Vector3d facing =
-                    !placement.valid || catchUp
-                            ? new Vector3d(sun)
-                            : new Vector3d(placement.direction);
-            final Placement wanted =
-                    place(
-                            depths[i] * (double) cornerLength,
-                            facing,
-                            cameraPosition,
-                            STATIC_MAP_SIZE);
+            facing.set(!placement.valid || catchUp ? sun : placement.direction);
+            place(
+                    depths[i] * (double) cornerLength,
+                    facing,
+                    cameraPosition,
+                    STATIC_MAP_SIZE,
+                    wanted,
+                    placeScratch);
             final boolean moved =
                     !placement.valid
                             || !wanted.center.equals(placement.center)
@@ -479,7 +503,7 @@ public class SunShadowCache {
             } else {
                 cascade.redraw = Redraw.NONE;
             }
-            fill(cascade, placement, cameraPosition, -depths[i]);
+            fill(cascade, placement, cameraPosition, -depths[i], placeScratch);
             countRedraw(cascade);
         }
     }
@@ -529,7 +553,18 @@ public class SunShadowCache {
      * @return The up direction.
      */
     static Vector3d upFor(@NonNull Vector3dc direction) {
-        return Math.abs(direction.y()) > 0.99 ? new Vector3d(0, 0, 1) : new Vector3d(0, 1, 0);
+        return upFor(direction, new Vector3d());
+    }
+
+    /**
+     * An up direction for the light's view, see {@link #upFor(Vector3dc)}.
+     *
+     * @param direction The way the light travels, normalized.
+     * @param out Receives the up direction.
+     * @return The output.
+     */
+    static Vector3d upFor(@NonNull Vector3dc direction, @NonNull Vector3d out) {
+        return Math.abs(direction.y()) > 0.99 ? out.set(0, 0, 1) : out.set(0, 1, 0);
     }
 
     /**
@@ -546,7 +581,30 @@ public class SunShadowCache {
             @NonNull Vector3dc direction,
             @NonNull Vector3dc cameraPosition,
             int mapSize) {
-        final Placement placement = new Placement();
+        return place(
+                reach, direction, cameraPosition, mapSize, new Placement(), new PlaceScratch());
+    }
+
+    /**
+     * Where a cached cascade would be for the camera where it is, into a placement, see {@link
+     * #place(double, Vector3dc, Vector3dc, int)}.
+     *
+     * @param reach How far from the camera the slice reaches, at its far corners.
+     * @param direction The way the sun's light travels, normalized.
+     * @param cameraPosition The camera's world position.
+     * @param mapSize The width and height of its map, in texels.
+     * @param placement Receives the placement, marked not valid.
+     * @param scratch Temporaries.
+     * @return The placement.
+     */
+    static Placement place(
+            double reach,
+            @NonNull Vector3dc direction,
+            @NonNull Vector3dc cameraPosition,
+            int mapSize,
+            @NonNull Placement placement,
+            @NonNull PlaceScratch scratch) {
+        placement.valid = false;
         placement.direction.set(direction);
         final double step = reach / RECENTER_STEPS;
         final double radius =
@@ -561,16 +619,16 @@ public class SunShadowCache {
         placement.extent = radius + CascadeShadowSplit.MARGIN_TEXELS * texelSize;
 
         // The camera in the light's view, snapped to the grid, and back
-        final Vector3d up = upFor(direction);
-        final Matrix4d rotation = new Matrix4d().lookAlong(direction, up);
-        final Vector3d center = rotation.transformPosition(new Vector3d(cameraPosition));
+        final Vector3d up = upFor(direction, scratch.up);
+        final Matrix4d rotation = scratch.rotation.identity().lookAlong(direction, up);
+        final Vector3d center = rotation.transformPosition(scratch.center.set(cameraPosition));
         // The light's view looks along -z, so z is along the light
         final double along = grid * ALONG_LIGHT_STEPS;
         center.set(
                 Math.rint(center.x / grid) * grid,
                 Math.rint(center.y / grid) * grid,
                 Math.rint(center.z / along) * along);
-        rotation.invert(new Matrix4d()).transformPosition(center);
+        rotation.invert(scratch.inverse).transformPosition(center);
         placement.center.set(center);
 
         // Half a step along the light further each way, for a camera anywhere in the step
@@ -730,14 +788,18 @@ public class SunShadowCache {
      * @param placement Where it is.
      * @param cameraPosition The camera's world position, the render space origin.
      * @param splitDistance The view space z of its slice's far end.
+     * @param scratch Temporaries.
      */
     static void fill(
             @NonNull CascadeShadowSplit cascade,
             @NonNull Placement placement,
             @NonNull Vector3dc cameraPosition,
-            float splitDistance) {
-        final Vector3d offset = new Vector3d(cameraPosition).sub(placement.center);
-        toFloat(new Matrix4d(placement.fromCenter).translate(offset), cascade.getProjViewMatrix());
+            float splitDistance,
+            @NonNull PlaceScratch scratch) {
+        final Vector3d offset = scratch.center.set(cameraPosition).sub(placement.center);
+        toFloat(
+                scratch.inverse.set(placement.fromCenter).translate(offset),
+                cascade.getProjViewMatrix());
         cascade.splitDistance = splitDistance;
         cascade.texelSize = (float) placement.texelSize;
         cascade.mapSize = placement.mapSize;

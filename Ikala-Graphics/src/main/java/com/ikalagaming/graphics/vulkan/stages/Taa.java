@@ -19,6 +19,7 @@ import com.ikalagaming.graphics.vulkan.VulkanState;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Matrix4d;
 import org.joml.Matrix4f;
 import org.joml.Vector3d;
 import org.lwjgl.system.MemoryStack;
@@ -57,6 +58,18 @@ public class Taa implements RenderStage {
 
     /** Last frame's projection, without jitter. */
     private final Matrix4f previousProjection = new Matrix4f();
+
+    /** How far the camera moved since last frame, worked out each frame. */
+    private final Vector3d cameraMove = new Vector3d();
+
+    /** The reprojection matrix, worked out each frame, see {@link TaaMath#reprojection}. */
+    private final Matrix4d reprojection = new Matrix4d();
+
+    /** A matrix the reprojection is worked out in. */
+    private final Matrix4d reprojectionTemp = new Matrix4d();
+
+    /** The reprojection matrix in floats, for the push constants. */
+    private final Matrix4f reprojectionFloat = new Matrix4f();
 
     /** Last frame's view matrix. */
     private final Matrix4f previousView = new Matrix4f();
@@ -148,7 +161,7 @@ public class Taa implements RenderStage {
         final Matrix4f projection = scene.getProjection().getProjectionMatrix();
         final Matrix4f view = scene.getCamera().getViewMatrix();
         final Vector3d camera = new Vector3d(scene.getCamera().getPosition());
-        final Vector3d cameraMove = new Vector3d(camera).sub(previousCamera);
+        final Vector3d cameraMove = this.cameraMove.set(camera).sub(previousCamera);
         final boolean showView = scene.getDebugVisualizers().isTaaView();
         final boolean readHistory =
                 historyValid
@@ -211,13 +224,16 @@ public class Taa implements RenderStage {
                         stack.longs(state.bindlessTextures.getDescriptorSet()),
                         null);
                 ByteBuffer constants = stack.calloc(ShaderBindings.Taa.PUSH_CONSTANTS_SIZE);
-                new Matrix4f(
+                reprojectionFloat
+                        .set(
                                 TaaMath.reprojection(
                                         projection,
                                         view,
                                         previousProjection,
                                         previousView,
-                                        cameraMove))
+                                        cameraMove,
+                                        reprojection,
+                                        reprojectionTemp))
                         .get(ShaderBindings.Taa.PUSH_CONSTANT_REPROJECTION_OFFSET, constants);
                 constants.putInt(
                         ShaderBindings.Taa.PUSH_CONSTANT_COLOR_INDEX_OFFSET,

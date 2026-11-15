@@ -244,10 +244,13 @@ public class WindowManager {
             currentToolbar.handleGuiInput(scene);
         }
 
-        windows.values().stream()
-                .map(Owned::value)
-                .filter(Component::isVisible)
-                .forEach(component -> component.handleGuiInput(scene));
+        // A loop, not a stream: this runs every frame
+        for (Owned<GuiWindow> owned : windows.values()) {
+            final GuiWindow window = owned.value();
+            if (window.isVisible()) {
+                window.handleGuiInput(scene);
+            }
+        }
     }
 
     /**
@@ -256,10 +259,12 @@ public class WindowManager {
      * @param scene The scene we are rendering.
      */
     public void updateValues(@NonNull Scene scene) {
-        windows.values().stream()
-                .map(Owned::value)
-                .filter(Component::isVisible)
-                .forEach(component -> component.updateValues(scene));
+        for (Owned<GuiWindow> owned : windows.values()) {
+            final GuiWindow window = owned.value();
+            if (window.isVisible()) {
+                window.updateValues(scene);
+            }
+        }
     }
 
     /**

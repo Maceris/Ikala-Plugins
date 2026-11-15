@@ -72,13 +72,17 @@ public final class ClusterMeshes {
         private void ready(int triangles) {
             final int corners = triangles * CORNERS;
             if (indices == null || indices.length < corners) {
+                // Room for a whole cluster at least, then doubling, so growing is rare
+                final int room =
+                        Math.max(
+                                Math.max(corners, Clusters.MAX_TRIANGLES * CORNERS),
+                                indices == null ? 0 : indices.length * 2);
                 vertices =
-                        ByteBuffer.allocate(corners * LodVertex.SIZE)
-                                .order(ByteOrder.LITTLE_ENDIAN);
-                indices = new int[corners];
-                keys = new int[corners * KEY];
+                        ByteBuffer.allocate(room * LodVertex.SIZE).order(ByteOrder.LITTLE_ENDIAN);
+                indices = new int[room];
+                keys = new int[room * KEY];
                 // At most half full
-                table = new int[Integer.highestOneBit(Math.max(4, corners * 2 - 1)) << 1];
+                table = new int[Integer.highestOneBit(Math.max(4, room * 2 - 1)) << 1];
             }
             vertices.clear();
             Arrays.fill(table, 0);

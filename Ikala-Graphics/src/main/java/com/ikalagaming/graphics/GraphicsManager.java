@@ -515,6 +515,9 @@ public class GraphicsManager {
         }
     }
 
+    /** {@link #guiDrawData()}'s map, refilled each frame and used only within it. */
+    private static final Map<Window, DrawData> GUI_DRAW_DATA = new HashMap<>();
+
     /**
      * The GUI draw data for each window, from IkGui's viewports: the main viewport is drawn in the
      * main window, and any other viewport in the window whose platform handle it holds.
@@ -522,7 +525,8 @@ public class GraphicsManager {
      * @return The draw data by window, only for windows that are still open.
      */
     private static Map<Window, DrawData> guiDrawData() {
-        Map<Window, DrawData> gui = new HashMap<>();
+        final Map<Window, DrawData> gui = GUI_DRAW_DATA;
+        gui.clear();
         final DrawData main = IkGui.getDrawData();
         if (main != null) {
             gui.put(mainWindow, main);

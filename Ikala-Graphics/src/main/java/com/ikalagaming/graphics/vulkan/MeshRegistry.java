@@ -12,7 +12,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.List;
-import java.util.TreeSet;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.Nullable;
 
@@ -153,7 +152,10 @@ public class MeshRegistry {
     private int[] generations = new int[0];
 
     /** Slots that are free to reuse, lowest first, which keeps the table compact. */
-    private final TreeSet<Integer> freeSlots = new TreeSet<>();
+    private final BitSet freeSlots = new BitSet();
+
+    /** No free slot is below this, so the lowest is searched for from here. */
+    private int lowestFree;
 
     /** How many meshes are registered and not removed. */
     private int liveCount;
@@ -525,7 +527,8 @@ public class MeshRegistry {
                 vertices.free(retired.vertexOffset(), retired.vertexCount());
                 indices.free(retired.firstIndex(), retired.indexCount());
             }
-            freeSlots.add(retired.slot());
+            freeSlots.set(retired.slot());
+            lowestFree = Math.min(lowestFree, retired.slot());
         } finally {
             lock.unlock();
         }
@@ -965,9 +968,11 @@ public class MeshRegistry {
      * @return The slot.
      */
     private int takeSlot() {
-        if (freeSlots.isEmpty()) {
+        int slot = freeSlots.nextSetBit(lowestFree);
+        if (slot < 0) {
             final int oldLength = handles.length;
-            final int newLength = oldLength + SLOT_GROWTH;
+            // By half, so a streamed world doesn't copy every table each few hundred meshes
+            final int newLength = oldLength + Math.max(SLOT_GROWTH, oldLength / 2);
             owners = Arrays.copyOf(owners, newLength);
             handles = Arrays.copyOf(handles, newLength);
             states = Arrays.copyOf(states, newLength);
@@ -978,11 +983,12 @@ public class MeshRegistry {
             recordedFirstIndices = Arrays.copyOf(recordedFirstIndices, newLength);
             recordedIndexCounts = Arrays.copyOf(recordedIndexCounts, newLength);
             recordedGenerations = Arrays.copyOf(recordedGenerations, newLength);
-            for (int slot = oldLength; slot < newLength; ++slot) {
-                freeSlots.add(slot);
-            }
+            freeSlots.set(oldLength, newLength);
+            slot = oldLength;
         }
-        return freeSlots.pollFirst();
+        freeSlots.clear(slot);
+        lowestFree = slot + 1;
+        return slot;
     }
 
     /**

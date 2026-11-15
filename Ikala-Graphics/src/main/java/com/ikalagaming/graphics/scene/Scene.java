@@ -220,8 +220,22 @@ public class Scene {
      */
     public Observer getObserver() {
         Observer frozen = frozenObserver;
-        return frozen != null ? frozen : new Observer(camera, projection);
+        if (frozen != null) {
+            return frozen;
+        }
+        // Asked for many times a frame; observers are immutable, so the last serves while the
+        // camera stays put
+        final Observer last = lastObserver;
+        if (last != null && last.matches(camera, projection)) {
+            return last;
+        }
+        final Observer made = new Observer(camera, projection);
+        lastObserver = made;
+        return made;
     }
+
+    /** The last observer made by {@link #getObserver()}, for when the camera hasn't changed. */
+    private volatile Observer lastObserver;
 
     /**
      * Stop the observer following the camera, keeping its current point of view until {@link

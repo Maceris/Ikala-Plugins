@@ -168,7 +168,7 @@ public class GuiRender {
                 sceneCopied,
                 drawData,
                 false,
-                presentation.toString());
+                presentation);
     }
 
     /**
@@ -197,7 +197,7 @@ public class GuiRender {
             boolean sceneCopied,
             DrawData drawData,
             boolean toCopy,
-            @NonNull String where) {
+            @NonNull Object where) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             transitionToDraw(commandBuffer, image, sceneCopied, stack);
 

@@ -3064,8 +3064,29 @@ public final class GateBenchmark {
         }
         frames.incrementAndGet();
         frame.forEach((name, ms) -> samples.computeIfAbsent(name, n -> new ArrayList<>()).add(ms));
+        // What the render thread allocated since the last frame, this bookkeeping included
+        final long allocated = THREADS.getCurrentThreadAllocatedBytes();
+        if (lastAllocated >= 0) {
+            samples.computeIfAbsent(RENDER_THREAD_KB, n -> new ArrayList<>())
+                    .add((allocated - lastAllocated) / BYTES_PER_KB);
+        }
+        lastAllocated = allocated;
         logHitch(frame);
     }
+
+    /** The row of the summary holding what the render thread allocated each frame, in KiB. */
+    public static final String RENDER_THREAD_KB = "Render thread KiB allocated";
+
+    /** Bytes in a KiB. */
+    private static final double BYTES_PER_KB = 1024;
+
+    /** Counts what each thread allocates. */
+    private static final com.sun.management.ThreadMXBean THREADS =
+            (com.sun.management.ThreadMXBean)
+                    java.lang.management.ManagementFactory.getThreadMXBean();
+
+    /** What the render thread had allocated by the last frame recorded, or -1 before the first. */
+    private long lastAllocated = -1;
 
     /** How long a frame may take before it counts as a hitch, in milliseconds: a 60 Hz frame. */
     public static final double HITCH_MS = 1000.0 / 60;

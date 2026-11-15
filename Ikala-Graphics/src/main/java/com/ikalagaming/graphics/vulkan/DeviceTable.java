@@ -91,6 +91,15 @@ public final class DeviceTable {
         /** Where each entry goes, as an index into the table. */
         private int[] indices = new int[INITIAL_ENTRIES];
 
+        /** Where sorting packs the entries, swapped with {@link #data}; null until first needed. */
+        private ByteBuffer spareData;
+
+        /** Where sorting packs the indices, swapped with {@link #indices}. */
+        private int[] spareIndices;
+
+        /** Sorting's keys, kept between frames. */
+        private long[] order = new long[0];
+
         /**
          * How many entries are packed. -- GETTER -- How many entries are packed.
          *
@@ -141,13 +150,22 @@ public final class DeviceTable {
                 return;
             }
             // The index high, the write order low, so the last write of an index sorts last
-            final long[] order = new long[count];
+            if (order.length < count) {
+                order = new long[indices.length];
+            }
             for (int i = 0; i < count; ++i) {
                 order[i] = ((long) indices[i] << Integer.SIZE) | i;
             }
-            Arrays.sort(order);
-            final ByteBuffer packed = MemoryUtil.memAlloc(indices.length * entrySize);
-            final int[] packedIndices = new int[indices.length];
+            Arrays.sort(order, 0, count);
+            if (spareIndices == null || spareIndices.length != indices.length) {
+                if (spareData != null) {
+                    MemoryUtil.memFree(spareData);
+                }
+                spareData = MemoryUtil.memAlloc(indices.length * entrySize);
+                spareIndices = new int[indices.length];
+            }
+            final ByteBuffer packed = spareData;
+            final int[] packedIndices = spareIndices;
             int kept = 0;
             for (int k = 0; k < count; ++k) {
                 final int index = (int) (order[k] >>> Integer.SIZE);
@@ -161,7 +179,8 @@ public final class DeviceTable {
                         entrySize);
                 packedIndices[kept++] = index;
             }
-            MemoryUtil.memFree(data);
+            spareData = data;
+            spareIndices = indices;
             data = packed;
             indices = packedIndices;
             count = kept;
@@ -174,12 +193,24 @@ public final class DeviceTable {
                 MemoryUtil.memFree(data);
                 indices = new int[INITIAL_ENTRIES];
                 data = MemoryUtil.memAlloc(INITIAL_ENTRIES * entrySize);
+                freeSpare();
+                order = new long[0];
             }
         }
 
         /** Free the native memory. */
         public void free() {
             MemoryUtil.memFree(data);
+            freeSpare();
+        }
+
+        /** Free the spare buffers sorting packs into. */
+        private void freeSpare() {
+            if (spareData != null) {
+                MemoryUtil.memFree(spareData);
+                spareData = null;
+                spareIndices = null;
+            }
         }
     }
 
