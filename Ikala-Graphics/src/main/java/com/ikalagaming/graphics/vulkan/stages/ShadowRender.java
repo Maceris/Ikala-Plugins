@@ -16,6 +16,7 @@ import com.ikalagaming.graphics.graph.SunShadowCache;
 import com.ikalagaming.graphics.lod.LodVertex;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.*;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 
 import lombok.NonNull;
@@ -540,21 +541,19 @@ public class ShadowRender implements RenderStage {
                             .layerCount(1)
                             .pDepthAttachment(depthAttachment);
             vkCmdBeginRendering(commandBuffer, renderingInfo);
-            vkCmdBindDescriptorSets(
+            Commands.bindDescriptorSets(
                     commandBuffer,
                     VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipelineLayout,
                     0,
-                    stack.longs(descriptorSets[state.frameIndex]),
-                    null);
+                    descriptorSets[state.frameIndex]);
             final GeometryArena arena = dynamics ? state.geometry : state.bakedGeometry;
             vkCmdBindPipeline(
                     commandBuffer,
                     VK_PIPELINE_BIND_POINT_GRAPHICS,
                     dynamics ? pointPipeline : pointBakedPipeline);
             vkCmdBindIndexBuffer(commandBuffer, arena.getIndices().buffer, 0, VK_INDEX_TYPE_UINT32);
-            vkCmdBindVertexBuffers(
-                    commandBuffer, 0, stack.longs(arena.getVertices().buffer), stack.longs(0));
+            Commands.bindVertexBuffer(commandBuffer, 0, arena.getVertices().buffer, 0);
             final MeshRegistry registry = arena.getRegistry();
             final ByteBuffer pushConstants =
                     stack.calloc(ShaderBindings.Shadow.PUSH_CONSTANTS_SIZE);
@@ -754,22 +753,16 @@ public class ShadowRender implements RenderStage {
                         .layerCount(1)
                         .pDepthAttachment(depthAttachment);
         vkCmdBeginRendering(commandBuffer, renderingInfo);
-        VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
-        viewports.get(0).width(size).height(size).minDepth(0).maxDepth(1);
-        vkCmdSetViewport(commandBuffer, 0, viewports);
-        VkRect2D.Buffer scissors = VkRect2D.calloc(1, stack);
-        scissors.get(0).extent().set(size, size);
-        vkCmdSetScissor(commandBuffer, 0, scissors);
+        Commands.viewport(commandBuffer, 0, 0, size, size);
+        Commands.scissor(commandBuffer, 0, 0, size, size);
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, scrollPipeline);
-        vkCmdBindDescriptorSets(
+        Commands.bindDescriptorSets(
                 commandBuffer,
                 VK_PIPELINE_BIND_POINT_GRAPHICS,
                 pipelineLayout,
                 0,
-                stack.longs(
-                        descriptorSets[state.frameIndex],
-                        state.bindlessTextures.getDescriptorSet()),
-                null);
+                descriptorSets[state.frameIndex],
+                state.bindlessTextures.getDescriptorSet());
         final ByteBuffer constants = stack.malloc(ShaderBindings.Shadow.VOLUME_PUSH_CONSTANTS_SIZE);
         constants.putInt(0, copy.bindlessIndex);
         constants.putInt(
@@ -924,23 +917,16 @@ public class ShadowRender implements RenderStage {
                     || bricks > 0
                     || skinned) {
                 // Not flipped, so the light stage can use the shadow map coordinates as is
-                VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
-                viewports.get(0).width(size).height(size).minDepth(0).maxDepth(1);
-                vkCmdSetViewport(commandBuffer, 0, viewports);
-                VkRect2D.Buffer scissors = VkRect2D.calloc(1, stack);
-                scissors.get(0).offset().set(x0, y0);
-                scissors.get(0).extent().set(width, height);
-                vkCmdSetScissor(commandBuffer, 0, scissors);
+                Commands.viewport(commandBuffer, 0, 0, size, size);
+                Commands.scissor(commandBuffer, x0, y0, width, height);
 
-                vkCmdBindDescriptorSets(
+                Commands.bindDescriptorSets(
                         commandBuffer,
                         VK_PIPELINE_BIND_POINT_GRAPHICS,
                         pipelineLayout,
                         0,
-                        stack.longs(
-                                descriptorSets[state.frameIndex],
-                                state.bindlessTextures.getDescriptorSet()),
-                        null);
+                        descriptorSets[state.frameIndex],
+                        state.bindlessTextures.getDescriptorSet());
 
                 vkCmdPushConstants(
                         commandBuffer,
@@ -995,13 +981,12 @@ public class ShadowRender implements RenderStage {
                 if (bricks > 0) {
                     vkCmdBindPipeline(
                             commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, brickPipeline);
-                    vkCmdBindDescriptorSets(
+                    Commands.bindDescriptorSets(
                             commandBuffer,
                             VK_PIPELINE_BIND_POINT_GRAPHICS,
                             pipelineLayout,
                             BRICK_SET,
-                            stack.longs(state.volumeBricks.getSet()),
-                            null);
+                            state.volumeBricks.getSet());
                     final ByteBuffer brickConstants = stack.calloc(Long.BYTES);
                     brickConstants.putLong(0, state.volumeBricks.shadowList(state.frameIndex));
                     vkCmdPushConstants(

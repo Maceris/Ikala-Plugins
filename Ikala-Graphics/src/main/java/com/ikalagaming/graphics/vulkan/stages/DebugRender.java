@@ -10,6 +10,7 @@ import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugShape;
 import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.DebugGeometry;
 import com.ikalagaming.graphics.vulkan.DebugVisualizerShapes;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
@@ -191,9 +192,8 @@ public class DebugRender implements RenderStage {
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             // Earlier stages drew to the final image, and left the depth read only
-            VkImageMemoryBarrier2.Buffer barriers = VkImageMemoryBarrier2.calloc(1, stack);
-            SceneRender.imageBarrier(
-                    barriers.get(0),
+            Commands.imageBarrier(
+                    commandBuffer,
                     target.texture,
                     VK_IMAGE_ASPECT_COLOR_BIT,
                     VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -202,9 +202,6 @@ public class DebugRender implements RenderStage {
                     VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-            vkCmdPipelineBarrier2(
-                    commandBuffer,
-                    VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barriers));
 
             VkRenderingAttachmentInfo.Buffer colorAttachments =
                     VkRenderingAttachmentInfo.calloc(1, stack);
@@ -232,19 +229,11 @@ public class DebugRender implements RenderStage {
             vkCmdBeginRendering(commandBuffer, renderingInfo);
 
             // A negative height flips y so the projection matrices work the same as for the scene
-            VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
-            viewports.get(0).x(0).y(height).width(width).height(-height).minDepth(0).maxDepth(1);
-            vkCmdSetViewport(commandBuffer, 0, viewports);
-            VkRect2D.Buffer scissors = VkRect2D.calloc(1, stack);
-            scissors.get(0).extent().set(width, height);
-            vkCmdSetScissor(commandBuffer, 0, scissors);
+            Commands.viewport(commandBuffer, 0, height, width, -height);
+            Commands.scissor(commandBuffer, 0, 0, width, height);
 
             if (vertexCount > 0) {
-                vkCmdBindVertexBuffers(
-                        commandBuffer,
-                        0,
-                        stack.longs(frameData.debugVertices.buffer),
-                        stack.longs(0));
+                Commands.bindVertexBuffer(commandBuffer, 0, frameData.debugVertices.buffer, 0);
             }
             ByteBuffer pushConstants = stack.malloc(PUSH_CONSTANT_SIZE);
             projectionView.get(pushConstants);

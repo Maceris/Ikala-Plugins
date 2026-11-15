@@ -5,6 +5,7 @@ import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.LodBakes;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 import com.ikalagaming.graphics.vulkan.SceneTarget;
@@ -125,13 +126,13 @@ public class LodBake implements RenderStage {
             final ByteBuffer constants = stack.calloc(CONSTANTS_SIZE);
             for (int i = 0; i < jobs.size(); ++i) {
                 final LodBakes.Job job = jobs.get(i);
-                vkCmdBindDescriptorSets(
+                Commands.bindDescriptorSets(
                         commandBuffer,
                         VK_PIPELINE_BIND_POINT_COMPUTE,
                         layout,
                         0,
-                        stack.longs(bakes.setOf(job), state.bindlessTextures.getDescriptorSet()),
-                        null);
+                        bakes.setOf(job),
+                        state.bindlessTextures.getDescriptorSet());
                 final int at = i * LodBakes.OFFSETS;
                 constants.putLong(0, buffer.deviceAddress + offsets[at + 1]);
                 constants.putLong(Long.BYTES, buffer.deviceAddress + offsets[at]);
@@ -179,15 +180,6 @@ public class LodBake implements RenderStage {
             long dstStage,
             long dstAccess,
             @NonNull MemoryStack stack) {
-        VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
-        barrier.get(0)
-                .sType$Default()
-                .srcStageMask(srcStage)
-                .srcAccessMask(srcAccess)
-                .dstStageMask(dstStage)
-                .dstAccessMask(dstAccess);
-        vkCmdPipelineBarrier2(
-                commandBuffer,
-                VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));
+        Commands.memoryBarrier(commandBuffer, srcStage, srcAccess, dstStage, dstAccess);
     }
 }

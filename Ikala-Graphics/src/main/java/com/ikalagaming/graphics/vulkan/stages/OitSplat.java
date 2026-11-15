@@ -7,6 +7,7 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.graph.VolumeMath;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.OitVolume;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.RenderStage;
@@ -150,18 +151,12 @@ public class OitSplat implements RenderStage {
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             // The last integration read and cleared the buffer
-            VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
-            barrier.get(0)
-                    .sType$Default()
-                    .srcStageMask(VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-                    .srcAccessMask(VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT)
-                    .dstStageMask(VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT)
-                    .dstAccessMask(
-                            VK_ACCESS_2_SHADER_STORAGE_READ_BIT
-                                    | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
-            vkCmdPipelineBarrier2(
+            Commands.memoryBarrier(
                     commandBuffer,
-                    VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));
+                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                    VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
 
             VkRenderingInfo renderingInfo =
                     VkRenderingInfo.calloc(stack)
@@ -175,13 +170,8 @@ public class OitSplat implements RenderStage {
                 state.bindlessTextures.getDescriptorSet(),
                 sceneRender.getDescriptorSet(state.frameIndex)
             };
-            vkCmdBindDescriptorSets(
-                    commandBuffer,
-                    VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    pipelineLayout,
-                    0,
-                    stack.longs(sets),
-                    null);
+            Commands.bindDescriptorSets(
+                    commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, sets);
             ByteBuffer constants = stack.calloc(ShaderBindings.OitVolume.SPLAT_PUSH_CONSTANTS_SIZE);
             constants.putLong(
                     ShaderBindings.OitVolume.PUSH_CONSTANT_EXTINCTION_OFFSET,

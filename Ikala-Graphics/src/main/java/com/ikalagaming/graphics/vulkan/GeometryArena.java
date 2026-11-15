@@ -13,8 +13,6 @@ import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.VkBufferCopy;
 import org.lwjgl.vulkan.VkCommandBuffer;
-import org.lwjgl.vulkan.VkDependencyInfo;
-import org.lwjgl.vulkan.VkMemoryBarrier2;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -735,16 +733,7 @@ public class GeometryArena {
             long dstStage,
             long dstAccess,
             @NonNull MemoryStack stack) {
-        VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
-        barrier.get(0)
-                .sType$Default()
-                .srcStageMask(srcStage)
-                .srcAccessMask(srcAccess)
-                .dstStageMask(dstStage)
-                .dstAccessMask(dstAccess);
-        vkCmdPipelineBarrier2(
-                commandBuffer,
-                VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));
+        Commands.memoryBarrier(commandBuffer, srcStage, srcAccess, dstStage, dstAccess);
     }
 
     /**

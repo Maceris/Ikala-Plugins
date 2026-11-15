@@ -8,6 +8,7 @@ import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.AtmosphereMath;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.Environment;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 import com.ikalagaming.graphics.vulkan.SceneTarget;
@@ -22,8 +23,6 @@ import org.joml.Vector4f;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkCommandBuffer;
 import org.lwjgl.vulkan.VkComputePipelineCreateInfo;
-import org.lwjgl.vulkan.VkDependencyInfo;
-import org.lwjgl.vulkan.VkMemoryBarrier2;
 import org.lwjgl.vulkan.VkPipelineLayoutCreateInfo;
 import org.lwjgl.vulkan.VkPushConstantRange;
 
@@ -173,14 +172,13 @@ public class EnvironmentUpdate implements RenderStage {
                     VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                     stack);
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-            vkCmdBindDescriptorSets(
+            Commands.bindDescriptorSets(
                     commandBuffer,
                     VK_PIPELINE_BIND_POINT_COMPUTE,
                     pipelineLayout,
                     0,
-                    stack.longs(
-                            state.environment.getSet(), state.bindlessTextures.getDescriptorSet()),
-                    null);
+                    state.environment.getSet(),
+                    state.bindlessTextures.getDescriptorSet());
             ByteBuffer constants = stack.calloc(ShaderBindings.Environment.PUSH_CONSTANTS_SIZE);
             scene.getSkyboxDiffuse().get(ShaderBindings.Environment.SKY_COLOR_OFFSET, constants);
             constants.putInt(ShaderBindings.Environment.SKY_TEXTURE_OFFSET, skyTexture);
@@ -264,14 +262,13 @@ public class EnvironmentUpdate implements RenderStage {
                     VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                     stack);
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, atmospherePipeline);
-            vkCmdBindDescriptorSets(
+            Commands.bindDescriptorSets(
                     commandBuffer,
                     VK_PIPELINE_BIND_POINT_COMPUTE,
                     pipelineLayout,
                     0,
-                    stack.longs(
-                            state.environment.getSet(), state.bindlessTextures.getDescriptorSet()),
-                    null);
+                    state.environment.getSet(),
+                    state.bindlessTextures.getDescriptorSet());
             ByteBuffer constants = stack.calloc(ShaderBindings.Environment.PUSH_CONSTANTS_SIZE);
             new Vector4f(sun, (float) radius)
                     .get(ShaderBindings.Atmosphere.SUN_AND_RADIUS_OFFSET, constants);
@@ -392,15 +389,6 @@ public class EnvironmentUpdate implements RenderStage {
             long dstStage,
             long dstAccess,
             @NonNull MemoryStack stack) {
-        VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
-        barrier.get(0)
-                .sType$Default()
-                .srcStageMask(srcStage)
-                .srcAccessMask(srcAccess)
-                .dstStageMask(dstStage)
-                .dstAccessMask(dstAccess);
-        vkCmdPipelineBarrier2(
-                commandBuffer,
-                VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));
+        Commands.memoryBarrier(commandBuffer, srcStage, srcAccess, dstStage, dstAccess);
     }
 }

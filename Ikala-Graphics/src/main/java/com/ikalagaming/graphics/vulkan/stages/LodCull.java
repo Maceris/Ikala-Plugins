@@ -5,6 +5,7 @@ import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.LodRenderer;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.RenderStage;
@@ -18,8 +19,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkCommandBuffer;
 import org.lwjgl.vulkan.VkComputePipelineCreateInfo;
-import org.lwjgl.vulkan.VkDependencyInfo;
-import org.lwjgl.vulkan.VkMemoryBarrier2;
 import org.lwjgl.vulkan.VkPipelineLayoutCreateInfo;
 import org.lwjgl.vulkan.VkPushConstantRange;
 
@@ -127,25 +126,20 @@ public class LodCull implements RenderStage {
                 final IntBuffer layout = stack.mallocInt(2 * LodRenderer.LIST_SLOTS);
                 layout.put(frameData.lodListRooms).put(frameData.lodListStarts).flip();
                 vkCmdUpdateBuffer(commandBuffer, frameData.lodListLayout.buffer, 0, layout);
-                VkMemoryBarrier2.Buffer copied = VkMemoryBarrier2.calloc(1, stack);
-                copied.get(0)
-                        .sType$Default()
-                        .srcStageMask(VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT)
-                        .srcAccessMask(VK_ACCESS_2_TRANSFER_WRITE_BIT)
-                        .dstStageMask(VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-                        .dstAccessMask(VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
-                vkCmdPipelineBarrier2(
+                Commands.memoryBarrier(
                         commandBuffer,
-                        VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(copied));
+                        VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
+                        VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                        VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
             }
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-            vkCmdBindDescriptorSets(
+            Commands.bindDescriptorSets(
                     commandBuffer,
                     VK_PIPELINE_BIND_POINT_COMPUTE,
                     pipelineLayout,
                     0,
-                    stack.longs(state.depthPyramid.getReadSet()),
-                    null);
+                    state.depthPyramid.getReadSet());
             ByteBuffer constants = stack.calloc(ShaderBindings.LodCull.PUSH_CONSTANTS_SIZE);
             constants.putLong(
                     ShaderBindings.LodCull.PUSH_CONSTANT_CLUSTERS_OFFSET,
@@ -207,24 +201,18 @@ public class LodCull implements RenderStage {
 
             // Draws read the commands and counts, the CPU reads the counters later, and next
             // frame's culling reads the visibility history
-            VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
-            barrier.get(0)
-                    .sType$Default()
-                    .srcStageMask(VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-                    .srcAccessMask(VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT)
-                    .dstStageMask(
-                            VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT
-                                    | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
-                                    | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
-                                    | VK_PIPELINE_STAGE_2_HOST_BIT)
-                    .dstAccessMask(
-                            VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT
-                                    | VK_ACCESS_2_SHADER_STORAGE_READ_BIT
-                                    | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-                                    | VK_ACCESS_2_HOST_READ_BIT);
-            vkCmdPipelineBarrier2(
+            Commands.memoryBarrier(
                     commandBuffer,
-                    VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));
+                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                    VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT
+                            | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
+                            | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
+                            | VK_PIPELINE_STAGE_2_HOST_BIT,
+                    VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT
+                            | VK_ACCESS_2_SHADER_STORAGE_READ_BIT
+                            | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+                            | VK_ACCESS_2_HOST_READ_BIT);
         }
     }
 }

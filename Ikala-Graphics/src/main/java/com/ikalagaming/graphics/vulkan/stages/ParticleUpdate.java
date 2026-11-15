@@ -12,6 +12,7 @@ import com.ikalagaming.graphics.scene.ParticleEffect;
 import com.ikalagaming.graphics.scene.ParticleEffectLoader;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.WaterEffects;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.ParticleMath;
 import com.ikalagaming.graphics.vulkan.ParticlePool;
 import com.ikalagaming.graphics.vulkan.RenderStage;
@@ -342,13 +343,13 @@ public class ParticleUpdate implements RenderStage {
             double seconds,
             @NonNull MemoryStack stack) {
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, simulatePipeline);
-        vkCmdBindDescriptorSets(
+        Commands.bindDescriptorSets(
                 commandBuffer,
                 VK_PIPELINE_BIND_POINT_COMPUTE,
                 simulateLayout,
                 0,
-                stack.longs(state.occupancy.getSet(), state.bindlessTextures.getDescriptorSet()),
-                null);
+                state.occupancy.getSet(),
+                state.bindlessTextures.getDescriptorSet());
         ByteBuffer constants = stack.calloc(ShaderBindings.Particles.SIMULATE_CONSTANTS_SIZE);
         final int current = pool.getCurrent();
         final long[] addresses = {
@@ -455,13 +456,13 @@ public class ParticleUpdate implements RenderStage {
             int emitters,
             @NonNull MemoryStack stack) {
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, emitPipeline);
-        vkCmdBindDescriptorSets(
+        Commands.bindDescriptorSets(
                 commandBuffer,
                 VK_PIPELINE_BIND_POINT_COMPUTE,
                 emitLayout,
                 0,
-                stack.longs(state.occupancy.getSet(), state.bindlessTextures.getDescriptorSet()),
-                null);
+                state.occupancy.getSet(),
+                state.bindlessTextures.getDescriptorSet());
         ByteBuffer constants = stack.calloc(ShaderBindings.Particles.EMIT_CONSTANTS_SIZE);
         final int next = 1 - pool.getCurrent();
         final long[] addresses = {
@@ -895,16 +896,7 @@ public class ParticleUpdate implements RenderStage {
             long dstStage,
             long dstAccess,
             @NonNull MemoryStack stack) {
-        VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
-        barrier.get(0)
-                .sType$Default()
-                .srcStageMask(srcStage)
-                .srcAccessMask(srcAccess)
-                .dstStageMask(dstStage)
-                .dstAccessMask(dstAccess);
-        vkCmdPipelineBarrier2(
-                commandBuffer,
-                VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));
+        Commands.memoryBarrier(commandBuffer, srcStage, srcAccess, dstStage, dstAccess);
     }
 
     /**

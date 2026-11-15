@@ -7,6 +7,7 @@ import com.ikalagaming.graphics.MeshKind;
 import com.ikalagaming.graphics.bake.BakedVertex;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.MeshData;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.GeometryArena;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.PipelineManagerVulkan;
@@ -158,19 +159,15 @@ final class TranslucentShadowPass {
         final int bricks =
                 state.volumeBricks != null ? state.volumeBricks.shadowCount(state.frameIndex) : 0;
         if (frameData.meshSlotCount + frameData.bakedSlotCount > 0 || bricks > 0) {
-            VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
-            viewports.get(0).width(size).height(size).minDepth(0).maxDepth(1);
-            vkCmdSetViewport(commandBuffer, 0, viewports);
-            VkRect2D.Buffer scissors = VkRect2D.calloc(1, stack);
-            scissors.get(0).extent().set(size, size);
-            vkCmdSetScissor(commandBuffer, 0, scissors);
-            vkCmdBindDescriptorSets(
+            Commands.viewport(commandBuffer, 0, 0, size, size);
+            Commands.scissor(commandBuffer, 0, 0, size, size);
+            Commands.bindDescriptorSets(
                     commandBuffer,
                     VK_PIPELINE_BIND_POINT_GRAPHICS,
                     layout,
                     0,
-                    stack.longs(descriptorSet, state.bindlessTextures.getDescriptorSet()),
-                    null);
+                    descriptorSet,
+                    state.bindlessTextures.getDescriptorSet());
             vkCmdPushConstants(commandBuffer, layout, VK_SHADER_STAGE_VERTEX_BIT, 0, pushConstants);
             final LongBuffer vertexBuffers = stack.callocLong(1);
             final LongBuffer vertexOffsets = stack.callocLong(1);
@@ -208,13 +205,12 @@ final class TranslucentShadowPass {
             // list's address goes where level of detail's worlds go in the shadow stage
             if (bricks > 0) {
                 vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, brickPipeline);
-                vkCmdBindDescriptorSets(
+                Commands.bindDescriptorSets(
                         commandBuffer,
                         VK_PIPELINE_BIND_POINT_GRAPHICS,
                         layout,
                         BRICK_SET,
-                        stack.longs(state.volumeBricks.getSet()),
-                        null);
+                        state.volumeBricks.getSet());
                 final ByteBuffer brickConstants = stack.calloc(Long.BYTES);
                 brickConstants.putLong(0, state.volumeBricks.shadowList(state.frameIndex));
                 vkCmdPushConstants(

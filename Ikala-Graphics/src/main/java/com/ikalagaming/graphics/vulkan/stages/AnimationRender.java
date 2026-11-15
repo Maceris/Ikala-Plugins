@@ -8,6 +8,7 @@ import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.*;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 
 import lombok.NonNull;
@@ -217,16 +218,7 @@ public class AnimationRender implements RenderStage {
             long dstStage,
             long dstAccess,
             @NonNull MemoryStack stack) {
-        VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
-        barrier.get(0)
-                .sType$Default()
-                .srcStageMask(srcStage)
-                .srcAccessMask(srcAccess)
-                .dstStageMask(dstStage)
-                .dstAccessMask(dstAccess);
-        vkCmdPipelineBarrier2(
-                commandBuffer,
-                VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));
+        Commands.memoryBarrier(commandBuffer, srcStage, srcAccess, dstStage, dstAccess);
     }
 
     private void createPipelineLayout(@NonNull VulkanState state) {

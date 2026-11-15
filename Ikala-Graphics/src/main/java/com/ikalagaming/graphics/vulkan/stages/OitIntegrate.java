@@ -5,6 +5,7 @@ import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.OitVolume;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.RenderStage;
@@ -121,13 +122,12 @@ public class OitIntegrate implements RenderStage {
                     stack);
 
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-            vkCmdBindDescriptorSets(
+            Commands.bindDescriptorSets(
                     commandBuffer,
                     VK_PIPELINE_BIND_POINT_COMPUTE,
                     pipelineLayout,
                     0,
-                    stack.longs(volume.getIntegrateSet()),
-                    null);
+                    volume.getIntegrateSet());
             ByteBuffer constants =
                     stack.calloc(ShaderBindings.OitVolume.INTEGRATE_PUSH_CONSTANTS_SIZE);
             constants.putLong(
@@ -176,15 +176,6 @@ public class OitIntegrate implements RenderStage {
             long dstStage,
             long dstAccess,
             @NonNull MemoryStack stack) {
-        VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
-        barrier.get(0)
-                .sType$Default()
-                .srcStageMask(srcStage)
-                .srcAccessMask(srcAccess)
-                .dstStageMask(dstStage)
-                .dstAccessMask(dstAccess);
-        vkCmdPipelineBarrier2(
-                commandBuffer,
-                VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));
+        Commands.memoryBarrier(commandBuffer, srcStage, srcAccess, dstStage, dstAccess);
     }
 }

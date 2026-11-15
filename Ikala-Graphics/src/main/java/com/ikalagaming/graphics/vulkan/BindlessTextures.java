@@ -139,13 +139,12 @@ public class BindlessTextures {
      */
     public void bind(@NonNull VkCommandBuffer commandBuffer, int bindPoint, long pipelineLayout) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            vkCmdBindDescriptorSets(
+            Commands.bindDescriptorSets(
                     commandBuffer,
                     bindPoint,
                     pipelineLayout,
                     ShaderBindings.BindlessTextures.SET,
-                    stack.longs(descriptorSet),
-                    null);
+                    descriptorSet);
         }
     }
 

@@ -6,6 +6,7 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.graph.VolumeMath;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 import com.ikalagaming.graphics.vulkan.SceneTarget;
@@ -135,18 +136,12 @@ public class VolumeSplat implements RenderStage {
         final int tilesY = VoxelOitMath.tiles(height);
         try (MemoryStack stack = MemoryStack.stackPush()) {
             // The surfaces' splat adds into the same buffer
-            VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
-            barrier.get(0)
-                    .sType$Default()
-                    .srcStageMask(VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT)
-                    .srcAccessMask(VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT)
-                    .dstStageMask(VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT)
-                    .dstAccessMask(
-                            VK_ACCESS_2_SHADER_STORAGE_READ_BIT
-                                    | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
-            vkCmdPipelineBarrier2(
+            Commands.memoryBarrier(
                     commandBuffer,
-                    VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));
+                    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                    VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                    VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
 
             VkRenderingInfo renderingInfo =
                     VkRenderingInfo.calloc(stack)

@@ -8,6 +8,7 @@ import com.ikalagaming.graphics.graph.TaaMath;
 import com.ikalagaming.graphics.scene.MediumRegistry;
 import com.ikalagaming.graphics.scene.MediumVolume;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.FogVolume;
 import com.ikalagaming.graphics.vulkan.ParticleMath;
 import com.ikalagaming.graphics.vulkan.ParticlePool;
@@ -452,13 +453,12 @@ public class FogRender {
                     VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                     stack);
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, integratePipeline);
-            vkCmdBindDescriptorSets(
+            Commands.bindDescriptorSets(
                     commandBuffer,
                     VK_PIPELINE_BIND_POINT_COMPUTE,
                     integrateLayout,
                     0,
-                    stack.longs(volume.getIntegrateSet()),
-                    null);
+                    volume.getIntegrateSet());
             ByteBuffer integrate = stack.calloc(INTEGRATE_CONSTANTS_SIZE);
             invProjection.get(0, integrate);
             integrate.putInt(INTEGRATE_TILES_OFFSET, tilesX);
@@ -645,13 +645,13 @@ public class FogRender {
                 VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                 stack);
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, froxelPipeline);
-        vkCmdBindDescriptorSets(
+        Commands.bindDescriptorSets(
                 commandBuffer,
                 VK_PIPELINE_BIND_POINT_COMPUTE,
                 froxelLayout,
                 0,
-                stack.longs(lightSets[0], lightSets[1]),
-                null);
+                lightSets[0],
+                lightSets[1]);
         final Vector3d anchor = new Vector3d(pool.getAnchor()).sub(scene.getCamera().getPosition());
         ByteBuffer constants = stack.calloc(FROXEL_CONSTANTS_SIZE);
         constants.putLong(0, pool.getParticles().deviceAddress);
@@ -705,15 +705,6 @@ public class FogRender {
             long dstStage,
             long dstAccess,
             @NonNull MemoryStack stack) {
-        VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
-        barrier.get(0)
-                .sType$Default()
-                .srcStageMask(srcStage)
-                .srcAccessMask(srcAccess)
-                .dstStageMask(dstStage)
-                .dstAccessMask(dstAccess);
-        vkCmdPipelineBarrier2(
-                commandBuffer,
-                VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));
+        Commands.memoryBarrier(commandBuffer, srcStage, srcAccess, dstStage, dstAccess);
     }
 }

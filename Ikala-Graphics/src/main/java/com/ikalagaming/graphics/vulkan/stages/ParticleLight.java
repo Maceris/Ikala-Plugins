@@ -4,6 +4,7 @@ import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.ParticleMath;
 import com.ikalagaming.graphics.vulkan.ParticlePool;
 import com.ikalagaming.graphics.vulkan.ShaderBindings;
@@ -123,13 +124,8 @@ public class ParticleLight {
                     VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                     stack);
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-            vkCmdBindDescriptorSets(
-                    commandBuffer,
-                    VK_PIPELINE_BIND_POINT_COMPUTE,
-                    layout,
-                    0,
-                    stack.longs(lightSets),
-                    null);
+            Commands.bindDescriptorSets(
+                    commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, lightSets);
             final Vector3d anchor =
                     new Vector3d(pool.getAnchor()).sub(scene.getCamera().getPosition());
             ByteBuffer constants = stack.calloc(ShaderBindings.Particles.LIGHT_CONSTANTS_SIZE);
@@ -180,15 +176,6 @@ public class ParticleLight {
             long dstStage,
             long dstAccess,
             @NonNull MemoryStack stack) {
-        VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
-        barrier.get(0)
-                .sType$Default()
-                .srcStageMask(srcStage)
-                .srcAccessMask(srcAccess)
-                .dstStageMask(dstStage)
-                .dstAccessMask(dstAccess);
-        vkCmdPipelineBarrier2(
-                commandBuffer,
-                VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));
+        Commands.memoryBarrier(commandBuffer, srcStage, srcAccess, dstStage, dstAccess);
     }
 }

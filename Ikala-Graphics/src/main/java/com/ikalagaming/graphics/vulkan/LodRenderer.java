@@ -3728,8 +3728,7 @@ public class LodRenderer {
         }
         try (MemoryStack stack = MemoryStack.stackPush()) {
             vkCmdBindIndexBuffer(commandBuffer, arena.getIndices().buffer, 0, VK_INDEX_TYPE_UINT32);
-            vkCmdBindVertexBuffers(
-                    commandBuffer, 0, stack.longs(arena.getVertices().buffer), stack.callocLong(1));
+            Commands.bindVertexBuffer(commandBuffer, 0, arena.getVertices().buffer, 0);
             final ByteBuffer constants = stack.malloc(2 * Long.BYTES);
             constants.putLong(0, frameData.lodWorlds.deviceAddress);
             constants.putLong(Long.BYTES, clusters.getBuffer().deviceAddress);

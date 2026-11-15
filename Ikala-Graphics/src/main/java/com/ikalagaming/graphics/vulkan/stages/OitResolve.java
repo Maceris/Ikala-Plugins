@@ -5,6 +5,7 @@ import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.FullScreenPass;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.PipelineManagerVulkan;
@@ -157,15 +158,13 @@ public class OitResolve implements RenderStage {
             vkCmdBeginRendering(commandBuffer, renderingInfo);
             if (width > 0 && height > 0) {
                 vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-                vkCmdBindDescriptorSets(
+                Commands.bindDescriptorSets(
                         commandBuffer,
                         VK_PIPELINE_BIND_POINT_GRAPHICS,
                         pipelineLayout,
                         0,
-                        stack.longs(
-                                state.bindlessTextures.getDescriptorSet(),
-                                state.oitVolume.getReadSet()),
-                        null);
+                        state.bindlessTextures.getDescriptorSet(),
+                        state.oitVolume.getReadSet());
                 ByteBuffer constants = stack.calloc(ShaderBindings.OitResolve.PUSH_CONSTANTS_SIZE);
                 constants.putInt(
                         ShaderBindings.OitResolve.PUSH_CONSTANT_ACCUM_INDEX_OFFSET,

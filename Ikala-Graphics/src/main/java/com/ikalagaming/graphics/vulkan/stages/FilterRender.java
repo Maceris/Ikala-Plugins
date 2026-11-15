@@ -7,6 +7,7 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.*;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 
 import lombok.Getter;
@@ -192,27 +193,17 @@ public class FilterRender implements RenderStage {
                 vkCmdBindPipeline(
                         commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[view.ordinal()]);
 
-                VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
-                viewports.get(0).width(width).height(height).minDepth(0).maxDepth(1);
-                vkCmdSetViewport(commandBuffer, 0, viewports);
-                VkRect2D.Buffer scissors = VkRect2D.calloc(1, stack);
-                scissors.get(0).extent().set(width, height);
-                vkCmdSetScissor(commandBuffer, 0, scissors);
+                Commands.viewport(commandBuffer, 0, 0, width, height);
+                Commands.scissor(commandBuffer, 0, 0, width, height);
 
-                vkCmdBindDescriptorSets(
+                Commands.bindDescriptorSets(
                         commandBuffer,
                         VK_PIPELINE_BIND_POINT_GRAPHICS,
                         pipelineLayout,
                         0,
-                        stack.longs(
-                                descriptorSets[vulkanState.frameIndex],
-                                vulkanState.bindlessTextures.getDescriptorSet()),
-                        null);
-                vkCmdBindVertexBuffers(
-                        commandBuffer,
-                        0,
-                        stack.longs(quadMesh.vertexBuffer().buffer),
-                        stack.longs(0));
+                        descriptorSets[vulkanState.frameIndex],
+                        vulkanState.bindlessTextures.getDescriptorSet());
+                Commands.bindVertexBuffer(commandBuffer, 0, quadMesh.vertexBuffer().buffer, 0);
                 vkCmdBindIndexBuffer(
                         commandBuffer, quadMesh.indexBuffer().buffer, 0, VK_INDEX_TYPE_UINT32);
                 vkCmdDrawIndexed(commandBuffer, QuadMesh.INDEX_COUNT, 1, 0, 0, 0);

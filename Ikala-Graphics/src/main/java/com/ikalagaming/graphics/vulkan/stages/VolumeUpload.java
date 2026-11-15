@@ -12,6 +12,7 @@ import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.VolumeMaterials;
 import com.ikalagaming.graphics.graph.VolumeMath;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 import com.ikalagaming.graphics.vulkan.SceneTarget;
 import com.ikalagaming.graphics.vulkan.ShaderVulkan;
@@ -202,13 +203,8 @@ public class VolumeUpload implements RenderStage {
                     VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT,
                     stack);
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-            vkCmdBindDescriptorSets(
-                    commandBuffer,
-                    VK_PIPELINE_BIND_POINT_COMPUTE,
-                    layout,
-                    0,
-                    stack.longs(bricks.getSet()),
-                    null);
+            Commands.bindDescriptorSets(
+                    commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, bricks.getSet());
             final ByteBuffer constants = stack.calloc(CONSTANTS_SIZE);
             constants.putLong(0, buffer.deviceAddress);
             constants.putInt(Long.BYTES, uploads.size());
@@ -248,16 +244,7 @@ public class VolumeUpload implements RenderStage {
             long dstStage,
             long dstAccess,
             @NonNull MemoryStack stack) {
-        VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
-        barrier.get(0)
-                .sType$Default()
-                .srcStageMask(srcStage)
-                .srcAccessMask(srcAccess)
-                .dstStageMask(dstStage)
-                .dstAccessMask(dstAccess);
-        vkCmdPipelineBarrier2(
-                commandBuffer,
-                VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));
+        Commands.memoryBarrier(commandBuffer, srcStage, srcAccess, dstStage, dstAccess);
     }
 
     /**

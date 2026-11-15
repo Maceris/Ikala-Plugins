@@ -5,6 +5,7 @@ import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 import com.ikalagaming.graphics.vulkan.SceneTarget;
@@ -17,8 +18,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkCommandBuffer;
 import org.lwjgl.vulkan.VkComputePipelineCreateInfo;
-import org.lwjgl.vulkan.VkDependencyInfo;
-import org.lwjgl.vulkan.VkMemoryBarrier2;
 import org.lwjgl.vulkan.VkPipelineLayoutCreateInfo;
 import org.lwjgl.vulkan.VkPushConstantRange;
 
@@ -121,13 +120,12 @@ public class InstanceCull implements RenderStage {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
             // Bound though unread, as the pipeline's layout has it
-            vkCmdBindDescriptorSets(
+            Commands.bindDescriptorSets(
                     commandBuffer,
                     VK_PIPELINE_BIND_POINT_COMPUTE,
                     pipelineLayout,
                     0,
-                    stack.longs(state.depthPyramid.getReadSet()),
-                    null);
+                    state.depthPyramid.getReadSet());
             final ByteBuffer constants = stack.calloc(ShaderBindings.Cull.PUSH_CONSTANTS_SIZE);
             constants.putLong(
                     ShaderBindings.Cull.PUSH_CONSTANT_COMMANDS_OFFSET,
@@ -145,21 +143,14 @@ public class InstanceCull implements RenderStage {
                     1,
                     1);
             // Culling adds to the counts, and the draws read them if nothing is culled
-            final VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
-            barrier.get(0)
-                    .sType$Default()
-                    .srcStageMask(VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-                    .srcAccessMask(VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT)
-                    .dstStageMask(
-                            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
-                                    | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT)
-                    .dstAccessMask(
-                            VK_ACCESS_2_SHADER_STORAGE_READ_BIT
-                                    | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-                                    | VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT);
-            vkCmdPipelineBarrier2(
+            Commands.memoryBarrier(
                     commandBuffer,
-                    VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));
+                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
+                    VK_ACCESS_2_SHADER_STORAGE_READ_BIT
+                            | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+                            | VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT);
         }
     }
 
@@ -190,13 +181,12 @@ public class InstanceCull implements RenderStage {
         final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
         try (MemoryStack stack = MemoryStack.stackPush()) {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-            vkCmdBindDescriptorSets(
+            Commands.bindDescriptorSets(
                     commandBuffer,
                     VK_PIPELINE_BIND_POINT_COMPUTE,
                     pipelineLayout,
                     0,
-                    stack.longs(state.depthPyramid.getReadSet()),
-                    null);
+                    state.depthPyramid.getReadSet());
             ByteBuffer constants = stack.calloc(ShaderBindings.Cull.PUSH_CONSTANTS_SIZE);
             constants.putLong(
                     ShaderBindings.Cull.PUSH_CONSTANT_INSTANCES_OFFSET,
@@ -257,24 +247,18 @@ public class InstanceCull implements RenderStage {
 
             // Draws read the commands and visible lists, the CPU reads the counters later, and
             // next frame's culling reads the visibility history
-            VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
-            barrier.get(0)
-                    .sType$Default()
-                    .srcStageMask(VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-                    .srcAccessMask(VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT)
-                    .dstStageMask(
-                            VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT
-                                    | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
-                                    | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
-                                    | VK_PIPELINE_STAGE_2_HOST_BIT)
-                    .dstAccessMask(
-                            VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT
-                                    | VK_ACCESS_2_SHADER_STORAGE_READ_BIT
-                                    | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-                                    | VK_ACCESS_2_HOST_READ_BIT);
-            vkCmdPipelineBarrier2(
+            Commands.memoryBarrier(
                     commandBuffer,
-                    VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));
+                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                    VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT
+                            | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
+                            | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
+                            | VK_PIPELINE_STAGE_2_HOST_BIT,
+                    VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT
+                            | VK_ACCESS_2_SHADER_STORAGE_READ_BIT
+                            | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+                            | VK_ACCESS_2_HOST_READ_BIT);
         }
     }
 }

@@ -5,6 +5,7 @@ import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.DepthPyramid;
 import com.ikalagaming.graphics.vulkan.DepthPyramidMath;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
@@ -19,8 +20,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkCommandBuffer;
 import org.lwjgl.vulkan.VkComputePipelineCreateInfo;
-import org.lwjgl.vulkan.VkDependencyInfo;
-import org.lwjgl.vulkan.VkMemoryBarrier2;
 import org.lwjgl.vulkan.VkPipelineLayoutCreateInfo;
 import org.lwjgl.vulkan.VkPushConstantRange;
 
@@ -122,13 +121,12 @@ public class DepthPyramidBuild implements RenderStage {
                     stack);
 
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-            vkCmdBindDescriptorSets(
+            Commands.bindDescriptorSets(
                     commandBuffer,
                     VK_PIPELINE_BIND_POINT_COMPUTE,
                     pipelineLayout,
                     1,
-                    stack.longs(state.bindlessTextures.getDescriptorSet()),
-                    null);
+                    state.bindlessTextures.getDescriptorSet());
             ByteBuffer constants = stack.calloc(ShaderBindings.DepthPyramid.PUSH_CONSTANTS_SIZE);
             constants.putInt(
                     ShaderBindings.DepthPyramid.PUSH_CONSTANT_DEPTH_INDEX_OFFSET,
@@ -158,13 +156,12 @@ public class DepthPyramidBuild implements RenderStage {
                 constants.putInt(ShaderBindings.DepthPyramid.PUSH_CONSTANT_LEVEL_OFFSET, level);
                 vkCmdPushConstants(
                         commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
-                vkCmdBindDescriptorSets(
+                Commands.bindDescriptorSets(
                         commandBuffer,
                         VK_PIPELINE_BIND_POINT_COMPUTE,
                         pipelineLayout,
                         0,
-                        stack.longs(pyramid.getBuildSet(level)),
-                        null);
+                        pyramid.getBuildSet(level));
                 final int groupSize = ShaderBindings.DepthPyramid.WORKGROUP_SIZE;
                 vkCmdDispatch(
                         commandBuffer,
@@ -194,15 +191,11 @@ public class DepthPyramidBuild implements RenderStage {
             long srcAccess,
             long dstAccess,
             @NonNull MemoryStack stack) {
-        VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
-        barrier.get(0)
-                .sType$Default()
-                .srcStageMask(VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-                .srcAccessMask(srcAccess)
-                .dstStageMask(VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-                .dstAccessMask(dstAccess);
-        vkCmdPipelineBarrier2(
+        Commands.memoryBarrier(
                 commandBuffer,
-                VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                srcAccess,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                dstAccess);
     }
 }

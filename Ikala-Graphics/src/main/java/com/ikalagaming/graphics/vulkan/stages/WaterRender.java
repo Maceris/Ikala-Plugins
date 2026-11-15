@@ -8,6 +8,7 @@ import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.WaterRegistry;
 import com.ikalagaming.graphics.scene.WaterTile;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.PipelineManagerVulkan;
 import com.ikalagaming.graphics.vulkan.RenderStage;
@@ -508,9 +509,8 @@ public class WaterRender implements RenderStage {
             }
 
             // Read only again, as the transparency passes and filters expect it
-            VkImageMemoryBarrier2.Buffer barriers = VkImageMemoryBarrier2.calloc(1, stack);
-            SceneRender.imageBarrier(
-                    barriers.get(0),
+            Commands.imageBarrier(
+                    commandBuffer,
                     depth.texture,
                     VK_IMAGE_ASPECT_DEPTH_BIT,
                     VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
@@ -524,9 +524,6 @@ public class WaterRender implements RenderStage {
                             | VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
                     VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
                     VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
-            vkCmdPipelineBarrier2(
-                    commandBuffer,
-                    VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barriers));
         }
     }
 
@@ -736,8 +733,7 @@ public class WaterRender implements RenderStage {
                 VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                 0,
                 constants(state, frameData, stack));
-        vkCmdBindVertexBuffers(
-                commandBuffer, 0, stack.longs(vertexBuffers[frame].buffer), stack.longs(0));
+        Commands.bindVertexBuffer(commandBuffer, 0, vertexBuffers[frame].buffer, 0);
         vkCmdBindIndexBuffer(commandBuffer, indexBuffers[frame].buffer, 0, VK_INDEX_TYPE_UINT32);
     }
 
@@ -1141,19 +1137,14 @@ public class WaterRender implements RenderStage {
                 WaveMath.PROFILE_SAMPLES / WaveMath.WORKGROUP_SIZE,
                 climates.size() * WaveMath.DEPTHS * WaveMath.DIRECTIONS,
                 1);
-        VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
-        barrier.get(0)
-                .sType$Default()
-                .srcStageMask(VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-                .srcAccessMask(VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT)
-                .dstStageMask(
-                        VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
-                                | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
-                                | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-                .dstAccessMask(VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
-        vkCmdPipelineBarrier2(
+        Commands.memoryBarrier(
                 commandBuffer,
-                VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
+                        | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
+                        | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
     }
 
     /**

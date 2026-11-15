@@ -5,6 +5,7 @@ import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.FullScreenPass;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.PipelineManagerVulkan;
@@ -181,13 +182,12 @@ public class ToneMap implements RenderStage {
             vkCmdBeginRendering(commandBuffer, renderingInfo);
             if (width > 0 && height > 0) {
                 vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-                vkCmdBindDescriptorSets(
+                Commands.bindDescriptorSets(
                         commandBuffer,
                         VK_PIPELINE_BIND_POINT_GRAPHICS,
                         pipelineLayout,
                         0,
-                        stack.longs(state.bindlessTextures.getDescriptorSet()),
-                        null);
+                        state.bindlessTextures.getDescriptorSet());
                 ByteBuffer constants = stack.calloc(ShaderBindings.ToneMap.PUSH_CONSTANTS_SIZE);
                 constants.putInt(
                         ShaderBindings.ToneMap.PUSH_CONSTANT_SCENE_COLOR_INDEX_OFFSET,

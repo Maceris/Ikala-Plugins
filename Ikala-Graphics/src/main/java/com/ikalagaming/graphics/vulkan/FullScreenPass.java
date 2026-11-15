@@ -217,14 +217,9 @@ public final class FullScreenPass {
             int width,
             int height,
             @NonNull MemoryStack stack) {
-        VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
-        viewports.get(0).width(width).height(height).minDepth(0).maxDepth(1);
-        vkCmdSetViewport(commandBuffer, 0, viewports);
-        VkRect2D.Buffer scissors = VkRect2D.calloc(1, stack);
-        scissors.get(0).extent().set(width, height);
-        vkCmdSetScissor(commandBuffer, 0, scissors);
-        vkCmdBindVertexBuffers(
-                commandBuffer, 0, stack.longs(quadMesh.vertexBuffer().buffer), stack.longs(0));
+        Commands.viewport(commandBuffer, 0, 0, width, height);
+        Commands.scissor(commandBuffer, 0, 0, width, height);
+        Commands.bindVertexBuffer(commandBuffer, 0, quadMesh.vertexBuffer().buffer, 0);
         vkCmdBindIndexBuffer(commandBuffer, quadMesh.indexBuffer().buffer, 0, VK_INDEX_TYPE_UINT32);
         vkCmdDrawIndexed(commandBuffer, QuadMesh.INDEX_COUNT, 1, 0, 0, 0);
     }

@@ -4,6 +4,7 @@ import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.ParticleMath;
 import com.ikalagaming.graphics.vulkan.ParticlePool;
 import com.ikalagaming.graphics.vulkan.PipelineManagerVulkan;
@@ -123,13 +124,8 @@ public class ParticleDraw {
             return;
         }
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-        vkCmdBindDescriptorSets(
-                commandBuffer,
-                VK_PIPELINE_BIND_POINT_GRAPHICS,
-                pipelineLayout,
-                0,
-                stack.longs(sets),
-                null);
+        Commands.bindDescriptorSets(
+                commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, sets);
         final Vector3d anchor = new Vector3d(pool.getAnchor()).sub(scene.getCamera().getPosition());
         ByteBuffer constants = stack.calloc(ShaderBindings.Particles.DRAW_CONSTANTS_SIZE);
         constants.putLong(

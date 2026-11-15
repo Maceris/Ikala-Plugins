@@ -11,6 +11,7 @@ import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.DrawData;
 import com.ikalagaming.graphics.gui.data.FontAtlas;
 import com.ikalagaming.graphics.vulkan.*;
+import com.ikalagaming.graphics.vulkan.Commands;
 
 import lombok.NonNull;
 import lombok.Setter;
@@ -580,28 +581,17 @@ public class GuiRender {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
-            VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
-            viewports
-                    .get(0)
-                    .width(viewportWidth)
-                    .height(viewportHeight)
-                    .minDepth(0.0f)
-                    .maxDepth(1.0f);
-            vkCmdSetViewport(commandBuffer, 0, viewports);
-            VkRect2D.Buffer scissors = VkRect2D.calloc(1, stack);
-            scissors.get(0).extent().set(scissorWidth, scissorHeight);
-            vkCmdSetScissor(commandBuffer, 0, scissors);
+            Commands.viewport(commandBuffer, 0, 0, viewportWidth, viewportHeight);
+            Commands.scissor(commandBuffer, 0, 0, scissorWidth, scissorHeight);
 
             // Sets 0 and 1 are consecutive, so bind both at once
-            vkCmdBindDescriptorSets(
+            Commands.bindDescriptorSets(
                     commandBuffer,
                     VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipelineLayout,
                     0,
-                    stack.longs(
-                            descriptorSets[state.frameIndex],
-                            state.bindlessTextures.getDescriptorSet()),
-                    null);
+                    descriptorSets[state.frameIndex],
+                    state.bindlessTextures.getDescriptorSet());
 
             LongBuffer vertexBuffers =
                     stack.longs(state.perFrameData[state.frameIndex].guiVertices.buffer);

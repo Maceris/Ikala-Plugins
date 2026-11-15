@@ -99,8 +99,8 @@ public final class LodResidency {
     private final long[] bucketBytes = new long[BUCKETS];
 
     /**
-     * Where each unit's children start in {@link #childList}, and one past the last unit where
-     * they end: one array rather than one per unit, since residency is rebuilt each batch.
+     * Where each unit's children start in {@link #childList}, and one past the last unit where they
+     * end: one array rather than one per unit, since residency is rebuilt each batch.
      */
     private final int[] childStart;
 

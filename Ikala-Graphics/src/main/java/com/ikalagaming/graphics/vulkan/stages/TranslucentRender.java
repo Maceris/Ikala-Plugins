@@ -10,6 +10,7 @@ import com.ikalagaming.graphics.bake.BakedVertex;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.VolumeMath;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.GeometryArena;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.PipelineManagerVulkan;
@@ -225,13 +226,8 @@ public class TranslucentRender implements RenderStage {
                     state.environment.getSet(),
                     state.fogVolume.getReadSet()
                 };
-                vkCmdBindDescriptorSets(
-                        commandBuffer,
-                        VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        pipelineLayout,
-                        0,
-                        stack.longs(sets),
-                        null);
+                Commands.bindDescriptorSets(
+                        commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, sets);
                 ByteBuffer constants = stack.calloc(ShaderBindings.Translucent.PUSH_CONSTANTS_SIZE);
                 constants.putFloat(
                         ShaderBindings.Translucent.PUSH_CONSTANT_SCREEN_SIZE_OFFSET, width);
@@ -290,12 +286,8 @@ public class TranslucentRender implements RenderStage {
             int width,
             int height,
             @NonNull MemoryStack stack) {
-        VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
-        viewports.get(0).x(0).y(height).width(width).height(-height).minDepth(0).maxDepth(1);
-        vkCmdSetViewport(commandBuffer, 0, viewports);
-        VkRect2D.Buffer scissors = VkRect2D.calloc(1, stack);
-        scissors.get(0).extent().set(width, height);
-        vkCmdSetScissor(commandBuffer, 0, scissors);
+        Commands.viewport(commandBuffer, 0, height, width, -height);
+        Commands.scissor(commandBuffer, 0, 0, width, height);
     }
 
     /**

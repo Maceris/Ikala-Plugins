@@ -15,6 +15,7 @@ import com.ikalagaming.graphics.graph.VolumeMath;
 import com.ikalagaming.graphics.lod.LodVertex;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.*;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 import com.ikalagaming.graphics.vulkan.TextureRegistry;
 
@@ -559,22 +560,16 @@ public class SceneRender implements RenderStage {
         final boolean wireframe = GraphicsManager.getScene().getDebugVisualizers().isWireframe();
 
         // A negative height flips y so the projection matrices work the same as in OpenGL
-        VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
-        viewports.get(0).x(0).y(height).width(width).height(-height).minDepth(0).maxDepth(1);
-        vkCmdSetViewport(commandBuffer, 0, viewports);
-        VkRect2D.Buffer scissors = VkRect2D.calloc(1, stack);
-        scissors.get(0).extent().set(width, height);
-        vkCmdSetScissor(commandBuffer, 0, scissors);
+        Commands.viewport(commandBuffer, 0, height, width, -height);
+        Commands.scissor(commandBuffer, 0, 0, width, height);
 
-        vkCmdBindDescriptorSets(
+        Commands.bindDescriptorSets(
                 commandBuffer,
                 VK_PIPELINE_BIND_POINT_GRAPHICS,
                 pipelineLayout,
                 0,
-                stack.longs(
-                        descriptorSets[state.frameIndex],
-                        state.bindlessTextures.getDescriptorSet()),
-                null);
+                descriptorSets[state.frameIndex],
+                state.bindlessTextures.getDescriptorSet());
         // Where sections' cut out blocks hand over to their volume bricks
         final ByteBuffer fade = stack.calloc(4 * Float.BYTES);
         fade.putFloat(0, VolumeMath.fadeStart(GraphicsManager.getSettings().volumeDistance));
@@ -966,8 +961,9 @@ public class SceneRender implements RenderStage {
                 .newLayout(newLayout)
                 .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
                 .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-                .image(image)
-                .subresourceRange(range -> range.aspectMask(aspect).levelCount(1).layerCount(1));
+                .image(image);
+        // By address: subresourceRange(...) makes a view object, or a lambda capturing the aspect
+        Commands.wholeRange(barrier.address() + VkImageMemoryBarrier2.SUBRESOURCERANGE, aspect);
     }
 
     /**

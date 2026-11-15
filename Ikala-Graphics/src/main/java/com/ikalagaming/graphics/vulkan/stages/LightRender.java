@@ -13,6 +13,7 @@ import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.vulkan.*;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 
 import lombok.NonNull;
@@ -201,9 +202,8 @@ public class LightRender implements RenderStage {
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             // Last read by the tone map stage, a frame or more ago
-            VkImageMemoryBarrier2.Buffer barrier = VkImageMemoryBarrier2.calloc(1, stack);
-            SceneRender.imageBarrier(
-                    barrier.get(0),
+            Commands.imageBarrier(
+                    commandBuffer,
                     target.texture,
                     VK_IMAGE_ASPECT_COLOR_BIT,
                     VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
@@ -212,9 +212,6 @@ public class LightRender implements RenderStage {
                     VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
                     VK_IMAGE_LAYOUT_UNDEFINED,
                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-            vkCmdPipelineBarrier2(
-                    commandBuffer,
-                    VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barrier));
 
             // Cleared, so the sky's pixels are empty until the skybox draws them
             VkRenderingAttachmentInfo.Buffer colorAttachments =

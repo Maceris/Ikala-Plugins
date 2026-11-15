@@ -5,6 +5,7 @@ import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.Commands;
 import com.ikalagaming.graphics.vulkan.FullScreenPass;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.QuadMesh;
@@ -111,9 +112,8 @@ public class OitCullDepth implements RenderStage {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             // Last tested against by the transparent stage, earlier this frame or a frame ago;
             // every pixel is written again
-            VkImageMemoryBarrier2.Buffer barriers = VkImageMemoryBarrier2.calloc(1, stack);
-            SceneRender.imageBarrier(
-                    barriers.get(0),
+            Commands.imageBarrier(
+                    commandBuffer,
                     image,
                     VK_IMAGE_ASPECT_DEPTH_BIT,
                     VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
@@ -124,9 +124,6 @@ public class OitCullDepth implements RenderStage {
                     VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
                     VK_IMAGE_LAYOUT_UNDEFINED,
                     VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-            vkCmdPipelineBarrier2(
-                    commandBuffer,
-                    VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barriers));
 
             VkRenderingAttachmentInfo depthAttachment =
                     VkRenderingAttachmentInfo.calloc(stack)
@@ -143,13 +140,12 @@ public class OitCullDepth implements RenderStage {
                             .pDepthAttachment(depthAttachment);
             vkCmdBeginRendering(commandBuffer, renderingInfo);
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-            vkCmdBindDescriptorSets(
+            Commands.bindDescriptorSets(
                     commandBuffer,
                     VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipelineLayout,
                     0,
-                    stack.longs(state.bindlessTextures.getDescriptorSet()),
-                    null);
+                    state.bindlessTextures.getDescriptorSet());
             final Matrix4f projection = scene.getProjection().getJitteredProjectionMatrix();
             ByteBuffer constants = stack.calloc(ShaderBindings.OitVolume.CULL_PUSH_CONSTANTS_SIZE);
             constants.putLong(
@@ -175,8 +171,8 @@ public class OitCullDepth implements RenderStage {
             vkCmdEndRendering(commandBuffer);
 
             // The transparent stage tests against it
-            SceneRender.imageBarrier(
-                    barriers.get(0),
+            Commands.imageBarrier(
+                    commandBuffer,
                     image,
                     VK_IMAGE_ASPECT_DEPTH_BIT,
                     VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
@@ -187,9 +183,6 @@ public class OitCullDepth implements RenderStage {
                     VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
                     VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
                     VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-            vkCmdPipelineBarrier2(
-                    commandBuffer,
-                    VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barriers));
         }
     }
 }
