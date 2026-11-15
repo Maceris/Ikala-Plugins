@@ -26,6 +26,11 @@ class IkGuiImplButtons {
     /** Reused for whether an item is held, see {@link #scratchHovered}. */
     private static final IkBoolean scratchHeld = new IkBoolean();
 
+    // Button temporaries, reused: buttons never run inside one another. Render thread only.
+    private static final Vector2f BUTTON_LABEL_SIZE = new Vector2f();
+    private static final Vector2f BUTTON_SIZE = new Vector2f();
+    private static final RectFloat BUTTON_BB = new RectFloat();
+
     static Context context;
 
     /**
@@ -64,7 +69,8 @@ class IkGuiImplButtons {
         final int id = window.getID(stringID);
         final float x = window.cursorPosition.x;
         final float y = window.cursorPosition.y;
-        final RectFloat bb = new RectFloat(x, y, x + width, y + height);
+        final RectFloat bb = BUTTON_BB;
+        bb.set(x, y, x + width, y + height);
         final float defaultSize = IkGuiImplLayout.getFrameHeight();
         IkGuiInternal.itemSize(
                 width,
@@ -139,7 +145,7 @@ class IkGuiImplButtons {
         final StyleVariables style = context.style.variable;
         final int id = window.getID(label);
         final String displayedLabel = Hash.getDisplayedText(label);
-        final Vector2f labelSize = new Vector2f();
+        final Vector2f labelSize = BUTTON_LABEL_SIZE;
         IkGuiImplUtils.calcTextSize(labelSize, displayedLabel, false, -1.0f);
 
         float x = window.cursorPosition.x;
@@ -150,13 +156,14 @@ class IkGuiImplButtons {
                 && style.framePadding.y < window.baseOffsetCurrentLine) {
             y += window.baseOffsetCurrentLine - style.framePadding.y;
         }
-        final Vector2f size = new Vector2f(width, height);
+        final Vector2f size = BUTTON_SIZE.set(width, height);
         IkGuiInternal.calcItemSize(
                 size,
                 labelSize.x + style.framePadding.x * 2.0f,
                 labelSize.y + style.framePadding.y * 2.0f);
 
-        final RectFloat bb = new RectFloat(x, y, x + size.x, y + size.y);
+        final RectFloat bb = BUTTON_BB;
+        bb.set(x, y, x + size.x, y + size.y);
         IkGuiInternal.itemSize(size.x, size.y, style.framePadding.y);
         if (!IkGuiInternal.itemAdd(bb, id)) {
             return false;

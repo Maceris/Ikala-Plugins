@@ -441,6 +441,18 @@ public class Window {
     /** Current clipping rect, since we can push and pop clip rects. */
     public final RectFloat rectCurrentClip;
 
+    // Temporaries for IkGuiImplWindows.begin(), kept on the window: windows begin every frame, and
+    // begin() may begin other windows (docking hosts) while it runs, but never this one
+    public final RectFloat beginTitleBarRect = new RectFloat();
+    public final RectFloat beginViewportRect = new RectFloat();
+    public final RectFloat beginVisibilityRect = new RectFloat();
+    public final RectFloat beginWindowRect = new RectFloat();
+    public final Vector2f beginScrollbarSizes = new Vector2f();
+    public final Vector2f beginSizeAutoFit = new Vector2f();
+    public final int[] beginBorderHovered = new int[1];
+    public final int[] beginBorderHeld = new int[1];
+    public final int[] beginResizeGripColors = new int[4];
+
     /** The inner part of the window, excluding the title bar, menu, scroll bars. */
     public final RectFloat rectInner;
 
@@ -812,7 +824,18 @@ public class Window {
      * @return A new rectangle from the position to the position plus the size.
      */
     public RectFloat getRect() {
-        return new RectFloat(position.x, position.y, position.x + size.x, position.y + size.y);
+        return getRect(new RectFloat());
+    }
+
+    /**
+     * The rectangle of the whole window, in screen coordinates, into a rectangle.
+     *
+     * @param output Where to store the result.
+     * @return The output rectangle, for convenience.
+     */
+    public RectFloat getRect(@NonNull RectFloat output) {
+        output.set(position.x, position.y, position.x + size.x, position.y + size.y);
+        return output;
     }
 
     /**

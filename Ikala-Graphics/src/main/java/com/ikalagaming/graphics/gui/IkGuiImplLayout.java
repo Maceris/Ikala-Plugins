@@ -23,6 +23,12 @@ import org.joml.Vector2f;
 class IkGuiImplLayout {
     static Context context;
 
+    /** separatorTextEx's label size, reused. Render thread only. */
+    private static final Vector2f SEPARATOR_LABEL_SIZE = new Vector2f();
+
+    /** separatorTextEx's bounds, reused. */
+    private static final RectFloat SEPARATOR_BB = new RectFloat();
+
     /**
      * Lock the horizontal starting position, and capture the group bounding box into one "item" (so
      * you can use isItemHovered() or layout primitives such as sameLine() on the whole group).
@@ -30,7 +36,12 @@ class IkGuiImplLayout {
     public static void beginGroup() {
         final Window window = context.windowCurrent;
 
-        GroupData groupData = new GroupData();
+        // Every field is set below, so the entry for this depth is reused
+        final int depth = context.groupStack.size();
+        if (context.groupStackEntries.size() <= depth) {
+            context.groupStackEntries.add(new GroupData());
+        }
+        final GroupData groupData = context.groupStackEntries.get(depth);
         groupData.windowID = window.id;
         groupData.backupCursorPos.set(window.cursorPosition);
         groupData.backupCursorPosPreviousLine.set(window.cursorPreviousLinePosition);
@@ -471,7 +482,7 @@ class IkGuiImplLayout {
         final StyleVariables style = context.style.variable;
 
         final String displayed = Hash.getDisplayedText(label);
-        final Vector2f labelSize = new Vector2f();
+        final Vector2f labelSize = SEPARATOR_LABEL_SIZE;
         IkGuiImplUtils.calcTextSize(labelSize, displayed, false, -1.0f);
         final float posX = window.cursorPosition.x;
         final float posY = window.cursorPosition.y;
@@ -480,8 +491,8 @@ class IkGuiImplLayout {
         final float separatorThickness = style.separatorTextBorderSize;
         final float minWidth = labelSize.x + extraWidth + padding.x * 2.0f;
         final float minHeight = Math.max(labelSize.y + padding.y * 2.0f, separatorThickness);
-        final RectFloat bb =
-                new RectFloat(posX, posY, window.rectWork.getRight(), posY + minHeight);
+        final RectFloat bb = SEPARATOR_BB;
+        bb.set(posX, posY, window.rectWork.getRight(), posY + minHeight);
         final float textBaselineY =
                 IkGuiInternal.truncate(
                         (bb.getHeight() - labelSize.y) * style.separatorTextAlign.y + 0.999f);

@@ -9,6 +9,7 @@ import com.ikalagaming.graphics.gui.data.Window;
 import com.ikalagaming.graphics.gui.enums.ColorType;
 import com.ikalagaming.graphics.gui.enums.MouseCursor;
 import com.ikalagaming.graphics.gui.flags.ButtonFlags;
+import com.ikalagaming.graphics.gui.flags.HoveredFlags;
 import com.ikalagaming.graphics.gui.flags.NavRenderCursorFlags;
 import com.ikalagaming.graphics.gui.flags.PopupFlags;
 import com.ikalagaming.graphics.gui.util.Color;
@@ -372,7 +373,10 @@ class IkGuiImplText {
             context.platformIO.openInShellFunction.test(target);
         }
         // It is more reassuring to always display the URL, even when it's the same as the label
-        IkGuiImplPopups.setItemTooltip(String.format("Open '%s'", target));
+        // Formatted only when shown: links are drawn every frame
+        if (IkGuiImplUtils.isItemHovered(HoveredFlags.FOR_TOOLTIP)) {
+            IkGuiImplPopups.setTooltip("Open '" + target + "'");
+        }
         if (IkGuiImplPopups.beginPopupContextItem((String) null, PopupFlags.MOUSE_BUTTON_DEFAULT)) {
             if (IkGuiImplMenus.menuItem("Copy Link###CopyLink", null, false, true)) {
                 IkGuiImplUtils.setClipboardText(target);

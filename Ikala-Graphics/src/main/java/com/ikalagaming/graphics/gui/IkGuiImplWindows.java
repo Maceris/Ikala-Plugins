@@ -13,6 +13,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -365,7 +366,8 @@ class IkGuiImplWindows {
             beginDisabledOverrideReenable();
         }
 
-        final RectFloat titleBarRect = new RectFloat();
+        final RectFloat titleBarRect = window.beginTitleBarRect;
+        titleBarRect.set(0, 0, 0, 0);
 
         // When reusing a window multiple times a frame, just append content (don't need to set up
         // again)
@@ -548,7 +550,8 @@ class IkGuiImplWindows {
 
             // Outer decoration sizes (we need to clear the scrollbar size immediately as
             // calcWindowAutoFitSize() needs it and can be called from other locations)
-            final Vector2f scrollbarSizesFromLastFrame = new Vector2f(window.scrollbarSizes);
+            final Vector2f scrollbarSizesFromLastFrame =
+                    window.beginScrollbarSizes.set(window.scrollbarSizes);
             window.decoOuterSizeX1 = 0.0f;
             window.decoOuterSizeX2 = 0.0f;
             window.decoOuterSizeY1 = window.titleBarHeight + window.menuBarHeight;
@@ -572,7 +575,7 @@ class IkGuiImplWindows {
                 if (sizeAutoFitYAlways || sizeAutoFitYCurrent) {
                     sizeAutoFitMask |= 2;
                 }
-                final Vector2f sizeAutoFit = new Vector2f();
+                final Vector2f sizeAutoFit = window.beginSizeAutoFit.set(0, 0);
                 calcWindowAutoFitSize(
                         window, window.contentSizeIdeal, sizeAutoFitMask, sizeAutoFit);
 
@@ -665,11 +668,11 @@ class IkGuiImplWindows {
             }
 
             // Late create a viewport if we don't fit within our current host viewport
-            final RectFloat viewportRect = window.viewport.getMainRect(new RectFloat());
+            final RectFloat viewportRect = window.viewport.getMainRect(window.beginViewportRect);
             if (window.viewportAllowPlatformMonitorExtend >= 0
                     && !window.viewportOwned
                     && (window.viewport.flags & ViewportFlags.IS_MINIMIZED) == 0
-                    && !viewportRect.contains(window.getRect())) {
+                    && !viewportRect.contains(window.getRect(window.beginWindowRect))) {
                 // This is based on the assumption that the DPI will be known ahead (same as the
                 // DPI of the selection done in windowSelectViewport())
                 window.viewport =
@@ -691,7 +694,8 @@ class IkGuiImplWindows {
             // past safe area padding). When clamping to stay visible, we will enforce that the
             // window position stays inside the visibility rect.
             window.viewport.getMainRect(viewportRect);
-            final RectFloat visibilityRect = window.viewport.getWorkRect(new RectFloat());
+            final RectFloat visibilityRect =
+                    window.viewport.getWorkRect(window.beginVisibilityRect);
             final float visibilityPaddingX =
                     Math.max(style.displayWindowPadding.x, style.displaySafeAreaPadding.x);
             final float visibilityPaddingY =
@@ -773,7 +777,8 @@ class IkGuiImplWindows {
             // further decorations
             if (context.testEngineHookItems) {
                 window.navLayerCurrent = IkGuiImplNav.NAV_LAYER_MENU;
-                IkGuiInternal.testEngineItemAdd(window.id, window.getRect(), null);
+                IkGuiInternal.testEngineItemAdd(
+                        window.id, window.getRect(window.beginWindowRect), null);
                 IkGuiInternal.testEngineItemInfo(
                         window.id,
                         window.name,
@@ -791,9 +796,12 @@ class IkGuiImplWindows {
             }
 
             // Handle manual resize: resize grips, borders
-            int[] borderHovered = {-1};
-            int[] borderHeld = {-1};
-            int[] resizeGripColors = new int[4];
+            final int[] borderHovered = window.beginBorderHovered;
+            final int[] borderHeld = window.beginBorderHeld;
+            final int[] resizeGripColors = window.beginResizeGripColors;
+            borderHovered[0] = -1;
+            borderHeld[0] = -1;
+            Arrays.fill(resizeGripColors, 0);
             final int resizeGripCount;
             if ((windowFlags & WindowFlags.INTERNAL_CHILD_WINDOW) != 0
                     && (windowFlags & WindowFlags.INTERNAL_POPUP) == 0) {

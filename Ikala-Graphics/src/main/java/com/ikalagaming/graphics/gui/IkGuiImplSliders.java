@@ -383,21 +383,34 @@ class IkGuiImplSliders {
      * limits are only used where precision doesn't matter, like the position along a slider. For
      * floating point types only the double limits are used.
      */
+    /**
+     * The limits {@link #resolveLimits} hands out, refilled each call: each drag and slider
+     * resolves them every frame and uses them only until it returns.
+     */
+    private static final Limits RESOLVED_LIMITS = new Limits(0L, 0L);
+
+    // Drags' and sliders' temporaries, reused: they run every frame, one at a time, and never
+    // inside one another. Render thread only, like the rest of IkGui.
+    private static final Vector2f SCALAR_LABEL_SIZE = new Vector2f();
+    private static final RectFloat SCALAR_FRAME_BB = new RectFloat();
+    private static final RectFloat SCALAR_TOTAL_BB = new RectFloat();
+    private static final RectFloat SCALAR_GRAB_BB = new RectFloat();
+
     static final class Limits {
         /** If these are the limits of an integer type. */
-        final boolean integer;
+        boolean integer;
 
         /** The minimum, exact for integer types. */
-        final long minLong;
+        long minLong;
 
         /** The maximum, exact for integer types. */
-        final long maxLong;
+        long maxLong;
 
         /** The minimum, exact for floating point types. */
-        final double min;
+        double min;
 
         /** The maximum, exact for floating point types. */
-        final double max;
+        double max;
 
         /**
          * Limits for an integer type.
@@ -406,11 +419,7 @@ class IkGuiImplSliders {
          * @param maxLong The maximum.
          */
         Limits(long minLong, long maxLong) {
-            integer = true;
-            this.minLong = minLong;
-            this.maxLong = maxLong;
-            min = minLong;
-            max = maxLong;
+            setInteger(minLong, maxLong);
         }
 
         /**
@@ -420,11 +429,39 @@ class IkGuiImplSliders {
          * @param max The maximum.
          */
         Limits(double min, double max) {
+            setFloating(min, max);
+        }
+
+        /**
+         * Make these the limits of an integer type.
+         *
+         * @param minLong The minimum.
+         * @param maxLong The maximum.
+         * @return These limits.
+         */
+        Limits setInteger(long minLong, long maxLong) {
+            integer = true;
+            this.minLong = minLong;
+            this.maxLong = maxLong;
+            min = minLong;
+            max = maxLong;
+            return this;
+        }
+
+        /**
+         * Make these the limits of a floating point type.
+         *
+         * @param min The minimum.
+         * @param max The maximum.
+         * @return These limits.
+         */
+        Limits setFloating(double min, double max) {
             integer = false;
             minLong = (long) min;
             maxLong = (long) max;
             this.min = min;
             this.max = max;
+            return this;
         }
 
         /**
@@ -446,15 +483,15 @@ class IkGuiImplSliders {
      * @param dataType The data type.
      * @param min The minimum, or null for none.
      * @param max The maximum, or null for none.
-     * @return The limits.
+     * @return The limits, shared: good until the next call.
      */
     static Limits resolveLimits(@NonNull SliderDataType dataType, Number min, Number max) {
         if (dataType.isFloatingPoint()) {
-            return new Limits(
+            return RESOLVED_LIMITS.setFloating(
                     min != null ? min.doubleValue() : dataType.getMinValue(),
                     max != null ? max.doubleValue() : dataType.getMaxValue());
         }
-        return new Limits(
+        return RESOLVED_LIMITS.setInteger(
                 min != null ? limitToLong(dataType, min) : typeMinLong(dataType),
                 max != null ? limitToLong(dataType, max) : typeMaxLong(dataType));
     }
@@ -1868,21 +1905,19 @@ class IkGuiImplSliders {
                         ? context.nextItemData.colorMarker
                         : 0;
 
-        final Vector2f labelSize = new Vector2f();
+        final Vector2f labelSize = SCALAR_LABEL_SIZE;
         IkGuiImplUtils.calcTextSize(labelSize, label, true, -1.0f);
         final float x = window.cursorPosition.x;
         final float y = window.cursorPosition.y;
-        final RectFloat frameBB =
-                new RectFloat(x, y, x + width, y + labelSize.y + style.framePadding.y * 2.0f);
-        final RectFloat totalBB =
-                new RectFloat(
-                        x,
-                        y,
-                        frameBB.getRight()
-                                + (labelSize.x > 0.0f
-                                        ? style.itemInnerSpacing.x + labelSize.x
-                                        : 0.0f),
-                        frameBB.getBottom());
+        final RectFloat frameBB = SCALAR_FRAME_BB;
+        frameBB.set(x, y, x + width, y + labelSize.y + style.framePadding.y * 2.0f);
+        final RectFloat totalBB = SCALAR_TOTAL_BB;
+        totalBB.set(
+                x,
+                y,
+                frameBB.getRight()
+                        + (labelSize.x > 0.0f ? style.itemInnerSpacing.x + labelSize.x : 0.0f),
+                frameBB.getBottom());
 
         IkGuiInternal.itemSize(totalBB, style.framePadding.y);
         final boolean tempInputAllowed = (sliderFlags & SliderFlags.NO_INPUT) == 0;
@@ -2640,21 +2675,19 @@ class IkGuiImplSliders {
                         ? context.nextItemData.colorMarker
                         : 0;
 
-        final Vector2f labelSize = new Vector2f();
+        final Vector2f labelSize = SCALAR_LABEL_SIZE;
         IkGuiImplUtils.calcTextSize(labelSize, label, true, -1.0f);
         final float x = window.cursorPosition.x;
         final float y = window.cursorPosition.y;
-        final RectFloat frameBB =
-                new RectFloat(x, y, x + width, y + labelSize.y + style.framePadding.y * 2.0f);
-        final RectFloat totalBB =
-                new RectFloat(
-                        x,
-                        y,
-                        frameBB.getRight()
-                                + (labelSize.x > 0.0f
-                                        ? style.itemInnerSpacing.x + labelSize.x
-                                        : 0.0f),
-                        frameBB.getBottom());
+        final RectFloat frameBB = SCALAR_FRAME_BB;
+        frameBB.set(x, y, x + width, y + labelSize.y + style.framePadding.y * 2.0f);
+        final RectFloat totalBB = SCALAR_TOTAL_BB;
+        totalBB.set(
+                x,
+                y,
+                frameBB.getRight()
+                        + (labelSize.x > 0.0f ? style.itemInnerSpacing.x + labelSize.x : 0.0f),
+                frameBB.getBottom());
 
         IkGuiInternal.itemSize(totalBB, style.framePadding.y);
         final boolean tempInputAllowed = (sliderFlags & SliderFlags.NO_INPUT) == 0;
@@ -2699,7 +2732,8 @@ class IkGuiImplSliders {
         renderScalarFrame(frameBB, id, hovered, colorMarker);
 
         // Slider behavior
-        final RectFloat grabBB = new RectFloat(0, 0, 0, 0);
+        final RectFloat grabBB = SCALAR_GRAB_BB;
+        grabBB.set(0, 0, 0, 0);
         final boolean valueChanged =
                 sliderBehavior(
                         frameBB, id, dataType, data, index, limits, format, sliderFlags, grabBB);
@@ -2927,20 +2961,19 @@ class IkGuiImplSliders {
         final StyleVariables style = context.style.variable;
         final int id = window.getID(label);
 
-        final Vector2f labelSize = new Vector2f();
+        final Vector2f labelSize = SCALAR_LABEL_SIZE;
         IkGuiImplUtils.calcTextSize(labelSize, label, true, -1.0f);
         final float x = window.cursorPosition.x;
         final float y = window.cursorPosition.y;
-        final RectFloat frameBB = new RectFloat(x, y, x + width, y + height);
-        final RectFloat bb =
-                new RectFloat(
-                        x,
-                        y,
-                        frameBB.getRight()
-                                + (labelSize.x > 0.0f
-                                        ? style.itemInnerSpacing.x + labelSize.x
-                                        : 0.0f),
-                        frameBB.getBottom());
+        final RectFloat frameBB = SCALAR_FRAME_BB;
+        frameBB.set(x, y, x + width, y + height);
+        final RectFloat bb = SCALAR_TOTAL_BB;
+        bb.set(
+                x,
+                y,
+                frameBB.getRight()
+                        + (labelSize.x > 0.0f ? style.itemInnerSpacing.x + labelSize.x : 0.0f),
+                frameBB.getBottom());
 
         IkGuiInternal.itemSize(bb, style.framePadding.y);
         if (!IkGuiInternal.itemAdd(frameBB, id)) {
@@ -2973,7 +3006,8 @@ class IkGuiImplSliders {
                 style.frameRounding);
 
         // Slider behavior
-        final RectFloat grabBB = new RectFloat(0, 0, 0, 0);
+        final RectFloat grabBB = SCALAR_GRAB_BB;
+        grabBB.set(0, 0, 0, 0);
         final boolean valueChanged =
                 sliderBehavior(
                         frameBB,

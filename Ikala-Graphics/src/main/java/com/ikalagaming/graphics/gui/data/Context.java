@@ -12,6 +12,7 @@ import com.ikalagaming.graphics.gui.enums.MouseCursor;
 import com.ikalagaming.graphics.gui.event.GuiInputEvent;
 import com.ikalagaming.graphics.gui.flags.DebugLogFlags;
 import com.ikalagaming.graphics.gui.flags.ViewportFlags;
+import com.ikalagaming.graphics.gui.util.IdMap;
 import com.ikalagaming.graphics.gui.util.KeyChord;
 import com.ikalagaming.graphics.gui.util.RectFloat;
 import com.ikalagaming.util.FloatArrayList;
@@ -877,7 +878,7 @@ public class Context {
      */
     public float windowBorderHoverPadding;
 
-    public final Map<Integer, Window> windowByID;
+    public final IdMap<Window> windowByID;
 
     public Window windowCurrent;
 
@@ -904,6 +905,12 @@ public class Context {
      * since windows are begun many times a frame and the stack only grows and shrinks at its end.
      */
     public final List<WindowStackData> windowStackEntries = new ArrayList<>();
+
+    /**
+     * Entries for {@link #groupStack}, one per depth, reused by every group begun at that depth:
+     * widgets begin groups many times a frame.
+     */
+    public final List<GroupData> groupStackEntries = new ArrayList<>();
 
     public Window windowWheeling;
 
@@ -1256,7 +1263,7 @@ public class Context {
         frameCountPlatformEnded = -1;
         windowActiveCount = 0;
         windowBorderHoverPadding = 0.0f;
-        windowByID = new HashMap<>();
+        windowByID = new IdMap<>();
         windowCurrent = null;
         windowDisplayOrder = new ArrayList<>();
         windowFocusOrder = new ArrayList<>();

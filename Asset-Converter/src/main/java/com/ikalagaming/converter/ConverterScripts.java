@@ -11,6 +11,7 @@ import com.ikalagaming.plugins.PluginManager;
 
 import lombok.extern.slf4j.Slf4j;
 
+import java.lang.management.ManagementFactory;
 import java.util.function.Consumer;
 
 /**
@@ -64,6 +65,51 @@ public final class ConverterScripts {
      */
     public static void log(String message) {
         log.info("Script: {}", message);
+    }
+
+    /** Bytes in a kibibyte. */
+    private static final double BYTES_PER_KIB = 1024.0;
+
+    /** The render thread's allocated bytes at the last {@link #logAllocation}, -1 before any. */
+    private static long lastAllocated = -1;
+
+    /** The frame number at the last {@link #logAllocation}. */
+    private static long lastFrame;
+
+    /**
+     * Write how much the render thread allocated per frame since the last call to the log, for
+     * checks that look for per-frame garbage. The first call only starts counting.
+     *
+     * @param label What the line is about, in plain ASCII.
+     */
+    public static void logAllocation(String label) {
+        final var renderer = GraphicsManager.getRenderInstance();
+        if (renderer == null
+                || !(ManagementFactory.getThreadMXBean()
+                        instanceof com.sun.management.ThreadMXBean threads)) {
+            log.info("Allocation {}: none", label);
+            return;
+        }
+        // The render thread is the one that started the app
+        long renderThread = -1;
+        for (Thread thread : Thread.getAllStackTraces().keySet()) {
+            if ("main".equals(thread.getName())) {
+                renderThread = thread.threadId();
+            }
+        }
+        final long allocated = threads.getThreadAllocatedBytes(renderThread);
+        final long frame = renderer.getState().frameNumber;
+        if (lastAllocated >= 0 && frame > lastFrame) {
+            log.info(
+                    "Allocation {}: {} KiB per frame over {} frames",
+                    label,
+                    String.format("%.2f", (allocated - lastAllocated) / BYTES_PER_KIB / (frame - lastFrame)),
+                    frame - lastFrame);
+        } else {
+            log.info("Allocation {}: counting from frame {}", label, frame);
+        }
+        lastAllocated = allocated;
+        lastFrame = frame;
     }
 
     /**

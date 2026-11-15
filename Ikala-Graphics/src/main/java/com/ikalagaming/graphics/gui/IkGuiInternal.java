@@ -25,6 +25,9 @@ public class IkGuiInternal {
 
     static Context context;
 
+    /** {@link #calcItemSize}'s room for the space available, reused. */
+    private static final Vector2f CALC_ITEM_SIZE_AVAILABLE = new Vector2f();
+
     public static void clearActiveID() {
         setActiveID(0, null);
     }
@@ -2710,7 +2713,7 @@ public class IkGuiInternal {
      */
     public static Vector2f calcItemSize(
             @NonNull Vector2f size, float defaultWidth, float defaultHeight) {
-        Vector2f available = new Vector2f();
+        final Vector2f available = CALC_ITEM_SIZE_AVAILABLE;
         if (size.x < 0.0f || size.y < 0.0f) {
             IkGuiImplUtils.getContentRegionAvailable(available);
         }

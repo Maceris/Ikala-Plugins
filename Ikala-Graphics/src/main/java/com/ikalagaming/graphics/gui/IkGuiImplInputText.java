@@ -37,6 +37,23 @@ class IkGuiImplInputText {
     /** The capacity of the temporary string used to edit scalars as text. */
     private static final int SCALAR_BUFFER_SIZE = 64;
 
+    // inputTextEx's temporaries, reused: every text and number field runs it every frame, and it
+    // never runs inside itself. Render thread only, like the rest of IkGui.
+    private static final Vector2f EX_LABEL_SIZE = new Vector2f();
+    private static final Vector2f EX_FRAME_SIZE = new Vector2f();
+    private static final RectFloat EX_FRAME_BB = new RectFloat();
+    private static final RectFloat EX_TOTAL_BB = new RectFloat();
+    private static final Vector2f EX_INNER_SIZE = new Vector2f();
+    private static final LastItemData EX_ITEM_DATA_BACKUP = new LastItemData();
+    private static final Vector2f EX_BACKUP_POS = new Vector2f();
+    private static final Vector2f EX_DRAW_POS = new Vector2f();
+    private static final RectFloat EX_CLIP_RECT = new RectFloat();
+    private static final IntArrayList EX_ROW_STARTS = new IntArrayList();
+    private static final int[] EX_LINE_VISIBLE = new int[2];
+    private static final Vector2f EX_CURSOR_OFFSET = new Vector2f();
+    private static final RectFloat EX_SELECTION_RECT = new RectFloat();
+    private static final RectFloat EX_CURSOR_RECT = new RectFloat();
+
     /** Matches the start of a floating point number, like scanf("%f") would read. */
     private static final Pattern FLOAT_PATTERN =
             Pattern.compile("^[+-]?(\\d+\\.?\\d*|\\.\\d+)([eE][+-]?\\d+)?");
@@ -453,12 +470,12 @@ class IkGuiImplInputText {
         }
         final int id = window.getID(label);
         final String labelDisplayed = Hash.getDisplayedText(label);
-        final Vector2f labelSize = new Vector2f();
+        final Vector2f labelSize = EX_LABEL_SIZE;
         IkGuiImplUtils.calcTextSize(labelSize, labelDisplayed, false, -1.0f);
         // Arbitrary default of 8 lines high for multi-line
         final Vector2f frameSize =
                 IkGuiInternal.calcItemSize(
-                        new Vector2f(sizeX, sizeY),
+                        EX_FRAME_SIZE.set(sizeX, sizeY),
                         IkGuiImplUtils.calculateItemWidth(),
                         (isMultiline ? fontSize * 8.0f : labelSize.y)
                                 + style.framePadding.y * 2.0f);
@@ -467,16 +484,17 @@ class IkGuiImplInputText {
 
         final float startX = window.cursorPosition.x;
         final float startY = window.cursorPosition.y;
-        final RectFloat frameBB =
-                new RectFloat(startX, startY, startX + frameSize.x, startY + frameSize.y);
-        final RectFloat totalBB =
-                new RectFloat(startX, startY, startX + totalSizeX, startY + frameSize.y);
+        final RectFloat frameBB = EX_FRAME_BB;
+        frameBB.set(startX, startY, startX + frameSize.x, startY + frameSize.y);
+        final RectFloat totalBB = EX_TOTAL_BB;
+        totalBB.set(startX, startY, startX + totalSizeX, startY + frameSize.y);
 
         Window drawWindow = window;
-        final Vector2f innerSize = new Vector2f(frameSize);
-        final LastItemData itemDataBackup = new LastItemData();
+        final Vector2f innerSize = EX_INNER_SIZE.set(frameSize);
+        // Only read when multi-line, after it is set
+        final LastItemData itemDataBackup = EX_ITEM_DATA_BACKUP;
         if (isMultiline) {
-            final Vector2f backupPos = new Vector2f(window.cursorPosition);
+            final Vector2f backupPos = EX_BACKUP_POS.set(window.cursorPosition);
             IkGuiInternal.itemSize(totalBB, style.framePadding.y);
             // Mimic some of the itemAdd() logic, and add the deactivated state check
             final boolean noClip =
@@ -1330,17 +1348,17 @@ class IkGuiImplInputText {
 
         final Vector2f drawPos =
                 isMultiline
-                        ? new Vector2f(drawWindow.cursorPosition)
-                        : new Vector2f(
+                        ? EX_DRAW_POS.set(drawWindow.cursorPosition)
+                        : EX_DRAW_POS.set(
                                 frameBB.getLeft() + style.framePadding.x,
                                 frameBB.getTop() + style.framePadding.y);
         // Not using the frame max because we have adjusted the size
-        final RectFloat clipRect =
-                new RectFloat(
-                        frameBB.getLeft(),
-                        frameBB.getTop(),
-                        frameBB.getLeft() + innerSize.x,
-                        frameBB.getTop() + innerSize.y);
+        final RectFloat clipRect = EX_CLIP_RECT;
+        clipRect.set(
+                frameBB.getLeft(),
+                frameBB.getTop(),
+                frameBB.getLeft() + innerSize.x,
+                frameBB.getTop() + innerSize.y);
         if (isMultiline) {
             clipRect.clipWith(drawWindow.rectCurrentClip);
         }
@@ -1375,7 +1393,8 @@ class IkGuiImplInputText {
         }
 
         // Build the row index for easy data access
-        final IntArrayList rowStarts = new IntArrayList();
+        final IntArrayList rowStarts = EX_ROW_STARTS;
+        rowStarts.clear();
         if (displayFromState) {
             for (int i = 0; i < state.getRowCount(); ++i) {
                 rowStarts.addInt(state.getRowStart(i));
@@ -1387,7 +1406,9 @@ class IkGuiImplInputText {
         final int lineCount = rowStarts.size();
 
         // Calculate visibility
-        final int[] lineVisible = {0, 1};
+        final int[] lineVisible = EX_LINE_VISIBLE;
+        lineVisible[0] = 0;
+        lineVisible[1] = 1;
         if (isMultiline) {
             calcClipRectVisibleItemsY(clipRect, drawPos.y, fontSize, lineVisible);
         }
@@ -1397,7 +1418,7 @@ class IkGuiImplInputText {
         final float textSizeY = lineCount * fontSize;
 
         // Calculate the blinking cursor position
-        final Vector2f cursorOffset = new Vector2f(0.0f, 0.0f);
+        final Vector2f cursorOffset = EX_CURSOR_OFFSET.set(0.0f, 0.0f);
         if (renderCursor && state != null) {
             if (displayFromState) {
                 state.getCursorOffset(state.cursor, cursorOffset);
@@ -1508,12 +1529,12 @@ class IkGuiImplInputText {
 
                     final float minX = drawPos.x - drawScrollX + selectionStartX;
                     final float minY = drawPos.y + line * fontSize;
-                    final RectFloat rect =
-                            new RectFloat(
-                                    minX,
-                                    minY + backgroundOffsetUp,
-                                    minX + rectWidth,
-                                    minY + backgroundOffsetDown + fontSize);
+                    final RectFloat rect = EX_SELECTION_RECT;
+                    rect.set(
+                            minX,
+                            minY + backgroundOffsetUp,
+                            minX + rectWidth,
+                            minY + backgroundOffsetDown + fontSize);
                     rect.clipWith(clipRect);
                     if (rect.getRight() > rect.getLeft() && rect.getBottom() > rect.getTop()) {
                         drawList.addRectFilled(
@@ -1583,12 +1604,12 @@ class IkGuiImplInputText {
             final float cursorScreenX =
                     IkGuiInternal.truncate(drawPos.x + cursorOffset.x - drawScrollX);
             final float cursorScreenY = IkGuiInternal.truncate(drawPos.y + cursorOffset.y);
-            final RectFloat cursorScreenRect =
-                    new RectFloat(
-                            cursorScreenX,
-                            cursorScreenY - fontSize + 0.5f,
-                            cursorScreenX + 1.0f,
-                            cursorScreenY - 1.5f);
+            final RectFloat cursorScreenRect = EX_CURSOR_RECT;
+            cursorScreenRect.set(
+                    cursorScreenX,
+                    cursorScreenY - fontSize + 0.5f,
+                    cursorScreenX + 1.0f,
+                    cursorScreenY - 1.5f);
             if (cursorIsVisible && cursorScreenRect.overlaps(clipRect)) {
                 drawList.addLine(
                         cursorScreenRect.getLeft(),

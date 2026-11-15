@@ -160,6 +160,10 @@ public class DrawList {
     private boolean preparedForRender;
 
     private final Deque<RectFloat> clipRects;
+
+    /** The rects {@link #clipRects} holds, one per depth, see {@link #takeClipRect()}. */
+    private final List<RectFloat> clipRectEntries = new ArrayList<>();
+
     private final IntArrayList textures;
 
     /** The points of the current path, as x, y pairs. */
@@ -531,7 +535,8 @@ public class DrawList {
 
     public void pushClipRect(
             float minX, float minY, float maxX, float maxY, boolean intersectWithCurrentClipRect) {
-        RectFloat newClipRect = new RectFloat(minX, minY, maxX, maxY);
+        final RectFloat newClipRect = takeClipRect();
+        newClipRect.set(minX, minY, maxX, maxY);
 
         // While transforming text, clip rects are in label space, so they can't be intersected
         // with the screen space clip rect from before the transform started
@@ -569,8 +574,23 @@ public class DrawList {
 
     public void pushClipRectFullScreen() {
         IkIO io = IkGui.getIO();
-        RectFloat newRect = new RectFloat(0, 0, io.displaySize.x, io.displaySize.y);
+        final RectFloat newRect = takeClipRect();
+        newRect.set(0, 0, io.displaySize.x, io.displaySize.y);
         clipRects.addFirst(newRect);
+    }
+
+    /**
+     * The rect for the next clip rect pushed, one per depth: widgets push and pop clip rects many
+     * times a frame, and nothing keeps one once it is popped.
+     *
+     * @return The rect, to set and push.
+     */
+    private RectFloat takeClipRect() {
+        final int depth = clipRects.size();
+        while (clipRectEntries.size() <= depth) {
+            clipRectEntries.add(new RectFloat());
+        }
+        return clipRectEntries.get(depth);
     }
 
     public void popClipRect() {
@@ -589,7 +609,9 @@ public class DrawList {
     public void setCurrentClipRect(float minX, float minY, float maxX, float maxY) {
         final RectFloat current = clipRects.peekFirst();
         if (current == null) {
-            clipRects.addFirst(new RectFloat(minX, minY, maxX, maxY));
+            final RectFloat rect = takeClipRect();
+            rect.set(minX, minY, maxX, maxY);
+            clipRects.addFirst(rect);
         } else {
             current.set(minX, minY, maxX, maxY);
         }

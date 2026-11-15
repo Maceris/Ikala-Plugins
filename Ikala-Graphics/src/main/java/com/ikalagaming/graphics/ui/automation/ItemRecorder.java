@@ -6,14 +6,13 @@ import com.ikalagaming.graphics.gui.TestEngineHooks;
 import com.ikalagaming.graphics.gui.data.Context;
 import com.ikalagaming.graphics.gui.data.LastItemData;
 import com.ikalagaming.graphics.gui.data.Window;
+import com.ikalagaming.graphics.gui.util.IdMap;
 import com.ikalagaming.graphics.gui.util.RectFloat;
 
 import lombok.NonNull;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Records the IkGui items submitted each frame through the test engine hooks, so steps can find
@@ -67,13 +66,13 @@ final class ItemRecorder implements TestEngineHooks {
     }
 
     /** The items by ID. */
-    private final Map<Integer, Item> items = new HashMap<>();
+    private final IdMap<Item> items = new IdMap<>();
 
     /**
      * Labels reported this frame before their item was added, by ID. Tabs report theirs first, as
      * Dear ImGui's do, so the label waits here for the add.
      */
-    private final Map<Integer, String> early = new HashMap<>();
+    private final IdMap<String> early = new IdMap<>();
 
     /** The frame the early labels were reported in. */
     private int earlyFrame = -1;
@@ -125,7 +124,7 @@ final class ItemRecorder implements TestEngineHooks {
     /** Forget items not submitted lately. Called once a frame. */
     void prune() {
         int oldest = IkGui.getContext().frameCount - KEEP_FRAMES;
-        items.values().removeIf(item -> item.frame < oldest);
+        items.removeIf(item -> item.frame < oldest, item -> item.id);
     }
 
     /**
@@ -137,11 +136,12 @@ final class ItemRecorder implements TestEngineHooks {
     List<Item> recent() {
         int since = IkGui.getContext().frameCount - 1;
         List<Item> result = new ArrayList<>();
-        for (Item item : items.values()) {
-            if (item.frame >= since) {
-                result.add(item);
-            }
-        }
+        items.forEachValue(
+                item -> {
+                    if (item.frame >= since) {
+                        result.add(item);
+                    }
+                });
         return result;
     }
 
@@ -167,7 +167,11 @@ final class ItemRecorder implements TestEngineHooks {
         }
         Context context = IkGui.getContext();
         Window window = context.windowCurrent;
-        Item item = items.computeIfAbsent(id, Item::new);
+        Item item = items.get(id);
+        if (item == null) {
+            item = new Item(id);
+            items.put(id, item);
+        }
         if (item.frame != context.frameCount) {
             // Most labels are reported after the item is added, so drop last frame's
             item.label = earlyFrame == context.frameCount ? early.remove(id) : null;
