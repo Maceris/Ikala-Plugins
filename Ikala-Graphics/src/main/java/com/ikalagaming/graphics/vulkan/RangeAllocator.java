@@ -1,9 +1,7 @@
 package com.ikalagaming.graphics.vulkan;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.TreeMap;
-import java.util.TreeSet;
+import com.ikalagaming.util.IntIntTreeMap;
+import com.ikalagaming.util.LongTreeSet;
 
 /**
  * Hands out ranges of a linear space, like the vertices of a shared vertex buffer. Ranges are
@@ -14,22 +12,14 @@ import java.util.TreeSet;
  * sides. When nothing fits, the space grows to at least double its size, or by a quarter once it is
  * large, and the caller grows the real buffer to match.
  *
+ * <p>The bookkeeping is in primitive trees, so allocating and freeing make no garbage: meshes come
+ * and go every frame while a world streams.
+ *
  * <p>Not thread safe; callers hold their own lock.
  */
 public class RangeAllocator {
-    /**
-     * A free range, ordered by size and then offset, so the smallest fitting ranges come first.
-     *
-     * @param offset Where it starts.
-     * @param length How long it is.
-     */
-    private record Free(int offset, int length) implements Comparable<Free> {
-        @Override
-        public int compareTo(Free other) {
-            int byLength = Integer.compare(length, other.length);
-            return byLength != 0 ? byLength : Integer.compare(offset, other.offset);
-        }
-    }
+    /** What {@link #fitting(int)} returns when nothing fits. */
+    private static final long NO_FIT = -1;
 
     /**
      * How much a large space grows by at a time, as a fraction of its size: a quarter, so a buffer
@@ -43,14 +33,17 @@ public class RangeAllocator {
     /** The size from which the space grows by {@link #LARGE_GROWTH_DIVISOR} instead of doubling. */
     private final int largeCapacity;
 
-    /** Free ranges by where they start, to merge neighbors. */
-    private final TreeMap<Integer, Integer> freeByOffset = new TreeMap<>();
+    /** Free ranges' lengths by where they start, to merge neighbors. */
+    private final IntIntTreeMap freeByOffset = new IntIntTreeMap();
 
-    /** Free ranges by size, to find one that fits. */
-    private final TreeSet<Free> freeBySize = new TreeSet<>();
+    /**
+     * Free ranges by size and then offset, packed by {@link LongTreeSet#pack}, so the smallest
+     * fitting ranges come first.
+     */
+    private final LongTreeSet freeBySize = new LongTreeSet();
 
     /** The length of each allocated range, by where it starts. */
-    private final Map<Integer, Integer> allocated = new HashMap<>();
+    private final IntIntTreeMap allocated = new IntIntTreeMap();
 
     /** How many elements the space holds now. */
     private int capacity;
@@ -105,20 +98,22 @@ public class RangeAllocator {
         if (length == 0) {
             return 0;
         }
-        Free fit = fitting(length);
-        if (fit == null) {
+        long fit = fitting(length);
+        if (fit == NO_FIT) {
             if (!grow(length)) {
                 return -1;
             }
             fit = fitting(length);
         }
-        removeFree(fit);
-        if (fit.length() > length) {
-            addFree(fit.offset() + length, fit.length() - length);
+        final int offset = LongTreeSet.low(fit);
+        final int fitLength = LongTreeSet.high(fit);
+        removeFree(offset, fitLength);
+        if (fitLength > length) {
+            addFree(offset + length, fitLength - length);
         }
-        allocated.put(fit.offset(), length);
+        allocated.put(offset, length);
         used += length;
-        return fit.offset();
+        return offset;
     }
 
     /**
@@ -132,8 +127,8 @@ public class RangeAllocator {
         if (length == 0) {
             return;
         }
-        Integer known = allocated.get(offset);
-        if (known == null || known != length) {
+        // Lengths are never 0, so 0 means none
+        if (allocated.get(offset, 0) != length) {
             throw new IllegalArgumentException(
                     "No allocated range of " + length + " elements at " + offset);
         }
@@ -141,14 +136,18 @@ public class RangeAllocator {
         used -= length;
         int start = offset;
         int end = offset + length;
-        var before = freeByOffset.floorEntry(offset - 1);
-        if (before != null && before.getKey() + before.getValue() == start) {
-            removeFree(new Free(before.getKey(), before.getValue()));
-            start = before.getKey();
+        final int before = freeByOffset.lowerEntry(offset);
+        if (before != IntIntTreeMap.NONE) {
+            final int beforeStart = freeByOffset.key(before);
+            final int beforeLength = freeByOffset.value(before);
+            if (beforeStart + beforeLength == start) {
+                removeFree(beforeStart, beforeLength);
+                start = beforeStart;
+            }
         }
-        Integer afterLength = freeByOffset.get(end);
-        if (afterLength != null) {
-            removeFree(new Free(end, afterLength));
+        final int afterLength = freeByOffset.get(end, 0);
+        if (afterLength > 0) {
+            removeFree(end, afterLength);
             end += afterLength;
         }
         addFree(start, end - start);
@@ -178,17 +177,18 @@ public class RangeAllocator {
      * @return Its length in elements, or 0 if nothing is free.
      */
     public int getLargestFree() {
-        return freeBySize.isEmpty() ? 0 : freeBySize.last().length();
+        return freeBySize.isEmpty() ? 0 : LongTreeSet.high(freeBySize.last());
     }
 
     /**
      * The smallest free range that fits a length, the lowest such if several are the same size.
      *
      * @param length The length needed.
-     * @return The range, or null if none fits.
+     * @return The range packed as its length and offset, or {@link #NO_FIT} if none fits.
      */
-    private Free fitting(int length) {
-        return freeBySize.ceiling(new Free(-1, length));
+    private long fitting(int length) {
+        final int entry = freeBySize.ceilingEntry(LongTreeSet.pack(length, 0));
+        return entry == LongTreeSet.NONE ? NO_FIT : freeBySize.value(entry);
     }
 
     /**
@@ -200,9 +200,10 @@ public class RangeAllocator {
      */
     private boolean grow(int length) {
         // A free range at the end counts toward the new allocation
-        var last = freeByOffset.lastEntry();
-        int freeAtEnd =
-                last != null && last.getKey() + last.getValue() == capacity ? last.getValue() : 0;
+        final int last = freeByOffset.lastEntry();
+        final int lastStart = last == IntIntTreeMap.NONE ? 0 : freeByOffset.key(last);
+        final int lastLength = last == IntIntTreeMap.NONE ? 0 : freeByOffset.value(last);
+        final int freeAtEnd = lastStart + lastLength == capacity ? lastLength : 0;
         long needed = (long) capacity + length - freeAtEnd;
         long stepped =
                 capacity >= largeCapacity
@@ -216,8 +217,8 @@ public class RangeAllocator {
         int start = capacity;
         capacity = (int) next;
         if (freeAtEnd > 0) {
-            removeFree(new Free(last.getKey(), freeAtEnd));
-            start = last.getKey();
+            removeFree(lastStart, freeAtEnd);
+            start = lastStart;
             added += freeAtEnd;
         }
         addFree(start, added);
@@ -233,17 +234,18 @@ public class RangeAllocator {
     private void addFree(int offset, int length) {
         if (length > 0) {
             freeByOffset.put(offset, length);
-            freeBySize.add(new Free(offset, length));
+            freeBySize.add(LongTreeSet.pack(length, offset));
         }
     }
 
     /**
      * Stop tracking a free range.
      *
-     * @param range The range.
+     * @param offset Where it starts.
+     * @param length How long it is.
      */
-    private void removeFree(Free range) {
-        freeByOffset.remove(range.offset());
-        freeBySize.remove(range);
+    private void removeFree(int offset, int length) {
+        freeByOffset.remove(offset);
+        freeBySize.remove(LongTreeSet.pack(length, offset));
     }
 }
