@@ -2,7 +2,6 @@ package com.ikalagaming.graphics.lod;
 
 import lombok.NonNull;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -99,8 +98,14 @@ public final class LodResidency {
     /** Bytes of units in each bucket of need, while the budget's cutoff is worked out. */
     private final long[] bucketBytes = new long[BUCKETS];
 
-    /** Each unit's children: the units whose parents include it. */
-    private final int[][] children;
+    /**
+     * Where each unit's children start in {@link #childList}, and one past the last unit where
+     * they end: one array rather than one per unit, since residency is rebuilt each batch.
+     */
+    private final int[] childStart;
+
+    /** Each unit's children, the units whose parents include it, by {@link #childStart}. */
+    private final int[] childList;
 
     /** The units, every parent before its children. */
     private final int[] order;
@@ -185,27 +190,28 @@ public final class LodResidency {
         Arrays.fill(unwantedSince, WANTED);
         distance = new double[n];
         need = new double[n];
-        final int[] childCount = new int[n];
+        childStart = new int[n + 1];
         for (Unit unit : units) {
             if (unit == null) {
                 continue;
             }
             for (int parent : unit.parents()) {
-                childCount[parent] += 1;
+                childStart[parent + 1] += 1;
             }
         }
-        children = new int[n][];
         for (int i = 0; i < n; ++i) {
-            children[i] = new int[childCount[i]];
-            childCount[i] = 0;
+            childStart[i + 1] += childStart[i];
         }
+        childList = new int[childStart[n]];
+        // rank is free until the order is known: each unit's children so far
+        rank = new int[n];
         for (int i = 0; i < n; ++i) {
             for (int parent : parentsOf(i)) {
-                children[parent][childCount[parent]++] = i;
+                childList[childStart[parent] + rank[parent]++] = i;
             }
         }
+        Arrays.fill(rank, 0);
         order = parentsFirst();
-        rank = new int[n];
         for (int unit : order) {
             rank[unit] = depth(unit, rank);
         }
@@ -239,21 +245,21 @@ public final class LodResidency {
     private int[] parentsFirst() {
         final int n = units.size();
         final int[] waiting = new int[n];
-        final ArrayDeque<Integer> ready = new ArrayDeque<>();
+        // The order is its own queue: units are added as they become ready and taken from the front
+        final int[] out = new int[n];
+        int count = 0;
         for (int i = 0; i < n; ++i) {
             waiting[i] = parentsOf(i).length;
             if (waiting[i] == 0) {
-                ready.add(i);
+                out[count++] = i;
             }
         }
-        final int[] out = new int[n];
-        int count = 0;
-        while (!ready.isEmpty()) {
-            final int unit = ready.poll();
-            out[count++] = unit;
-            for (int child : children[unit]) {
+        for (int next = 0; next < count; ++next) {
+            final int unit = out[next];
+            for (int c = childStart[unit]; c < childStart[unit + 1]; ++c) {
+                final int child = childList[c];
                 if (--waiting[child] == 0) {
-                    ready.add(child);
+                    out[count++] = child;
                 }
             }
         }
@@ -551,8 +557,8 @@ public final class LodResidency {
                 continue;
             }
             boolean childLoaded = false;
-            for (int child : children[unit]) {
-                childLoaded |= loaded[child];
+            for (int c = childStart[unit]; c < childStart[unit + 1]; ++c) {
+                childLoaded |= loaded[childList[c]];
             }
             if (childLoaded) {
                 continue;

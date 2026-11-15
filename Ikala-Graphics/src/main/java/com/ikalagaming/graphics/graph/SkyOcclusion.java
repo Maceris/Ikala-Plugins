@@ -6,6 +6,7 @@ import org.joml.Matrix4d;
 import org.joml.Matrix4f;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
+import org.joml.Vector4d;
 
 /**
  * The sky occlusion map: what doesn't move (baked sections, level of detail, and placed instances
@@ -47,6 +48,12 @@ public class SkyOcclusion {
 
     /** Where the map is in the world, and what it holds. */
     private final SunShadowCache.Placement placement = new SunShadowCache.Placement();
+
+    /** The texels {@link #invalidate} works out, reused. Render thread. */
+    private final int[] invalidRect = new int[SunShadowCache.RECT_VALUES];
+
+    /** A vector {@link #invalidate} works in. Render thread. */
+    private final Vector4d invalidCorner = new Vector4d();
 
     /** Where the map would be this frame, before it is compared with where it is. */
     private final SunShadowCache.Placement wantedScratch = new SunShadowCache.Placement();
@@ -91,9 +98,8 @@ public class SkyOcclusion {
         if (!placement.valid) {
             return;
         }
-        final int[] rect = SunShadowCache.rectOf(placement, min, max);
-        if (rect != null) {
-            SunShadowCache.addRect(dirty, rect);
+        if (SunShadowCache.rectOf(placement, min, max, invalidRect, invalidCorner)) {
+            SunShadowCache.addRect(dirty, invalidRect);
         }
     }
 

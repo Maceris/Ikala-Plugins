@@ -98,7 +98,7 @@ public class SunShadowCache {
     static final int DIRTY_MARGIN_TEXELS = 3;
 
     /** Values in a redraw rectangle. */
-    private static final int RECT_VALUES = 4;
+    static final int RECT_VALUES = 4;
 
     /** The most rectangles a cascade keeps waiting; past it, two are merged into one. */
     static final int MAX_PENDING = 32;
@@ -161,6 +161,12 @@ public class SunShadowCache {
         /** The light view's up direction. */
         final Vector3d up = new Vector3d();
     }
+
+    /** The texels {@link #invalidate} works out, reused. Render thread. */
+    private final int[] invalidRect = new int[RECT_VALUES];
+
+    /** A vector {@link #invalidate} works in. Render thread. */
+    private final Vector4d invalidCorner = new Vector4d();
 
     /** Where each cached cascade would be this frame, before it is compared with where it is. */
     private final Placement wanted = new Placement();
@@ -250,11 +256,10 @@ public class SunShadowCache {
             if (!CACHED[i] || !placement.valid) {
                 continue;
             }
-            final int[] rect = rectOf(placement, min, max);
-            if (rect == null) {
-                continue;
+            // addPending copies the rectangle if it keeps it
+            if (rectOf(placement, min, max, invalidRect, invalidCorner)) {
+                addPending(pending.get(i), invalidRect);
             }
-            addPending(pending.get(i), rect);
         }
     }
 
@@ -380,11 +385,31 @@ public class SunShadowCache {
      */
     static int[] rectOf(
             @NonNull Placement placement, double @NonNull [] min, double @NonNull [] max) {
+        final int[] rect = new int[RECT_VALUES];
+        return rectOf(placement, min, max, rect, new Vector4d()) ? rect : null;
+    }
+
+    /**
+     * The texels a box covers in a cascade's map, see {@link #rectOf(Placement, double[],
+     * double[])}, into an array.
+     *
+     * @param placement The cascade.
+     * @param min The box's minimum corner, in the world.
+     * @param max The box's maximum corner, in the world.
+     * @param rect Receives min x, min y, max x, max y, the max exclusive.
+     * @param corner A vector to work in.
+     * @return False if the box misses the map.
+     */
+    static boolean rectOf(
+            @NonNull Placement placement,
+            double @NonNull [] min,
+            double @NonNull [] max,
+            int @NonNull [] rect,
+            @NonNull Vector4d corner) {
         double x0 = Double.POSITIVE_INFINITY;
         double y0 = Double.POSITIVE_INFINITY;
         double x1 = Double.NEGATIVE_INFINITY;
         double y1 = Double.NEGATIVE_INFINITY;
-        final Vector4d corner = new Vector4d();
         for (int c = 0; c < BOX_CORNERS; ++c) {
             corner.set(
                             (c & 1) == 0 ? min[0] : max[0],
@@ -400,13 +425,11 @@ public class SunShadowCache {
             x1 = Math.max(x1, x);
             y1 = Math.max(y1, y);
         }
-        final int[] rect = {
-            Math.max(0, (int) Math.floor(x0) - DIRTY_MARGIN_TEXELS),
-            Math.max(0, (int) Math.floor(y0) - DIRTY_MARGIN_TEXELS),
-            Math.min(placement.mapSize, (int) Math.ceil(x1) + DIRTY_MARGIN_TEXELS),
-            Math.min(placement.mapSize, (int) Math.ceil(y1) + DIRTY_MARGIN_TEXELS)
-        };
-        return rect[2] <= rect[0] || rect[3] <= rect[1] ? null : rect;
+        rect[0] = Math.max(0, (int) Math.floor(x0) - DIRTY_MARGIN_TEXELS);
+        rect[1] = Math.max(0, (int) Math.floor(y0) - DIRTY_MARGIN_TEXELS);
+        rect[2] = Math.min(placement.mapSize, (int) Math.ceil(x1) + DIRTY_MARGIN_TEXELS);
+        rect[3] = Math.min(placement.mapSize, (int) Math.ceil(y1) + DIRTY_MARGIN_TEXELS);
+        return rect[2] > rect[0] && rect[3] > rect[1];
     }
 
     /**

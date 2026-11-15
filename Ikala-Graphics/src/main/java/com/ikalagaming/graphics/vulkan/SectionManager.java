@@ -1927,8 +1927,9 @@ public class SectionManager {
             }
             // Checks queued while checking wait for the next frame, so a section waiting on
             // something is checked once a frame
-            final List<Section> again = new ArrayList<>();
-            final List<Double> waits = new ArrayList<>();
+            final List<Section> again = checkAgain;
+            again.clear();
+            int waitCount = 0;
             while (!checks.isEmpty() && checks.peek().at() <= travel) {
                 final Check check = checks.poll();
                 final Section section = check.section();
@@ -1938,10 +1939,13 @@ public class SectionManager {
                     continue;
                 }
                 again.add(section);
-                waits.add(check(state, section, eye, reach, materialsVersion));
+                if (waitCount == checkWaits.length) {
+                    checkWaits = Arrays.copyOf(checkWaits, Math.max(16, 2 * waitCount));
+                }
+                checkWaits[waitCount++] = check(state, section, eye, reach, materialsVersion);
             }
             for (int i = 0; i < again.size(); ++i) {
-                queueCheck(again.get(i), travel + waits.get(i));
+                queueCheck(again.get(i), travel + checkWaits[i]);
             }
             // Replaced checks stay queued until due; drop them if they pile up, as when the
             // observer stands still while sections are baked again
@@ -1958,6 +1962,12 @@ public class SectionManager {
             lock.unlock();
         }
     }
+
+    /** The sections checked this frame, to queue again; reused. Hold the lock. */
+    private final List<Section> checkAgain = new ArrayList<>();
+
+    /** How long each section in {@link #checkAgain} waits for its next check; reused. */
+    private double[] checkWaits = new double[16];
 
     /**
      * Queue a section's next check, replacing any it had. Hold the lock.

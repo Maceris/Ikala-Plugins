@@ -178,6 +178,40 @@ public class InstanceDrawUpdate implements RenderStage {
     /** The culling counters read back, scratch. */
     private final int[] counterScratch = new int[COUNTER_COUNT];
 
+    /** The point shadow observer's frustum planes, worked out each frame. */
+    private final float[] observerPlanesScratch = new float[FrustumPlanes.FLOATS];
+
+    /** The point shadow observer's projection times view, worked out each frame. */
+    private final Matrix4f observerMatrix = new Matrix4f();
+
+    /** The state {@link #invalidationTaker} passes boxes to, set only while draining. */
+    private VulkanState drainingState;
+
+    /** Passes changed boxes to the shadow caches, made once rather than a lambda each frame. */
+    private final ShadowInvalidation.Taker invalidationTaker = this::takeInvalidation;
+
+    /**
+     * Pass a changed box to the shadow caches that draw what changed.
+     *
+     * @param min The box's minimum corner, in the world.
+     * @param max The box's maximum corner, in the world.
+     * @param change What changed there.
+     */
+    private void takeInvalidation(
+            double @NonNull [] min,
+            double @NonNull [] max,
+            ShadowInvalidation.@NonNull Change change) {
+        final VulkanState vulkanState = drainingState;
+        if (change != ShadowInvalidation.Change.SWAP) {
+            vulkanState.sunShadows.invalidate(min, max);
+        }
+        vulkanState.skyOcclusion.invalidate(min, max);
+        vulkanState.pointShadows.invalidate(min, max);
+        if (change == ShadowInvalidation.Change.SURFACE) {
+            vulkanState.occupancy.invalidate(min, max);
+        }
+    }
+
     /** One pass's frustum planes, scratch. */
     private final float[] planeScratch = new float[ShaderBindings.Cull.PLANES_PER_PASS * 4];
 
@@ -401,17 +435,9 @@ public class InstanceDrawUpdate implements RenderStage {
         // occupancy volume is voxelized from the sections alone: level of detail changes, a sphere
         // per cluster and thousands a frame while streaming, would only clear and queue whole
         // levels of it again
-        vulkanState.shadowInvalidation.drain(
-                (min, max, change) -> {
-                    if (change != ShadowInvalidation.Change.SWAP) {
-                        vulkanState.sunShadows.invalidate(min, max);
-                    }
-                    vulkanState.skyOcclusion.invalidate(min, max);
-                    vulkanState.pointShadows.invalidate(min, max);
-                    if (change == ShadowInvalidation.Change.SURFACE) {
-                        vulkanState.occupancy.invalidate(min, max);
-                    }
-                });
+        drainingState = vulkanState;
+        vulkanState.shadowInvalidation.drain(invalidationTaker);
+        drainingState = null;
         vulkanState.sunShadows.plan(
                 frameData.cascadeShadowSplits,
                 scene.getProjection().getInverseProjectionMatrix(),
@@ -425,9 +451,10 @@ public class InstanceDrawUpdate implements RenderStage {
 
         // Which point lights get shadow maps, from what the observer can see
         final Observer pointObserver = scene.getObserver();
-        final float[] observerPlanes = new float[FrustumPlanes.FLOATS];
+        final float[] observerPlanes = observerPlanesScratch;
         FrustumPlanes.extract(
-                new Matrix4f(pointObserver.getProjectionMatrix())
+                observerMatrix
+                        .set(pointObserver.getProjectionMatrix())
                         .mul(pointObserver.getViewMatrix()),
                 pointObserver.getPosition(),
                 scene.getCamera().getPosition(),
