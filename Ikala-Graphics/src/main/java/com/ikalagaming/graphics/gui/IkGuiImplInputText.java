@@ -1769,8 +1769,7 @@ class IkGuiImplInputText {
      * @param data The data.
      * @param index The index of the value in the data.
      * @param format The display format.
-     * @param clampMin The minimum to clamp to, may be null.
-     * @param clampMax The maximum to clamp to, may be null.
+     * @param clamp The limits to clamp to, either of which may be missing, or null to not clamp.
      * @return True if the value changed.
      */
     static boolean tempInputScalar(
@@ -1781,18 +1780,13 @@ class IkGuiImplInputText {
             @NonNull Object data,
             int index,
             String format,
-            Number clampMin,
-            Number clampMax) {
+            IkGuiImplSliders.Limits clamp) {
         String trimmedFormat = trimFormatDecorations(format == null ? "" : format);
         if (trimmedFormat.isEmpty()) {
             trimmedFormat = dataType.getDefaultFormat();
         }
         final String text =
-                IkGuiImplSliders.formatScalar(
-                                dataType,
-                                IkGuiImplSliders.readNumber(dataType, data, index),
-                                trimmedFormat)
-                        .trim();
+                IkGuiImplSliders.formatScalar(dataType, data, index, trimmedFormat).trim();
 
         final int flags =
                 InputTextFlags.AUTO_SELECT_ALL | InputTextFlags.INTERNAL_LOCALIZE_DECIMAL_POINT;
@@ -1809,17 +1803,17 @@ class IkGuiImplInputText {
         }
 
         // Back up the old value
-        final Number backup = IkGuiImplSliders.readNumber(dataType, data, index);
+        final long backup = IkGuiImplSliders.readBits(dataType, data, index);
 
         // Apply the new value (or operations) then clamp
         dataTypeApplyFromText(buf.get(), dataType, data, index, trimmedFormat, null);
-        if (clampMin != null || clampMax != null) {
-            IkGuiImplSliders.clampScalar(dataType, data, index, clampMin, clampMax);
+        if (clamp != null && (clamp.hasMin || clamp.hasMax)) {
+            IkGuiImplSliders.clampScalar(dataType, data, index, clamp);
         }
 
         // Only mark as edited if the new value is different
         context.lastItemData.itemFlags &= ~ItemFlags.INTERNAL_NO_MARK_EDITED;
-        boolean valueChanged = !backup.equals(IkGuiImplSliders.readNumber(dataType, data, index));
+        boolean valueChanged = backup != IkGuiImplSliders.readBits(dataType, data, index);
         if ((context.lastItemData.itemFlags & ItemFlags.MIXED_VALUE) != 0) {
             valueChanged |= mixedValueChanged();
         }
@@ -1885,7 +1879,7 @@ class IkGuiImplInputText {
             int index,
             String format,
             Number valueWhenEmpty) {
-        final Number backup = IkGuiImplSliders.readNumber(dataType, data, index);
+        final long backup = IkGuiImplSliders.readBits(dataType, data, index);
 
         int start = 0;
         while (start < text.length() && InputTextState.isBlank(text.charAt(start))) {
@@ -1895,7 +1889,7 @@ class IkGuiImplInputText {
         if (trimmed.isEmpty()) {
             if (valueWhenEmpty != null) {
                 IkGuiImplSliders.writeNumber(dataType, data, index, valueWhenEmpty);
-                return !backup.equals(IkGuiImplSliders.readNumber(dataType, data, index));
+                return backup != IkGuiImplSliders.readBits(dataType, data, index);
             }
             return false;
         }
@@ -1919,7 +1913,7 @@ class IkGuiImplInputText {
             }
             IkGuiImplSliders.writeLong(dataType, data, index, parsed.getAsLong());
         }
-        return !backup.equals(IkGuiImplSliders.readNumber(dataType, data, index));
+        return backup != IkGuiImplSliders.readBits(dataType, data, index);
     }
 
     /**
@@ -2117,18 +2111,18 @@ class IkGuiImplInputText {
             format = dataType.getDefaultFormat();
         }
 
+        // Null for zero, which is only boxed if an empty input parses to it
         final Number referenceValue =
                 (context.nextItemData.fieldFlags & NextItemFlags.HAS_REFERENCE_VALUE) != 0
                         ? context.nextItemData.referenceValue
-                        : IkGuiImplSliders.zeroNumber(dataType);
+                        : null;
 
-        final Number value = IkGuiImplSliders.readNumber(dataType, data, index);
         final String text =
                 (flags & InputTextFlags.DISPLAY_EMPTY_REF_VAL) != 0
-                                && IkGuiImplSliders.compareNumbers(dataType, value, referenceValue)
-                                        == 0
+                                && IkGuiImplSliders.valueEquals(
+                                        dataType, data, index, referenceValue)
                         ? ""
-                        : IkGuiImplSliders.formatScalar(dataType, value, format);
+                        : IkGuiImplSliders.formatScalar(dataType, data, index, format);
         final IkString buf = new IkString(text, SCALAR_BUFFER_SIZE);
 
         // Disable the markItemEdited() call in inputText, but keep the edited status flag. We
@@ -2160,8 +2154,13 @@ class IkGuiImplInputText {
         }
 
         // Apply
-        final Number valueWhenEmpty =
-                (flags & InputTextFlags.PARSE_EMPTY_REF_VAL) != 0 ? referenceValue : null;
+        final Number valueWhenEmpty;
+        if ((flags & InputTextFlags.PARSE_EMPTY_REF_VAL) == 0) {
+            valueWhenEmpty = null;
+        } else {
+            valueWhenEmpty =
+                    referenceValue != null ? referenceValue : IkGuiImplSliders.zeroNumber(dataType);
+        }
         boolean valueChanged = false;
         if ((context.lastItemData.itemFlags & ItemFlags.LIVE_EDIT_ON_INPUT_SCALAR) != 0) {
             // We would be using ret if ENTER_RETURNS_TRUE was not involved

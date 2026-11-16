@@ -24,8 +24,10 @@ import java.util.Locale;
  * and limits are always exact. Like Dear ImGui does for 64-bit types, doubles are still used for
  * things that don't need to be exact, like the position of a value along a slider.
  *
- * <p>Limits are passed as boxed numbers ({@link Number}), where null means there is no limit. Drags
- * without a limit use the limit of the data type, and sliders need both limits.
+ * <p>The generic versions take limits as boxed numbers ({@link Number}), where null means there is
+ * no limit, like Dear ImGui's pointers. They unbox them once into {@link Limits}, which the typed
+ * helpers fill straight from primitives, so drawing a drag or slider boxes nothing. Drags without a
+ * limit use the limit of the data type, and sliders need both limits.
  */
 @Slf4j
 class IkGuiImplSliders {
@@ -265,6 +267,42 @@ class IkGuiImplSliders {
     }
 
     /**
+     * Read a value as bits that are equal exactly when the values are, without boxing it: the
+     * double's bits for floating point types (like {@link Double#equals}), the value for integer
+     * types.
+     *
+     * @param dataType The type of data.
+     * @param data An array of the data type, or one of the Ik* boxes.
+     * @param index The index into the data.
+     * @return The value's bits.
+     */
+    static long readBits(@NonNull SliderDataType dataType, @NonNull Object data, int index) {
+        if (dataType.isFloatingPoint()) {
+            return Double.doubleToLongBits(readScalar(dataType, data, index));
+        }
+        return readLong(dataType, data, index);
+    }
+
+    /**
+     * Whether a value equals a reference value, as the data type compares them.
+     *
+     * @param dataType The type of data.
+     * @param data An array of the data type, or one of the Ik* boxes.
+     * @param index The index into the data.
+     * @param reference The reference value, null for zero.
+     * @return True if they are equal.
+     */
+    static boolean valueEquals(
+            @NonNull SliderDataType dataType, @NonNull Object data, int index, Number reference) {
+        if (dataType.isFloatingPoint()) {
+            final double referenceValue = reference == null ? 0.0 : reference.doubleValue();
+            return Double.compare(readScalar(dataType, data, index), referenceValue) == 0;
+        }
+        final long referenceValue = reference == null ? 0L : toLong(reference);
+        return readLong(dataType, data, index) == referenceValue;
+    }
+
+    /**
      * Write a number into a data container, converting it to the data type.
      *
      * @param dataType The type of data.
@@ -298,74 +336,6 @@ class IkGuiImplSliders {
     }
 
     /**
-     * Compare two numbers as the data type would.
-     *
-     * @param dataType The data type.
-     * @param a The first number.
-     * @param b The second number.
-     * @return Negative if a is less than b, 0 if they are equal, positive if a is greater.
-     */
-    static int compareNumbers(
-            @NonNull SliderDataType dataType, @NonNull Number a, @NonNull Number b) {
-        if (dataType.isFloatingPoint()) {
-            return Double.compare(a.doubleValue(), b.doubleValue());
-        }
-        return Long.compare(toLong(a), toLong(b));
-    }
-
-    /**
-     * The smaller of two numbers, as the data type would compare them.
-     *
-     * @param dataType The data type.
-     * @param a The first number.
-     * @param b The second number.
-     * @return The smaller number.
-     */
-    private static Number minNumber(
-            @NonNull SliderDataType dataType, @NonNull Number a, @NonNull Number b) {
-        return compareNumbers(dataType, a, b) <= 0 ? a : b;
-    }
-
-    /**
-     * The larger of two numbers, as the data type would compare them.
-     *
-     * @param dataType The data type.
-     * @param a The first number.
-     * @param b The second number.
-     * @return The larger number.
-     */
-    private static Number maxNumber(
-            @NonNull SliderDataType dataType, @NonNull Number a, @NonNull Number b) {
-        return compareNumbers(dataType, a, b) >= 0 ? a : b;
-    }
-
-    /**
-     * The smallest value the data type can hold, as a number.
-     *
-     * @param dataType The data type.
-     * @return The minimum.
-     */
-    private static Number typeMinNumber(@NonNull SliderDataType dataType) {
-        if (dataType.isFloatingPoint()) {
-            return dataType.getMinValue();
-        }
-        return typeMinLong(dataType);
-    }
-
-    /**
-     * The largest value the data type can hold, as a number.
-     *
-     * @param dataType The data type.
-     * @return The maximum.
-     */
-    private static Number typeMaxNumber(@NonNull SliderDataType dataType) {
-        if (dataType.isFloatingPoint()) {
-            return dataType.getMaxValue();
-        }
-        return typeMaxLong(dataType);
-    }
-
-    /**
      * Zero as a number of the data type.
      *
      * @param dataType The data type.
@@ -379,15 +349,23 @@ class IkGuiImplSliders {
     }
 
     /**
-     * The limits of a drag or slider. For integer types the long limits are exact, and the double
-     * limits are only used where precision doesn't matter, like the position along a slider. For
-     * floating point types only the double limits are used.
-     */
-    /**
      * The limits {@link #resolveLimits} hands out, refilled each call: each drag and slider
      * resolves them every frame and uses them only until it returns.
      */
     private static final Limits RESOLVED_LIMITS = new Limits(0L, 0L);
+
+    /**
+     * The limits a widget is given, filled by the typed helpers and the {@link Number} versions
+     * from their arguments, so limits are never boxed. A widget uses them until it returns, and
+     * none runs inside another.
+     */
+    private static final Limits GIVEN_LIMITS = new Limits(0L, 0L);
+
+    /** The limits range widgets give each of their two drags or sliders. */
+    private static final Limits RANGE_ITEM_LIMITS = new Limits(0L, 0L);
+
+    /** The angle {@link #sliderAngle} edits, in degrees. */
+    private static final float[] ANGLE_DEGREES = new float[1];
 
     // Drags' and sliders' temporaries, reused: they run every frame, one at a time, and never
     // inside one another. Render thread only, like the rest of IkGui.
@@ -396,9 +374,21 @@ class IkGuiImplSliders {
     private static final RectFloat SCALAR_TOTAL_BB = new RectFloat();
     private static final RectFloat SCALAR_GRAB_BB = new RectFloat();
 
+    /**
+     * The limits of a drag or slider. For integer types the long limits are exact, and the double
+     * limits are only used where precision doesn't matter, like the position along a slider. For
+     * floating point types only the double limits are used. Limits a widget is given can be
+     * missing; resolved limits always have both.
+     */
     static final class Limits {
         /** If these are the limits of an integer type. */
         boolean integer;
+
+        /** Whether there is a minimum. */
+        boolean hasMin;
+
+        /** Whether there is a maximum. */
+        boolean hasMax;
 
         /** The minimum, exact for integer types. */
         long minLong;
@@ -441,6 +431,8 @@ class IkGuiImplSliders {
          */
         Limits setInteger(long minLong, long maxLong) {
             integer = true;
+            hasMin = true;
+            hasMax = true;
             this.minLong = minLong;
             this.maxLong = maxLong;
             min = minLong;
@@ -457,6 +449,8 @@ class IkGuiImplSliders {
          */
         Limits setFloating(double min, double max) {
             integer = false;
+            hasMin = true;
+            hasMax = true;
             minLong = (long) min;
             maxLong = (long) max;
             this.min = min;
@@ -477,23 +471,82 @@ class IkGuiImplSliders {
     }
 
     /**
-     * Resolve the limits of a drag or slider. Missing limits use the limits of the data type, like
-     * Dear ImGui does for drags.
+     * The limits given to a floating point widget.
+     *
+     * @param min The minimum.
+     * @param max The maximum.
+     * @return The limits, shared: good until the widget returns.
+     */
+    static Limits floatLimits(double min, double max) {
+        return GIVEN_LIMITS.setFloating(min, max);
+    }
+
+    /**
+     * The limits given to an integer widget.
+     *
+     * @param min The minimum.
+     * @param max The maximum.
+     * @return The limits, shared: good until the widget returns.
+     */
+    static Limits intLimits(long min, long max) {
+        return GIVEN_LIMITS.setInteger(min, max);
+    }
+
+    /**
+     * The limits given to a widget as numbers, unboxed once. Integer limits are clamped to the
+     * range of the type.
      *
      * @param dataType The data type.
      * @param min The minimum, or null for none.
      * @param max The maximum, or null for none.
+     * @return The limits, shared: good until the widget returns.
+     */
+    static Limits numberLimits(@NonNull SliderDataType dataType, Number min, Number max) {
+        final Limits limits = GIVEN_LIMITS;
+        if (dataType.isFloatingPoint()) {
+            limits.setFloating(
+                    min != null ? min.doubleValue() : 0.0, max != null ? max.doubleValue() : 0.0);
+        } else {
+            limits.setInteger(
+                    min != null ? limitToLong(dataType, min) : 0L,
+                    max != null ? limitToLong(dataType, max) : 0L);
+        }
+        limits.hasMin = min != null;
+        limits.hasMax = max != null;
+        return limits;
+    }
+
+    /**
+     * Resolve the limits of a drag or slider. Missing limits use the limits of the data type, like
+     * Dear ImGui does for drags.
+     *
+     * @param dataType The data type.
+     * @param given The limits the widget was given.
      * @return The limits, shared: good until the next call.
      */
-    static Limits resolveLimits(@NonNull SliderDataType dataType, Number min, Number max) {
+    static Limits resolveLimits(@NonNull SliderDataType dataType, @NonNull Limits given) {
         if (dataType.isFloatingPoint()) {
             return RESOLVED_LIMITS.setFloating(
-                    min != null ? min.doubleValue() : dataType.getMinValue(),
-                    max != null ? max.doubleValue() : dataType.getMaxValue());
+                    given.hasMin ? given.min : dataType.getMinValue(),
+                    given.hasMax ? given.max : dataType.getMaxValue());
         }
         return RESOLVED_LIMITS.setInteger(
-                min != null ? limitToLong(dataType, min) : typeMinLong(dataType),
-                max != null ? limitToLong(dataType, max) : typeMaxLong(dataType));
+                given.hasMin ? given.minLong : typeMinLong(dataType),
+                given.hasMax ? given.maxLong : typeMaxLong(dataType));
+    }
+
+    /**
+     * Compare a widget's minimum and maximum as the data type would. Both must be present.
+     *
+     * @param dataType The data type.
+     * @param limits The limits.
+     * @return Negative if the min is less than the max, 0 if equal, positive if greater.
+     */
+    private static int compareLimits(@NonNull SliderDataType dataType, @NonNull Limits limits) {
+        if (dataType.isFloatingPoint()) {
+            return Double.compare(limits.min, limits.max);
+        }
+        return Long.compare(limits.minLong, limits.maxLong);
     }
 
     /**
@@ -537,47 +590,47 @@ class IkGuiImplSliders {
      *
      * @param sliderFlags The slider flags.
      * @param dataType The data type.
-     * @param min The minimum, may be null.
-     * @param max The maximum, may be null.
+     * @param given The limits the widget was given, which may be missing.
      * @return True if text input should be clamped to the limits.
      */
     static boolean tempInputIsClampEnabled(
-            int sliderFlags, @NonNull SliderDataType dataType, Number min, Number max) {
-        if ((sliderFlags & SliderFlags.CLAMP_ON_INPUT) == 0 || (min == null && max == null)) {
+            int sliderFlags, @NonNull SliderDataType dataType, @NonNull Limits given) {
+        if ((sliderFlags & SliderFlags.CLAMP_ON_INPUT) == 0 || (!given.hasMin && !given.hasMax)) {
             return false;
         }
-        if (min == null || max == null) {
+        if (!given.hasMin || !given.hasMax) {
             return true;
         }
-        final int rangeDirection = compareNumbers(dataType, min, max);
+        final int rangeDirection = compareLimits(dataType, given);
         if (rangeDirection < 0) {
             return true;
         }
         if (rangeDirection == 0) {
-            return compareNumbers(dataType, min, zeroNumber(dataType)) != 0
-                    || (sliderFlags & SliderFlags.CLAMP_ZERO_RANGE) != 0;
+            final boolean zero =
+                    dataType.isFloatingPoint()
+                            ? Double.compare(given.min, 0.0) == 0
+                            : given.minLong == 0L;
+            return !zero || (sliderFlags & SliderFlags.CLAMP_ZERO_RANGE) != 0;
         }
         return false;
     }
 
     /**
-     * Clamp a value to optional limits, swapping them if they are reversed.
+     * Clamp a value to limits, either of which may be missing, swapping them if they are reversed.
      *
      * @param dataType The data type.
      * @param data The data.
      * @param index The index of the value in the data.
-     * @param clampMin The minimum, or null for none.
-     * @param clampMax The maximum, or null for none.
+     * @param clamp The limits.
      */
     static void clampScalar(
             @NonNull SliderDataType dataType,
             @NonNull Object data,
             int index,
-            Number clampMin,
-            Number clampMax) {
+            @NonNull Limits clamp) {
         if (dataType.isFloatingPoint()) {
-            double min = clampMin != null ? clampMin.doubleValue() : dataType.getMinValue();
-            double max = clampMax != null ? clampMax.doubleValue() : dataType.getMaxValue();
+            double min = clamp.hasMin ? clamp.min : dataType.getMinValue();
+            double max = clamp.hasMax ? clamp.max : dataType.getMaxValue();
             if (min > max) {
                 final double temp = min;
                 min = max;
@@ -590,8 +643,8 @@ class IkGuiImplSliders {
                     MathUtil.clamp(readScalar(dataType, data, index), min, max));
             return;
         }
-        long min = clampMin != null ? toLong(clampMin) : typeMinLong(dataType);
-        long max = clampMax != null ? toLong(clampMax) : typeMaxLong(dataType);
+        long min = clamp.hasMin ? clamp.minLong : typeMinLong(dataType);
+        long max = clamp.hasMax ? clamp.maxLong : typeMaxLong(dataType);
         if (min > max) {
             final long temp = min;
             min = max;
@@ -647,16 +700,49 @@ class IkGuiImplSliders {
      */
     static String formatScalar(
             @NonNull SliderDataType dataType, @NonNull Number value, @NonNull String format) {
-        // Most values shown are the same as the frame before, and formatting takes a formatter, a
-        // pattern match and a few strings each time
         final boolean floating = value instanceof Double || value instanceof Float;
         final long bits =
                 floating ? Double.doubleToLongBits(value.doubleValue()) : value.longValue();
-        final int slot =
-                (System.identityHashCode(format) * 31
-                                + Long.hashCode(bits) * 7
-                                + dataType.ordinal())
-                        & (FORMATTED_KEPT - 1);
+        return formatBits(dataType, floating, bits, format);
+    }
+
+    /**
+     * Format a value straight from its data, without boxing it, see {@link
+     * #formatScalar(SliderDataType, Number, String)}.
+     *
+     * @param dataType The data type.
+     * @param data An array of the data type, or one of the Ik* boxes.
+     * @param index The index of the value in the data.
+     * @param format The format string.
+     * @return The formatted value.
+     */
+    static String formatScalar(
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
+            int index,
+            @NonNull String format) {
+        final boolean floating = dataType.isFloatingPoint();
+        return formatBits(dataType, floating, readBits(dataType, data, index), format);
+    }
+
+    /**
+     * Format a value given as bits, reusing the text from earlier frames when it is the same.
+     *
+     * @param dataType The data type.
+     * @param floating Whether the value is floating point.
+     * @param bits The double's bits if floating, else the long value.
+     * @param format The format string.
+     * @return The formatted value.
+     */
+    private static String formatBits(
+            @NonNull SliderDataType dataType, boolean floating, long bits, @NonNull String format) {
+        // Most values shown are the same as the frame before, and formatting takes a formatter, a
+        // pattern match and a few strings each time
+        // A multiplicative hash, taking the slot from the top bits so every bit counts: floats
+        // widened to doubles differ mostly in their exponents, and a mask of the low bits put 0.1
+        // and 0.2 in the same slot, so a widget showing both formatted them every frame
+        final long key = bits ^ ((long) System.identityHashCode(format) << 32 | dataType.ordinal());
+        final int slot = (int) ((key * FORMATTED_HASH) >>> (Long.SIZE - FORMATTED_BITS));
         final Formatted kept = formatted[slot];
         if (kept != null
                 && kept.format() == format
@@ -664,6 +750,13 @@ class IkGuiImplSliders {
                 && kept.floating() == floating
                 && kept.bits() == bits) {
             return kept.text();
+        }
+        // Formatting boxes the value anyway, so only a miss boxes it
+        final Number value;
+        if (floating) {
+            value = Double.longBitsToDouble(bits);
+        } else {
+            value = bits;
         }
         final String text = formatScalarUncached(dataType, value, format);
         formatted[slot] = new Formatted(format, dataType, floating, bits, text);
@@ -682,8 +775,14 @@ class IkGuiImplSliders {
     private record Formatted(
             String format, SliderDataType dataType, boolean floating, long bits, String text) {}
 
-    /** How many formatted values are kept, a power of 2. */
-    private static final int FORMATTED_KEPT = 256;
+    /** The log 2 of how many formatted values are kept. */
+    private static final int FORMATTED_BITS = 8;
+
+    /** How many formatted values are kept. */
+    private static final int FORMATTED_KEPT = 1 << FORMATTED_BITS;
+
+    /** The multiplier of the slot hash, 2^64 over the golden ratio. */
+    private static final long FORMATTED_HASH = 0x9E37_79B9_7F4A_7C15L;
 
     /**
      * Formatted values, by format and value. Each slot is replaced whole, so threads see a value
@@ -1784,12 +1883,12 @@ class IkGuiImplSliders {
      */
     private static boolean revertToValueOnActivation(
             @NonNull SliderDataType dataType, @NonNull Object data, int index) {
-        final Number before = readNumber(dataType, data, index);
+        final long before = readBits(dataType, data, index);
         if (context.activeIDValueOnActivation != null) {
             writeNumber(dataType, data, index, context.activeIDValueOnActivation);
         }
         IkGuiInternal.clearActiveID();
-        return !before.equals(readNumber(dataType, data, index));
+        return before != readBits(dataType, data, index);
     }
 
     /**
@@ -1862,7 +1961,15 @@ class IkGuiImplSliders {
             Number max,
             String format,
             int sliderFlags) {
-        return dragScalarIndex(label, dataType, data, 0, speed, min, max, format, sliderFlags);
+        return dragScalarIndex(
+                label,
+                dataType,
+                data,
+                0,
+                speed,
+                numberLimits(dataType, min, max),
+                format,
+                sliderFlags);
     }
 
     /**
@@ -1873,8 +1980,7 @@ class IkGuiImplSliders {
      * @param data An array of the data type, or one of the Ik* boxes.
      * @param index The index of the value in the data.
      * @param speed The speed, in value units per pixel.
-     * @param min The minimum value, or null for the minimum of the data type.
-     * @param max The maximum value, or null for the maximum of the data type.
+     * @param given The limits, where a missing one is the limit of the data type.
      * @param format The display format, null for the default for the data type.
      * @param sliderFlags Slider flags.
      * @return True if the value changed.
@@ -1885,8 +1991,7 @@ class IkGuiImplSliders {
             @NonNull Object data,
             int index,
             float speed,
-            Number min,
-            Number max,
+            @NonNull Limits given,
             String format,
             int sliderFlags) {
         final Window window = IkGuiInternal.getCurrentWindow();
@@ -1946,23 +2051,15 @@ class IkGuiImplSliders {
                         false);
         if (tempInputActive) {
             // Only clamp Ctrl+Click input when CLAMP_ON_INPUT is set
-            final boolean clampEnabled = tempInputIsClampEnabled(sliderFlags, dataType, min, max);
+            final boolean clampEnabled = tempInputIsClampEnabled(sliderFlags, dataType, given);
             return IkGuiImplInputText.tempInputScalar(
-                    frameBB,
-                    id,
-                    label,
-                    dataType,
-                    data,
-                    index,
-                    format,
-                    clampEnabled ? min : null,
-                    clampEnabled ? max : null);
+                    frameBB, id, label, dataType, data, index, format, clampEnabled ? given : null);
         }
 
         renderScalarFrame(frameBB, id, hovered, colorMarker);
 
         // Drag behavior
-        final Limits limits = resolveLimits(dataType, min, max);
+        final Limits limits = resolveLimits(dataType, given);
         final boolean valueChanged =
                 dragBehavior(id, dataType, data, index, speed, limits, format, sliderFlags);
         if (valueChanged) {
@@ -1971,7 +2068,7 @@ class IkGuiImplSliders {
 
         // Display the value using the user-provided display format so the user can add
         // prefix/suffix/decorations to the value
-        final String valueText = formatScalar(dataType, readNumber(dataType, data, index), format);
+        final String valueText = formatScalar(dataType, data, index, format);
         renderValueAndLabel(frameBB, label, labelSize, valueText);
 
         IkGuiInternal.testEngineItemInfo(
@@ -2006,6 +2103,40 @@ class IkGuiImplSliders {
             Number max,
             String format,
             int sliderFlags) {
+        return dragScalarN(
+                label,
+                dataType,
+                data,
+                components,
+                speed,
+                numberLimits(dataType, min, max),
+                format,
+                sliderFlags);
+    }
+
+    /**
+     * Multiple drags on one line, see {@link #dragScalarN(String, SliderDataType, Object, int,
+     * float, Number, Number, String, int)}.
+     *
+     * @param label The label, which is also used for the ID.
+     * @param dataType The data type.
+     * @param data An array of the data type.
+     * @param components The number of components.
+     * @param speed The speed, in value units per pixel.
+     * @param given The limits, where a missing one is the limit of the data type.
+     * @param format The display format, null for the default for the data type.
+     * @param sliderFlags Slider flags.
+     * @return True if any value changed.
+     */
+    static boolean dragScalarN(
+            @NonNull String label,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
+            int components,
+            float speed,
+            @NonNull Limits given,
+            String format,
+            int sliderFlags) {
         final Window window = IkGuiInternal.getCurrentWindow();
         if (window.skipItems) {
             return false;
@@ -2027,7 +2158,7 @@ class IkGuiImplSliders {
                 setNextItemColorMarker(DEFAULT_RGBA_COLOR_MARKERS[i % 4]);
             }
             valueChanged |=
-                    dragScalarIndex("", dataType, data, i, speed, min, max, format, sliderFlags);
+                    dragScalarIndex("", dataType, data, i, speed, given, format, sliderFlags);
             IkGuiImplUtils.popID();
             IkGuiImplLayout.popItemWidth();
         }
@@ -2062,6 +2193,70 @@ class IkGuiImplSliders {
     }
 
     /**
+     * The limits of the widget that edits the low end of a range: from the range's min (or the
+     * type's, without a range) to the current high end, also kept under the range's max.
+     *
+     * @param dataType The data type.
+     * @param range The range's limits.
+     * @param noRange Whether the range is empty, so only the other value limits this one.
+     * @param currentMax The current high end.
+     * @return The limits, shared: good until the next range widget.
+     */
+    private static Limits lowItemLimits(
+            @NonNull SliderDataType dataType,
+            @NonNull Limits range,
+            boolean noRange,
+            @NonNull Object currentMax) {
+        if (dataType.isFloatingPoint()) {
+            final double current = readScalar(dataType, currentMax, 0);
+            final double upper;
+            if (noRange) {
+                upper = current;
+            } else {
+                upper = Double.compare(range.max, current) <= 0 ? range.max : current;
+            }
+            return RANGE_ITEM_LIMITS.setFloating(
+                    noRange ? dataType.getMinValue() : range.min, upper);
+        }
+        final long current = readLong(dataType, currentMax, 0);
+        return RANGE_ITEM_LIMITS.setInteger(
+                noRange ? typeMinLong(dataType) : range.minLong,
+                noRange ? current : Math.min(range.maxLong, current));
+    }
+
+    /**
+     * The limits of the widget that edits the high end of a range: from the current low end, also
+     * kept over the range's min, to the range's max (or the type's, without a range).
+     *
+     * @param dataType The data type.
+     * @param range The range's limits.
+     * @param noRange Whether the range is empty, so only the other value limits this one.
+     * @param currentMin The current low end.
+     * @return The limits, shared: good until the next range widget.
+     */
+    private static Limits highItemLimits(
+            @NonNull SliderDataType dataType,
+            @NonNull Limits range,
+            boolean noRange,
+            @NonNull Object currentMin) {
+        if (dataType.isFloatingPoint()) {
+            final double current = readScalar(dataType, currentMin, 0);
+            final double lower;
+            if (noRange) {
+                lower = current;
+            } else {
+                lower = Double.compare(range.min, current) >= 0 ? range.min : current;
+            }
+            return RANGE_ITEM_LIMITS.setFloating(
+                    lower, noRange ? dataType.getMaxValue() : range.max);
+        }
+        final long current = readLong(dataType, currentMin, 0);
+        return RANGE_ITEM_LIMITS.setInteger(
+                noRange ? current : Math.max(range.minLong, current),
+                noRange ? typeMaxLong(dataType) : range.maxLong);
+    }
+
+    /**
      * Two drags for editing a range, where the min can't go above the max and vice versa.
      *
      * @param label The label, which is also used for the ID.
@@ -2069,8 +2264,7 @@ class IkGuiImplSliders {
      * @param currentMin The current minimum of the range.
      * @param currentMax The current maximum of the range.
      * @param speed The speed, in value units per pixel.
-     * @param min The minimum value.
-     * @param max The maximum value.
+     * @param range The minimum and maximum values, both present.
      * @param format The display format.
      * @param formatMax The display format for the max, null to use the same format.
      * @param sliderFlags Slider flags.
@@ -2082,8 +2276,7 @@ class IkGuiImplSliders {
             @NonNull Object currentMin,
             @NonNull Object currentMax,
             float speed,
-            @NonNull Number min,
-            @NonNull Number max,
+            @NonNull Limits range,
             String format,
             String formatMax,
             int sliderFlags) {
@@ -2100,36 +2293,33 @@ class IkGuiImplSliders {
         IkGuiImplLayout.pushMultiItemsWidths(2, IkGuiImplUtils.calculateItemWidth());
 
         // Without a range, each value is only limited by the other one
-        final boolean noRange = compareNumbers(dataType, min, max) >= 0;
-        final Number currentMaxValue = readNumber(dataType, currentMax, 0);
-        final Number minMin = noRange ? typeMinNumber(dataType) : min;
-        final Number minMax = noRange ? currentMaxValue : minNumber(dataType, max, currentMaxValue);
+        final boolean noRange = compareLimits(dataType, range) >= 0;
+        final Limits minLimits = lowItemLimits(dataType, range, noRange, currentMax);
         final int minFlags =
                 sliderFlags
-                        | (compareNumbers(dataType, minMin, minMax) == 0
+                        | (compareLimits(dataType, minLimits) == 0
                                 ? SliderFlags.INTERNAL_READ_ONLY
                                 : 0);
         boolean valueChanged =
-                dragScalar("##min", dataType, currentMin, speed, minMin, minMax, format, minFlags);
+                dragScalarIndex(
+                        "##min", dataType, currentMin, 0, speed, minLimits, format, minFlags);
         IkGuiImplLayout.popItemWidth();
         IkGuiImplLayout.sameLine(0, context.style.variable.itemInnerSpacing.x);
 
-        final Number currentMinValue = readNumber(dataType, currentMin, 0);
-        final Number maxMin = noRange ? currentMinValue : maxNumber(dataType, min, currentMinValue);
-        final Number maxMax = noRange ? typeMaxNumber(dataType) : max;
+        final Limits maxLimits = highItemLimits(dataType, range, noRange, currentMin);
         final int maxFlags =
                 sliderFlags
-                        | (compareNumbers(dataType, maxMin, maxMax) == 0
+                        | (compareLimits(dataType, maxLimits) == 0
                                 ? SliderFlags.INTERNAL_READ_ONLY
                                 : 0);
         valueChanged |=
-                dragScalar(
+                dragScalarIndex(
                         "##max",
                         dataType,
                         currentMax,
+                        0,
                         speed,
-                        maxMin,
-                        maxMax,
+                        maxLimits,
                         formatMax != null ? formatMax : format,
                         maxFlags);
         IkGuiImplLayout.popItemWidth();
@@ -2303,16 +2493,15 @@ class IkGuiImplSliders {
      * range.
      *
      * @param dataType The data type.
-     * @param min The minimum, may be null.
-     * @param max The maximum, may be null.
+     * @param given The limits the slider was given.
      * @return The limits, or null if they are missing.
      */
-    private static Limits sliderLimits(@NonNull SliderDataType dataType, Number min, Number max) {
-        if (min == null || max == null) {
+    private static Limits sliderLimits(@NonNull SliderDataType dataType, @NonNull Limits given) {
+        if (!given.hasMin || !given.hasMax) {
             IkGuiImplDebugTools.reportError(log, "Sliders need both a min and a max");
             return null;
         }
-        final Limits limits = resolveLimits(dataType, min, max);
+        final Limits limits = resolveLimits(dataType, given);
         final boolean inRange =
                 switch (dataType) {
                     case BYTE, SHORT, INT -> true;
@@ -2329,8 +2518,8 @@ class IkGuiImplSliders {
             IkGuiImplDebugTools.reportError(
                     log,
                     "Slider limits {}..{} are outside half the range of {}, use a drag instead",
-                    min,
-                    max,
+                    limits.integer ? (Object) limits.minLong : (Object) limits.min,
+                    limits.integer ? (Object) limits.maxLong : (Object) limits.max,
                     dataType);
         }
         return limits;
@@ -2630,7 +2819,8 @@ class IkGuiImplSliders {
             Number max,
             String format,
             int sliderFlags) {
-        return sliderScalarIndex(label, dataType, data, 0, min, max, format, sliderFlags);
+        return sliderScalarIndex(
+                label, dataType, data, 0, numberLimits(dataType, min, max), format, sliderFlags);
     }
 
     /**
@@ -2640,8 +2830,7 @@ class IkGuiImplSliders {
      * @param dataType The data type.
      * @param data An array of the data type, or one of the Ik* boxes.
      * @param index The index of the value in the data.
-     * @param min The minimum value, which is required.
-     * @param max The maximum value, which is required.
+     * @param given The limits, both required.
      * @param format The display format, null for the default for the data type.
      * @param sliderFlags Slider flags.
      * @return True if the value changed.
@@ -2651,8 +2840,7 @@ class IkGuiImplSliders {
             @NonNull SliderDataType dataType,
             @NonNull Object data,
             int index,
-            Number min,
-            Number max,
+            @NonNull Limits given,
             String format,
             int sliderFlags) {
         final Window window = IkGuiInternal.getCurrentWindow();
@@ -2662,7 +2850,7 @@ class IkGuiImplSliders {
         if (!validateData(dataType, data, index + 1)) {
             return false;
         }
-        final Limits limits = sliderLimits(dataType, min, max);
+        final Limits limits = sliderLimits(dataType, given);
         if (limits == null) {
             return false;
         }
@@ -2718,15 +2906,7 @@ class IkGuiImplSliders {
             // Only clamp Ctrl+Click input when CLAMP_ON_INPUT is set
             final boolean clampEnabled = (sliderFlags & SliderFlags.CLAMP_ON_INPUT) != 0;
             return IkGuiImplInputText.tempInputScalar(
-                    frameBB,
-                    id,
-                    label,
-                    dataType,
-                    data,
-                    index,
-                    format,
-                    clampEnabled ? min : null,
-                    clampEnabled ? max : null);
+                    frameBB, id, label, dataType, data, index, format, clampEnabled ? given : null);
         }
 
         renderScalarFrame(frameBB, id, hovered, colorMarker);
@@ -2748,7 +2928,7 @@ class IkGuiImplSliders {
 
         // Display the value using the user-provided display format so the user can add
         // prefix/suffix/decorations to the value
-        final String valueText = formatScalar(dataType, readNumber(dataType, data, index), format);
+        final String valueText = formatScalar(dataType, data, index, format);
         renderValueAndLabel(frameBB, label, labelSize, valueText);
 
         IkGuiInternal.testEngineItemInfo(
@@ -2781,6 +2961,37 @@ class IkGuiImplSliders {
             Number max,
             String format,
             int sliderFlags) {
+        return sliderScalarN(
+                label,
+                dataType,
+                data,
+                components,
+                numberLimits(dataType, min, max),
+                format,
+                sliderFlags);
+    }
+
+    /**
+     * Multiple sliders on one line, see {@link #sliderScalarN(String, SliderDataType, Object, int,
+     * Number, Number, String, int)}.
+     *
+     * @param label The label, which is also used for the ID.
+     * @param dataType The data type.
+     * @param data An array of the data type.
+     * @param components The number of components.
+     * @param given The limits, both required.
+     * @param format The display format, null for the default for the data type.
+     * @param sliderFlags Slider flags.
+     * @return True if any value changed.
+     */
+    static boolean sliderScalarN(
+            @NonNull String label,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
+            int components,
+            @NonNull Limits given,
+            String format,
+            int sliderFlags) {
         final Window window = IkGuiInternal.getCurrentWindow();
         if (window.skipItems) {
             return false;
@@ -2801,7 +3012,7 @@ class IkGuiImplSliders {
             if ((sliderFlags & SliderFlags.COLOR_MARKERS) != 0) {
                 setNextItemColorMarker(DEFAULT_RGBA_COLOR_MARKERS[i % 4]);
             }
-            valueChanged |= sliderScalarIndex("", dataType, data, i, min, max, format, sliderFlags);
+            valueChanged |= sliderScalarIndex("", dataType, data, i, given, format, sliderFlags);
             IkGuiImplUtils.popID();
             IkGuiImplLayout.popItemWidth();
         }
@@ -2820,8 +3031,7 @@ class IkGuiImplSliders {
      * @param dataType The data type.
      * @param currentMin The current minimum of the range.
      * @param currentMax The current maximum of the range.
-     * @param min The minimum value.
-     * @param max The maximum value.
+     * @param range The minimum and maximum values, both present.
      * @param format The display format.
      * @param formatMax The display format for the max, null to use the same format.
      * @param sliderFlags Slider flags.
@@ -2832,8 +3042,7 @@ class IkGuiImplSliders {
             @NonNull SliderDataType dataType,
             @NonNull Object currentMin,
             @NonNull Object currentMax,
-            @NonNull Number min,
-            @NonNull Number max,
+            @NonNull Limits range,
             String format,
             String formatMax,
             int sliderFlags) {
@@ -2850,30 +3059,30 @@ class IkGuiImplSliders {
         IkGuiImplLayout.pushMultiItemsWidths(2, IkGuiImplUtils.calculateItemWidth());
 
         // The min slider covers min..currentMax, the max slider covers currentMin..max
-        final Number minMax = minNumber(dataType, max, readNumber(dataType, currentMax, 0));
+        final Limits minLimits = lowItemLimits(dataType, range, false, currentMax);
         final int minFlags =
                 sliderFlags
-                        | (compareNumbers(dataType, min, minMax) == 0
+                        | (compareLimits(dataType, minLimits) == 0
                                 ? SliderFlags.INTERNAL_READ_ONLY
                                 : 0);
         boolean valueChanged =
-                sliderScalar("##min", dataType, currentMin, min, minMax, format, minFlags);
+                sliderScalarIndex("##min", dataType, currentMin, 0, minLimits, format, minFlags);
         IkGuiImplLayout.popItemWidth();
         IkGuiImplLayout.sameLine(0, context.style.variable.itemInnerSpacing.x);
 
-        final Number maxMin = maxNumber(dataType, min, readNumber(dataType, currentMin, 0));
+        final Limits maxLimits = highItemLimits(dataType, range, false, currentMin);
         final int maxFlags =
                 sliderFlags
-                        | (compareNumbers(dataType, maxMin, max) == 0
+                        | (compareLimits(dataType, maxLimits) == 0
                                 ? SliderFlags.INTERNAL_READ_ONLY
                                 : 0);
         valueChanged |=
-                sliderScalar(
+                sliderScalarIndex(
                         "##max",
                         dataType,
                         currentMax,
-                        maxMin,
-                        max,
+                        0,
+                        maxLimits,
                         formatMax != null ? formatMax : format,
                         maxFlags);
         IkGuiImplLayout.popItemWidth();
@@ -2906,14 +3115,15 @@ class IkGuiImplSliders {
         if (format == null) {
             format = SLIDER_ANGLE_DEFAULT_FORMAT;
         }
-        final float[] degrees = {(float) Math.toDegrees(valueRadians[0])};
+        final float[] degrees = ANGLE_DEGREES;
+        degrees[0] = (float) Math.toDegrees(valueRadians[0]);
         final boolean valueChanged =
-                sliderScalar(
+                sliderScalarIndex(
                         label,
                         SliderDataType.FLOAT,
                         degrees,
-                        minDegrees,
-                        maxDegrees,
+                        0,
+                        floatLimits(minDegrees, maxDegrees),
                         format,
                         sliderFlags);
         if (valueChanged) {
@@ -2946,6 +3156,40 @@ class IkGuiImplSliders {
             Number max,
             String format,
             int sliderFlags) {
+        return vSliderScalar(
+                label,
+                width,
+                height,
+                dataType,
+                data,
+                numberLimits(dataType, min, max),
+                format,
+                sliderFlags);
+    }
+
+    /**
+     * A vertical slider, see {@link #vSliderScalar(String, float, float, SliderDataType, Object,
+     * Number, Number, String, int)}.
+     *
+     * @param label The label, which is also used for the ID.
+     * @param width The width of the slider.
+     * @param height The height of the slider.
+     * @param dataType The data type.
+     * @param data An array of the data type, or one of the Ik* boxes.
+     * @param given The limits, both required.
+     * @param format The display format, null for the default for the data type.
+     * @param sliderFlags Slider flags.
+     * @return True if the value changed.
+     */
+    static boolean vSliderScalar(
+            @NonNull String label,
+            float width,
+            float height,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
+            @NonNull Limits given,
+            String format,
+            int sliderFlags) {
         final Window window = IkGuiInternal.getCurrentWindow();
         if (window.skipItems) {
             return false;
@@ -2953,7 +3197,7 @@ class IkGuiImplSliders {
         if (!validateData(dataType, data, 1)) {
             return false;
         }
-        final Limits limits = sliderLimits(dataType, min, max);
+        final Limits limits = sliderLimits(dataType, given);
         if (limits == null) {
             return false;
         }
@@ -3034,7 +3278,7 @@ class IkGuiImplSliders {
         final String valueText =
                 isMixed && context.mixedValueLabel != null
                         ? context.mixedValueLabel
-                        : formatScalar(dataType, readNumber(dataType, data, 0), format);
+                        : formatScalar(dataType, data, 0, format);
         if (isMixed) {
             IkGuiImplUtils.pushStyleColor(
                     ColorType.TEXT, IkGuiImplUtils.getColor(ColorType.TEXT_DISABLED));
@@ -3081,7 +3325,15 @@ class IkGuiImplSliders {
             float max,
             String format,
             int sliderFlags) {
-        return dragScalar(label, SliderDataType.FLOAT, value, speed, min, max, format, sliderFlags);
+        return dragScalarIndex(
+                label,
+                SliderDataType.FLOAT,
+                value,
+                0,
+                speed,
+                floatLimits(min, max),
+                format,
+                sliderFlags);
     }
 
     /**
@@ -3098,7 +3350,14 @@ class IkGuiImplSliders {
             String format,
             int sliderFlags) {
         return dragScalarN(
-                label, SliderDataType.FLOAT, values, 2, speed, min, max, format, sliderFlags);
+                label,
+                SliderDataType.FLOAT,
+                values,
+                2,
+                speed,
+                floatLimits(min, max),
+                format,
+                sliderFlags);
     }
 
     /**
@@ -3115,7 +3374,14 @@ class IkGuiImplSliders {
             String format,
             int sliderFlags) {
         return dragScalarN(
-                label, SliderDataType.FLOAT, values, 3, speed, min, max, format, sliderFlags);
+                label,
+                SliderDataType.FLOAT,
+                values,
+                3,
+                speed,
+                floatLimits(min, max),
+                format,
+                sliderFlags);
     }
 
     /**
@@ -3132,7 +3398,14 @@ class IkGuiImplSliders {
             String format,
             int sliderFlags) {
         return dragScalarN(
-                label, SliderDataType.FLOAT, values, 4, speed, min, max, format, sliderFlags);
+                label,
+                SliderDataType.FLOAT,
+                values,
+                4,
+                speed,
+                floatLimits(min, max),
+                format,
+                sliderFlags);
     }
 
     /**
@@ -3156,8 +3429,7 @@ class IkGuiImplSliders {
                 currentMin,
                 currentMax,
                 speed,
-                min,
-                max,
+                floatLimits(min, max),
                 format,
                 formatMax,
                 sliderFlags);
@@ -3176,7 +3448,15 @@ class IkGuiImplSliders {
             int max,
             String format,
             int sliderFlags) {
-        return dragScalar(label, SliderDataType.INT, value, speed, min, max, format, sliderFlags);
+        return dragScalarIndex(
+                label,
+                SliderDataType.INT,
+                value,
+                0,
+                speed,
+                intLimits(min, max),
+                format,
+                sliderFlags);
     }
 
     /**
@@ -3193,7 +3473,14 @@ class IkGuiImplSliders {
             String format,
             int sliderFlags) {
         return dragScalarN(
-                label, SliderDataType.INT, values, 2, speed, min, max, format, sliderFlags);
+                label,
+                SliderDataType.INT,
+                values,
+                2,
+                speed,
+                intLimits(min, max),
+                format,
+                sliderFlags);
     }
 
     /**
@@ -3210,7 +3497,14 @@ class IkGuiImplSliders {
             String format,
             int sliderFlags) {
         return dragScalarN(
-                label, SliderDataType.INT, values, 3, speed, min, max, format, sliderFlags);
+                label,
+                SliderDataType.INT,
+                values,
+                3,
+                speed,
+                intLimits(min, max),
+                format,
+                sliderFlags);
     }
 
     /**
@@ -3227,7 +3521,14 @@ class IkGuiImplSliders {
             String format,
             int sliderFlags) {
         return dragScalarN(
-                label, SliderDataType.INT, values, 4, speed, min, max, format, sliderFlags);
+                label,
+                SliderDataType.INT,
+                values,
+                4,
+                speed,
+                intLimits(min, max),
+                format,
+                sliderFlags);
     }
 
     /**
@@ -3251,8 +3552,7 @@ class IkGuiImplSliders {
                 currentMin,
                 currentMax,
                 speed,
-                min,
-                max,
+                intLimits(min, max),
                 format,
                 formatMax,
                 sliderFlags);
@@ -3265,7 +3565,8 @@ class IkGuiImplSliders {
      */
     public static boolean sliderFloat(
             String label, float[] value, float min, float max, String format, int sliderFlags) {
-        return sliderScalar(label, SliderDataType.FLOAT, value, min, max, format, sliderFlags);
+        return sliderScalarIndex(
+                label, SliderDataType.FLOAT, value, 0, floatLimits(min, max), format, sliderFlags);
     }
 
     /**
@@ -3275,7 +3576,8 @@ class IkGuiImplSliders {
      */
     public static boolean sliderFloat2(
             String label, float[] values, float min, float max, String format, int sliderFlags) {
-        return sliderScalarN(label, SliderDataType.FLOAT, values, 2, min, max, format, sliderFlags);
+        return sliderScalarN(
+                label, SliderDataType.FLOAT, values, 2, floatLimits(min, max), format, sliderFlags);
     }
 
     /**
@@ -3285,7 +3587,8 @@ class IkGuiImplSliders {
      */
     public static boolean sliderFloat3(
             String label, float[] values, float min, float max, String format, int sliderFlags) {
-        return sliderScalarN(label, SliderDataType.FLOAT, values, 3, min, max, format, sliderFlags);
+        return sliderScalarN(
+                label, SliderDataType.FLOAT, values, 3, floatLimits(min, max), format, sliderFlags);
     }
 
     /**
@@ -3295,7 +3598,8 @@ class IkGuiImplSliders {
      */
     public static boolean sliderFloat4(
             String label, float[] values, float min, float max, String format, int sliderFlags) {
-        return sliderScalarN(label, SliderDataType.FLOAT, values, 4, min, max, format, sliderFlags);
+        return sliderScalarN(
+                label, SliderDataType.FLOAT, values, 4, floatLimits(min, max), format, sliderFlags);
     }
 
     /**
@@ -3317,8 +3621,7 @@ class IkGuiImplSliders {
                 SliderDataType.FLOAT,
                 currentMin,
                 currentMax,
-                min,
-                max,
+                floatLimits(min, max),
                 format,
                 formatMax,
                 sliderFlags);
@@ -3331,7 +3634,8 @@ class IkGuiImplSliders {
      */
     public static boolean sliderInt(
             String label, int[] value, int min, int max, String format, int sliderFlags) {
-        return sliderScalar(label, SliderDataType.INT, value, min, max, format, sliderFlags);
+        return sliderScalarIndex(
+                label, SliderDataType.INT, value, 0, intLimits(min, max), format, sliderFlags);
     }
 
     /**
@@ -3341,7 +3645,8 @@ class IkGuiImplSliders {
      */
     public static boolean sliderInt2(
             String label, int[] values, int min, int max, String format, int sliderFlags) {
-        return sliderScalarN(label, SliderDataType.INT, values, 2, min, max, format, sliderFlags);
+        return sliderScalarN(
+                label, SliderDataType.INT, values, 2, intLimits(min, max), format, sliderFlags);
     }
 
     /**
@@ -3351,7 +3656,8 @@ class IkGuiImplSliders {
      */
     public static boolean sliderInt3(
             String label, int[] values, int min, int max, String format, int sliderFlags) {
-        return sliderScalarN(label, SliderDataType.INT, values, 3, min, max, format, sliderFlags);
+        return sliderScalarN(
+                label, SliderDataType.INT, values, 3, intLimits(min, max), format, sliderFlags);
     }
 
     /**
@@ -3361,7 +3667,8 @@ class IkGuiImplSliders {
      */
     public static boolean sliderInt4(
             String label, int[] values, int min, int max, String format, int sliderFlags) {
-        return sliderScalarN(label, SliderDataType.INT, values, 4, min, max, format, sliderFlags);
+        return sliderScalarN(
+                label, SliderDataType.INT, values, 4, intLimits(min, max), format, sliderFlags);
     }
 
     /**
@@ -3383,8 +3690,7 @@ class IkGuiImplSliders {
                 SliderDataType.INT,
                 currentMin,
                 currentMax,
-                min,
-                max,
+                intLimits(min, max),
                 format,
                 formatMax,
                 sliderFlags);
@@ -3405,7 +3711,14 @@ class IkGuiImplSliders {
             String format,
             int sliderFlags) {
         return vSliderScalar(
-                label, width, height, SliderDataType.FLOAT, value, min, max, format, sliderFlags);
+                label,
+                width,
+                height,
+                SliderDataType.FLOAT,
+                value,
+                floatLimits(min, max),
+                format,
+                sliderFlags);
     }
 
     /**
@@ -3423,7 +3736,14 @@ class IkGuiImplSliders {
             String format,
             int sliderFlags) {
         return vSliderScalar(
-                label, width, height, SliderDataType.INT, value, min, max, format, sliderFlags);
+                label,
+                width,
+                height,
+                SliderDataType.INT,
+                value,
+                intLimits(min, max),
+                format,
+                sliderFlags);
     }
 
     /** Private constructor so this is not instantiated. */

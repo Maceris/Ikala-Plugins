@@ -209,8 +209,7 @@ class IkGuiImplColor {
                                     f,
                                     n,
                                     1.0f / 255.0f,
-                                    0.0f,
-                                    hdr ? 0.0f : 1.0f,
+                                    IkGuiImplSliders.floatLimits(0.0f, hdr ? 0.0f : 1.0f),
                                     FORMAT_TABLE_FLOAT[formatIndex][n],
                                     dragFlags);
                     valueChangedAsFloat |= valueChanged;
@@ -222,8 +221,7 @@ class IkGuiImplColor {
                                     i,
                                     n,
                                     1.0f,
-                                    0,
-                                    hdr ? 0 : 255,
+                                    IkGuiImplSliders.intLimits(0, hdr ? 0 : 255),
                                     FORMAT_TABLE_INT[formatIndex][n],
                                     dragFlags);
                 }
