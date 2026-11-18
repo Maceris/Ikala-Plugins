@@ -203,10 +203,13 @@ public class PointShadows {
                                     range));
                 });
         castingLights = lights.size();
-        final Set<Integer> kept = new HashSet<>();
-        for (CubeMap map : maps) {
-            if (map != null) {
-                kept.add(map.representative);
+        // Most scenes have no shadowed point lights, so the set is made only when some are
+        final Set<Integer> kept = lights.isEmpty() ? Set.of() : new HashSet<>();
+        if (!lights.isEmpty()) {
+            for (CubeMap map : maps) {
+                if (map != null) {
+                    kept.add(map.representative);
+                }
             }
         }
         final LightTree tree = new LightTree(lights);

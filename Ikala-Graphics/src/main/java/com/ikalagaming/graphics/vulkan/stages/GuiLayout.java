@@ -56,6 +56,24 @@ final class GuiLayout {
      */
     static GuiLayout of(@NonNull Collection<DrawData> drawData) {
         GuiLayout layout = new GuiLayout();
+        layout.layOut(drawData);
+        return layout;
+    }
+
+    /**
+     * Lay out draw data one after another, replacing what this layout held, so a renderer can keep
+     * one layout rather than make one each frame.
+     *
+     * @param drawData The draw data for each window that shows GUI. Each is laid out once.
+     */
+    void layOut(@NonNull Collection<DrawData> drawData) {
+        final GuiLayout layout = this;
+        offsets.clear();
+        order.clear();
+        vertexBytes = 0;
+        commandBytes = 0;
+        pointBytes = 0;
+        detailBytes = 0;
         for (DrawData data : drawData) {
             if (layout.offsets.containsKey(data)) {
                 continue;
@@ -77,7 +95,6 @@ final class GuiLayout {
             layout.offsets.put(data, lists);
             layout.order.add(data);
         }
-        return layout;
     }
 
     /**

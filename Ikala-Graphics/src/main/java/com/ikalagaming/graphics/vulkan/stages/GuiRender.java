@@ -68,6 +68,9 @@ public class GuiRender {
     /** Where the draw data uploaded by {@link #prepare} went in the packed buffers. */
     private GuiLayout prepared = GuiLayout.EMPTY;
 
+    /** The layout {@link #prepare} fills each frame, kept so a frame doesn't make one. */
+    private final GuiLayout layout = new GuiLayout();
+
     /**
      * Set up the GUI render stage.
      *
@@ -132,7 +135,8 @@ public class GuiRender {
         uploadFontGlyphs(commandBuffer, vulkanState, frameData);
         updateUniforms(frameData);
 
-        prepared = GuiLayout.of(drawData);
+        layout.layOut(drawData);
+        prepared = layout;
         if (prepared.drawData().isEmpty()) {
             ensureBuffersExist(vulkanState, frameData);
         } else {

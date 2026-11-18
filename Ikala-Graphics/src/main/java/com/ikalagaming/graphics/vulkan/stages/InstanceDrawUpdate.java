@@ -121,6 +121,15 @@ public class InstanceDrawUpdate implements RenderStage {
     /** The slots already written this frame, scratch, main and baked. */
     private final BitSet seenStandard = new BitSet();
 
+    /**
+     * The models listed this frame with their instances, kept between frames so a frame doesn't
+     * make a new map; cleared when the frame is written.
+     */
+    private final Map<Model, ModelInstances> listedModels = new LinkedHashMap<>();
+
+    /** The poses of this frame's animated listed models, kept like {@link #listedModels}. */
+    private final Map<Model, Poses> listedPoses = new LinkedHashMap<>();
+
     private final BitSet seenBaked = new BitSet();
 
     /** The commands being written, for {@link #standardWriter} and {@link #bakedWriter}. */
@@ -501,7 +510,8 @@ public class InstanceDrawUpdate implements RenderStage {
         final DebugVisualizers visualizers = scene.getDebugVisualizers();
         final boolean debugLines = visualizers.isNormals() || visualizers.isTangents();
         final MaterialCache materialCache = scene.getMaterialCache();
-        final Map<Model, ModelInstances> listed = new LinkedHashMap<>();
+        final Map<Model, ModelInstances> listed = listedModels;
+        listed.clear();
         for (InstanceTable.ModelCount modelCount : snapshot.models()) {
             final Model model = modelCount.model();
             if ((!model.isAnimated() && !debugLines) || isBaked(model)) {
@@ -535,7 +545,8 @@ public class InstanceDrawUpdate implements RenderStage {
         int visibleCount = LIST_COUNT * culledEntries;
         int commandCount = culledCommands;
         int poseCount = 0;
-        final Map<Model, Poses> modelPoses = new LinkedHashMap<>();
+        final Map<Model, Poses> modelPoses = listedPoses;
+        modelPoses.clear();
         for (var entry : listed.entrySet()) {
             final Model model = entry.getKey();
             final ModelInstances modelInstances = entry.getValue();
@@ -652,6 +663,9 @@ public class InstanceDrawUpdate implements RenderStage {
                     }
                     writeListedCommands(model, info, modelInstances, poses, meshes, commands);
                 });
+        // Not kept past the frame, so an unloaded plugin's models can go
+        listed.clear();
+        modelPoses.clear();
     }
 
     /**
@@ -686,12 +700,17 @@ public class InstanceDrawUpdate implements RenderStage {
         for (int[] kindFirst : firstVisible) {
             Arrays.fill(kindFirst, 0);
         }
-        for (InstanceTable.ModelCount modelCount : models) {
+        // Indexed rather than iterated: whether the JIT removes the iterators changed from build to
+        // build, and when it didn't they were most of a frame's garbage
+        for (int m = 0; m < models.size(); ++m) {
+            final InstanceTable.ModelCount modelCount = models.get(m);
             // Animated models are drawn from CPU-written commands instead
             if (modelCount.model().isAnimated()) {
                 continue;
             }
-            for (MeshData mesh : modelCount.model().getMeshDataList()) {
+            final List<MeshData> meshes = modelCount.model().getMeshDataList();
+            for (int i = 0; i < meshes.size(); ++i) {
+                final MeshData mesh = meshes.get(i);
                 MeshHandle handle = mesh.getMesh();
                 if (handle == null) {
                     continue;

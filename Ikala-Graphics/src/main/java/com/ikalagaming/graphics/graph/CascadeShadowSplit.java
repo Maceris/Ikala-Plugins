@@ -259,6 +259,53 @@ public class CascadeShadowSplit {
     }
 
     /**
+     * Scratch for fitting cascades, so a frame's fitting allocates nothing. Render thread only,
+     * like the fitting; nothing is kept past a call.
+     */
+    static final class FitScratch {
+        /**
+         * The rays through the screen's corners, see {@link #cornerRays(Matrix4fc, Vector3f[])}.
+         */
+        final Vector3f[] rays = {new Vector3f(), new Vector3f(), new Vector3f(), new Vector3f()};
+
+        /** A corner of the screen on its way through the inverse projection. */
+        final Vector4f point = new Vector4f();
+
+        /** The light's up direction. */
+        final Vector3d up = new Vector3d();
+
+        /** The light's rotation. */
+        final Matrix4d rotation = new Matrix4d();
+
+        /** The inverse of the light's rotation. */
+        final Matrix4d inverse = new Matrix4d();
+
+        /** The slice's center. */
+        final Vector3f center = new Vector3f();
+
+        /** A corner of the slice. */
+        final Vector3f corner = new Vector3f();
+
+        /** The center in world space, then the light's. */
+        final Vector3d world = new Vector3d();
+
+        /** The center snapped to texels, relative to the camera. */
+        final Vector3f snapped = new Vector3f();
+
+        /** Where the light's view looks from. */
+        final Vector3f eye = new Vector3f();
+
+        /** The up direction in floats. */
+        final Vector3f upFloat = new Vector3f();
+
+        /** The light's view. */
+        final Matrix4f lightView = new Matrix4f();
+    }
+
+    /** The fitting scratch, see {@link FitScratch}. */
+    static final FitScratch FIT = new FitScratch();
+
+    /**
      * Fit one cascade around its slice of the view, to be drawn whole this frame.
      *
      * @param cascade The cascade to fill out.
@@ -286,15 +333,15 @@ public class CascadeShadowSplit {
             @NonNull Matrix4d inverseLightRotation,
             int mapSize) {
         // The sphere around the slice, worked out in view space so turning can't change it
-        final Vector3f center = new Vector3f();
+        final Vector3f center = FIT.center.zero();
         for (Vector3f ray : rays) {
             center.fma(near, ray).fma(far, ray);
         }
         center.div(2f * rays.length);
         float radius = 0;
         for (Vector3f ray : rays) {
-            radius = Math.max(radius, new Vector3f(ray).mul(near).distance(center));
-            radius = Math.max(radius, new Vector3f(ray).mul(far).distance(center));
+            radius = Math.max(radius, FIT.corner.set(ray).mul(near).distance(center));
+            radius = Math.max(radius, FIT.corner.set(ray).mul(far).distance(center));
         }
         radius = (float) Math.ceil(radius / RADIUS_STEP) * RADIUS_STEP;
         // Texels to spare on each side, since snapping moves the center by up to a texel and
@@ -304,20 +351,21 @@ public class CascadeShadowSplit {
 
         // Snap the center to the texel grid in world space, in double precision
         inverseView.transformPosition(center);
-        final Vector3d world = new Vector3d(center).add(cameraPosition);
+        final Vector3d world = FIT.world.set(center).add(cameraPosition);
         lightRotation.transformPosition(world);
         world.x = Math.floor(world.x / texelSize) * texelSize;
         world.y = Math.floor(world.y / texelSize) * texelSize;
         inverseLightRotation.transformPosition(world);
         final Vector3f snapped =
-                new Vector3f(
+                FIT.snapped.set(
                         (float) (world.x - cameraPosition.x()),
                         (float) (world.y - cameraPosition.y()),
                         (float) (world.z - cameraPosition.z()));
 
         final float back = extent + CASTER_REACH;
         final Vector3f eye =
-                new Vector3f(snapped)
+                FIT.eye
+                        .set(snapped)
                         .sub(
                                 (float) (direction.x * back),
                                 (float) (direction.y * back),
@@ -328,11 +376,8 @@ public class CascadeShadowSplit {
          * furthest from the light and shadows were drawn on top of the geometry casting them.
          */
         final Matrix4f lightView =
-                new Matrix4f()
-                        .lookAt(
-                                eye,
-                                snapped,
-                                new Vector3f((float) up.x, (float) up.y, (float) up.z));
+                FIT.lightView.setLookAt(
+                        eye, snapped, FIT.upFloat.set((float) up.x, (float) up.y, (float) up.z));
         cascade.projViewMatrix
                 .setOrtho(-extent, extent, -extent, extent, 0, back + extent, true)
                 .mul(lightView);
@@ -353,14 +398,27 @@ public class CascadeShadowSplit {
      * @return The four rays.
      */
     static Vector3f[] cornerRays(@NonNull Matrix4fc inverseProjection) {
-        final Vector3f[] rays = new Vector3f[4];
+        final Vector3f[] rays = {new Vector3f(), new Vector3f(), new Vector3f(), new Vector3f()};
+        return cornerRays(inverseProjection, rays);
+    }
+
+    /**
+     * The view space rays through the corners of the screen, into vectors kept by the caller.
+     * Render thread only, since it uses {@link #FIT}'s point.
+     *
+     * @param inverseProjection The inverse of the camera's projection matrix.
+     * @param rays Receives the four rays.
+     * @return The rays.
+     */
+    static Vector3f[] cornerRays(
+            @NonNull Matrix4fc inverseProjection, @NonNull Vector3f @NonNull [] rays) {
         int corner = 0;
         for (int y = -1; y <= 1; y += 2) {
             for (int x = -1; x <= 1; x += 2) {
                 // Any depth is on the same ray
-                final Vector4f point = new Vector4f(x, y, 0.5f, 1).mul(inverseProjection);
-                final Vector3f ray = new Vector3f(point.x, point.y, point.z).div(point.w);
-                rays[corner++] = ray.div(-ray.z);
+                final Vector4f point = FIT.point.set(x, y, 0.5f, 1).mul(inverseProjection);
+                final Vector3f ray = rays[corner++].set(point.x, point.y, point.z).div(point.w);
+                ray.div(-ray.z);
             }
         }
         return rays;

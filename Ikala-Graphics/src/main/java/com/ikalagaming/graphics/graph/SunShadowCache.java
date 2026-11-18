@@ -465,7 +465,8 @@ public class SunShadowCache {
                 sunBehind[i] = placements[i].valid;
             }
         }
-        final Vector3f[] rays = CascadeShadowSplit.cornerRays(inverseProjection);
+        final Vector3f[] rays =
+                CascadeShadowSplit.cornerRays(inverseProjection, CascadeShadowSplit.FIT.rays);
         float cornerLength = 0;
         for (Vector3f ray : rays) {
             cornerLength = Math.max(cornerLength, ray.length());
@@ -552,8 +553,9 @@ public class SunShadowCache {
             @NonNull Vector3dc cameraPosition,
             @NonNull Vector3d direction,
             int index) {
-        final Vector3d up = upFor(direction);
-        final Matrix4d lightRotation = new Matrix4d().lookAlong(direction, up);
+        final Vector3d up = upFor(direction, CascadeShadowSplit.FIT.up);
+        final Matrix4d lightRotation =
+                CascadeShadowSplit.FIT.rotation.identity().lookAlong(direction, up);
         CascadeShadowSplit.fitSlice(
                 cascade,
                 Math.max(near, Projection.Z_NEAR),
@@ -564,7 +566,7 @@ public class SunShadowCache {
                 direction,
                 up,
                 lightRotation,
-                lightRotation.invert(new Matrix4d()),
+                lightRotation.invert(CascadeShadowSplit.FIT.inverse),
                 CACHED[index] ? STATIC_MAP_SIZE : CascadeShadowSplit.SHADOW_MAP_SIZE);
     }
 

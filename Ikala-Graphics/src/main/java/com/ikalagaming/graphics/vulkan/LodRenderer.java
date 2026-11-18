@@ -3526,7 +3526,9 @@ public class LodRenderer {
             }
         }
         // Each instance's entry, and its model's observers for residency
-        final Map<World, List<double[]>> modelEyes = new java.util.IdentityHashMap<>();
+        // Most frames place no instances, so make the map only when some are
+        final Map<World, List<double[]>> modelEyes =
+                placed.isEmpty() ? Map.of() : new java.util.IdentityHashMap<>();
         final double[] from = {eye.x(), eye.y(), eye.z()};
         for (Instance instance : placed) {
             final World model = instance.model;

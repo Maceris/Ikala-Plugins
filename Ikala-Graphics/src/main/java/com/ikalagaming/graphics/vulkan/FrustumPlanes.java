@@ -20,6 +20,9 @@ public final class FrustumPlanes {
     /** How many floats a frustum's planes take. */
     public static final int FLOATS = 6 * 4;
 
+    /** Each thread's plane, so extracting planes every frame allocates nothing. */
+    private static final ThreadLocal<Vector4f> PLANE = ThreadLocal.withInitial(Vector4f::new);
+
     /**
      * Extract the planes of a projection × view matrix in render space.
      *
@@ -27,7 +30,7 @@ public final class FrustumPlanes {
      * @param out Receives the planes, {@link #FLOATS} floats.
      */
     public static void extract(@NonNull Matrix4fc projectionView, float @NonNull [] out) {
-        Vector4f plane = new Vector4f();
+        final Vector4f plane = PLANE.get();
         for (int i = 0; i < 6; ++i) {
             projectionView.frustumPlane(i, plane);
             out[i * 4] = plane.x;
