@@ -1,5 +1,7 @@
 package com.ikalagaming.characters.gltf;
 
+import com.ikalagaming.util.FileUtils;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -7,6 +9,7 @@ import com.google.gson.JsonParser;
 import lombok.Getter;
 import lombok.NonNull;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -178,8 +181,45 @@ public final class GltfFile {
         if (uri.startsWith("data:") && marker > 0) {
             return Base64.getDecoder().decode(uri.substring(marker + DATA_URI_MARKER.length()));
         }
-        String file = java.net.URLDecoder.decode(uri, StandardCharsets.UTF_8);
-        return Files.readAllBytes(folder.resolve(file));
+        String file = percentDecode(uri);
+        Path path =
+                FileUtils.resolveInside(folder, file)
+                        .orElseThrow(
+                                () ->
+                                        new IOException(
+                                                "The URI "
+                                                        + uri
+                                                        + " leaves the folder of the glTF file"));
+        return Files.readAllBytes(path);
+    }
+
+    /**
+     * Decode the %XX escapes in a relative URI. Unlike form decoding, + stays a plus sign.
+     *
+     * @param uri The URI.
+     * @return The decoded text.
+     * @throws IOException If an escape is cut short or isn't hexadecimal.
+     */
+    static String percentDecode(String uri) throws IOException {
+        if (uri.indexOf('%') < 0) {
+            return uri;
+        }
+        byte[] text = uri.getBytes(StandardCharsets.UTF_8);
+        ByteArrayOutputStream out = new ByteArrayOutputStream(text.length);
+        for (int i = 0; i < text.length; ++i) {
+            if (text[i] != '%') {
+                out.write(text[i]);
+                continue;
+            }
+            int high = i + 2 < text.length ? Character.digit(text[i + 1], 16) : -1;
+            int low = i + 2 < text.length ? Character.digit(text[i + 2], 16) : -1;
+            if (high < 0 || low < 0) {
+                throw new IOException("A broken % escape in the URI " + uri);
+            }
+            out.write(high << 4 | low);
+            i += 2;
+        }
+        return out.toString(StandardCharsets.UTF_8);
     }
 
     /**

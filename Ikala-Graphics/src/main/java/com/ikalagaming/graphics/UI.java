@@ -18,10 +18,10 @@ import com.ikalagaming.graphics.ui.style.ThemeException;
 import com.ikalagaming.graphics.ui.style.ThemeLoader;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
+import com.ikalagaming.util.FileUtils;
 
 import lombok.NonNull;
 
-import java.io.File;
 import java.nio.file.Path;
 import java.util.ResourceBundle;
 import java.util.concurrent.CompletableFuture;
@@ -188,11 +188,11 @@ public final class UI {
      * @return The theme.
      * @throws ThemeException If the theme is broken.
      * @throws java.io.UncheckedIOException If it can't be read.
+     * @throws IllegalArgumentException If the path leaves the data folder.
      */
     public Theme loadTheme(@NonNull String path) {
         context.checkOpen();
-        File file = PluginFolder.getResource(context.getOwner(), ResourceType.DATA, path);
-        return ThemeLoader.load(file.toPath(), manager.get().getDefaultTheme());
+        return ThemeLoader.load(dataFile(path), manager.get().getDefaultTheme());
     }
 
     /**
@@ -217,11 +217,27 @@ public final class UI {
      * @return The spec.
      * @throws SpecException If the spec is broken.
      * @throws java.io.UncheckedIOException If it can't be read.
+     * @throws IllegalArgumentException If the path leaves the data folder.
      */
     public UiSpec loadSpec(@NonNull String path) {
         context.checkOpen();
-        File file = PluginFolder.getResource(context.getOwner(), ResourceType.DATA, path);
-        return SpecLoader.load(file.toPath());
+        return SpecLoader.load(dataFile(path));
+    }
+
+    /**
+     * Find a file in this plugin's data folder.
+     *
+     * @param path The path within the folder.
+     * @return The file, which might not exist.
+     * @throws IllegalArgumentException If the path would leave the folder.
+     */
+    private Path dataFile(String path) {
+        Path folder = PluginFolder.getResource(context.getOwner(), ResourceType.DATA, "").toPath();
+        return FileUtils.resolveInside(folder, path)
+                .orElseThrow(
+                        () ->
+                                new IllegalArgumentException(
+                                        "'" + path + "' is outside the plugin's data folder"));
     }
 
     /**

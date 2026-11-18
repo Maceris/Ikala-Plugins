@@ -16,6 +16,7 @@ import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.scripting.ScriptLaunch;
 import com.ikalagaming.scripting.ScriptManager;
 import com.ikalagaming.scripting.interpreter.ScriptRuntime;
+import com.ikalagaming.util.FileUtils;
 
 import lombok.Getter;
 import lombok.NonNull;
@@ -864,9 +865,8 @@ public final class SpecInstance {
         if (folder == null) {
             folder = PluginFolder.getResource(owner.getOwner(), ResourceType.SCRIPTS, "").toPath();
         }
-        folder = folder.toAbsolutePath().normalize();
-        Path file = folder.resolve(action.file()).normalize();
-        if (!file.startsWith(folder) || !Files.isRegularFile(file)) {
+        Path file = FileUtils.resolveInside(folder, action.file()).orElse(null);
+        if (file == null || !Files.isRegularFile(file)) {
             throw new SpecException(
                     where + ": no script '" + action.file() + "' in the plugin's scripts folder");
         }

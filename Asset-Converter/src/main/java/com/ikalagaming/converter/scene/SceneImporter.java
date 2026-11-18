@@ -6,6 +6,7 @@ import com.ikalagaming.converter.scene.ImportedScene.Node;
 import com.ikalagaming.converter.scene.ImportedScene.TextureRef;
 import com.ikalagaming.converter.scene.ImportedScene.TextureSlot;
 import com.ikalagaming.graphics.graph.MeshData;
+import com.ikalagaming.util.FileUtils;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -638,13 +639,11 @@ public final class SceneImporter {
          */
         @Nullable Path find(@NonNull String named) {
             final String normalized = named.replace('\\', '/');
-            try {
-                final Path relative = folder.resolve(normalized);
-                if (Files.isRegularFile(relative)) {
-                    return relative;
-                }
-            } catch (RuntimeException e) {
-                // Not a valid path here, like a drive letter from another machine; go by name
+            // Only inside the model's folder: an absolute or UNC path, like \\host\share\x.png,
+            // would reach outside it, even over the network. Those are found by name instead.
+            final Path relative = FileUtils.resolveInside(folder, normalized).orElse(null);
+            if (relative != null && Files.isRegularFile(relative)) {
+                return relative;
             }
             final int slash = normalized.lastIndexOf('/');
             final String name = normalized.substring(slash + 1).toLowerCase(Locale.ROOT);

@@ -8,6 +8,7 @@ import com.ikalagaming.graphics.ui.Sizing;
 import com.ikalagaming.graphics.ui.style.Style;
 import com.ikalagaming.graphics.ui.style.StyleParser;
 import com.ikalagaming.graphics.ui.style.ThemeException;
+import com.ikalagaming.util.FileUtils;
 
 import lombok.NonNull;
 import org.yaml.snakeyaml.LoaderOptions;
@@ -42,7 +43,7 @@ import java.util.regex.Pattern;
  *   anchors: center            # fill, top-left ... or {at: [0.5, 0.5], offset: [0, -20]}
  *   width: fit                 # fit, grow, 240, "50%", {grow: 2, min: 100}
  * templates:
- *   import: [common.yml]       # templates from other files, next to this one
+ *   import: [common.yml]       # templates from other files, in this folder or below it
  *   big-button:
  *     params: [id, text, action]
  *     node: { type: button, id: ${id}, text: ${text}, onClick: ${action} }
@@ -213,7 +214,17 @@ public final class SpecLoader {
                         at(path, IMPORT) + ": imports need a spec loaded from a file");
             }
             for (String file : SpecValues.names(map.get(IMPORT), at(path, IMPORT))) {
-                Path imported = folder.resolve(file).normalize();
+                // Imports may go into subfolders, but never up out of the importing spec's folder
+                Path imported =
+                        FileUtils.resolveInside(folder, file)
+                                .orElseThrow(
+                                        () ->
+                                                new SpecException(
+                                                        at(path, IMPORT)
+                                                                + ": '"
+                                                                + file
+                                                                + "' is outside the spec's"
+                                                                + " folder"));
                 if (files.contains(imported.toAbsolutePath())) {
                     continue;
                 }

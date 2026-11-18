@@ -12,6 +12,7 @@ import com.ikalagaming.scripting.interpreter.ScriptRuntime;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.concurrent.CompletionException;
@@ -449,14 +450,16 @@ public final class ScriptAutomation {
      * the scene without the GUI over it. The window doesn't have to be in front, but a minimized
      * window draws nothing to save.
      *
-     * @param path Where the file goes; folders are made as needed.
+     * @param path Where the file goes, a .png file on this machine; folders are made as needed.
      * @return The tag to await, which resumes once the file is written.
+     * @throws IllegalArgumentException If the path isn't a local .png file.
      */
     public String saveFrame(@NonNull String path) {
+        final Path file = frameFile(path);
         final ScriptRuntime runtime = currentRuntime();
         final String tag = TAG_PREFIX + NEXT_TAG.incrementAndGet();
         GraphicsManager.getRenderInstance()
-                .saveFrame(Path.of(path))
+                .saveFrame(file)
                 .whenComplete(
                         (saved, error) -> {
                             if (error == null) {
@@ -472,6 +475,29 @@ public final class ScriptAutomation {
                             ScriptManager.terminate(runtime);
                         });
         return tag;
+    }
+
+    /**
+     * Check where a script wants a frame saved. Scripts can come with downloaded content, so they
+     * may only write PNG files, and never to a network share, where just opening the path would
+     * send the user's Windows credentials to that host.
+     *
+     * @param path The path the script gave.
+     * @return The absolute path.
+     * @throws IllegalArgumentException If it isn't a local .png file.
+     */
+    static Path frameFile(String path) {
+        final String slashes = path.replace('\\', '/');
+        if (slashes.startsWith("//")
+                || slashes.indexOf(':', 2) >= 0
+                || !slashes.toLowerCase(Locale.ROOT).endsWith(".png")) {
+            throw new IllegalArgumentException("Frames save to local .png files, not " + path);
+        }
+        try {
+            return Path.of(path).toAbsolutePath().normalize();
+        } catch (InvalidPathException e) {
+            throw new IllegalArgumentException("Not a valid path: " + path, e);
+        }
     }
 
     /**

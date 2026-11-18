@@ -174,6 +174,25 @@ class SpecLoaderTest {
     }
 
     @Test
+    void importsCannotLeaveTheSpecsFolder(@TempDir Path folder) throws IOException {
+        Files.writeString(
+                folder.resolve("common.yml"),
+                "templates:\n  shared: { node: { type: label, id: shared, text: Shared } }\n");
+        Path menus = Files.createDirectory(folder.resolve("menus"));
+        for (String escape : new String[] {"../common.yml", folder.resolve("common.yml").toString()}) {
+            Path spec = menus.resolve("menu.yml");
+            Files.writeString(
+                    spec,
+                    SURFACE
+                            + "templates:\n  import: ['"
+                            + escape
+                            + "']\ncontent: { use: shared }\n");
+            SpecException thrown = assertThrows(SpecException.class, () -> SpecLoader.load(spec));
+            assertTrue(thrown.getMessage().contains("outside the spec's folder"), thrown::getMessage);
+        }
+    }
+
+    @Test
     void problemsSayWhereTheyAre() {
         assertTrue(
                 failure("surface: { id: x }\ncontent: {type: column, id: r}\nextra: 1")

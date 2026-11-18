@@ -4,12 +4,14 @@ import com.ikalagaming.characters.data.DataFormat;
 import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.definition.Definition;
 import com.ikalagaming.characters.definition.Kind;
+import com.ikalagaming.util.FileUtils;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -38,6 +40,7 @@ import java.util.Map;
  *
  * @author Ches Burks
  */
+@Slf4j
 public final class CharacterRegistry {
     /** A registry with nothing in it. */
     public static final CharacterRegistry EMPTY = new CharacterRegistry(List.of());
@@ -151,11 +154,22 @@ public final class CharacterRegistry {
      * @param namespace The namespace of the definition that names it.
      * @param path The asset's path, with / between folders.
      * @return The file, or null if the namespace has no folder on disk, like the built-in content
-     *     inside the plugin.
+     *     inside the plugin, or if the path would leave the folder (which is logged). An empty
+     *     path is the folder itself.
      */
     public Path asset(@NonNull String namespace, @NonNull String path) {
         Path root = roots.get(namespace);
-        return root == null ? null : root.resolve(path).normalize();
+        if (root == null) {
+            return null;
+        }
+        if (path.isEmpty()) {
+            return root.toAbsolutePath().normalize();
+        }
+        Path file = FileUtils.resolveInside(root, path).orElse(null);
+        if (file == null) {
+            log.warn("Ignoring the asset path '{}' in {}: it leaves the content folder", path, namespace);
+        }
+        return file;
     }
 
     /**
@@ -170,6 +184,9 @@ public final class CharacterRegistry {
      */
     public byte[] readAsset(@NonNull String namespace, @NonNull String path) throws IOException {
         Path file = asset(namespace, path);
+        if (file == null && roots.containsKey(namespace)) {
+            throw new IOException("The asset path " + path + " leaves the folder of " + namespace);
+        }
         if (file != null) {
             try {
                 return Files.readAllBytes(file);
