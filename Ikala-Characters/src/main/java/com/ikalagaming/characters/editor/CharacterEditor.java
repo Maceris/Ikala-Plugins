@@ -39,7 +39,6 @@ import com.ikalagaming.characters.view.HeldItems;
 import com.ikalagaming.characters.view.PartAssembler;
 import com.ikalagaming.characters.view.PartCategories;
 import com.ikalagaming.characters.view.PartForms;
-import com.ikalagaming.characters.view.PartRegions;
 import com.ikalagaming.characters.view.PartSlots;
 import com.ikalagaming.characters.view.ShownCharacter;
 import com.ikalagaming.graphics.GraphicsContext;
@@ -334,9 +333,6 @@ public final class CharacterEditor {
     /** Turns the camera. */
     private final OrbitCamera orbit = new OrbitCamera();
 
-    /** What the body under the worn parts hides, for the shown character. */
-    private PartRegions regions;
-
     /** The character's name. */
     private final Observable<String> characterName = Observable.of("");
 
@@ -382,8 +378,11 @@ public final class CharacterEditor {
     /** Which of the loaded designs is shown. */
     private int designIndex;
 
-    /** The design shown, built and sorted, or null while loading. */
-    private PreparedDesign prepared;
+    /**
+     * The design shown and what was last put on its character, or null until a design first loads
+     * after the editor opens, and again once it closes.
+     */
+    private EditorSession session;
 
     /**
      * Files read while the editor is open, on their plan's rig, for switching designs fast. Holds
@@ -401,15 +400,6 @@ public final class CharacterEditor {
 
     /** The particle effects characters wear, loaded while the editor is open. */
     private FxEffects fxEffects;
-
-    /** What the shown effects were built from, to tell when to build them again. */
-    private List<Object> shownFx = List.of();
-
-    /** The effects on the shown character, from the parts and the design. */
-    private List<FxUse> shownUses = List.of();
-
-    /** The shown character's effects, or null. */
-    private CharacterFx shownEffects;
 
     /** The shown character's animation and the Motion tab. */
     private final CharacterMotion motion = new CharacterMotion();
@@ -459,23 +449,8 @@ public final class CharacterEditor {
     /** The styles the animation was last built for. */
     private List<Id> motionStyles = List.of();
 
-    /** What the shown character has equipped. */
-    private Equipment equipment = Equipment.NONE;
-
     /** Reads held items' meshes. */
     private final HeldItems heldItems = new HeldItems();
-
-    /** The effects the equipped items carry. */
-    private List<FxUse> itemFx = List.of();
-
-    /** The character shown, or null while loading or if it failed. */
-    private ShownCharacter shown;
-
-    /** What the character wears and its slider values, or null while nothing is shown. */
-    private CharacterLook look;
-
-    /** Its slots sorted into the body's regions. */
-    private PartCategories categories;
 
     /** The palette channel the Colors tab shows, or null before one is picked. */
     private String colorChannel;
@@ -483,44 +458,11 @@ public final class CharacterEditor {
     /** The color picker's color, sRGB. */
     private final float[] picker = {0.5f, 0.5f, 0.5f};
 
-    /** The look's version when the parts were last colored, or -1 to color them again. */
-    private int shownColorVersion = -1;
-
-    /**
-     * The colors the worn parts give palette channels, as of {@link #shownColorVersion}, see {@link
-     * #findPartColors}.
-     */
-    private Map<String, Integer> partColors = Map.of();
-
-    /** The channel last previewed, or null. */
-    private String shownPreviewChannel;
-
-    /** The swatch last previewed. */
-    private int shownPreviewCode;
-
     /** Whether the Body tab is showing, rather than the Costume tab. */
     private boolean bodyTab = true;
 
     /** How tall the character is with the sliders as they are, in meters. */
     private float characterHeight;
-
-    /** Which category is open, or -1 for none. */
-    private int openCategory = -1;
-
-    /** The parts last shown, to change them only when they change. */
-    private List<Integer> lastWorn = List.of();
-
-    /**
-     * How far each shown part pushing out over bulky body parts is pushed over each slot, by part
-     * index, to move one again only when that changes; see {@link PartForms}.
-     */
-    private final Map<Integer, Map<String, Float>> pushed = new HashMap<>();
-
-    /**
-     * How far each shown accessory is moved out to rest on what is worn under it, by part index, to
-     * move one again only when that changes; see {@link AccessoryRests}.
-     */
-    private final Map<Integer, Vector3f> rested = new HashMap<>();
 
     /** The channel whose swatch the Colors tab has hovered, or null, see {@link #tickFrame}. */
     private String previewChannel;
@@ -531,33 +473,12 @@ public final class CharacterEditor {
     /** Runs {@link #tickFrame} while the editor is open. */
     private final Runnable frameTick = this::tickFrame;
 
-    /** The decal last shown, see {@link #showDecal}. */
-    private DecalUse shownDecal;
-
-    /** Whether the shown character has the look's decal, {@link #shownDecal}. */
-    private boolean decalSynced;
-
     /** The most a color's channel holds, see {@link Color}. */
     private static final float COLOR_MAX = 255;
 
     /** The channels a newly chosen decal's colors take, until the user picks others. */
     private static final Map<String, String> DECAL_CHANNELS =
             Map.of(Decal.FIRST, Palette.ACCENT, Decal.SECOND, Palette.PRIMARY);
-
-    /** The body plan the character's rig belongs to, or null. */
-    private BodyPlan plan;
-
-    /** The look before the slider being dragged, taken while no slider is dragged. */
-    private CharacterLook.Snapshot beforeEdit;
-
-    /** The look's version when {@link #beforeEdit} was taken. */
-    private int beforeEditVersion = -1;
-
-    /** Whether a slider drag has been remembered for undo. */
-    private boolean editing;
-
-    /** Which clip of the character's is playing, or -1 for none. */
-    private int clipIndex = -1;
 
     /** Whether the clip's time moves on. */
     private boolean playing = true;
@@ -770,68 +691,70 @@ public final class CharacterEditor {
             characterName.set("Couldn't build " + design.id());
             return;
         }
-        if (shown != null) {
-            shown.close();
+        if (session == null) {
+            session = new EditorSession();
+        } else {
+            session.shown.close();
         }
-        prepared = built;
-        plan = built.plan();
+        session.prepared = built;
+        session.plan = built.plan();
         ImportedCharacter character = built.character();
         PartSlots slots = built.slots();
-        regions = built.regions();
+        session.regions = built.regions();
         Set<String> extras = new HashSet<>();
         // Tails and wings; a chain named like a layer, like the cape, stays with the layers
-        plan.extensions().stream()
+        session.plan.extensions().stream()
                 .map(BodyPlan.Extension::id)
-                .filter(chain -> plan.layer(chain) == null)
+                .filter(chain -> session.plan.layer(chain) == null)
                 .forEach(extras::add);
-        categories = PartCategories.of(character, slots, extras);
-        List<Slider> found = findSliders(plan);
-        look =
+        session.categories = PartCategories.of(character, slots, extras);
+        List<Slider> found = findSliders(session.plan);
+        session.look =
                 new CharacterLook(
                         slots,
                         found,
-                        plan.variants(),
+                        session.plan.variants(),
                         built.channelNames(),
                         built.fills(),
                         built.optionParts(),
-                        plan,
+                        session.plan,
                         built.formMeshes());
-        look.start(
-                plan.variants().indexOf(plan.variant(design.variant())),
+        session.look.start(
+                session.plan.variants().indexOf(session.plan.variant(design.variant())),
                 DesignSnapshot.sliderValues(design),
                 DesignSnapshot.colorCodes(design),
                 design.fx(),
                 design.style(),
                 design.decal());
-        decalSynced = false;
-        beforeEditVersion = -1;
-        editing = false;
-        lastWorn = look.worn(CharacterLook.NO_PREVIEW, 0);
+        session.decalSynced = false;
+        session.beforeEditVersion = -1;
+        session.editing = false;
+        session.lastWorn = session.look.worn(CharacterLook.NO_PREVIEW, 0);
         // Facing the camera's side of the floor; characters face +Z
-        shown =
+        session.shown =
                 new ShownCharacter(
                         plugin,
                         character,
-                        regions.regions(),
+                        session.regions.regions(),
                         built.channels(),
                         built.fallbacks(),
                         new Vector3d(CharacterStage.origin()),
                         new Quaternionf(),
-                        lastWorn);
-        shown.setHiddenRegions(regions.hidden(lastWorn));
-        pushed.clear();
-        rested.clear();
-        pushForms(lastWorn, look.slotStandoffs(CharacterLook.NO_PREVIEW, 0));
-        equipment = Equipment.NONE;
-        itemFx = List.of();
+                        session.lastWorn);
+        session.shown.setHiddenRegions(session.regions.hidden(session.lastWorn));
+        session.pushed.clear();
+        session.rested.clear();
+        pushForms(session.lastWorn, session.look.slotStandoffs(CharacterLook.NO_PREVIEW, 0));
+        session.equipment = Equipment.NONE;
+        session.itemFx = List.of();
         motion.setCombat(false);
-        shownColorVersion = -1;
-        shownFx = List.of();
+        session.shownColorVersion = -1;
+        session.shownFx = List.of();
         characterName.set(design.id().toString());
         String path = design.id().path();
         saveName.set(path.substring(path.lastIndexOf('/') + 1));
         if (!applySliders()) {
-            look =
+            session.look =
                     new CharacterLook(
                             slots,
                             List.of(),
@@ -839,11 +762,12 @@ public final class CharacterEditor {
                             built.channelNames(),
                             built.fills(),
                             built.optionParts(),
-                            plan,
+                            session.plan,
                             built.formMeshes());
             slidersTitle.set("No sliders: the skeleton lacks their bones");
         }
-        openCategory = Math.min(openCategory, categories.categories().size() - 1);
+        session.openCategory =
+                Math.min(session.openCategory, session.categories.categories().size() - 1);
         frameOpenCategory();
         ImportedCharacter.ClipData initial = CharacterPreview.pickClip(character, null);
         playClip(initial == null ? -1 : character.clips().indexOf(initial));
@@ -860,11 +784,11 @@ public final class CharacterEditor {
         motion.setStanding(standsStill());
         motion.build(
                 registry.get(),
-                plan,
+                session.plan,
                 variant,
                 motionStyles,
                 current.reference(),
-                shown,
+                session.shown,
                 builds,
                 task -> graphics.ui().post(task));
     }
@@ -877,16 +801,16 @@ public final class CharacterEditor {
      * @param index The variant's position in the plan.
      */
     private void switchVariant(int index) {
-        if (prepared == null || index == look.variant()) {
+        if (session == null || index == session.look.variant()) {
             return;
         }
         showDesign(
                 DesignSnapshot.of(
-                        look,
-                        plan,
-                        prepared,
-                        prepared.design().id(),
-                        plan.variants().get(index).id(),
+                        session.look,
+                        session.plan,
+                        session.prepared,
+                        session.prepared.design().id(),
+                        session.plan.variants().get(index).id(),
                         false));
     }
 
@@ -907,11 +831,11 @@ public final class CharacterEditor {
         Id id = Id.parse(current.saveNamespace() + ":design/" + name);
         Design design =
                 DesignSnapshot.of(
-                        look,
-                        plan,
-                        prepared,
+                        session.look,
+                        session.plan,
+                        session.prepared,
                         id,
-                        plan.variants().get(Math.max(0, look.variant())).id(),
+                        session.plan.variants().get(Math.max(0, session.look.variant())).id(),
                         true);
         List<Problem> problems = design.validate(registry.get(), SLIDER_CONTEXT);
         if (!problems.isEmpty()) {
@@ -943,10 +867,10 @@ public final class CharacterEditor {
      * @param change What to do to the look.
      */
     private void changeLook(Consumer<CharacterLook> change) {
-        if (look == null) {
+        if (session == null) {
             return;
         }
-        change.accept(look);
+        change.accept(session.look);
         applySliders();
         showWorn(CharacterLook.NO_PREVIEW, 0);
     }
@@ -959,15 +883,15 @@ public final class CharacterEditor {
      * @param previewChoice What it would hold.
      */
     private void showWorn(int previewSlot, int previewChoice) {
-        if (look == null || shown == null) {
+        if (session == null) {
             return;
         }
-        List<Integer> worn = look.worn(previewSlot, previewChoice);
-        pushForms(worn, look.slotStandoffs(previewSlot, previewChoice));
-        if (!worn.equals(lastWorn)) {
-            lastWorn = worn;
-            shown.showParts(worn);
-            shown.setHiddenRegions(regions.hidden(worn));
+        List<Integer> worn = session.look.worn(previewSlot, previewChoice);
+        pushForms(worn, session.look.slotStandoffs(previewSlot, previewChoice));
+        if (!worn.equals(session.lastWorn)) {
+            session.lastWorn = worn;
+            session.shown.showParts(worn);
+            session.shown.setHiddenRegions(session.regions.hidden(worn));
         }
     }
 
@@ -980,8 +904,8 @@ public final class CharacterEditor {
      * @param slotStandoffs How far the body part in each slot stands out, in meters.
      */
     private void pushForms(List<Integer> worn, Map<String, Float> slotStandoffs) {
-        Map<String, Float> amounts = PartForms.shares(plan, slotStandoffs);
-        ImportedCharacter character = prepared.character();
+        Map<String, Float> amounts = PartForms.shares(session.plan, slotStandoffs);
+        ImportedCharacter character = session.prepared.character();
         for (int index : worn) {
             ImportedCharacter.Part part = character.parts().get(index);
             if (part.formTargets().isEmpty()) {
@@ -994,9 +918,9 @@ public final class CharacterEditor {
                             own.put(slot, amount);
                         }
                     });
-            if (!own.equals(pushed.getOrDefault(index, Map.of()))) {
-                pushed.put(index, own);
-                shown.replaceVertices(index, PartForms.displace(part, own));
+            if (!own.equals(session.pushed.getOrDefault(index, Map.of()))) {
+                session.pushed.put(index, own);
+                session.shown.replaceVertices(index, PartForms.displace(part, own));
             }
         }
         restAccessories(worn);
@@ -1009,7 +933,7 @@ public final class CharacterEditor {
      * @param worn The shown parts.
      */
     private void restAccessories(List<Integer> worn) {
-        List<Part> definitions = prepared.partDefinitions();
+        List<Part> definitions = session.prepared.partDefinitions();
         Set<Part> wornParts = new LinkedHashSet<>();
         for (int index : worn) {
             Part definition = definitions.get(index);
@@ -1017,7 +941,7 @@ public final class CharacterEditor {
                 wornParts.add(definition);
             }
         }
-        ImportedCharacter character = prepared.character();
+        ImportedCharacter character = session.prepared.character();
         for (int index : worn) {
             Part definition = definitions.get(index);
             ImportedCharacter.Part part = character.parts().get(index);
@@ -1027,13 +951,15 @@ public final class CharacterEditor {
                 continue;
             }
             // The socket the mesh is on, whichever of the sockets it fits that is
-            BodyPlan.Socket socket = plan.socketOnBone(character.skeleton().name(part.joints()[0]));
+            BodyPlan.Socket socket =
+                    session.plan.socketOnBone(character.skeleton().name(part.joints()[0]));
             Vector3f push =
-                    AccessoryRests.push(plan, socket, wornParts, prepared.design().variant());
-            Vector3f last = rested.get(index);
+                    AccessoryRests.push(
+                            session.plan, socket, wornParts, session.prepared.design().variant());
+            Vector3f last = session.rested.get(index);
             if (last == null ? push.lengthSquared() > 0 : !push.equals(last)) {
-                rested.put(index, push);
-                shown.replaceVertices(index, AccessoryRests.moved(part, push));
+                session.rested.put(index, push);
+                session.shown.replaceVertices(index, AccessoryRests.moved(part, push));
             }
         }
     }
@@ -1045,7 +971,7 @@ public final class CharacterEditor {
      * @param frame The UI frame.
      */
     private void drawParts(@NonNull UiFrame frame) {
-        boolean ready = look != null && categories != null;
+        boolean ready = session != null;
         boolean body = bodyTab;
         boolean onContent = false;
         if (IkGui.beginTabBar("##character-tabs")) {
@@ -1084,7 +1010,7 @@ public final class CharacterEditor {
             bodyTab = body;
             frameOpenCategory();
             // The Body tab stands the character at rest, so the ruler reads its height true
-            playClip(clipIndex);
+            playClip(session.clipIndex);
         }
         if (bodyTab || contentTab) {
             showWorn(CharacterLook.NO_PREVIEW, 0);
@@ -1110,7 +1036,7 @@ public final class CharacterEditor {
 
     /** Draw the Body tab: a card for each variant of the body plan, and the character's height. */
     private void drawBody() {
-        List<BodyPlan.Variant> variants = look.variants();
+        List<BodyPlan.Variant> variants = session.look.variants();
         if (variants.isEmpty()) {
             IkGui.textDisabled("The rig has no body plan with variants");
         }
@@ -1126,7 +1052,7 @@ public final class CharacterEditor {
             String label = name.substring(0, 1).toUpperCase(Locale.ROOT) + name.substring(1);
             if (IkGui.selectable(
                     label + "##variant" + v,
-                    look.variant() == v,
+                    session.look.variant() == v,
                     SelectableFlags.NONE,
                     cardWidth,
                     IkGui.getFrameHeight() * CARD_ROWS)) {
@@ -1166,19 +1092,19 @@ public final class CharacterEditor {
     private void drawCostume() {
         int previewSlot = CharacterLook.NO_PREVIEW;
         int previewChoice = 0;
-        if (IkGui.checkbox(BOTH_SIDES_LABEL, look.bothSides())) {
-            look.setBothSides(!look.bothSides());
+        if (IkGui.checkbox(BOTH_SIDES_LABEL, session.look.bothSides())) {
+            session.look.setBothSides(!session.look.bothSides());
         }
-        List<PartCategories.Category> list = categories.categories();
+        List<PartCategories.Category> list = session.categories.categories();
         for (int c = 0; c < list.size(); ++c) {
             PartCategories.Category category = list.get(c);
             if (category.slots().stream().noneMatch(this::isShown)) {
                 continue;
             }
-            IkGui.setNextItemOpen(openCategory == c, Condition.ALWAYS);
+            IkGui.setNextItemOpen(session.openCategory == c, Condition.ALWAYS);
             boolean open = IkGui.collapsingHeader(category.label() + "##" + category.id());
-            if (open != (openCategory == c)) {
-                openCategory = open ? c : -1;
+            if (open != (session.openCategory == c)) {
+                session.openCategory = open ? c : -1;
                 frameOpenCategory();
             }
             if (!open) {
@@ -1207,7 +1133,8 @@ public final class CharacterEditor {
      * @return True if it is shown.
      */
     private boolean isShown(int slot) {
-        return look.choice(slot) != CharacterLook.EMPTY || !look.available(slot).isEmpty();
+        return session.look.choice(slot) != CharacterLook.EMPTY
+                || !session.look.available(slot).isEmpty();
     }
 
     /**
@@ -1218,20 +1145,20 @@ public final class CharacterEditor {
      * @return The choice hovered in its open dropdown, or {@code Integer.MIN_VALUE} for none.
      */
     private int drawSlot(int slot) {
-        PartSlots.Slot info = look.slots().slots().get(slot);
-        int choice = look.choice(slot);
+        PartSlots.Slot info = session.look.slots().slots().get(slot);
+        int choice = session.look.choice(slot);
         String current = choice == CharacterLook.EMPTY ? EMPTY_LABEL : info.labels().get(choice);
         // The slot's name in a column of its own, so the rows line up
         IkGui.alignTextToFramePadding();
         IkGui.textUnformatted(info.id());
         IkGui.sameLine(NAME_COLUMN);
-        int cover = look.coveredBy(slot);
+        int cover = session.look.coveredBy(slot);
         if (cover >= 0) {
-            PartSlots.Slot covering = look.slots().slots().get(cover);
-            IkGui.textDisabled("part of " + covering.labels().get(look.choice(cover)));
+            PartSlots.Slot covering = session.look.slots().slots().get(cover);
+            IkGui.textDisabled("part of " + covering.labels().get(session.look.choice(cover)));
             return Integer.MIN_VALUE;
         }
-        Part hiding = look.hiddenBy(slot);
+        Part hiding = session.look.hiddenBy(slot);
         if (hiding != null) {
             IkGui.textDisabled(
                     (choice == CharacterLook.EMPTY ? "" : current + ", ")
@@ -1239,13 +1166,13 @@ public final class CharacterEditor {
                             + PreparedDesign.label(hiding.id()));
             return Integer.MIN_VALUE;
         }
-        if (look.isFixed(slot)) {
+        if (session.look.isFixed(slot)) {
             IkGui.textUnformatted(current);
             return Integer.MIN_VALUE;
         }
         int hovered = Integer.MIN_VALUE;
         if (IkGui.button("<")) {
-            look.step(slot, -1);
+            session.look.step(slot, -1);
         }
         IkGui.sameLine();
         float arrow = IkGui.getFrameHeight();
@@ -1257,13 +1184,13 @@ public final class CharacterEditor {
             if (info.optional()) {
                 shown.add(CharacterLook.EMPTY);
             }
-            shown.addAll(look.available(slot));
+            shown.addAll(session.look.available(slot));
             for (int option : shown) {
                 String text =
                         option == CharacterLook.EMPTY ? EMPTY_LABEL : info.labels().get(option);
                 boolean selected = option == choice;
                 if (IkGui.selectable(text + "##" + option, selected)) {
-                    look.choose(slot, option);
+                    session.look.choose(slot, option);
                 }
                 if (selected) {
                     IkGui.setItemDefaultFocus();
@@ -1276,25 +1203,26 @@ public final class CharacterEditor {
         }
         IkGui.sameLine();
         if (IkGui.button(">")) {
-            look.step(slot, 1);
+            session.look.step(slot, 1);
         }
         return hovered;
     }
 
     /** Glide the camera to frame the open category, or the whole character if none is open. */
     private void frameOpenCategory() {
-        if (categories == null) {
+        if (session == null) {
             return;
         }
         Vector3f min;
         Vector3f max;
-        if (!bodyTab && openCategory >= 0) {
-            PartCategories.Category category = categories.categories().get(openCategory);
+        if (!bodyTab && session.openCategory >= 0) {
+            PartCategories.Category category =
+                    session.categories.categories().get(session.openCategory);
             min = category.min();
             max = category.max();
         } else {
-            min = categories.min();
-            max = categories.max();
+            min = session.categories.min();
+            max = session.categories.max();
         }
         Vector3d center =
                 new Vector3d((min.x + max.x) / 2.0, (min.y + max.y) / 2.0, (min.z + max.z) / 2.0)
@@ -1329,13 +1257,13 @@ public final class CharacterEditor {
      * @return False if the sliders don't fit the skeleton.
      */
     private boolean applySliders() {
-        if (shown == null || plan == null || look == null) {
-            return look != null && look.sliders().isEmpty();
+        if (session == null) {
+            return false;
         }
         try {
             Set<Part> worn = new LinkedHashSet<>();
-            for (int index : look.worn(CharacterLook.NO_PREVIEW, 0)) {
-                Part definition = prepared.partDefinitions().get(index);
+            for (int index : session.look.worn(CharacterLook.NO_PREVIEW, 0)) {
+                Part definition = session.prepared.partDefinitions().get(index);
                 if (definition != null) {
                     worn.add(definition);
                 }
@@ -1343,14 +1271,21 @@ public final class CharacterEditor {
             // Parts on extension chains make their chains as long as their meshes
             Proportions proportions =
                     Proportions.fromSliders(
-                                    shown.getSkeleton(), plan, look.sliders(), look.values(), 1)
-                            .withChains(plan, Proportions.chainLengths(plan, worn));
-            shown.setProportions(proportions);
+                                    session.shown.getSkeleton(),
+                                    session.plan,
+                                    session.look.sliders(),
+                                    session.look.values(),
+                                    1)
+                            .withChains(session.plan, Proportions.chainLengths(session.plan, worn));
+            session.shown.setProportions(proportions);
             characterHeight = heightWith(proportions);
             swingChains(worn);
             return true;
         } catch (IllegalArgumentException e) {
-            log.warn("The sliders don't fit {}: {}", shown.getCharacter().name(), e.getMessage());
+            log.warn(
+                    "The sliders don't fit {}: {}",
+                    session.shown.getCharacter().name(),
+                    e.getMessage());
             return false;
         }
     }
@@ -1366,7 +1301,7 @@ public final class CharacterEditor {
         List<WingPoser.Worn> wingsWorn = new ArrayList<>();
         for (Part part : worn) {
             BodyPlan.Extension extension =
-                    part.extension() == null ? null : plan.extension(part.extension());
+                    part.extension() == null ? null : session.plan.extension(part.extension());
             if (extension != null && extension.wing() != null) {
                 wingsWorn.add(
                         new WingPoser.Worn(
@@ -1387,21 +1322,22 @@ public final class CharacterEditor {
         worn.stream()
                 .filter(part -> part.extension() != null)
                 .forEach(part -> keyed.add(part.id().toString()));
-        if (keyed.equals(swinging) && shown == swingingOn) {
+        if (keyed.equals(swinging) && session.shown == swingingOn) {
             return;
         }
         swinging = keyed;
-        swingingOn = shown;
+        swingingOn = session.shown;
         SpringChains springs =
-                new SpringChains(shown.getSkeleton(), plan, springsOn ? chains : Set.of());
+                new SpringChains(
+                        session.shown.getSkeleton(), session.plan, springsOn ? chains : Set.of());
         springChains = springs.isEmpty() ? null : springs;
-        shown.setSprings(springChains);
-        onChain = new boolean[shown.getSkeleton().size()];
+        session.shown.setSprings(springChains);
+        onChain = new boolean[session.shown.getSkeleton().size()];
         for (String chain : chains) {
-            BodyPlan.Extension extension = plan.extension(chain);
+            BodyPlan.Extension extension = session.plan.extension(chain);
             if (extension != null) {
                 for (String name : extension.bones()) {
-                    int bone = shown.getSkeleton().index(name);
+                    int bone = session.shown.getSkeleton().index(name);
                     if (bone >= 0) {
                         onChain[bone] = true;
                     }
@@ -1415,8 +1351,8 @@ public final class CharacterEditor {
                 .forEach(part -> own.put(part.extension(), part.wing()));
         WingMotion wings =
                 new WingMotion(
-                        shown.getSkeleton(),
-                        plan,
+                        session.shown.getSkeleton(),
+                        session.plan,
                         chains,
                         wingState == null ? WingMotion.State.FOLD : wingState,
                         own);
@@ -1424,7 +1360,7 @@ public final class CharacterEditor {
             wings.setAutomatic();
         }
         wingMotion = wings.isEmpty() ? null : wings;
-        shown.setWings(wingMotion);
+        session.shown.setWings(wingMotion);
     }
 
     /**
@@ -1452,7 +1388,7 @@ public final class CharacterEditor {
      * @return The height, in meters.
      */
     private float heightWith(Proportions proportions) {
-        Skeleton skeleton = shown.getSkeleton();
+        Skeleton skeleton = session.shown.getSkeleton();
         PoseSolver solver = new PoseSolver(skeleton);
         solver.solve(new Pose(skeleton), proportions);
         float[] palette = new float[skeleton.size() * Skeleton.MATRIX_FLOATS];
@@ -1461,14 +1397,14 @@ public final class CharacterEditor {
         for (int b = 0; b < matrices.length; ++b) {
             matrices[b] = new Matrix4f().set(palette, b * Skeleton.MATRIX_FLOATS);
         }
-        List<ImportedCharacter.Part> parts = shown.getCharacter().parts();
+        List<ImportedCharacter.Part> parts = session.shown.getCharacter().parts();
         Vector3f rest = new Vector3f();
         Vector3f moved = new Vector3f();
         Vector3f sum = new Vector3f();
         float top = 0;
-        for (int s = 0; s < look.slots().slots().size(); ++s) {
-            PartSlots.Slot slot = look.slots().slots().get(s);
-            int choice = look.choice(s);
+        for (int s = 0; s < session.look.slots().slots().size(); ++s) {
+            PartSlots.Slot slot = session.look.slots().slots().get(s);
+            int choice = session.look.choice(s);
             if (slot.optional() || choice == CharacterLook.EMPTY) {
                 continue;
             }
@@ -1590,13 +1526,13 @@ public final class CharacterEditor {
      * @param frame The UI frame.
      */
     private void drawSliders(@NonNull UiFrame frame) {
-        if (look == null) {
+        if (session == null) {
             return;
         }
-        if (!editing && beforeEditVersion != look.version()) {
+        if (!session.editing && session.beforeEditVersion != session.look.version()) {
             // Only taken when the look changed, so idle frames don't copy it
-            beforeEdit = look.snapshot();
-            beforeEditVersion = look.version();
+            session.beforeEdit = session.look.snapshot();
+            session.beforeEditVersion = session.look.version();
         }
         int hovered = NO_SWATCH;
         if (IkGui.beginTabBar("##look-tabs")) {
@@ -1626,8 +1562,8 @@ public final class CharacterEditor {
             }
             IkGui.endTabBar();
         }
-        if (editing && !IkGui.isAnyItemActive()) {
-            editing = false;
+        if (session.editing && !IkGui.isAnyItemActive()) {
+            session.editing = false;
         }
         // The next frame's tick shows it, see tickFrame
         previewChannel = hovered == NO_SWATCH ? null : colorChannel;
@@ -1640,13 +1576,13 @@ public final class CharacterEditor {
      * any swatch the Colors tab has hovered.
      */
     private void tickFrame() {
-        if (look == null) {
+        if (session == null) {
             return;
         }
         showFx();
         tickMotion();
-        if (showBones && shown != null) {
-            boneView.draw(shown, onChain, springChains, boneNames);
+        if (showBones) {
+            boneView.draw(session.shown, onChain, springChains, boneNames);
         }
         showColors(previewChannel, previewCode);
         // The Colors tab sets it again each frame it is drawn
@@ -1656,9 +1592,9 @@ public final class CharacterEditor {
 
     /** Remember the look before a drag for undo, once, when the drag starts changing it. */
     private void startEdit() {
-        if (!editing) {
-            look.push(beforeEdit);
-            editing = true;
+        if (!session.editing) {
+            session.look.push(session.beforeEdit);
+            session.editing = true;
         }
     }
 
@@ -1666,7 +1602,7 @@ public final class CharacterEditor {
     private void drawScales() {
         String group = null;
         boolean changed = false;
-        for (Slider slider : look.sliders()) {
+        for (Slider slider : session.look.sliders()) {
             String sliderGroup = groupOf(slider);
             if (!sliderGroup.equals(group)) {
                 group = sliderGroup;
@@ -1675,11 +1611,11 @@ public final class CharacterEditor {
                     drawAxisHeadings();
                 }
             }
-            Range range = look.range(slider, SLIDER_CONTEXT);
-            float[] value = look.values().get(slider.id());
+            Range range = session.look.range(slider, SLIDER_CONTEXT);
+            float[] value = session.look.values().get(slider.id());
             String label = Objects.requireNonNullElse(slider.label(), slider.id().toString());
             // A full helmet locks the face's sliders, as there is no face to shape
-            Part locking = look.lockedBy(slider);
+            Part locking = session.look.lockedBy(slider);
             IkGui.beginDisabled(locking != null);
             if (slider.vector()) {
                 changed |= IkGui.sliderFloat3(label, value, range.min(), range.max());
@@ -1693,7 +1629,7 @@ public final class CharacterEditor {
         }
         if (changed) {
             startEdit();
-            look.touch();
+            session.look.touch();
             applySliders();
         }
     }
@@ -1710,7 +1646,7 @@ public final class CharacterEditor {
             IkGui.textDisabled("No effects loaded");
             return;
         }
-        List<FxUse> uses = look.fx();
+        List<FxUse> uses = session.look.fx();
         for (int i = 0; i < uses.size(); ++i) {
             IkGui.pushID(i);
             IkGui.separatorText("Effect " + (i + 1));
@@ -1719,8 +1655,12 @@ public final class CharacterEditor {
         }
         IkGui.spacing();
         if (uses.size() < Design.MAX_FX && IkGui.button("Add effect")) {
-            String socket = plan.sockets().isEmpty() ? null : plan.sockets().get(0).id();
-            String bone = socket == null ? prepared.character().rig().bones().get(0).name() : null;
+            String socket =
+                    session.plan.sockets().isEmpty() ? null : session.plan.sockets().get(0).id();
+            String bone =
+                    socket == null
+                            ? session.prepared.character().rig().bones().get(0).name()
+                            : null;
             changeLook(
                     changed ->
                             changed.addFx(
@@ -1749,11 +1689,11 @@ public final class CharacterEditor {
     private void drawDecal() {
         IkGui.separatorText("Decal");
         List<Decal> all = registry.get().all(Decal.class);
-        if (all.isEmpty() || plan.decals().isEmpty()) {
+        if (all.isEmpty() || session.plan.decals().isEmpty()) {
             IkGui.textDisabled("No decals for this body");
             return;
         }
-        DecalUse use = look.decal();
+        DecalUse use = session.look.decal();
         if (IkGui.beginCombo(
                 "Decal##decal", use == null ? "none" : PreparedDesign.label(use.decal()))) {
             if (IkGui.selectable("none##no-decal", use == null)) {
@@ -1763,7 +1703,7 @@ public final class CharacterEditor {
                 boolean chosen = use != null && decal.id().equals(use.decal());
                 if (IkGui.selectable(
                         PreparedDesign.label(decal.id()) + "##" + decal.id(), chosen)) {
-                    String place = use == null ? plan.decals().get(0).id() : use.place();
+                    String place = use == null ? session.plan.decals().get(0).id() : use.place();
                     Map<String, String> channels = use == null ? DECAL_CHANNELS : use.channels();
                     changeLook(
                             changed -> changed.setDecal(new DecalUse(decal.id(), place, channels)));
@@ -1774,8 +1714,8 @@ public final class CharacterEditor {
         if (use == null) {
             return;
         }
-        if (plan.decals().size() > 1 && IkGui.beginCombo("On##decal-place", use.place())) {
-            for (BodyPlan.DecalPlace place : plan.decals()) {
+        if (session.plan.decals().size() > 1 && IkGui.beginCombo("On##decal-place", use.place())) {
+            for (BodyPlan.DecalPlace place : session.plan.decals()) {
                 if (IkGui.selectable(
                         place.id() + "##" + place.id(), place.id().equals(use.place()))) {
                     changeLook(
@@ -1795,7 +1735,7 @@ public final class CharacterEditor {
                 if (IkGui.selectable("its own##own-" + mask, channel == null)) {
                     changeLook(changed -> changed.setDecal(recolored(use, mask, null)));
                 }
-                for (String other : plan.allChannels()) {
+                for (String other : session.plan.allChannels()) {
                     if (IkGui.selectable(
                             other + "##" + mask + "-" + other, other.equals(channel))) {
                         changeLook(changed -> changed.setDecal(recolored(use, mask, other)));
@@ -1834,7 +1774,7 @@ public final class CharacterEditor {
      * @return False if nothing is shown or the plan has no decal places.
      */
     boolean wearDecal(String decalId, String place, String first, String second) {
-        if (look == null || plan == null || plan.decals().isEmpty()) {
+        if (session == null || session.plan.decals().isEmpty()) {
             return false;
         }
         if (decalId == null || decalId.isBlank()) {
@@ -1848,7 +1788,7 @@ public final class CharacterEditor {
         if (second != null && !second.isBlank()) {
             channels.put(Decal.SECOND, second);
         }
-        String where = place == null || place.isBlank() ? plan.decals().get(0).id() : place;
+        String where = place == null || place.isBlank() ? session.plan.decals().get(0).id() : place;
         changeLook(changed -> changed.setDecal(new DecalUse(Id.parse(decalId), where, channels)));
         return true;
     }
@@ -1872,7 +1812,7 @@ public final class CharacterEditor {
         }
         String place = use.socket() != null ? use.socket() : use.bone();
         if (IkGui.beginCombo("On##place", place)) {
-            for (BodyPlan.Socket socket : plan.sockets()) {
+            for (BodyPlan.Socket socket : session.plan.sockets()) {
                 if (IkGui.selectable(
                         socket.id() + "##socket-" + socket.id(),
                         socket.id().equals(use.socket()))) {
@@ -1880,7 +1820,7 @@ public final class CharacterEditor {
                 }
             }
             IkGui.separator();
-            for (Rig.Bone bone : prepared.character().rig().bones()) {
+            for (Rig.Bone bone : session.prepared.character().rig().bones()) {
                 if (bone.kind() != Rig.BoneKind.DEFORM) {
                     continue;
                 }
@@ -1896,7 +1836,7 @@ public final class CharacterEditor {
             if (IkGui.selectable("its own##own", use.color() == null)) {
                 changeLook(changed -> changed.setFx(index, colored(use, null)));
             }
-            for (String channel : plan.allChannels()) {
+            for (String channel : session.plan.allChannels()) {
                 if (IkGui.selectable(channel + "##" + channel, channel.equals(use.color()))) {
                     changeLook(changed -> changed.setFx(index, colored(use, channel)));
                 }
@@ -1905,7 +1845,7 @@ public final class CharacterEditor {
         }
         if (IkGui.beginCombo("When##when", use.when())) {
             List<String> whens = new ArrayList<>(List.of(FxUse.ALWAYS, FxUse.MOVING));
-            whens.addAll(CharacterMotion.toggles(shownUses));
+            whens.addAll(CharacterMotion.toggles(session.shownUses));
             for (String when : whens) {
                 if (IkGui.selectable(when + "##when-" + when, when.equals(use.when()))) {
                     changeLook(changed -> changed.setFx(index, use.withWhen(when)));
@@ -1922,7 +1862,7 @@ public final class CharacterEditor {
         changed |= IkGui.sliderFloat("Glow##intensity", intensity, 0, FxUse.FACTORS.max());
         if (changed) {
             startEdit();
-            look.dragFx(
+            session.look.dragFx(
                     index,
                     new FxUse(
                             use.fx(),
@@ -2014,7 +1954,7 @@ public final class CharacterEditor {
      * changed since they were last put on.
      */
     private void showFx() {
-        if (shown == null || look == null || fxEffects == null) {
+        if (session == null || fxEffects == null) {
             return;
         }
         List<Part> worn = wornParts();
@@ -2022,34 +1962,34 @@ public final class CharacterEditor {
         for (Part part : worn) {
             uses.addAll(part.fx());
         }
-        uses.addAll(look.fx());
-        uses.addAll(itemFx);
+        uses.addAll(session.look.fx());
+        uses.addAll(session.itemFx);
         Map<String, Color> colors = new HashMap<>();
-        for (String channel : plan.allChannels()) {
+        for (String channel : session.plan.allChannels()) {
             Integer code = channelColor(channel);
             if (code != null) {
                 colors.put(channel, ColorCode.toColor(code));
             }
         }
         List<Object> key = List.of(uses, colors);
-        if (key.equals(shownFx)) {
+        if (key.equals(session.shownFx)) {
             return;
         }
-        shownFx = key;
-        shownUses = uses;
-        shownEffects =
+        session.shownFx = key;
+        session.shownUses = uses;
+        session.shownEffects =
                 uses.isEmpty()
                         ? null
                         : new CharacterFx(
                                 uses,
                                 worn,
-                                plan,
-                                shown.getSkeleton(),
+                                session.plan,
+                                session.shown.getSkeleton(),
                                 colors,
                                 registry.get(),
                                 fxEffects);
-        motion.applyStates(shownEffects, uses);
-        shown.setFx(shownEffects);
+        motion.applyStates(session.shownEffects, uses);
+        session.shown.setFx(session.shownEffects);
     }
 
     /**
@@ -2060,9 +2000,9 @@ public final class CharacterEditor {
     private AccessoryAligner.Stage alignStage() {
         List<AccessoryAligner.Worn> accessories = new ArrayList<>();
         List<Integer> head = new ArrayList<>();
-        List<PartSlots.Slot> slots = look.slots().slots();
+        List<PartSlots.Slot> slots = session.look.slots().slots();
         for (int s = 0; s < slots.size(); ++s) {
-            int choice = look.choice(s);
+            int choice = session.look.choice(s);
             if (choice == CharacterLook.EMPTY) {
                 continue;
             }
@@ -2071,20 +2011,21 @@ public final class CharacterEditor {
             if (AccessoryAligner.HEAD_SLOT.equals(slot.id())) {
                 head.addAll(meshes);
             }
-            Part part = registry.get().get(Part.class, prepared.optionIds().get(s).get(choice));
+            Part part =
+                    registry.get().get(Part.class, session.prepared.optionIds().get(s).get(choice));
             if (part != null
                     && part.kind() == Part.PartKind.ACCESSORY
-                    && plan.socket(slot.id()) != null
+                    && session.plan.socket(slot.id()) != null
                     && !meshes.isEmpty()) {
                 accessories.add(new AccessoryAligner.Worn(slot.id(), part, meshes));
             }
         }
         return new AccessoryAligner.Stage(
-                prepared.character(),
-                shown,
+                session.prepared.character(),
+                session.shown,
                 accessories,
                 head,
-                plan.variants().get(Math.max(0, look.variant())).id(),
+                session.plan.variants().get(Math.max(0, session.look.variant())).id(),
                 CharacterStage.origin());
     }
 
@@ -2095,12 +2036,13 @@ public final class CharacterEditor {
      */
     private List<Part> wornParts() {
         List<Part> worn = new ArrayList<>();
-        for (int s = 0; s < look.slots().slots().size(); ++s) {
-            int choice = look.choice(s);
+        for (int s = 0; s < session.look.slots().slots().size(); ++s) {
+            int choice = session.look.choice(s);
             if (choice == CharacterLook.EMPTY) {
                 continue;
             }
-            Part part = registry.get().get(Part.class, prepared.optionIds().get(s).get(choice));
+            Part part =
+                    registry.get().get(Part.class, session.prepared.optionIds().get(s).get(choice));
             if (part != null) {
                 worn.add(part);
             }
@@ -2138,8 +2080,8 @@ public final class CharacterEditor {
      * @return The color code, or null if neither colors it.
      */
     private Integer channelColor(String channel) {
-        Integer code = look.color(channel);
-        return code != null ? code : partColors.get(channel);
+        Integer code = session.look.color(channel);
+        return code != null ? code : session.partColors.get(channel);
     }
 
     /**
@@ -2150,7 +2092,7 @@ public final class CharacterEditor {
      * @return The color code of the swatch hovered, or {@link #NO_SWATCH}.
      */
     private int drawColors() {
-        List<String> channels = look.channels();
+        List<String> channels = session.look.channels();
         if (channels.isEmpty()) {
             IkGui.textDisabled("Nothing to color");
             return NO_SWATCH;
@@ -2160,7 +2102,7 @@ public final class CharacterEditor {
         }
         float swatch = IkGui.getFrameHeight();
         for (String channel : channels) {
-            Integer code = look.color(channel);
+            Integer code = session.look.color(channel);
             IkGui.colorButton(
                     "##channel-" + channel,
                     rgba(channelColor(channel)),
@@ -2195,7 +2137,7 @@ public final class CharacterEditor {
         }
 
         // The picker snaps to the colors a design can hold
-        Integer current = look.color(colorChannel);
+        Integer current = session.look.color(colorChannel);
         Integer shownColor = channelColor(colorChannel);
         if (shownColor != null) {
             ColorCode.decode(shownColor, picker);
@@ -2208,7 +2150,7 @@ public final class CharacterEditor {
                         | ColorEditFlags.NO_INPUTS
                         | ColorEditFlags.NO_ALPHA)) {
             startEdit();
-            look.dragColor(colorChannel, ColorCode.encode(picker[0], picker[1], picker[2]));
+            session.look.dragColor(colorChannel, ColorCode.encode(picker[0], picker[1], picker[2]));
         }
         if (current != null) {
             IkGui.textDisabled(
@@ -2234,13 +2176,13 @@ public final class CharacterEditor {
      */
     private boolean channelUntinted(String channel) {
         boolean any = false;
-        for (PartSlots.Slot slot : look.slots().slots()) {
+        for (PartSlots.Slot slot : session.look.slots().slots()) {
             if (!PartSlots.channelOf(slot).equals(channel)) {
                 continue;
             }
             for (List<Integer> option : slot.options()) {
                 for (int part : option) {
-                    if (shown.isTinted(part)) {
+                    if (session.shown.isTinted(part)) {
                         return false;
                     }
                     any = true;
@@ -2272,20 +2214,20 @@ public final class CharacterEditor {
      * @param previewCode The swatch's color code.
      */
     private void showColors(String previewChannel, int previewCode) {
-        if (shown == null
-                || look.version() == shownColorVersion
-                        && Objects.equals(previewChannel, shownPreviewChannel)
-                        && previewCode == shownPreviewCode) {
+        if (session == null
+                || session.look.version() == session.shownColorVersion
+                        && Objects.equals(previewChannel, session.shownPreviewChannel)
+                        && previewCode == session.shownPreviewCode) {
             return;
         }
-        if (shownColorVersion != look.version()) {
-            partColors = findPartColors();
+        if (session.shownColorVersion != session.look.version()) {
+            session.partColors = findPartColors();
         }
-        shownColorVersion = look.version();
-        shownPreviewChannel = previewChannel;
-        shownPreviewCode = previewCode;
+        session.shownColorVersion = session.look.version();
+        session.shownPreviewChannel = previewChannel;
+        session.shownPreviewCode = previewCode;
         // One tint per standard channel; channels the design leaves uncolored are unset
-        List<String> channels = plan.allChannels();
+        List<String> channels = session.plan.allChannels();
         float[] tints = new float[3 * Math.min(channels.size(), Skins.TINT_SLOTS)];
         Arrays.fill(tints, 1);
         float[] rgb = new float[3];
@@ -2294,7 +2236,7 @@ public final class CharacterEditor {
             Integer code =
                     channel.equals(previewChannel)
                             ? Integer.valueOf(previewCode)
-                            : look.color(channel);
+                            : session.look.color(channel);
             if (code != null) {
                 ColorCode.decode(code, rgb);
                 System.arraycopy(rgb, 0, tints, 3 * c, 3);
@@ -2303,7 +2245,7 @@ public final class CharacterEditor {
                 tints[3 * c] = Skins.UNSET;
             }
         }
-        shown.setTints(tints);
+        session.shown.setTints(tints);
         showDecal();
     }
 
@@ -2312,14 +2254,14 @@ public final class CharacterEditor {
      * place, the tint slots its colors take and its defaults, and the parts that show it.
      */
     private void showDecal() {
-        DecalUse use = look.decal();
-        if (decalSynced && Objects.equals(use, shownDecal)) {
+        DecalUse use = session.look.decal();
+        if (session.decalSynced && Objects.equals(use, session.shownDecal)) {
             return;
         }
-        decalSynced = true;
-        shownDecal = use;
+        session.decalSynced = true;
+        session.shownDecal = use;
         Decal art = use == null ? null : registry.get().get(Decal.class, use.decal());
-        BodyPlan.DecalPlace place = use == null ? null : plan.decalPlace(use.place());
+        BodyPlan.DecalPlace place = use == null ? null : session.plan.decalPlace(use.place());
         byte[] bytes = null;
         if (art != null) {
             try {
@@ -2332,10 +2274,10 @@ public final class CharacterEditor {
             if (use != null) {
                 log.debug("No decal art for {} on {}", use.decal(), use.place());
             }
-            shown.setDecal(null, null, -1, -1, SkinnedPart.WHITE, SkinnedPart.WHITE);
+            session.shown.setDecal(null, null, -1, -1, SkinnedPart.WHITE, SkinnedPart.WHITE);
             return;
         }
-        List<String> all = plan.allChannels();
+        List<String> all = session.plan.allChannels();
         int[] slots = new int[2];
         int[] fallbacks = new int[2];
         List<String> masks = List.of(Decal.FIRST, Decal.SECOND);
@@ -2352,15 +2294,17 @@ public final class CharacterEditor {
                                     color.green() / COLOR_MAX,
                                     color.blue() / COLOR_MAX);
         }
-        shown.setDecal(
+        session.shown.setDecal(
                 new ImportedCharacter.ImageData(art.image(), "image/png", bytes),
-                CharacterDecals.restToBox(shown.getSkeleton(), place),
+                CharacterDecals.restToBox(session.shown.getSkeleton(), place),
                 slots[0],
                 slots[1],
                 fallbacks[0],
                 fallbacks[1]);
-        boolean[] showing = CharacterDecals.partsShowing(plan, place, prepared.partDefinitions());
-        shown.setDecalParts(showing);
+        boolean[] showing =
+                CharacterDecals.partsShowing(
+                        session.plan, place, session.prepared.partDefinitions());
+        session.shown.setDecalParts(showing);
         if (log.isDebugEnabled()) {
             int count = 0;
             for (boolean shows : showing) {
@@ -2377,7 +2321,7 @@ public final class CharacterEditor {
      * @return True if one does.
      */
     private boolean hasVectors(String group) {
-        return look.sliders().stream()
+        return session.look.sliders().stream()
                 .anyMatch(slider -> slider.vector() && groupOf(slider).equals(group));
     }
 
@@ -2413,28 +2357,28 @@ public final class CharacterEditor {
      * @param index The clip's position in the character's list.
      */
     private void playClip(int index) {
-        if (shown == null) {
+        if (session == null) {
             return;
         }
         motion.setStanding(standsStill());
         if (motion.active()) {
             return;
         }
-        List<ImportedCharacter.ClipData> clips = shown.getCharacter().clips();
+        List<ImportedCharacter.ClipData> clips = session.shown.getCharacter().clips();
         if (clips.isEmpty()) {
-            clipIndex = -1;
-            shown.play(null);
+            session.clipIndex = -1;
+            session.shown.play(null);
             clipName.set("No clips");
             clipPosition.set("");
             return;
         }
-        clipIndex = Math.floorMod(index, clips.size());
-        ImportedCharacter.ClipData clip = clips.get(clipIndex);
+        session.clipIndex = Math.floorMod(index, clips.size());
+        ImportedCharacter.ClipData clip = clips.get(session.clipIndex);
         // The Body tab stands the character at rest, so the ruler reads its height true
-        shown.play(standsStill() ? null : clip);
-        shown.setPlaying(playing);
+        session.shown.play(standsStill() ? null : clip);
+        session.shown.setPlaying(playing);
         clipName.set(bodyTab ? clip.name() + " (plays on the Costume tab)" : clip.name());
-        clipPosition.set((clipIndex + 1) + " / " + clips.size());
+        clipPosition.set((session.clipIndex + 1) + " / " + clips.size());
     }
 
     /**
@@ -2445,8 +2389,9 @@ public final class CharacterEditor {
     private void stepClip(int step) {
         if (motion.active()) {
             motion.cycle(step);
-        } else {
-            playClip(clipIndex + step);
+        } else if (session != null) {
+            // Nothing plays while nothing is shown
+            playClip(session.clipIndex + step);
         }
     }
 
@@ -2464,7 +2409,7 @@ public final class CharacterEditor {
             posingWings = false;
         }
         if (posingWings) {
-            wingPoser.draw(new WingPoser.Stage(shown, wornWings, wingMotion));
+            wingPoser.draw(new WingPoser.Stage(session.shown, wornWings, wingMotion));
         } else {
             aligner.draw(alignStage());
         }
@@ -2474,9 +2419,9 @@ public final class CharacterEditor {
     private void drawMotion() {
         List<AnimStyle> styles =
                 registry.get().all(AnimStyle.class).stream()
-                        .filter(style -> style.plan().equals(plan.id()))
+                        .filter(style -> style.plan().equals(session.plan.id()))
                         .toList();
-        Id chosen = look.style();
+        Id chosen = session.look.style();
         String preview = chosen == null ? PLAN_STYLE : PreparedDesign.label(chosen);
         if (IkGui.beginCombo("Style##style", preview)) {
             if (IkGui.selectable(PLAN_STYLE + "##own-style", chosen == null)) {
@@ -2519,7 +2464,7 @@ public final class CharacterEditor {
                 }
             }
         }
-        motion.draw(shownEffects, shownUses);
+        motion.draw(session.shownEffects, session.shownUses);
     }
 
     /**
@@ -2531,16 +2476,16 @@ public final class CharacterEditor {
     private List<Id> styles() {
         List<Id> styles = new ArrayList<>();
         CharacterRegistry definitions = registry.get();
-        for (BodyPlan.EquipmentSlot slot : plan.equipment()) {
-            Equipment.Equipped equipped = equipment.slots().get(slot.id());
+        for (BodyPlan.EquipmentSlot slot : session.plan.equipment()) {
+            Equipment.Equipped equipped = session.equipment.slots().get(slot.id());
             Item item = equipped == null ? null : definitions.get(Item.class, equipped.item());
-            Item.Look itemLook = item == null ? null : item.lookOn(plan.id());
+            Item.Look itemLook = item == null ? null : item.lookOn(session.plan.id());
             if (itemLook != null && itemLook.style() != null) {
                 styles.add(itemLook.style());
             }
         }
-        if (look.style() != null) {
-            styles.add(look.style());
+        if (session.look.style() != null) {
+            styles.add(session.look.style());
         }
         return styles;
     }
@@ -2554,14 +2499,14 @@ public final class CharacterEditor {
         CharacterRegistry definitions = registry.get();
         List<Item> all = definitions.all(Item.class);
         boolean any = false;
-        for (BodyPlan.EquipmentSlot slot : plan.equipment()) {
+        for (BodyPlan.EquipmentSlot slot : session.plan.equipment()) {
             List<Item> fits =
                     all.stream()
                             .filter(
                                     item ->
                                             item.slots().contains(slot.id())
-                                                    && item.lookOn(plan.id()) != null
-                                                    && item.lookOn(plan.id()).held())
+                                                    && item.lookOn(session.plan.id()) != null
+                                                    && item.lookOn(session.plan.id()).held())
                             .toList();
             if (fits.isEmpty()) {
                 continue;
@@ -2569,7 +2514,7 @@ public final class CharacterEditor {
             any = true;
             IkGui.pushID(slot.id());
             IkGui.separatorText(slot.id());
-            drawEquipped(slot.id(), equipment.slots().get(slot.id()), fits, definitions);
+            drawEquipped(slot.id(), session.equipment.slots().get(slot.id()), fits, definitions);
             IkGui.popID();
         }
         if (!any) {
@@ -2617,7 +2562,7 @@ public final class CharacterEditor {
             return;
         }
         Item shownItem = definitions.get(Item.class, equipped.shown());
-        Item.Look shownLook = shownItem == null ? null : shownItem.lookOn(plan.id());
+        Item.Look shownLook = shownItem == null ? null : shownItem.lookOn(session.plan.id());
         if (shownLook != null) {
             String state = equipped.state() == null ? shownLook.firstState() : equipped.state();
             if (IkGui.beginCombo("State##state", state)) {
@@ -2680,13 +2625,13 @@ public final class CharacterEditor {
      * @param equipped The item, or null to empty the slot.
      */
     private void equip(String slot, Equipment.Equipped equipped) {
-        Map<String, Equipment.Equipped> slots = new LinkedHashMap<>(equipment.slots());
+        Map<String, Equipment.Equipped> slots = new LinkedHashMap<>(session.equipment.slots());
         if (equipped == null) {
             slots.remove(slot);
         } else {
             slots.put(slot, equipped);
         }
-        equipment = new Equipment(slots);
+        session.equipment = new Equipment(slots);
         applyEquipment();
     }
 
@@ -2697,8 +2642,10 @@ public final class CharacterEditor {
      */
     private void setAllStates(String state) {
         Map<String, Equipment.Equipped> slots = new LinkedHashMap<>();
-        equipment.slots().forEach((slot, equipped) -> slots.put(slot, equipped.withState(state)));
-        equipment = new Equipment(slots);
+        session.equipment
+                .slots()
+                .forEach((slot, equipped) -> slots.put(slot, equipped.withState(state)));
+        session.equipment = new Equipment(slots);
         applyEquipment();
     }
 
@@ -2707,19 +2654,19 @@ public final class CharacterEditor {
      * The styles follow on the next frame, as the animation is rebuilt for them.
      */
     private void applyEquipment() {
-        if (shown == null) {
+        if (session == null) {
             return;
         }
         CharacterRegistry definitions = registry.get();
         Design design =
                 DesignSnapshot.of(
-                        look,
-                        plan,
-                        prepared,
-                        prepared.design().id(),
-                        look.variants().get(look.variant()).id(),
+                        session.look,
+                        session.plan,
+                        session.prepared,
+                        session.prepared.design().id(),
+                        session.look.variants().get(session.look.variant()).id(),
                         true);
-        LookStack.Shown stack = LookStack.resolve(design, equipment, definitions);
+        LookStack.Shown stack = LookStack.resolve(design, session.equipment, definitions);
         List<Part> worn = new ArrayList<>();
         for (Id partId : stack.worn().values()) {
             Part part = definitions.get(Part.class, partId);
@@ -2727,7 +2674,13 @@ public final class CharacterEditor {
                 worn.add(part);
             }
         }
-        shown.setHeld(heldItems.meshes(stack.held(), worn, plan, shown.getSkeleton(), definitions));
+        session.shown.setHeld(
+                heldItems.meshes(
+                        stack.held(),
+                        worn,
+                        session.plan,
+                        session.shown.getSkeleton(),
+                        definitions));
         // A weapon in a hand readies the character to fight
         boolean drawn =
                 stack.held().stream()
@@ -2736,17 +2689,17 @@ public final class CharacterEditor {
                                         held.socket().type() != null
                                                 && held.socket().type().startsWith(GRIP_TYPE));
         motion.setCombat(drawn);
-        motion.applyStates(shownEffects, shownUses);
-        itemFx = List.copyOf(stack.fx().subList(design.fx().size(), stack.fx().size()));
+        motion.applyStates(session.shownEffects, session.shownUses);
+        session.itemFx = List.copyOf(stack.fx().subList(design.fx().size(), stack.fx().size()));
     }
 
     /** Rebuild the animation when the style changed, repeat actions, and fill the clip bar. */
     private void tickMotion() {
-        if (shown == null) {
+        if (session == null) {
             return;
         }
         if (!motionStyles.equals(styles())) {
-            buildMotion(look.variants().get(look.variant()).id());
+            buildMotion(session.look.variants().get(session.look.variant()).id());
         }
         motion.tick();
         if (motion.active()) {
@@ -2765,8 +2718,8 @@ public final class CharacterEditor {
     private void togglePlay() {
         playing = !playing;
         playText.set(playing ? "Pause" : "Play");
-        if (shown != null) {
-            shown.setPlaying(playing);
+        if (session != null) {
+            session.shown.setPlaying(playing);
         }
     }
 
@@ -2810,26 +2763,15 @@ public final class CharacterEditor {
         panels.clear();
         GraphicsManager.getWindowManager().removeWindow(INPUT_WINDOW);
         graphics.removeFrameTask(frameTick);
-        if (shown != null) {
-            shown.close();
-            shown = null;
+        if (session != null) {
+            session.close();
+            session = null;
         }
         motion.detach();
-        shownEffects = null;
-        shownUses = List.of();
-        look = null;
-        prepared = null;
         readFiles.clear();
-        shownFx = List.of();
         graphics.particles().setHotReload(false);
         fxEffects.close();
         fxEffects = null;
-        regions = null;
-        categories = null;
-        openCategory = -1;
-        lastWorn = List.of();
-        pushed.clear();
-        rested.clear();
         stage.leave();
         goBack.run();
     }
@@ -2854,29 +2796,18 @@ public final class CharacterEditor {
         back = null;
         ++loads;
         panels.clear();
-        if (shown != null) {
+        if (session != null) {
             // Stops its timer, and skips releasing graphics once they are closed
-            shown.close();
-            shown = null;
+            session.close();
+            session = null;
         }
         motion.detach();
-        shownEffects = null;
-        shownUses = List.of();
-        look = null;
-        prepared = null;
         readFiles.clear();
-        shownFx = List.of();
         if (fxEffects != null) {
             // Skips unloading effects once graphics are closed
             fxEffects.close();
             fxEffects = null;
         }
-        regions = null;
-        categories = null;
-        openCategory = -1;
-        lastWorn = List.of();
-        pushed.clear();
-        rested.clear();
     }
 
     /**
@@ -2948,10 +2879,10 @@ public final class CharacterEditor {
      * @return False if nothing is shown or no slot offers the part.
      */
     boolean wear(@NonNull String partId) {
-        if (look == null || prepared == null) {
+        if (session == null) {
             return false;
         }
-        int[] found = PreparedDesign.findOption(prepared.optionIds(), partId);
+        int[] found = PreparedDesign.findOption(session.prepared.optionIds(), partId);
         if (found == null) {
             return false;
         }
@@ -2987,12 +2918,12 @@ public final class CharacterEditor {
      * @return Each bone's name, head in model space and y axis, joined by "; ", or an empty string.
      */
     String posedHeads(String prefix) {
-        if (shown == null) {
+        if (session == null) {
             return "";
         }
-        Skeleton skeleton = shown.getSkeleton();
+        Skeleton skeleton = session.shown.getSkeleton();
         float[] posed = new float[skeleton.size() * ShownCharacter.BONE_FLOATS];
-        if (!shown.posedBones(posed)) {
+        if (!session.shown.posedBones(posed)) {
             return "";
         }
         List<String> heads = new ArrayList<>();
@@ -3022,15 +2953,15 @@ public final class CharacterEditor {
      */
     List<String> wornIds() {
         List<String> ids = new ArrayList<>();
-        if (look == null || prepared == null) {
+        if (session == null) {
             return ids;
         }
-        for (int slot = 0; slot < look.slots().slots().size(); ++slot) {
-            int choice = look.choice(slot);
-            if (choice != CharacterLook.EMPTY && look.hiddenBy(slot) == null) {
-                String form = look.formOf(slot);
+        for (int slot = 0; slot < session.look.slots().slots().size(); ++slot) {
+            int choice = session.look.choice(slot);
+            if (choice != CharacterLook.EMPTY && session.look.hiddenBy(slot) == null) {
+                String form = session.look.formOf(slot);
                 ids.add(
-                        prepared.optionIds().get(slot).get(choice)
+                        session.prepared.optionIds().get(slot).get(choice)
                                 + (form == null ? "" : Part.FORM_SEPARATOR + form));
             }
         }
@@ -3043,8 +2974,8 @@ public final class CharacterEditor {
      * @param both Whether pairs go on together.
      */
     void setBothSides(boolean both) {
-        if (look != null) {
-            look.setBothSides(both);
+        if (session != null) {
+            session.look.setBothSides(both);
         }
     }
 
@@ -3060,7 +2991,9 @@ public final class CharacterEditor {
         if (!still) {
             bodyTab = false;
         }
-        playClip(clipIndex);
+        if (session != null) {
+            playClip(session.clipIndex);
+        }
     }
 
     /**
@@ -3082,7 +3015,7 @@ public final class CharacterEditor {
      * @return False if nothing is shown or no slot offers the part.
      */
     boolean frame(String partId, double pitch, double yaw) {
-        if (look == null || prepared == null || categories == null) {
+        if (session == null) {
             return false;
         }
         Vector3f min = new Vector3f();
@@ -3090,15 +3023,18 @@ public final class CharacterEditor {
         if (partId == null) {
             // What is worn, not every part offered, which reaches far wider
             PartCategories.bounds(
-                    prepared.character(), look.worn(CharacterLook.NO_PREVIEW, 0), min, max);
+                    session.prepared.character(),
+                    session.look.worn(CharacterLook.NO_PREVIEW, 0),
+                    min,
+                    max);
         } else {
-            int[] found = PreparedDesign.findOption(prepared.optionIds(), partId);
+            int[] found = PreparedDesign.findOption(session.prepared.optionIds(), partId);
             if (found == null) {
                 return false;
             }
             PartCategories.bounds(
-                    prepared.character(),
-                    prepared.slots().slots().get(found[0]).options().get(found[1]),
+                    session.prepared.character(),
+                    session.prepared.slots().slots().get(found[0]).options().get(found[1]),
                     min,
                     max);
         }
