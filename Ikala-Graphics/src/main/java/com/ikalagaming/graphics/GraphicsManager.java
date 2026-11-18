@@ -802,6 +802,15 @@ public class GraphicsManager {
     }
 
     /**
+     * Whether this is the thread graphics run on, which draws the UI and runs what is posted to it.
+     *
+     * @return True on the render thread.
+     */
+    public static boolean isRenderThread() {
+        return Thread.currentThread() == mainThread;
+    }
+
+    /**
      * Shut down graphics from any thread. On the main thread, this cleans up immediately.
      * Otherwise, it flags the main thread to clean up on its next tick, after which the tick stage
      * removes itself.

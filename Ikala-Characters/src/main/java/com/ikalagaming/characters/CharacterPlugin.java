@@ -11,6 +11,7 @@ import com.ikalagaming.characters.registry.CharacterRegistry;
 import com.ikalagaming.characters.registry.ContentSource;
 import com.ikalagaming.characters.registry.Schemas;
 import com.ikalagaming.event.Listener;
+import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.plugins.Plugin;
 import com.ikalagaming.plugins.PluginManager;
@@ -19,6 +20,7 @@ import com.ikalagaming.plugins.config.PluginConfig;
 import com.ikalagaming.scripting.HostClass;
 import com.ikalagaming.scripting.ScriptManager;
 
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -27,6 +29,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -66,6 +72,9 @@ public class CharacterPlugin extends Plugin {
 
     /** The most problems logged by a load, so a broken folder doesn't flood the console. */
     private static final int MAX_LOGGED_PROBLEMS = 50;
+
+    /** How long disabling waits for the editor to close on the render thread. */
+    private static final long CLOSE_WAIT_SECONDS = 5;
 
     /** The skinned tube demo, which {@code character demo} turns on and off. */
     private final SkinnedDemo demo = new SkinnedDemo(PLUGIN_NAME);
@@ -148,13 +157,49 @@ public class CharacterPlugin extends Plugin {
                 closing.abandon();
             } else {
                 graphics.ui().removeTool(CharacterEditor.TOOL_ID);
-                graphics.ui().post(closing::close);
+                closeOnRenderThread(graphics, closing);
             }
             // Builds don't need graphics, so they stop either way
             closing.stopWork();
         }
         registry = CharacterRegistry.EMPTY;
         return true;
+    }
+
+    /**
+     * Close the editor on the render thread, and wait for it when disabling from another thread:
+     * the plugin's classes go when it finishes unloading, and a close left queued until then failed
+     * to load the classes it needed, which stopped the main loop.
+     *
+     * @param graphics The plugin's graphics.
+     * @param closing The editor.
+     */
+    private static void closeOnRenderThread(
+            @NonNull GraphicsContext graphics, @NonNull CharacterEditor closing) {
+        if (GraphicsManager.isRenderThread()) {
+            closing.close();
+            return;
+        }
+        final CompletableFuture<Void> closed = new CompletableFuture<>();
+        graphics.ui()
+                .post(
+                        () -> {
+                            try {
+                                closing.close();
+                                closed.complete(null);
+                            } catch (RuntimeException e) {
+                                closed.completeExceptionally(e);
+                            }
+                        });
+        try {
+            closed.get(CLOSE_WAIT_SECONDS, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (ExecutionException e) {
+            log.warn("Closing the character editor failed", e.getCause());
+        } catch (TimeoutException e) {
+            log.warn("The character editor didn't close within {} s", CLOSE_WAIT_SECONDS);
+        }
     }
 
     /** Load the content folders listed in the config, replacing the current registry. */
