@@ -191,9 +191,12 @@ public class TextureLoaderVulkan {
         clampSampler = createSampler(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
 
         ByteBuffer white = MemoryUtil.memAlloc(4);
-        white.put(0, new byte[] {-1, -1, -1, -1});
-        defaultTexture = createTexture(white, Format.R8G8B8A8_UNORM, 1, 1);
-        MemoryUtil.memFree(white);
+        try {
+            white.put(0, new byte[] {-1, -1, -1, -1});
+            defaultTexture = createTexture(white, Format.R8G8B8A8_UNORM, 1, 1);
+        } finally {
+            MemoryUtil.memFree(white);
+        }
 
         final int defaultIndex = defaultTexture.bindlessIndex;
         if (defaultIndex != ShaderBindings.BindlessTextures.DEFAULT_TEXTURE_INDEX) {
@@ -358,21 +361,15 @@ public class TextureLoaderVulkan {
         formatFeatures(format);
         final int width = dds.getWidth();
         final int height = dds.getHeight();
-        TextureInfoVulkan info =
-                createImage(format, width, height, dds.getMipLevels(), false, wrap);
+        // Read from the file before making the image, so a broken file doesn't leave it behind
         final int[] offsets = new int[dds.getMipLevels()];
         for (int level = 0; level < offsets.length; ++level) {
             offsets[level] = dds.levelOffset(level);
         }
-        return queue(
-                owner,
-                info,
-                dds.getData(),
-                format,
-                width,
-                height,
-                average(dds, ColorSpace.of(format)),
-                offsets);
+        final float[] average = average(dds, ColorSpace.of(format));
+        TextureInfoVulkan info =
+                createImage(format, width, height, dds.getMipLevels(), false, wrap);
+        return queue(owner, info, dds.getData(), format, width, height, average, offsets);
     }
 
     /**
@@ -722,12 +719,18 @@ public class TextureLoaderVulkan {
         TextureInfoVulkan info =
                 createImage(format, width, height, mipLevels, mipLevels > 1, TextureWrap.CLAMP);
 
-        if (buffer != null) {
-            upload(info, buffer, width, height, mipLevels);
-        } else {
-            final boolean clear = canClearColor(format);
-            state.immediateCommands.submit(
-                    state, commandBuffer -> recordInitializeEmpty(commandBuffer, info, clear));
+        try {
+            if (buffer != null) {
+                upload(info, buffer, width, height, mipLevels);
+            } else {
+                final boolean clear = canClearColor(format);
+                state.immediateCommands.submit(
+                        state, commandBuffer -> recordInitializeEmpty(commandBuffer, info, clear));
+            }
+        } catch (RuntimeException e) {
+            // The upload waits for the GPU, so nothing can still be using the image
+            info.destroy(state);
+            throw e;
         }
 
         state.bindlessTextures.register(state, info);
@@ -805,7 +808,14 @@ public class TextureLoaderVulkan {
                             .viewType(VK_IMAGE_VIEW_TYPE_2D)
                             .format(vkFormat)
                             .subresourceRange(colorRange(stack, 0, mipLevels));
-            checkError(vkCreateImageView(state.device.logical, viewCreateInfo, null, longOutput));
+            try {
+                checkError(
+                        vkCreateImageView(state.device.logical, viewCreateInfo, null, longOutput));
+            } catch (RuntimeException e) {
+                // Nothing has the image yet, so it goes with the failure
+                vmaDestroyImage(state.vmaAllocator, image, allocation);
+                throw e;
+            }
 
             TextureInfoVulkan info =
                     new TextureInfoVulkan()

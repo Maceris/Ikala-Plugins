@@ -416,6 +416,11 @@ public class ShaderVulkan {
                         .module(shaderModules[i])
                         .pName(ENTRY_POINT_AS_BUFFER);
             }
+        } catch (RuntimeException | Error e) {
+            // Nobody gets a shader to free, so let go of the modules made before the one that
+            // failed, and the stages: a broken hot edit would leak them each time
+            free();
+            throw e;
         } finally {
             shaderc_compile_options_release(options);
             shaderc_compiler_release(compiler);
