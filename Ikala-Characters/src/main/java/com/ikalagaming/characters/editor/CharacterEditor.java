@@ -3121,6 +3121,13 @@ public final class CharacterEditor {
      * them: stop the shown character's timer and forget what was shown, without touching the UI or
      * anything else on the GPU, which went with the graphics. Doesn't go back to what opened it.
      * Call on the thread disabling the plugin, since the render thread is gone.
+     *
+     * <p>Safe off the render thread: the plugin's graphics only read as closed while it is being
+     * disabled once graphics shut down, which closes every context on the render thread as its last
+     * tick, so no UI code of the editor runs any more; an unloaded plugin's context closes only
+     * after its disabling. What this does touch from other threads is locked or volatile: the shown
+     * character's timer is shut down and waited for before its effects close, and the effects and
+     * emitters take their own locks.
      */
     public void abandon() {
         if (back == null) {

@@ -6,6 +6,7 @@ import com.ikalagaming.graphics.gui.data.*;
 import com.ikalagaming.graphics.gui.enums.*;
 import com.ikalagaming.graphics.gui.flags.*;
 import com.ikalagaming.graphics.gui.util.Color;
+import com.ikalagaming.graphics.gui.util.Hash;
 import com.ikalagaming.graphics.gui.util.KeyChord;
 import com.ikalagaming.graphics.gui.util.RectFloat;
 
@@ -1280,6 +1281,12 @@ public class IkGui {
         IkGuiImplMetrics.context = null;
         IkGuiImplDebugTools.context = null;
         IkGuiInternal.context = null;
+        // Kept between frames rather than in the context, so forgotten with it
+        IkGuiImplDebugTools.forgetErrorTooltip();
+        IkGuiImplSliders.forgetFormatted();
+        IkGuiImplText.forgetFontBackups();
+        IkGuiImplUtils.forgetStackEntries();
+        Hash.forgetDisplayed();
     }
 
     /**

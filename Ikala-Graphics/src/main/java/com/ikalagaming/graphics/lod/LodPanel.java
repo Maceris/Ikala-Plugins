@@ -10,6 +10,7 @@ import com.ikalagaming.graphics.gui.flags.TreeNodeFlags;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.LodBakes;
 import com.ikalagaming.graphics.vulkan.LodRenderer;
+import com.ikalagaming.plugins.PluginThreads;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -112,6 +113,12 @@ public final class LodPanel implements AutoCloseable {
     private volatile boolean closed;
 
     /**
+     * The thread building the DAG and measuring it, owned by the plugin, so unloading the plugin
+     * interrupts and waits for it; closing the panel interrupts it too.
+     */
+    private final Thread builder;
+
+    /**
      * Start building a DAG in the background, naming materials by index.
      *
      * @param graphics The plugin's graphics context.
@@ -198,8 +205,10 @@ public final class LodPanel implements AutoCloseable {
             DagBuilder.@NonNull Options options) {
         this.graphics = graphics;
         this.name = name;
-        Thread builder =
-                new Thread(
+        builder =
+                PluginThreads.thread(
+                        graphics.getOwner(),
+                        "LOD panel " + name,
                         () -> {
                             try {
                                 final List<LodMesh> meshes = inputs.get();
@@ -255,6 +264,10 @@ public final class LodPanel implements AutoCloseable {
                                             }
                                         });
                             } catch (RuntimeException e) {
+                                if (closed) {
+                                    // Interrupted by closing, which nobody is waiting on
+                                    return;
+                                }
                                 log.warn("Could not build LOD for {}", name, e);
                                 failure = String.valueOf(e.getMessage());
                             } catch (Error e) {
@@ -263,9 +276,7 @@ public final class LodPanel implements AutoCloseable {
                                 failure = e.toString();
                                 throw e;
                             }
-                        },
-                        "LOD panel " + name);
-        builder.setDaemon(true);
+                        });
         builder.start();
     }
 
@@ -504,6 +515,7 @@ public final class LodPanel implements AutoCloseable {
     @Override
     public void close() {
         closed = true;
+        builder.interrupt();
         if (view != null) {
             view.close();
             view = null;

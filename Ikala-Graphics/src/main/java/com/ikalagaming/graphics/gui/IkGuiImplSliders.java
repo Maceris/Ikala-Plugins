@@ -13,6 +13,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
 
+import java.util.Arrays;
 import java.util.IllegalFormatException;
 import java.util.Locale;
 
@@ -789,6 +790,11 @@ class IkGuiImplSliders {
      * with its own text.
      */
     private static final Formatted[] formatted = new Formatted[FORMATTED_KEPT];
+
+    /** Forget the formatted values kept, when the context is destroyed. */
+    static void forgetFormatted() {
+        Arrays.fill(formatted, null);
+    }
 
     /**
      * Format a value, see {@link #formatScalar(SliderDataType, Number, String)}.

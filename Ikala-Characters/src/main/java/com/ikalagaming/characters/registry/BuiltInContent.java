@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * The definitions that ship inside this plugin, like the {@code ikala:biped} plan, which load
@@ -32,6 +33,12 @@ public final class BuiltInContent {
 
     /** The URI scheme of resources inside a jar. */
     private static final String JAR_SCHEME = "jar";
+
+    /**
+     * Held while loading from the jar's file system: two loads at once would share it, and the one
+     * that opened it would close it under the other.
+     */
+    private static final ReentrantLock JAR_LOCK = new ReentrantLock();
 
     private BuiltInContent() {}
 
@@ -58,6 +65,7 @@ public final class BuiltInContent {
             return load(Path.of(uri), others);
         }
         // Inside a jar the folder is only readable through a zip file system, opened for the load
+        JAR_LOCK.lock();
         FileSystem opened = null;
         try {
             try {
@@ -67,8 +75,12 @@ public final class BuiltInContent {
             }
             return load(Path.of(uri), others);
         } finally {
-            if (opened != null) {
-                opened.close();
+            try {
+                if (opened != null) {
+                    opened.close();
+                }
+            } finally {
+                JAR_LOCK.unlock();
             }
         }
     }

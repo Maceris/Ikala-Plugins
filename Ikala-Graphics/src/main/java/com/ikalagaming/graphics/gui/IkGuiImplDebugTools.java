@@ -352,6 +352,14 @@ class IkGuiImplDebugTools {
     private static boolean withinErrorTooltip;
 
     /**
+     * Clear the error tooltip's flag, when the context is destroyed: an exception while the tooltip
+     * was open would otherwise leave it set, and no error tooltip would show again.
+     */
+    static void forgetErrorTooltip() {
+        withinErrorTooltip = false;
+    }
+
+    /**
      * Begin the error tooltip, a pseudo-tooltip that follows the mouse until Ctrl is held. When
      * Ctrl is held the position is locked, so it can be clicked. It can be appended to several
      * times each frame.

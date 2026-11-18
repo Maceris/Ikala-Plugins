@@ -21,6 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
 import org.joml.Vector4f;
 
+import java.util.Arrays;
 import java.util.Objects;
 
 @Slf4j
@@ -166,6 +167,12 @@ class IkGuiImplText {
 
     /** The next of {@link #fontBackups} to replace. */
     private static int nextFontBackup;
+
+    /** Forget the font backups kept, when the context is destroyed. */
+    static void forgetFontBackups() {
+        Arrays.fill(fontBackups, null);
+        nextFontBackup = 0;
+    }
 
     public static void pushFont(@NonNull String font, int size) {
         String oldFont = context.font == null ? null : context.font.name;

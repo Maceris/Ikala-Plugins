@@ -13,6 +13,7 @@ import org.joml.Vector2f;
 import org.joml.Vector4f;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -2216,6 +2217,12 @@ class IkGuiImplUtils {
 
     /** Style variable stack entries kept for reuse, by a hash of what they hold. */
     private static final StyleMod[] styleMods = new StyleMod[MODS_KEPT];
+
+    /** Forget the stack entries kept, when the context is destroyed. */
+    static void forgetStackEntries() {
+        Arrays.fill(colorMods, null);
+        Arrays.fill(styleMods, null);
+    }
 
     /**
      * A color stack entry. Styles push the same few colors every frame, and the entries can't

@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.gui.util;
 
+import java.util.Arrays;
+
 public class Hash {
 
     /**
@@ -90,6 +92,11 @@ public class Hash {
      * label with its own part.
      */
     private static final Displayed[] displayed = new Displayed[DISPLAYED_KEPT];
+
+    /** Forget the displayed parts kept, when the IkGui context is destroyed. */
+    public static void forgetDisplayed() {
+        Arrays.fill(displayed, null);
+    }
 
     /**
      * Hash a name, given a parent ID. As in ImGui, an empty name produces the parent ID, so {@code

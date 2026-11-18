@@ -812,9 +812,11 @@ public final class ScenePlacement {
             textures.put(file, texture);
             textureNames.put(texture, file.getFileName().toString());
             if (removed) {
-                // Taken out while this one loaded, so nothing will release it otherwise
-                textures.remove(file);
-                graphics.textures().release(texture);
+                // Taken out while this one loaded. Whichever of this and remove() takes it out of
+                // the map releases it, so it is released once even if remove() saw it
+                if (textures.remove(file, texture)) {
+                    graphics.textures().release(texture);
+                }
                 return;
             }
             pending.add(texture);
@@ -976,10 +978,13 @@ public final class ScenePlacement {
         }
         hidden.clear();
         cache.setDirty(true);
-        for (TextureHandle texture : textures.values()) {
-            graphics.textures().release(texture);
+        // Taken out one at a time, since the loading thread may be releasing one it just added
+        for (Path file : textures.keySet()) {
+            final TextureHandle texture = textures.remove(file);
+            if (texture != null) {
+                graphics.textures().release(texture);
+            }
         }
-        textures.clear();
         for (TextureHandle texture : editorTextures) {
             graphics.textures().release(texture);
         }
