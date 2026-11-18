@@ -80,6 +80,40 @@ public final class SpecLoader {
             String name, List<String> params, Map<String, Object> node, String path) {}
 
     /**
+     * The most nodes one spec may expand to. Templates that use each other several times can grow
+     * exponentially, and a broken spec should fail with a message, not hang the editor. Lists of
+     * data belong in a repeat, which is expanded once here and filled in at runtime.
+     */
+    static final int MAX_NODES = 50_000;
+
+    /** The deepest nodes may nest, counting the nodes templates add. */
+    static final int MAX_DEPTH = 256;
+
+    /**
+     * The most values that filling in template parameters may visit, across the whole spec.
+     * Parameters holding lists or maps are copied at each template they pass through.
+     */
+    static final int MAX_SUBSTITUTED_VALUES = 1_000_000;
+
+    /** The longest text filling in template parameters may make. */
+    static final int MAX_TEXT_LENGTH = 1 << 20;
+
+    /** Tracks expanding the templates of one spec, to catch cycles and runaway growth. */
+    private static final class Expansion {
+        /** The templates being expanded, innermost first. */
+        final Deque<String> using = new ArrayDeque<>();
+
+        /** The nodes made so far. */
+        int nodes;
+
+        /** How deep the node being read is. */
+        int depth;
+
+        /** The values visited filling in parameters so far. */
+        int substituted;
+    }
+
+    /**
      * Load a spec file. Templates it imports are found next to it.
      *
      * @param file The file.
@@ -188,7 +222,7 @@ public final class SpecLoader {
             throw new SpecException(missing(source, CONTENT));
         }
         UiSpec.SurfaceSpec surface = surface(root.get(SURFACE), SURFACE);
-        NodeSpec content = node(root.get(CONTENT), CONTENT, templates, new ArrayDeque<>());
+        NodeSpec content = node(root.get(CONTENT), CONTENT, templates, new Expansion());
         return new UiSpec(source, surface, content, List.copyOf(files));
     }
 
@@ -356,15 +390,44 @@ public final class SpecLoader {
      * @param value The YAML map.
      * @param path Where it is, for messages.
      * @param templates The templates that can be used.
-     * @param using The templates being expanded, to catch cycles.
+     * @param expansion Tracks the expansion, to catch cycles and runaway growth.
      * @return The node.
      */
     private static NodeSpec node(
-            Object value, String path, Map<String, Template> templates, Deque<String> using) {
+            Object value, String path, Map<String, Template> templates, Expansion expansion) {
         Map<String, Object> map = SpecValues.map(value, path);
         if (map.containsKey(USE)) {
-            return use(map, path, templates, using);
+            return use(map, path, templates, expansion);
         }
+        if (++expansion.nodes > MAX_NODES) {
+            throw new SpecException(
+                    path + ": the spec expands to more than " + MAX_NODES + " nodes");
+        }
+        if (expansion.depth >= MAX_DEPTH) {
+            throw new SpecException(path + ": nodes nest more than " + MAX_DEPTH + " deep");
+        }
+        ++expansion.depth;
+        try {
+            return readNode(map, path, templates, expansion);
+        } finally {
+            --expansion.depth;
+        }
+    }
+
+    /**
+     * Read a node that doesn't use a template.
+     *
+     * @param map The YAML map.
+     * @param path Where it is, for messages.
+     * @param templates The templates that can be used.
+     * @param expansion Tracks the expansion, to catch cycles and runaway growth.
+     * @return The node.
+     */
+    private static NodeSpec readNode(
+            Map<String, Object> map,
+            String path,
+            Map<String, Template> templates,
+            Expansion expansion) {
         if (!map.containsKey(TYPE)) {
             throw new SpecException(missing(path, TYPE));
         }
@@ -378,12 +441,13 @@ public final class SpecLoader {
         if (map.containsKey(CHILDREN)) {
             List<?> list = SpecValues.list(map.get(CHILDREN), at(path, CHILDREN));
             for (int i = 0; i < list.size(); ++i) {
-                children.add(node(list.get(i), path + ".children[" + i + "]", templates, using));
+                children.add(
+                        node(list.get(i), path + ".children[" + i + "]", templates, expansion));
             }
         }
         NodeSpec.RepeatSpec repeat = null;
         if (map.containsKey(REPEAT)) {
-            repeat = repeat(map.get(REPEAT), at(path, REPEAT), templates, using);
+            repeat = repeat(map.get(REPEAT), at(path, REPEAT), templates, expansion);
         }
         Map<String, Object> properties = new LinkedHashMap<>();
         map.forEach(
@@ -407,14 +471,14 @@ public final class SpecLoader {
      * @param map The node that uses it: {@code use} and {@code with}.
      * @param path Where it is, for messages.
      * @param templates The templates that can be used.
-     * @param using The templates being expanded, to catch cycles.
+     * @param expansion Tracks the expansion, to catch cycles and runaway growth.
      * @return The expanded node.
      */
     private static NodeSpec use(
             Map<String, Object> map,
             String path,
             Map<String, Template> templates,
-            Deque<String> using) {
+            Expansion expansion) {
         for (String key : map.keySet()) {
             if (!USE.equals(key) && !WITH.equals(key)) {
                 throw new SpecException(
@@ -430,7 +494,7 @@ public final class SpecLoader {
         String name = SpecValues.name(map.get(USE), at(path, USE));
         Map<String, Object> with =
                 map.containsKey(WITH) ? SpecValues.map(map.get(WITH), at(path, WITH)) : Map.of();
-        return expand(name, with, path, templates, using);
+        return expand(name, with, path, templates, expansion);
     }
 
     /**
@@ -440,7 +504,7 @@ public final class SpecLoader {
      * @param with The parameter values.
      * @param path Where it is used, for messages.
      * @param templates The templates that can be used.
-     * @param using The templates being expanded, to catch cycles.
+     * @param expansion Tracks the expansion, to catch cycles and runaway growth.
      * @return The expanded node.
      */
     private static NodeSpec expand(
@@ -448,12 +512,13 @@ public final class SpecLoader {
             Map<String, Object> with,
             String path,
             Map<String, Template> templates,
-            Deque<String> using) {
+            Expansion expansion) {
         Template template = templates.get(name);
         if (template == null) {
             throw new SpecException(
                     path + ": unknown template '" + name + "', known: " + templates.keySet());
         }
+        Deque<String> using = expansion.using;
         if (using.contains(name)) {
             throw new SpecException(
                     path + ": template cycle " + String.join(" -> ", using) + " -> " + name);
@@ -476,8 +541,12 @@ public final class SpecLoader {
         }
         using.push(name);
         try {
+            String inside = path + "<" + name + ">";
             return node(
-                    substitute(template.node(), with), path + "<" + name + ">", templates, using);
+                    substitute(template.node(), with, inside, expansion),
+                    inside,
+                    templates,
+                    expansion);
         } finally {
             using.pop();
         }
@@ -489,11 +558,11 @@ public final class SpecLoader {
      * @param value The YAML map.
      * @param path Where it is, for messages.
      * @param templates The templates that can be used.
-     * @param using The templates being expanded, to catch cycles.
+     * @param expansion Tracks the expansion, to catch cycles and runaway growth.
      * @return The repeat.
      */
     private static NodeSpec.RepeatSpec repeat(
-            Object value, String path, Map<String, Template> templates, Deque<String> using) {
+            Object value, String path, Map<String, Template> templates, Expansion expansion) {
         Map<String, Object> map = SpecValues.map(value, path);
         Set<String> known = Set.of(LIST, AS, TEMPLATE, WITH, KEY);
         for (String key : map.keySet()) {
@@ -514,7 +583,7 @@ public final class SpecLoader {
                         with,
                         path,
                         templates,
-                        using);
+                        expansion);
         return new NodeSpec.RepeatSpec(
                 SpecValues.name(map.get(LIST), at(path, LIST)),
                 SpecValues.name(map.get(AS), at(path, AS)),
@@ -529,35 +598,82 @@ public final class SpecLoader {
      *
      * @param value Part of a template, as written.
      * @param params The parameter values.
+     * @param path Where the template is used, for messages.
+     * @param expansion Tracks the expansion, to catch runaway growth.
      * @return A copy with the parameters replaced.
      */
-    private static Object substitute(Object value, Map<String, Object> params) {
+    private static Object substitute(
+            Object value, Map<String, Object> params, String path, Expansion expansion) {
+        spend(path, expansion);
         if (value instanceof String text) {
             Matcher whole = WHOLE_PARAMETER.matcher(text);
             if (whole.matches()) {
-                return params.get(whole.group(1));
+                Object param = params.get(whole.group(1));
+                charge(param, path, expansion);
+                return param;
             }
             Matcher matcher = PARAMETER.matcher(text);
             StringBuilder out = new StringBuilder();
             while (matcher.find()) {
-                matcher.appendReplacement(
-                        out,
-                        Matcher.quoteReplacement(String.valueOf(params.get(matcher.group(1)))));
+                String replacement = String.valueOf(params.get(matcher.group(1)));
+                if (out.length() + replacement.length() > MAX_TEXT_LENGTH) {
+                    throw new SpecException(
+                            path
+                                    + ": filling in template parameters makes text longer than "
+                                    + MAX_TEXT_LENGTH
+                                    + " characters");
+                }
+                matcher.appendReplacement(out, Matcher.quoteReplacement(replacement));
             }
             matcher.appendTail(out);
             return out.toString();
         }
         if (value instanceof Map<?, ?> map) {
             Map<Object, Object> copy = new LinkedHashMap<>();
-            map.forEach((key, child) -> copy.put(key, substitute(child, params)));
+            map.forEach((key, child) -> copy.put(key, substitute(child, params, path, expansion)));
             return copy;
         }
         if (value instanceof List<?> list) {
             List<Object> copy = new ArrayList<>();
-            list.forEach(child -> copy.add(substitute(child, params)));
+            list.forEach(child -> copy.add(substitute(child, params, path, expansion)));
             return copy;
         }
         return value;
+    }
+
+    /**
+     * Count a parameter value toward the substitution budget. Whole values are passed on as they
+     * are, so a list parameter that lists itself twice at each template would otherwise make a
+     * structure exponentially big to walk while taking almost no memory.
+     *
+     * @param value The value.
+     * @param path Where the template is used, for messages.
+     * @param expansion Tracks the expansion.
+     */
+    private static void charge(Object value, String path, Expansion expansion) {
+        spend(path, expansion);
+        if (value instanceof Map<?, ?> map) {
+            map.values().forEach(child -> charge(child, path, expansion));
+        } else if (value instanceof List<?> list) {
+            list.forEach(child -> charge(child, path, expansion));
+        }
+    }
+
+    /**
+     * Count one value toward the substitution budget.
+     *
+     * @param path Where the template is used, for messages.
+     * @param expansion Tracks the expansion.
+     * @throws SpecException If the budget is used up.
+     */
+    private static void spend(String path, Expansion expansion) {
+        if (++expansion.substituted > MAX_SUBSTITUTED_VALUES) {
+            throw new SpecException(
+                    path
+                            + ": filling in template parameters takes more than "
+                            + MAX_SUBSTITUTED_VALUES
+                            + " values");
+        }
     }
 
     /** Static loading only. */

@@ -173,6 +173,103 @@ class SpecLoaderTest {
         assertEquals(2, loaded.files().size(), "The spec and its import");
     }
 
+    /**
+     * A spec whose templates each use the one before, built from numbered template bodies.
+     *
+     * @param name The template name prefix.
+     * @param first The body of template 0.
+     * @param next Makes the body of template k from the name of template k - 1.
+     * @param count How many templates follow the first.
+     * @param use How the content uses the last template.
+     * @return The spec.
+     */
+    private static String chain(
+            String name,
+            String first,
+            java.util.function.Function<String, String> next,
+            int count,
+            String use) {
+        StringBuilder spec = new StringBuilder(SURFACE).append("templates:\n");
+        spec.append("  ").append(name).append("0: ").append(first).append('\n');
+        for (int k = 1; k <= count; ++k) {
+            spec.append("  ")
+                    .append(name)
+                    .append(k)
+                    .append(": ")
+                    .append(next.apply(name + (k - 1)))
+                    .append('\n');
+        }
+        return spec.append("content: { use: ")
+                .append(name)
+                .append(count)
+                .append(use)
+                .append(" }\n")
+                .toString();
+    }
+
+    @Test
+    void templatesThatMultiplyAreStopped() {
+        String tenUses = String.join(", ", java.util.Collections.nCopies(10, "{ use: %s }"));
+        String spec =
+                chain(
+                        "t",
+                        "{ node: { type: label, id: x } }",
+                        previous ->
+                                "{ node: { type: column, id: c, children: ["
+                                        + tenUses.replace("%s", previous)
+                                        + "] } }",
+                        5,
+                        "");
+        assertTrue(failure(spec).contains("more than " + SpecLoader.MAX_NODES + " nodes"));
+    }
+
+    @Test
+    void templatesThatNestTooDeepAreStopped() {
+        String spec =
+                chain(
+                        "d",
+                        "{ node: { type: label, id: x } }",
+                        previous ->
+                                "{ node: { type: column, id: c, children: [{ use: "
+                                        + previous
+                                        + " }] } }",
+                        SpecLoader.MAX_DEPTH + 10,
+                        "");
+        assertTrue(failure(spec).contains("nest more than " + SpecLoader.MAX_DEPTH + " deep"));
+    }
+
+    @Test
+    void textThatDoublesIsStopped() {
+        String spec =
+                chain(
+                        "s",
+                        "{ params: [x], node: { type: label, id: a, text: \"${x}\" } }",
+                        previous ->
+                                "{ params: [x], node: { use: "
+                                        + previous
+                                        + ", with: { x: \"${x}${x}\" } } }",
+                        25,
+                        ", with: { x: abcd }");
+        assertTrue(failure(spec).contains("text longer than"));
+    }
+
+    @Test
+    void listParametersThatDoubleAreStopped() {
+        String spec =
+                chain(
+                        "l",
+                        "{ params: [x], node: { type: label, id: a, items: \"${x}\" } }",
+                        previous ->
+                                "{ params: [x], node: { use: "
+                                        + previous
+                                        + ", with: { x: [\"${x}\", \"${x}\"] } } }",
+                        30,
+                        ", with: { x: [1] }");
+        assertTrue(
+                failure(spec)
+                        .contains("more than " + SpecLoader.MAX_SUBSTITUTED_VALUES + " values"));
+    }
+
     @Test
     void importsCannotLeaveTheSpecsFolder(@TempDir Path folder) throws IOException {
         Files.writeString(
