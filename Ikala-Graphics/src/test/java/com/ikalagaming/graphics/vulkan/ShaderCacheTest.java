@@ -87,6 +87,64 @@ class ShaderCacheTest {
         assertFalse(Files.exists(file), "The damaged file was deleted");
     }
 
+    /** A flipped byte in the SPIR-V, past the magic number, fails the checksum and is dropped. */
+    @Test
+    void testFlippedBodyByteDropped(@TempDir Path folder) throws IOException {
+        final ShaderCache cache = new ShaderCache(folder);
+        final String key = ShaderCache.key("void main() {}", 1, COMPILER);
+        cache.save(key, ByteBuffer.wrap(spirv(12)));
+        final Path file = cache.fileOf(key);
+        final byte[] bytes = Files.readAllBytes(file);
+        bytes[bytes.length - 3] ^= (byte) 0x01;
+        Files.write(file, bytes);
+
+        assertNull(cache.load(key));
+        assertFalse(Files.exists(file), "The damaged file was deleted");
+    }
+
+    /** A bare SPIR-V module, as the old format kept it, has no checksum, so it is dropped. */
+    @Test
+    void testBareSpirvDropped(@TempDir Path folder) throws IOException {
+        final ShaderCache cache = new ShaderCache(folder);
+        final String key = ShaderCache.key("void main() {}", 1, COMPILER);
+        Files.write(cache.fileOf(key), spirv(12));
+
+        assertNull(cache.load(key));
+        assertFalse(Files.exists(cache.fileOf(key)), "The old file was deleted");
+    }
+
+    /** The checksum alone isn't enough: what it covers must still look like SPIR-V. */
+    @Test
+    void testUnwrapChecksTheModule() {
+        final byte[] module = spirv(12);
+        assertArrayEquals(module, ShaderCache.unwrap(ShaderCache.wrap(ByteBuffer.wrap(module))));
+        // Whole words only, even with a right checksum
+        final byte[] ragged = Arrays.copyOf(module, module.length - 1);
+        assertNull(ShaderCache.unwrap(ShaderCache.wrap(ByteBuffer.wrap(ragged))));
+        // Shorter than a SPIR-V header
+        assertNull(ShaderCache.unwrap(ShaderCache.wrap(ByteBuffer.wrap(spirv(2)))));
+        // Shorter than the file header
+        assertNull(ShaderCache.unwrap(new byte[ShaderCache.FILE_HEADER_BYTES - 1]));
+        assertNull(ShaderCache.unwrap(new byte[0]));
+        // A cut file
+        final byte[] file = ShaderCache.wrap(ByteBuffer.wrap(module));
+        assertNull(ShaderCache.unwrap(Arrays.copyOf(file, file.length - 4)));
+    }
+
+    /** Dropping a module the driver refused deletes it, so it is compiled and saved again. */
+    @Test
+    void testDrop(@TempDir Path folder) {
+        final ShaderCache cache = new ShaderCache(folder);
+        final String key = ShaderCache.key("void main() {}", 1, COMPILER);
+        cache.save(key, ByteBuffer.wrap(spirv(12)));
+        cache.drop(key);
+
+        assertFalse(Files.exists(cache.fileOf(key)));
+        assertNull(cache.load(key));
+        // Dropping what isn't there is fine
+        cache.drop(key);
+    }
+
     /** A file cut short of whole words is a miss. */
     @Test
     void testTruncatedFileDropped(@TempDir Path folder) throws IOException {

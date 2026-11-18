@@ -282,6 +282,8 @@ public class TextureLoaderVulkan {
      * @param wrap What it shows outside its texture coordinates.
      * @return The handle for the texture, pending until uploaded.
      * @throws TextureException If the format is not supported, or there are no bindless slots left.
+     * @throws IllegalArgumentException If the size isn't positive, or the buffer holds fewer bytes
+     *     than an image of that size and format takes.
      */
     public TextureHandle load(
             @NonNull String owner,
@@ -290,10 +292,50 @@ public class TextureLoaderVulkan {
             int width,
             int height,
             @NonNull TextureWrap wrap) {
+        checkData(buffer, format, width, height);
         final int mipLevels = mipLevels(buffer != null, format, width, height);
         TextureInfoVulkan info = createImage(format, width, height, mipLevels, mipLevels > 1, wrap);
         final float[] average = buffer == null ? null : average(buffer, format);
         return queue(owner, info, buffer, format, width, height, average, null);
+    }
+
+    /**
+     * Check that a texture's size is positive and its data holds a whole image, before anything is
+     * created for it, so the GPU never copies past the end of the staged data.
+     *
+     * @param buffer The data, from its position to its limit, or null for none.
+     * @param format The format of the data. Formats whose size {@link DdsFile#byteCount} doesn't
+     *     know only have their size checked.
+     * @param width The width in pixels.
+     * @param height The height in pixels.
+     * @throws IllegalArgumentException If the size isn't positive, or the data is too short.
+     */
+    static void checkData(ByteBuffer buffer, @NonNull Format format, int width, int height) {
+        if (width <= 0 || height <= 0) {
+            throw new IllegalArgumentException(
+                    SafeResourceLoader.format(
+                            "Texture size {} x {} isn't positive", width, height));
+        }
+        if (buffer == null) {
+            return;
+        }
+        long needed;
+        try {
+            needed = DdsFile.byteCount(format, width, height);
+        } catch (ArithmeticException e) {
+            // Past a long, so far past any buffer
+            needed = Long.MAX_VALUE;
+        }
+        if (buffer.remaining() < needed) {
+            throw new IllegalArgumentException(
+                    SafeResourceLoader.format(
+                            "A {} x {} {} texture needs {} bytes, but the data has {}",
+                            width,
+                            height,
+                            format.name(),
+                            needed,
+                            buffer.remaining()));
+        }
     }
 
     /**

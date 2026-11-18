@@ -140,6 +140,13 @@ public class ShaderVulkan {
                 try {
                     spirvBytes.put(cached).flip();
                     return createModule(state, spirvBytes);
+                } catch (RenderException e) {
+                    // Whole but refused, say by a new driver: compile it once below instead
+                    log.warn(
+                            "The cached shader {} was refused, compiling it again: {}",
+                            shaderName,
+                            e.getMessage());
+                    cache.drop(key);
                 } finally {
                     MemoryUtil.memFree(spirvBytes);
                 }

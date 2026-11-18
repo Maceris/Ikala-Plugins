@@ -257,6 +257,11 @@ public final class LodPanel implements AutoCloseable {
                             } catch (RuntimeException e) {
                                 log.warn("Could not build LOD for {}", name, e);
                                 failure = String.valueOf(e.getMessage());
+                            } catch (Error e) {
+                                // Like running out of memory: say why the build stopped
+                                log.error("Building LOD for {} stopped", name, e);
+                                failure = e.toString();
+                                throw e;
                             }
                         },
                         "LOD panel " + name);

@@ -64,6 +64,18 @@ public final class DdsFile {
     /** DX10 resource dimension for 2D textures. */
     static final int DX10_TEXTURE_2D = 3;
 
+    /**
+     * The widest or tallest texture read, in pixels. The 2D image limit of most desktop GPUs, and
+     * it keeps a forged header's size math far from overflowing; it also caps the mip chain at 15
+     * levels.
+     */
+    static final int MAX_DIMENSION = 16384;
+
+    /**
+     * The most bytes the levels may take once loaded, since the data is one buffer indexed by int.
+     */
+    static final long MAX_DATA_BYTES = Integer.MAX_VALUE;
+
     /** Formats by four character code, for legacy headers. */
     private static final Map<Integer, Format> BY_FOURCC =
             Map.ofEntries(
@@ -203,8 +215,9 @@ public final class DdsFile {
         final int bitCount = in.getInt(88);
         final int[] masks = {in.getInt(92), in.getInt(96), in.getInt(100), in.getInt(104)};
         final int caps2 = in.getInt(112);
-        if (width <= 0 || height <= 0) {
-            throw new IOException("Bad size " + width + " x " + height);
+        if (width <= 0 || height <= 0 || width > MAX_DIMENSION || height > MAX_DIMENSION) {
+            throw new IOException(
+                    "Bad size " + width + " x " + height + ", the limit is " + MAX_DIMENSION);
         }
         if ((caps2 & (CAPS2_CUBEMAP | CAPS2_VOLUME)) != 0) {
             throw new IOException("Cube maps and volume textures aren't supported");
@@ -221,7 +234,10 @@ public final class DdsFile {
             final int dimension = in.getInt(HEADER_SIZE + 4);
             final int misc = in.getInt(HEADER_SIZE + 8);
             final int arraySize = in.getInt(HEADER_SIZE + 12);
-            if (dimension != DX10_TEXTURE_2D || (misc & DX10_MISC_CUBE) != 0 || arraySize > 1) {
+            // The array size is unsigned; 0 is allowed, since some writers leave it unset
+            if (dimension != DX10_TEXTURE_2D
+                    || (misc & DX10_MISC_CUBE) != 0
+                    || Integer.compareUnsigned(arraySize, 1) > 0) {
                 throw new IOException("Only single 2D textures are supported");
             }
             format = BY_DXGI.get(dxgi);
@@ -266,31 +282,49 @@ public final class DdsFile {
                 (flags & FLAG_MIPMAP_COUNT) != 0 && mipCount > 0
                         ? Math.min(mipCount, fullChain)
                         : 1;
-        final int[] offsets = new int[levels + 1];
-        final int[] storedOffsets = new int[levels + 1];
-        for (int level = 0; level < levels; ++level) {
-            final int w = levelSize(width, level);
-            final int h = levelSize(height, level);
-            offsets[level + 1] = offsets[level] + byteCount(format, w, h);
-            storedOffsets[level + 1] = storedOffsets[level] + widen.storedBytes(format, w, h);
+        final long[] chain = new long[levels + 1];
+        long stored = 0;
+        try {
+            for (int level = 0; level < levels; ++level) {
+                final int w = levelSize(width, level);
+                final int h = levelSize(height, level);
+                chain[level + 1] = Math.addExact(chain[level], byteCount(format, w, h));
+                stored = Math.addExact(stored, widen.storedBytes(format, w, h));
+            }
+        } catch (ArithmeticException e) {
+            throw new IOException("Size overflows: " + width + " x " + height, e);
         }
-        final int stored = storedOffsets[levels];
-        if (in.remaining() - dataStart < stored) {
+        final long available = (long) in.remaining() - dataStart;
+        if (available < stored) {
             throw new IOException(
                     "Truncated: "
                             + levels
                             + " levels need "
                             + stored
                             + " bytes, the file has "
-                            + (in.remaining() - dataStart));
+                            + available);
+        }
+        if (chain[levels] > MAX_DATA_BYTES) {
+            throw new IOException(
+                    "Too large: "
+                            + levels
+                            + " levels need "
+                            + chain[levels]
+                            + " bytes, the limit is "
+                            + MAX_DATA_BYTES);
+        }
+        // Every offset fits an int now, since the last and largest does
+        final int[] offsets = new int[levels + 1];
+        for (int level = 0; level <= levels; ++level) {
+            offsets[level] = (int) chain[level];
         }
 
         final ByteBuffer data =
                 ByteBuffer.allocateDirect(offsets[levels]).order(ByteOrder.nativeOrder());
         if (widen == Widen.NONE) {
-            data.put(0, in, dataStart, stored);
+            data.put(0, in, dataStart, (int) stored);
         } else {
-            widen.copy(in, dataStart, data, stored);
+            widen.copy(in, dataStart, data, (int) stored);
         }
         return new DdsFile(format, width, height, levels, data, offsets);
     }
@@ -434,14 +468,17 @@ public final class DdsFile {
      * @param format The format.
      * @param width The width in pixels.
      * @param height The height in pixels.
-     * @return The size in bytes.
+     * @return The size in bytes, 0 for a format neither block compressed nor one DDS files load as.
+     * @throws ArithmeticException If the size doesn't fit a long, which only absurd sizes do.
      */
-    public static int byteCount(@NonNull Format format, int width, int height) {
+    public static long byteCount(@NonNull Format format, int width, int height) {
         final int block = blockBytes(format);
         if (block > 0) {
-            return ((width + 3) / 4) * ((height + 3) / 4) * block;
+            final long blocks =
+                    Math.multiplyExact(((long) width + 3) / 4, ((long) height + 3) / 4);
+            return Math.multiplyExact(blocks, block);
         }
-        return width * height * pixelBytes(format);
+        return Math.multiplyExact(Math.multiplyExact((long) width, height), pixelBytes(format));
     }
 
     /**
@@ -492,8 +529,10 @@ public final class DdsFile {
          * @param height The height.
          * @return The size in the file.
          */
-        int storedBytes(Format format, int width, int height) {
-            return this == FROM_24 ? width * height * 3 : byteCount(format, width, height);
+        long storedBytes(Format format, int width, int height) {
+            return this == FROM_24
+                    ? Math.multiplyExact(Math.multiplyExact((long) width, height), 3)
+                    : byteCount(format, width, height);
         }
 
         /**

@@ -16,12 +16,16 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.HexFormat;
+import java.util.zip.CRC32C;
 
 /**
  * Compiled SPIR-V on disk, one {@value #EXTENSION} file per module, named by a hash of the source
  * with its includes and everything else that changes what the compiler makes, so a shader whose
- * source and includes haven't changed since any earlier session is read instead of compiled.
+ * source and includes haven't changed since any earlier session is read instead of compiled. Each
+ * file starts with a small header holding the SPIR-V's checksum, so a damaged file is a miss and is
+ * compiled again rather than handed to the driver.
  *
  * <p>It lives in a {@value #FOLDER} folder inside the level of detail cache's folder. The LOD cache
  * only counts and evicts its own files at the top of that folder, so it never sees these. Nothing
@@ -41,8 +45,23 @@ final class ShaderCache {
     /** The extension of a file being written. */
     private static final String WRITING = ".tmp";
 
-    /** Changes when what goes into a key changes, so old files are never read. */
-    private static final int FORMAT_VERSION = 1;
+    /**
+     * Changes when what goes into a key or the file layout changes, so old files are never read.
+     * Version 2 added the header with a checksum.
+     */
+    private static final int FORMAT_VERSION = 2;
+
+    /** "IKSV" as a little endian int, the first word of every cache file. */
+    private static final int FILE_MAGIC = 0x56534B49;
+
+    /** The bytes before the SPIR-V in a file: the magic, the format version and the CRC-32C. */
+    static final int FILE_HEADER_BYTES = Integer.BYTES * 3;
+
+    /**
+     * The largest file read. Modules are tens of kilobytes; anything near this is damage, not a
+     * shader.
+     */
+    private static final long MAX_FILE_BYTES = 64L * 1024 * 1024;
 
     /** The first word of every SPIR-V module. */
     private static final int SPIRV_MAGIC = 0x07230203;
@@ -103,8 +122,8 @@ final class ShaderCache {
     }
 
     /**
-     * Read a module, if it is there and looks like SPIR-V. A file that doesn't is a miss, and is
-     * deleted so the next compile replaces it.
+     * Read a module, if it is there, whole, and looks like SPIR-V. A file that isn't is a miss, and
+     * is deleted so the next compile replaces it.
      *
      * @param key The module's key.
      * @return The SPIR-V bytes, or null.
@@ -112,13 +131,18 @@ final class ShaderCache {
     byte[] load(@NonNull String key) {
         final Path file = fileOf(key);
         try {
-            final byte[] bytes = Files.readAllBytes(file);
-            if (!isSpirv(bytes)) {
-                log.warn("The cached shader {} isn't SPIR-V, compiling it again", file);
+            if (Files.size(file) > MAX_FILE_BYTES) {
+                log.warn("The cached shader {} is too large, compiling it again", file);
                 deleteQuietly(file);
                 return null;
             }
-            return bytes;
+            final byte[] spirv = unwrap(Files.readAllBytes(file));
+            if (spirv == null) {
+                log.warn("The cached shader {} is damaged, compiling it again", file);
+                deleteQuietly(file);
+                return null;
+            }
+            return spirv;
         } catch (NoSuchFileException e) {
             return null;
         } catch (IOException e) {
@@ -139,8 +163,7 @@ final class ShaderCache {
      * @param spirv The SPIR-V bytes, from its position to its limit, which are left as they were.
      */
     void save(@NonNull String key, @NonNull ByteBuffer spirv) {
-        final byte[] bytes = new byte[spirv.remaining()];
-        spirv.duplicate().get(bytes);
+        final byte[] bytes = wrap(spirv);
         final Path file = fileOf(key);
         final Path writing = folder.resolve(key + EXTENSION + WRITING);
         try {
@@ -162,6 +185,16 @@ final class ShaderCache {
     }
 
     /**
+     * Forget a module the driver refused even though its file was whole, so it is compiled and
+     * saved again.
+     *
+     * @param key The module's key.
+     */
+    void drop(@NonNull String key) {
+        deleteQuietly(fileOf(key));
+    }
+
+    /**
      * Where a module's file is.
      *
      * @param key The module's key.
@@ -169,6 +202,48 @@ final class ShaderCache {
      */
     Path fileOf(@NonNull String key) {
         return folder.resolve(key + EXTENSION);
+    }
+
+    /**
+     * Lay out a module as its file holds it: the magic, the format version and the SPIR-V's
+     * CRC-32C, then the SPIR-V.
+     *
+     * @param spirv The SPIR-V bytes, from its position to its limit, which are left as they were.
+     * @return The file's bytes.
+     */
+    static byte[] wrap(@NonNull ByteBuffer spirv) {
+        final ByteBuffer body = spirv.duplicate();
+        final CRC32C crc = new CRC32C();
+        crc.update(body.duplicate());
+        final ByteBuffer out =
+                ByteBuffer.allocate(FILE_HEADER_BYTES + body.remaining())
+                        .order(ByteOrder.LITTLE_ENDIAN);
+        out.putInt(FILE_MAGIC).putInt(FORMAT_VERSION).putInt((int) crc.getValue()).put(body);
+        return out.array();
+    }
+
+    /**
+     * The SPIR-V in a module's file, if the file is whole: the header matches, the checksum is
+     * right, and what follows could be a SPIR-V module.
+     *
+     * @param file The file's bytes.
+     * @return The SPIR-V bytes, or null if the file is damaged or from another version.
+     */
+    static byte[] unwrap(byte @NonNull [] file) {
+        if (file.length < FILE_HEADER_BYTES) {
+            return null;
+        }
+        final ByteBuffer in = ByteBuffer.wrap(file).order(ByteOrder.LITTLE_ENDIAN);
+        if (in.getInt(0) != FILE_MAGIC || in.getInt(Integer.BYTES) != FORMAT_VERSION) {
+            return null;
+        }
+        final byte[] spirv = Arrays.copyOfRange(file, FILE_HEADER_BYTES, file.length);
+        final CRC32C crc = new CRC32C();
+        crc.update(spirv);
+        if ((int) crc.getValue() != in.getInt(Integer.BYTES * 2) || !isSpirv(spirv)) {
+            return null;
+        }
+        return spirv;
     }
 
     /**

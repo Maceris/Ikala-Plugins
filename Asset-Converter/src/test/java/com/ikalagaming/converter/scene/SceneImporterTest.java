@@ -225,6 +225,37 @@ class SceneImporterTest {
     }
 
     /**
+     * A face naming a vertex the mesh doesn't have is refused, by assimp or by the importer, and
+     * never reaches the mesh data.
+     *
+     * @throws IOException If the file can't be written.
+     */
+    @Test
+    void testFaceIndexPastVertices() throws IOException {
+        Path file = folder.resolve("bad.obj");
+        Files.writeString(
+                file,
+                """
+                v 0 0 0
+                v 1 0 0
+                v 0 1 0
+                f 1 2 3
+                f 1 2 99
+                """);
+        ImportedScene scene;
+        try {
+            scene = SceneImporter.read(file, message -> {});
+        } catch (IOException expected) {
+            return;
+        }
+        for (ImportedScene.Mesh mesh : scene.meshes()) {
+            for (int index : mesh.data().getIndices()) {
+                assertTrue(index >= 0 && index < mesh.data().getVertexCount(), "index " + index);
+            }
+        }
+    }
+
+    /**
      * A one node tree, for transform checks.
      *
      * @return The root, named n.

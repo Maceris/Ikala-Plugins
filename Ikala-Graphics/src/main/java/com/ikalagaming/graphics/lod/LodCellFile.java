@@ -103,6 +103,55 @@ public final class LodCellFile {
     /** Ints in a stored input: the child cell's level, x, y, z and the cluster id. */
     private static final int INPUT_INTS = 5;
 
+    /** Bytes in a cluster record before its vertices and triangles. */
+    private static final int CLUSTER_HEADER_BYTES =
+            Integer.BYTES * 8 + Double.BYTES * (1 + 2 * SPHERE_VALUES);
+
+    /** Bytes each triangle takes in a cluster record: its corner indices, material, visibility. */
+    private static final int TRIANGLE_BYTES =
+            LodMesh.CORNERS * Short.BYTES + Integer.BYTES + Float.BYTES;
+
+    /** Bytes in a group record besides its children, outputs and bake tiles. */
+    private static final int GROUP_HEADER_BYTES =
+            Integer.BYTES * 5
+                    + Double.BYTES * (3 + SPHERE_VALUES)
+                    + Integer.BYTES * 7
+                    + Long.BYTES
+                    + Integer.BYTES;
+
+    /** Bytes in a coverage volume record before its voxels: its cluster, origin, size and count. */
+    private static final int VOLUME_HEADER_BYTES = Integer.BYTES * 2 + Double.BYTES * (AXES + 1);
+
+    /** Bytes each voxel takes in a coverage volume record. */
+    private static final int VOXEL_BYTES =
+            Long.BYTES
+                    + Float.BYTES
+                            * (1 + CoverageVolume.SGGX_VALUES + CoverageVolume.COLOR_VALUES + 3)
+                    + Integer.BYTES;
+
+    /**
+     * The most triangles a cluster read from a file may have. Clusters are split at {@link
+     * Clusters#MAX_TRIANGLES} and only rarely end up larger, so this is far past any real one; it
+     * is there because a triangle takes 14 bytes in the file but up to 80 once read, so the bytes
+     * left alone would let a forged count ask for several times the file's size.
+     */
+    private static final int MAX_CLUSTER_TRIANGLES = 1 << 20;
+
+    /**
+     * The most sections a cell read from a file may stand for. A cell holds a cube of a few
+     * sections a side; each takes 12 bytes in the file but an object of its own once read.
+     */
+    private static final int MAX_CELL_SECTIONS = 1 << 20;
+
+    /**
+     * The most levels a DAG read from a file may have. Each level about halves the triangles, so
+     * real DAGs have a few dozen at most; the DAG sizes tables by its level count.
+     */
+    private static final int MAX_LEVELS = 256;
+
+    /** What clusters are called in messages about counts. */
+    private static final String CLUSTERS_NAME = "clusters";
+
     /**
      * A cell as stored.
      *
@@ -191,7 +240,8 @@ public final class LodCellFile {
      * @param clusters How many clusters it has.
      */
     private static void decodeBakes(@NonNull ByteBuffer in, @NonNull LodDag dag, int clusters) {
-        final int count = count(in.getInt());
+        // Each is at least its cluster id and a bake's width and height
+        final int count = count(in.getInt(), Integer.BYTES * 3, in, clusters, "bakes");
         for (int i = 0; i < count; ++i) {
             dag.setBake(clusterId(in.getInt(), clusters), BakeTexels.read(in));
         }
@@ -227,13 +277,11 @@ public final class LodCellFile {
      * @param clusters How many clusters it has.
      */
     private static void decodeKinds(@NonNull ByteBuffer in, @NonNull LodDag dag, int clusters) {
-        final int count = count(in.getInt());
+        final int count = count(in.getInt(), Integer.BYTES * 2, in, clusters, "volume kind lists");
         for (int i = 0; i < count; ++i) {
             final int id = clusterId(in.getInt(), clusters);
-            final int length = count(in.getInt());
-            if (length > in.remaining()) {
-                throw new IllegalArgumentException("Volume kinds past the section's end");
-            }
+            final int length =
+                    count(in.getInt(), Byte.BYTES, in, Integer.MAX_VALUE, "volume kinds");
             final byte[] kinds = new byte[length];
             in.get(kinds);
             dag.setVolumeKinds(id, kinds);
@@ -261,6 +309,14 @@ public final class LodCellFile {
         final ByteBuffer cellData = require(file, LCEL);
         final ByteBuffer clusterData = require(file, LCLU);
         final ByteBuffer groupData = require(file, LGRP);
+        // Read first, as it bounds the cell's inputs
+        final int clusters =
+                count(
+                        clusterData.getInt(),
+                        CLUSTER_HEADER_BYTES,
+                        clusterData,
+                        Integer.MAX_VALUE,
+                        CLUSTERS_NAME);
 
         // The cell
         final int cellStart = cellData.position();
@@ -274,9 +330,24 @@ public final class LodCellFile {
         }
         final double cellLeafEdge = cellData.getDouble();
         final double dagLeafEdge = cellData.getDouble();
-        final int sectionCount = count(cellData.getInt());
-        final int inputCount = count(cellData.getInt());
-        final int reasonLength = count(cellData.getInt());
+        final int sectionCount =
+                count(
+                        cellData.getInt(),
+                        AXES * Integer.BYTES,
+                        cellData,
+                        MAX_CELL_SECTIONS,
+                        "sections");
+        final int inputCount = count(cellData.getInt(), 0, cellData, clusters, "inputs");
+        final int reasonLength = count(cellData.getInt(), 0, cellData, Integer.MAX_VALUE, "reason");
+        // All three lists follow the counts, so the data left must hold them together
+        fits(
+                Math.addExact(
+                        Math.addExact(
+                                Math.multiplyExact((long) sectionCount, AXES * Integer.BYTES),
+                                Math.multiplyExact((long) inputCount, INPUT_INTS * Integer.BYTES)),
+                        reasonLength),
+                cellData,
+                "The cell's sections, inputs and reason");
         final List<LodStore.SectionPos> sections = new ArrayList<>(sectionCount);
         for (int i = 0; i < sectionCount; ++i) {
             sections.add(
@@ -300,11 +371,16 @@ public final class LodCellFile {
         }
 
         final LodDag dag = new LodDag(origin);
-        final int clusters = count(clusterData.getInt());
         for (int i = 0; i < clusters; ++i) {
             dag.add(decodeCluster(clusterData));
         }
-        final int groups = count(groupData.getInt());
+        final int groups =
+                count(
+                        groupData.getInt(),
+                        GROUP_HEADER_BYTES,
+                        groupData,
+                        Integer.MAX_VALUE,
+                        "groups");
         for (int i = 0; i < groups; ++i) {
             dag.add(decodeGroup(groupData, clusters));
         }
@@ -361,12 +437,24 @@ public final class LodCellFile {
                 clusters.offset(),
                 Math.toIntExact(clusters.length()),
                 in -> {
-                    final int count = count(in.getInt());
+                    final int count =
+                            count(
+                                    in.getInt(),
+                                    CLUSTER_HEADER_BYTES,
+                                    in,
+                                    Integer.MAX_VALUE - 1,
+                                    CLUSTERS_NAME);
                     final long[] starts = new long[count + 1];
                     for (int i = 0; i < count; ++i) {
                         final int at = in.position();
                         starts[i] = clusters.offset() + at;
-                        in.position(at + in.getInt(at));
+                        final int size = in.getInt(at);
+                        if (size < CLUSTER_HEADER_BYTES || size > in.remaining()) {
+                            throw new IllegalArgumentException(
+                                    file + "'s cluster " + i + " has a record of " + size
+                                            + " bytes");
+                        }
+                        in.position(at + size);
                     }
                     starts[count] = clusters.offset() + in.position();
                     if (in.position() > clusters.length()) {
@@ -407,17 +495,42 @@ public final class LodCellFile {
     }
 
     /**
-     * Check a count read from a file.
+     * Check a count read from a file before anything that size is made: it must be in range, and
+     * the data left must hold that many items, so a corrupt or forged count fails here instead of
+     * asking for more memory than the file could ever fill.
      *
      * @param count The count.
-     * @return It.
-     * @throws IllegalArgumentException If it is negative.
+     * @param itemBytes The fewest bytes each item takes in the data after the count, or 0 if they
+     *     are checked later.
+     * @param in The data, just past the count.
+     * @param max The most there may be.
+     * @param what What is counted, for the message.
+     * @return The count.
+     * @throws IllegalArgumentException If it is negative, over the most, or past the data's end.
      */
-    private static int count(int count) {
-        if (count < 0) {
-            throw new IllegalArgumentException("A negative count");
+    private static int count(
+            int count, int itemBytes, @NonNull ByteBuffer in, int max, @NonNull String what) {
+        if (count < 0 || count > max) {
+            throw new IllegalArgumentException(
+                    "A count of " + count + " " + what + ", not 0 to " + max);
         }
+        fits(Math.multiplyExact((long) count, itemBytes), in, what);
         return count;
+    }
+
+    /**
+     * Check that the data left holds what a file says comes next.
+     *
+     * @param bytes The fewest bytes it takes.
+     * @param in The data, at its start.
+     * @param what What it is, for the message.
+     * @throws IllegalArgumentException If the data ends first.
+     */
+    private static void fits(long bytes, @NonNull ByteBuffer in, @NonNull String what) {
+        if (bytes > in.remaining()) {
+            throw new IllegalArgumentException(
+                    what + " take " + bytes + " bytes, but only " + in.remaining() + " are left");
+        }
     }
 
     /**
@@ -591,13 +704,10 @@ public final class LodCellFile {
      * @return The bytes.
      */
     private static int clusterSize(LodDag.@NonNull Cluster cluster, @NonNull Packed packed) {
-        final int triangles = cluster.triangleCount();
-        return Integer.BYTES * 8
-                + Double.BYTES * (1 + 2 * SPHERE_VALUES)
+        return CLUSTER_HEADER_BYTES
                 + packed.vertexCount() * AXES * Float.BYTES
                 + (packed.attributes() == null ? 0 : packed.attributes().length * Integer.BYTES)
-                + triangles * LodMesh.CORNERS * Short.BYTES
-                + triangles * (Integer.BYTES + Float.BYTES);
+                + cluster.triangleCount() * TRIANGLE_BYTES;
     }
 
     /**
@@ -611,14 +721,27 @@ public final class LodCellFile {
         final int size = in.getInt();
         final int id = in.getInt();
         final int level = in.getInt();
-        final int triangles = count(in.getInt());
+        if (level < 0 || level >= MAX_LEVELS) {
+            throw new IllegalArgumentException("Cluster " + id + " is at level " + level);
+        }
+        final int triangles = in.getInt();
         final int producer = in.getInt();
         final int section = in.getInt();
         final double error = in.getDouble();
         final double[] bound = getSphere(in);
         final double[] tight = getSphere(in);
-        final int vertexCount = count(in.getInt());
+        final int vertexCount = in.getInt();
         final boolean any = in.getInt() != 0;
+        // The vertex table and the triangles follow, so the data left must hold both
+        count(triangles, 0, in, MAX_CLUSTER_TRIANGLES, "triangles");
+        count(vertexCount, 0, in, MAX_VERTICES, "vertices");
+        final int vertexBytes = AXES * Float.BYTES + (any ? Attributes.VALUES * Integer.BYTES : 0);
+        fits(
+                Math.addExact(
+                        Math.multiplyExact((long) vertexCount, vertexBytes),
+                        Math.multiplyExact((long) triangles, TRIANGLE_BYTES)),
+                in,
+                "Cluster " + id + "'s vertices and triangles");
         final float[] positions = new float[vertexCount * AXES];
         for (int i = 0; i < positions.length; ++i) {
             positions[i] = in.getFloat();
@@ -791,16 +914,7 @@ public final class LodCellFile {
      * @return The bytes.
      */
     private static int volumeSize(@NonNull CoverageVolume volume) {
-        return Integer.BYTES * 2
-                + Double.BYTES * (AXES + 1)
-                + volume.size()
-                        * (Long.BYTES
-                                + Float.BYTES
-                                        * (1
-                                                + CoverageVolume.SGGX_VALUES
-                                                + CoverageVolume.COLOR_VALUES
-                                                + 3)
-                                + Integer.BYTES);
+        return VOLUME_HEADER_BYTES + volume.size() * VOXEL_BYTES;
     }
 
     /**
@@ -811,7 +925,7 @@ public final class LodCellFile {
      * @param clusters How many clusters it has.
      */
     private static void decodeVolumes(@NonNull ByteBuffer in, @NonNull LodDag dag, int clusters) {
-        final int count = count(in.getInt());
+        final int count = count(in.getInt(), VOLUME_HEADER_BYTES, in, clusters, "volumes");
         for (int i = 0; i < count; ++i) {
             final int id = clusterId(in.getInt(), clusters);
             final double[] origin = new double[AXES];
@@ -819,7 +933,7 @@ public final class LodCellFile {
                 origin[axis] = in.getDouble();
             }
             final double voxelSize = in.getDouble();
-            final int n = count(in.getInt());
+            final int n = count(in.getInt(), VOXEL_BYTES, in, Integer.MAX_VALUE, "voxels");
             final long[] keys = new long[n];
             final float[] density = new float[n];
             final float[] sggx = new float[n * CoverageVolume.SGGX_VALUES];
@@ -867,12 +981,9 @@ public final class LodCellFile {
      * @return The bytes.
      */
     private static int groupSize(LodDag.@NonNull Group group) {
-        return Integer.BYTES * 5
-                + Double.BYTES * (3 + SPHERE_VALUES)
-                + Integer.BYTES * 7
-                + Long.BYTES
-                + (group.children().length + group.outputs().length) * Integer.BYTES
-                + (1 + group.bakeTiles().length) * Integer.BYTES;
+        return GROUP_HEADER_BYTES
+                + (group.children().length + group.outputs().length + group.bakeTiles().length)
+                        * Integer.BYTES;
     }
 
     /**
@@ -887,8 +998,15 @@ public final class LodCellFile {
         final int size = in.getInt();
         final int id = in.getInt();
         final int level = in.getInt();
-        final int[] children = new int[count(in.getInt())];
-        final int[] outputs = new int[count(in.getInt())];
+        // Each names a distinct cluster, so there can't be more than the DAG has
+        final int childCount = count(in.getInt(), 0, in, clusters, "children");
+        final int outputCount = count(in.getInt(), 0, in, clusters, "outputs");
+        fits(
+                Math.multiplyExact((long) childCount + outputCount, Integer.BYTES),
+                in,
+                "Group " + id + "'s children and outputs");
+        final int[] children = new int[childCount];
+        final int[] outputs = new int[outputCount];
         final double error = in.getDouble();
         final double[] bound = getSphere(in);
         final double simplifyError = in.getDouble();
@@ -907,10 +1025,11 @@ public final class LodCellFile {
         for (int i = 0; i < outputs.length; ++i) {
             outputs[i] = clusterId(in.getInt(), clusters);
         }
-        final int[] bakeTiles = new int[count(in.getInt())];
-        if (bakeTiles.length != 0 && bakeTiles.length != outputs.length) {
+        final int tileCount = count(in.getInt(), Integer.BYTES, in, outputs.length, "bake tiles");
+        if (tileCount != 0 && tileCount != outputs.length) {
             throw new IllegalArgumentException("Group " + id + " has bake tiles for some outputs");
         }
+        final int[] bakeTiles = new int[tileCount];
         for (int i = 0; i < bakeTiles.length; ++i) {
             bakeTiles[i] = in.getInt();
         }

@@ -201,7 +201,8 @@ public final class AssetFile {
      *
      * @param path The file.
      * @return Each section's place, in table order.
-     * @throws AssetFormatException If the file doesn't start like a container.
+     * @throws AssetFormatException If the file doesn't start like a container, or its table or a
+     *     section lies outside it.
      * @throws UncheckedIOException If the file can't be read.
      */
     public static List<Place> locate(@NonNull Path path) {
@@ -214,23 +215,37 @@ public final class AssetFile {
             if (!Arrays.equals(magic, AssetFormat.MAGIC)) {
                 throw new AssetFormatException(path + " is not an asset container");
             }
-            final int count = header.getInt(AssetFormat.HEADER_SECTION_COUNT);
-            final int entrySize = header.getInt(AssetFormat.HEADER_TABLE_ENTRY_SIZE);
+            final long fileSize = channel.size();
+            final long count =
+                    Integer.toUnsignedLong(header.getInt(AssetFormat.HEADER_SECTION_COUNT));
+            final long entrySize =
+                    Integer.toUnsignedLong(header.getInt(AssetFormat.HEADER_TABLE_ENTRY_SIZE));
             final long tableOffset = header.getLong(AssetFormat.HEADER_TABLE_OFFSET);
-            if (count < 0 || entrySize < AssetFormat.TABLE_ENTRY_SIZE) {
+            // Checked against the file before anything is allocated for the table
+            final long tableBytes =
+                    AssetValidator.tableBytes(count, entrySize, tableOffset, fileSize);
+            if (entrySize < AssetFormat.TABLE_ENTRY_SIZE
+                    || tableBytes < 0
+                    || tableBytes > Integer.MAX_VALUE) {
                 throw new AssetFormatException(path + " has a malformed section table");
             }
             final ByteBuffer table =
-                    readAt(channel, tableOffset, Math.multiplyExact(count, entrySize), path)
+                    readAt(channel, tableOffset, (int) tableBytes, path)
                             .order(ByteOrder.LITTLE_ENDIAN);
-            final List<Place> places = new ArrayList<>(count);
-            for (int i = 0; i < count; ++i) {
-                final int base = i * entrySize;
-                places.add(
+            final int entries = (int) count;
+            final List<Place> places = new ArrayList<>(entries);
+            for (int i = 0; i < entries; ++i) {
+                final int base = (int) (i * entrySize);
+                final Place place =
                         new Place(
                                 table.getInt(base + AssetFormat.ENTRY_TAG),
                                 table.getLong(base + AssetFormat.ENTRY_OFFSET),
-                                table.getLong(base + AssetFormat.ENTRY_LENGTH)));
+                                table.getLong(base + AssetFormat.ENTRY_LENGTH));
+                if (!AssetValidator.inFile(place.offset(), place.length(), fileSize)) {
+                    throw new AssetFormatException(
+                            path + " has section " + i + " past the end of the file");
+                }
+                places.add(place);
             }
             return places;
         } catch (IOException e) {

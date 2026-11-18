@@ -461,6 +461,10 @@ public final class LiveLod implements AutoCloseable {
                     return;
                 }
                 log.error("Building level of detail failed", e);
+            } catch (Error e) {
+                // Like running out of memory: this thread can't go on, but say why it stopped
+                log.error("The level of detail builder stopped", e);
+                throw e;
             }
         }
     }

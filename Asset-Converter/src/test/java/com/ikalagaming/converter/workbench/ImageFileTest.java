@@ -20,6 +20,7 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.zip.CRC32;
 import javax.imageio.ImageIO;
 
 /** Tests for decoding image files. */
@@ -185,5 +186,54 @@ class ImageFileTest {
         assertEquals(
                 java.util.List.of("wood", "base", "color", "2k"),
                 ImageFile.words("Wood_BaseColor-2k.dds"));
+    }
+
+    /**
+     * A PNG of only a header, with a valid CRC, claiming a size; it has no pixel data.
+     *
+     * @param width The claimed width.
+     * @param height The claimed height.
+     * @param bitDepth Bits per channel.
+     * @return The file's bytes.
+     */
+    private static byte[] forgedPng(int width, int height, int bitDepth) {
+        ByteBuffer ihdr = ByteBuffer.allocate(4 + 13).order(ByteOrder.BIG_ENDIAN);
+        ihdr.put("IHDR".getBytes(StandardCharsets.US_ASCII));
+        // Gray, no interlacing
+        ihdr.putInt(width).putInt(height).put((byte) bitDepth).put(new byte[4]);
+        CRC32 crc = new CRC32();
+        crc.update(ihdr.array());
+        ByteBuffer png = ByteBuffer.allocate(8 + 4 + 17 + 4 + 12).order(ByteOrder.BIG_ENDIAN);
+        png.put(new byte[] {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'});
+        png.putInt(13).put(ihdr.array()).putInt((int) crc.getValue());
+        crc.reset();
+        crc.update("IEND".getBytes(StandardCharsets.US_ASCII));
+        png.putInt(0).put("IEND".getBytes(StandardCharsets.US_ASCII)).putInt((int) crc.getValue());
+        return png.array();
+    }
+
+    /** Headers claiming more than the size caps are refused before any pixels are decoded. */
+    @Test
+    void testForgedSizeRefused() throws IOException {
+        // Wider than a side may be
+        Path wide = folder.resolve("wide.png");
+        Files.write(wide, forgedPng(ImageFile.MAX_SIDE + 1, 1, 8));
+        IOException thrown = assertThrows(IOException.class, () -> ImageFile.read(wide));
+        assertTrue(thrown.getMessage().contains("size limit"), thrown.getMessage());
+
+        // Square at the side limit, but 16 bit, so its decoded bytes pass what a buffer holds
+        Path deep = folder.resolve("deep_huge.png");
+        Files.write(deep, forgedPng(ImageFile.MAX_SIDE, ImageFile.MAX_SIDE, 16));
+        thrown = assertThrows(IOException.class, () -> ImageFile.read(deep));
+        assertTrue(thrown.getMessage().contains("size limit"), thrown.getMessage());
+
+        assertThrows(
+                IOException.class,
+                () -> ImageFile.checkSize(wide, 0, 1, ImageFile.Depth.UNORM8));
+        assertThrows(
+                IOException.class,
+                () -> ImageFile.checkSize(wide, 1, ImageFile.MAX_SIDE + 1, ImageFile.Depth.UNORM8));
+        // At the caps, 8 bit, it fits
+        ImageFile.checkSize(wide, ImageFile.MAX_SIDE, ImageFile.MAX_SIDE, ImageFile.Depth.UNORM8);
     }
 }

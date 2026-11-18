@@ -8,9 +8,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.zip.CRC32C;
@@ -255,6 +259,109 @@ class AssetFileTest {
         file.putLong(entryBase(3) + ENTRY_OFFSET, file.getLong(entryBase(2) + ENTRY_OFFSET));
         fixCrc(file, 3);
         assertTrue(hasError(file, "overlaps section"));
+    }
+
+    @Test
+    void overlapWithAnEarlierNonAdjacentSectionIsReported() {
+        ByteBuffer file = sample().order(ByteOrder.LITTLE_ENDIAN);
+        // Stretch VERT over both NOTE payloads: the second NOTE overlaps VERT, though the first
+        // NOTE lies between them in offset order and doesn't overlap the second
+        long vertOffset = file.getLong(entryBase(1) + ENTRY_OFFSET);
+        long lastEnd =
+                file.getLong(entryBase(3) + ENTRY_OFFSET)
+                        + file.getLong(entryBase(3) + ENTRY_LENGTH);
+        file.putLong(entryBase(1) + ENTRY_LENGTH, lastEnd - vertOffset);
+        fixCrc(file, 1);
+        assertTrue(hasError(file, "Section 2 (NOTE) overlaps section 1 (VERT)"));
+        assertTrue(hasError(file, "Section 3 (NOTE) overlaps section 1 (VERT)"));
+        assertThrows(AssetFormatException.class, () -> AssetFile.read(file, KNOWN));
+    }
+
+    @Test
+    void separateSectionsAreNotOverlaps() {
+        assertTrue(AssetValidator.validate(sample(), KNOWN).isEmpty());
+    }
+
+    @Test
+    void tableBytesChecksAgainstTheFile() {
+        assertEquals(400, AssetValidator.tableBytes(10, 40, 100, 500));
+        assertEquals(0, AssetValidator.tableBytes(0, 40, 500, 500));
+        assertEquals(-1, AssetValidator.tableBytes(10, 40, 101, 500));
+        assertEquals(-1, AssetValidator.tableBytes(10, 40, 501, 500));
+        assertEquals(-1, AssetValidator.tableBytes(10, 40, -1, 500));
+        assertEquals(-1, AssetValidator.tableBytes(0xFFFFFFFFL, 0xFFFFFFFFL, 0, Long.MAX_VALUE));
+        assertEquals(-1, AssetValidator.tableBytes(Long.MAX_VALUE, 2, 0, Long.MAX_VALUE));
+        assertTrue(AssetValidator.inFile(0, 500, 500));
+        assertFalse(AssetValidator.inFile(1, 500, 500));
+        assertFalse(AssetValidator.inFile(Long.MAX_VALUE, Long.MAX_VALUE, 500));
+        assertFalse(AssetValidator.inFile(-8, 4, 500));
+    }
+
+    /**
+     * Section counts and entry sizes in the header that the file can't hold are refused by {@code
+     * locate} before it allocates a table for them.
+     *
+     * @param count The section count to write.
+     * @param entrySize The table entry size to write.
+     * @param directory Where to write the file.
+     */
+    @ParameterizedTest
+    @CsvSource({
+        "50000000, 40",
+        "2147483647, 40",
+        "-1, 40",
+        "-1, -1",
+        "4, -1",
+        "4, 2000000000",
+        "4, 8"
+    })
+    void locateRefusesForgedTables(int count, int entrySize, @TempDir Path directory)
+            throws IOException {
+        ByteBuffer file = sample().order(ByteOrder.LITTLE_ENDIAN);
+        file.putInt(HEADER_SECTION_COUNT, count);
+        file.putInt(HEADER_TABLE_ENTRY_SIZE, entrySize);
+        Path path = directory.resolve("forged" + EXTENSION);
+        Files.write(path, toArray(file));
+        assertThrows(AssetFormatException.class, () -> AssetFile.locate(path));
+    }
+
+    @Test
+    void locateRefusesTablesPastTheEnd(@TempDir Path directory) throws IOException {
+        ByteBuffer file = sample().order(ByteOrder.LITTLE_ENDIAN);
+        file.putLong(HEADER_TABLE_OFFSET, file.limit() - 8);
+        Path path = directory.resolve("forged" + EXTENSION);
+        Files.write(path, toArray(file));
+        assertThrows(AssetFormatException.class, () -> AssetFile.locate(path));
+        file.putLong(HEADER_TABLE_OFFSET, -1);
+        Files.write(path, toArray(file));
+        assertThrows(AssetFormatException.class, () -> AssetFile.locate(path));
+    }
+
+    @Test
+    void locateRefusesSectionsPastTheEnd(@TempDir Path directory) throws IOException {
+        ByteBuffer file = sample().order(ByteOrder.LITTLE_ENDIAN);
+        Path path = directory.resolve("forged" + EXTENSION);
+        Files.write(path, toArray(file));
+        assertEquals(4, AssetFile.locate(path).size());
+
+        file.putLong(entryBase(1) + ENTRY_LENGTH, 1_000_000);
+        Files.write(path, toArray(file));
+        assertThrows(AssetFormatException.class, () -> AssetFile.locate(path));
+        file.putLong(entryBase(1) + ENTRY_LENGTH, Long.MAX_VALUE);
+        Files.write(path, toArray(file));
+        assertThrows(AssetFormatException.class, () -> AssetFile.locate(path));
+    }
+
+    /**
+     * Copy a buffer's contents, from its position to its limit.
+     *
+     * @param buffer The buffer, left as it was.
+     * @return The bytes.
+     */
+    private static byte[] toArray(ByteBuffer buffer) {
+        byte[] bytes = new byte[buffer.remaining()];
+        buffer.duplicate().get(bytes);
+        return bytes;
     }
 
     @Test

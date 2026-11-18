@@ -5,6 +5,7 @@ import com.ikalagaming.util.FileUtils;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import lombok.Getter;
 import lombok.NonNull;
@@ -36,6 +37,19 @@ public final class GltfFile {
 
     /** The binary container's binary chunk type. */
     private static final int CHUNK_BIN = 0x004E4942;
+
+    /** The field for where a buffer view or accessor starts, in bytes. */
+    private static final String BYTE_OFFSET = "byteOffset";
+
+    /** The field for a buffer view's bytes from one element to the next. */
+    private static final String BYTE_STRIDE = "byteStride";
+
+    /**
+     * The most values (elements times components) one accessor may hold, so a forged count can't
+     * allocate more than 256 MB, even for an accessor with no data behind it; 2^26, far more than
+     * any character needs.
+     */
+    static final long MAX_ACCESSOR_VALUES = 1L << 26;
 
     /** What embedded data URIs start with, up to the base64 data. */
     private static final String DATA_URI_MARKER = ";base64,";
@@ -94,9 +108,27 @@ public final class GltfFile {
         if (bytes.length >= 12 && data.getInt(0) == GLB_MAGIC) {
             return readBinary(data, folder);
         }
-        JsonObject json =
-                JsonParser.parseString(new String(bytes, StandardCharsets.UTF_8)).getAsJsonObject();
+        JsonObject json = parseJson(new String(bytes, StandardCharsets.UTF_8));
         return new GltfFile(json, loadBuffers(json, null, folder), folder);
+    }
+
+    /**
+     * Parse the file's JSON, which must be an object.
+     *
+     * @param text The JSON text.
+     * @return The object.
+     * @throws IOException If it isn't valid JSON or isn't an object.
+     */
+    private static JsonObject parseJson(String text) throws IOException {
+        try {
+            JsonElement parsed = JsonParser.parseString(text);
+            if (!parsed.isJsonObject()) {
+                throw new IOException("The glTF JSON isn't an object");
+            }
+            return parsed.getAsJsonObject();
+        } catch (JsonParseException e) {
+            throw new IOException("The glTF JSON can't be parsed: " + e.getMessage(), e);
+        }
     }
 
     /**
@@ -117,6 +149,9 @@ public final class GltfFile {
         while (offset + 8 <= data.limit()) {
             int length = data.getInt(offset);
             int type = data.getInt(offset + 4);
+            if (length < 0) {
+                throw new IOException("A chunk has a negative length, " + length);
+            }
             if (offset + 8L + length > data.limit()) {
                 throw new IOException("A chunk runs past the end of the file");
             }
@@ -124,14 +159,16 @@ public final class GltfFile {
             if (type == CHUNK_JSON) {
                 byte[] text = new byte[length];
                 chunk.get(0, text);
-                json =
-                        JsonParser.parseString(new String(text, StandardCharsets.UTF_8))
-                                .getAsJsonObject();
+                json = parseJson(new String(text, StandardCharsets.UTF_8));
             } else if (type == CHUNK_BIN && binary == null) {
                 binary = chunk;
             }
-            // Chunks are padded to 4 bytes
-            offset += 8 + ((length + 3) & ~3);
+            // Chunks are padded to 4 bytes; in long math, as the padding can pass the end
+            long next = offset + 8L + ((length + 3L) & ~3L);
+            if (next > data.limit()) {
+                break;
+            }
+            offset = (int) next;
         }
         if (json == null) {
             throw new IOException("The file has no JSON chunk");
@@ -360,12 +397,43 @@ public final class GltfFile {
      * @return A copy of its bytes.
      */
     public byte[] bufferViewBytes(int bufferView) {
-        JsonObject view = get("bufferViews", bufferView);
-        ByteBuffer buffer = buffers.get(view.get("buffer").getAsInt());
-        int offset = view.has("byteOffset") ? view.get("byteOffset").getAsInt() : 0;
-        byte[] bytes = new byte[view.get("byteLength").getAsInt()];
-        buffer.get(offset, bytes);
+        View view = view(bufferView);
+        byte[] bytes = new byte[view.length];
+        view.buffer.get(view.offset, bytes);
         return bytes;
+    }
+
+    /**
+     * Look up a buffer view, checking it lies inside its buffer.
+     *
+     * @param bufferView The buffer view's index.
+     * @return The view.
+     * @throws IllegalArgumentException If there is no such view, or it leaves its buffer.
+     */
+    private View view(int bufferView) {
+        JsonObject view = get("bufferViews", bufferView);
+        int bufferIndex = view.get("buffer").getAsInt();
+        if (bufferIndex < 0 || bufferIndex >= buffers.size()) {
+            throw new IllegalArgumentException(
+                    "Buffer view " + bufferView + " names the missing buffer " + bufferIndex);
+        }
+        ByteBuffer buffer = buffers.get(bufferIndex);
+        long offset = view.has(BYTE_OFFSET) ? view.get(BYTE_OFFSET).getAsLong() : 0;
+        long length = view.get("byteLength").getAsLong();
+        // Subtracted, so huge values can't wrap past the check
+        if (offset < 0
+                || length < 0
+                || offset > buffer.limit()
+                || length > buffer.limit() - offset) {
+            throw new IllegalArgumentException(
+                    "Buffer view " + bufferView + " runs past its buffer");
+        }
+        int stride = view.has(BYTE_STRIDE) ? view.get(BYTE_STRIDE).getAsInt() : 0;
+        if (stride < 0) {
+            throw new IllegalArgumentException(
+                    "Buffer view " + bufferView + " has a negative stride");
+        }
+        return new View(buffer, (int) offset, (int) length, stride);
     }
 
     /**
@@ -392,26 +460,51 @@ public final class GltfFile {
         }
         int componentType = object.get("componentType").getAsInt();
         int components = components(object.get("type").getAsString());
-        int count = object.get("count").getAsInt();
+        long count = object.get("count").getAsLong();
         boolean normalized = object.has("normalized") && object.get("normalized").getAsBoolean();
         int size = componentSize(componentType);
+        // Divided, so a forged count can't overflow the product
+        if (count < 0 || count > MAX_ACCESSOR_VALUES / components) {
+            throw new IllegalArgumentException(
+                    "Accessor " + accessor + " has a bad element count, " + count);
+        }
+        int elementSize = size * components;
         if (!object.has("bufferView")) {
             // All zeroes, as glTF says
             return new Reader(
-                    null, 0, size * components, componentType, components, count, normalized);
+                    null, 0, elementSize, componentType, components, (int) count, normalized);
         }
-        JsonObject view = get("bufferViews", object.get("bufferView").getAsInt());
-        ByteBuffer buffer = buffers.get(view.get("buffer").getAsInt());
-        int offset =
-                (view.has("byteOffset") ? view.get("byteOffset").getAsInt() : 0)
-                        + (object.has("byteOffset") ? object.get("byteOffset").getAsInt() : 0);
-        int stride = view.has("byteStride") ? view.get("byteStride").getAsInt() : size * components;
-        long end = offset + (long) stride * (count - 1) + (long) size * components;
-        if (count > 0 && end > buffer.limit()) {
-            throw new IllegalArgumentException("Accessor " + accessor + " runs past its buffer");
+        View view = view(object.get("bufferView").getAsInt());
+        long accessorOffset = object.has(BYTE_OFFSET) ? object.get(BYTE_OFFSET).getAsLong() : 0;
+        int stride = view.stride == 0 ? elementSize : view.stride;
+        if (accessorOffset < 0 || accessorOffset > view.length || stride < elementSize) {
+            throw new IllegalArgumentException(
+                    "Accessor " + accessor + " has a bad offset or a stride under its elements");
         }
-        return new Reader(buffer, offset, stride, componentType, components, count, normalized);
+        // Inside the view, not just the buffer, in long math so huge values can't wrap
+        long end = accessorOffset + (long) stride * (count - 1) + elementSize;
+        if (count > 0 && end > view.length) {
+            throw new IllegalArgumentException("Accessor " + accessor + " runs past its view");
+        }
+        return new Reader(
+                view.buffer,
+                (int) (view.offset + accessorOffset),
+                stride,
+                componentType,
+                components,
+                (int) count,
+                normalized);
     }
+
+    /**
+     * A buffer view's checked place in its buffer.
+     *
+     * @param buffer The buffer.
+     * @param offset Where the view starts.
+     * @param length The view's length in bytes.
+     * @param stride Bytes from one element to the next, or 0 for tightly packed.
+     */
+    private record View(ByteBuffer buffer, int offset, int length, int stride) {}
 
     /**
      * Reads the elements of one accessor.

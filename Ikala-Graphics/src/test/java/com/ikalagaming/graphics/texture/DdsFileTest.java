@@ -8,6 +8,8 @@ import com.ikalagaming.graphics.ColorSpace;
 import com.ikalagaming.graphics.Format;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -235,5 +237,135 @@ class DdsFileTest {
         assertEquals(16, DdsFile.byteCount(Format.BC1_RGBA_UNORM_BLOCK, 5, 4));
         assertEquals(64, DdsFile.byteCount(Format.BC5_UNORM_BLOCK, 8, 8));
         assertEquals(4 * 3 * 8, DdsFile.byteCount(Format.R16G16B16A16_SFLOAT, 4, 3));
+    }
+
+    /** Sizes that would wrap an int are worked out in full. */
+    @Test
+    void testByteCountsDoNotWrap() {
+        // Exactly 2^32, which an int holds as 0
+        assertEquals(1L << 32, DdsFile.byteCount(Format.R32G32B32A32_SFLOAT, 16384, 16384));
+        assertEquals(
+                (long) Integer.MAX_VALUE * Integer.MAX_VALUE,
+                DdsFile.byteCount(Format.R8_UNORM, Integer.MAX_VALUE, Integer.MAX_VALUE));
+        assertThrows(
+                ArithmeticException.class,
+                () ->
+                        DdsFile.byteCount(
+                                Format.R32G32B32A32_SFLOAT, Integer.MAX_VALUE, Integer.MAX_VALUE));
+    }
+
+    /**
+     * A DX10 header for an uncompressed format with a forged size and almost no data is refused
+     * with an IOException, never wrapped to a small size or let out as another exception.
+     *
+     * @param width The width in the header.
+     * @param height The height in the header.
+     * @param dxgi The DXGI format.
+     * @param mips The mip count in the header.
+     */
+    @ParameterizedTest
+    @CsvSource({
+        // 16384 x 16384 RGBA32F is exactly 2^32 bytes
+        "16384, 16384, 2, 1",
+        "16384, 16384, 2, 2147483647",
+        "16384, 16384, 28, 15",
+        // Past the dimension cap
+        "16385, 1, 28, 1",
+        "1, 2147483647, 28, 1",
+        "2147483647, 2147483647, 2, 1",
+        // Not positive
+        "0, 4, 28, 1",
+        "4, -4, 28, 1",
+        "-2147483648, -2147483648, 2, 1"
+    })
+    void testForgedSizesAreRefused(int width, int height, int dxgi, int mips) {
+        ByteBuffer bytes =
+                file(
+                        width,
+                        height,
+                        mips,
+                        DdsFile.PIXEL_FOURCC,
+                        DdsFile.fourCC("DX10"),
+                        0,
+                        NO_MASKS,
+                        0,
+                        new int[] {dxgi, DdsFile.DX10_TEXTURE_2D, 0, 1, 0},
+                        64);
+        assertThrows(IOException.class, () -> DdsFile.parse(bytes));
+    }
+
+    /** A legacy 24 bit header with a forged size is refused before the widened copy. */
+    @Test
+    void testForgedTwentyFourBitSizeIsRefused() {
+        ByteBuffer bytes =
+                file(
+                        16384,
+                        16384,
+                        1,
+                        DdsFile.PIXEL_RGB,
+                        0,
+                        24,
+                        new int[] {0xFF0000, 0xFF00, 0xFF, 0},
+                        0,
+                        null,
+                        12);
+        IOException e = assertThrows(IOException.class, () -> DdsFile.parse(bytes));
+        assertTrue(e.getMessage().startsWith("Truncated"), e.getMessage());
+    }
+
+    /** The largest allowed size still reads when the data is there, with its whole mip chain. */
+    @Test
+    void testLargestSizeReads() throws IOException {
+        // BC1 at 16384 x 4: 4096 blocks of 8 bytes on top, then halving down to 1 x 1
+        long expected = 0;
+        for (int level = 0; level < 15; ++level) {
+            expected +=
+                    DdsFile.byteCount(
+                            Format.BC1_RGBA_UNORM_BLOCK,
+                            DdsFile.levelSize(16384, level),
+                            DdsFile.levelSize(4, level));
+        }
+        ByteBuffer bytes =
+                file(
+                        16384,
+                        4,
+                        99,
+                        DdsFile.PIXEL_FOURCC,
+                        DdsFile.fourCC("DXT1"),
+                        0,
+                        NO_MASKS,
+                        0,
+                        null,
+                        (int) expected);
+        DdsFile dds = DdsFile.parse(bytes);
+        assertEquals(15, dds.getMipLevels());
+        assertEquals(expected, dds.getData().remaining());
+        assertEquals(expected - 8, dds.levelOffset(14));
+    }
+
+    /**
+     * Arrays and cube maps in a DX10 header are refused, whatever count they claim; the count is
+     * unsigned, so -1 is a huge array, not a single texture.
+     *
+     * @param misc The misc flags.
+     * @param arraySize The array size.
+     */
+    @ParameterizedTest
+    @CsvSource({"0, 2", "0, 2147483647", "0, -1", "4, 1"})
+    void testDx10ArraysAreRefused(int misc, int arraySize) {
+        ByteBuffer bytes =
+                file(
+                        4,
+                        4,
+                        1,
+                        DdsFile.PIXEL_FOURCC,
+                        DdsFile.fourCC("DX10"),
+                        0,
+                        NO_MASKS,
+                        0,
+                        new int[] {71, DdsFile.DX10_TEXTURE_2D, misc, arraySize, 0},
+                        8);
+        // The data is enough for one 4 x 4 BC1 image, so only the count can refuse it
+        assertThrows(IOException.class, () -> DdsFile.parse(bytes));
     }
 }

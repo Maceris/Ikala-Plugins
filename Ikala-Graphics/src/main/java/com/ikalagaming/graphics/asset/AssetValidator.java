@@ -337,16 +337,7 @@ public final class AssetValidator {
             error(problems, "Table entry size %d is smaller than %d", entrySize, TABLE_ENTRY_SIZE);
             return null;
         }
-        // Both are unsigned 32 bit values, so the product can overflow a long
-        long tableSize;
-        try {
-            tableSize = Math.multiplyExact(count, entrySize);
-        } catch (ArithmeticException e) {
-            tableSize = Long.MAX_VALUE;
-        }
-        if (tableOffset < 0
-                || tableOffset > buffer.remaining()
-                || tableSize > buffer.remaining() - tableOffset) {
+        if (tableBytes(count, entrySize, tableOffset, buffer.remaining()) < 0) {
             error(
                     problems,
                     "Section table of %d entries at offset %s runs past the end of the file",
@@ -372,6 +363,43 @@ public final class AssetValidator {
     }
 
     /**
+     * How many bytes a section table takes, if it lies wholly inside the file. Shared by everything
+     * that reads a table, so a forged count or entry size is refused before anything is allocated
+     * for it.
+     *
+     * @param count The section count, unsigned.
+     * @param entrySize The size of one entry, unsigned.
+     * @param tableOffset Where the table starts.
+     * @param fileSize How long the file is.
+     * @return The table's size in bytes, or -1 if it is out of range or runs past the end.
+     */
+    static long tableBytes(long count, long entrySize, long tableOffset, long fileSize) {
+        if (count < 0 || entrySize < 0 || tableOffset < 0 || tableOffset > fileSize) {
+            return -1;
+        }
+        // Both are unsigned 32 bit values, so the product can overflow a long
+        final long tableSize;
+        try {
+            tableSize = Math.multiplyExact(count, entrySize);
+        } catch (ArithmeticException e) {
+            return -1;
+        }
+        return tableSize > fileSize - tableOffset ? -1 : tableSize;
+    }
+
+    /**
+     * Whether a payload lies wholly inside the file.
+     *
+     * @param offset Where it starts.
+     * @param length How long it is.
+     * @param fileSize How long the file is.
+     * @return True if it starts and ends inside the file.
+     */
+    static boolean inFile(long offset, long length, long fileSize) {
+        return offset >= 0 && length >= 0 && offset <= fileSize && length <= fileSize - offset;
+    }
+
+    /**
      * Check one table entry: bounds, alignment, checksum, and whether it must be understood.
      *
      * @param buffer The file.
@@ -382,10 +410,7 @@ public final class AssetValidator {
      */
     private static @Nullable Integer checkEntry(
             ByteBuffer buffer, Row entry, KnownSections known, List<Problem> problems) {
-        if (entry.offset() < 0
-                || entry.length() < 0
-                || entry.offset() > buffer.remaining()
-                || entry.length() > buffer.remaining() - entry.offset()) {
+        if (!inFile(entry.offset(), entry.length(), buffer.remaining())) {
             error(
                     problems,
                     "%s at offset %s with length %s runs past the end of the file",
@@ -440,20 +465,26 @@ public final class AssetValidator {
         // Empty payloads take no space, so they can't overlap anything
         sorted.removeIf(entry -> entry.length() == 0);
         long reservedEnd = Math.max(headerEnd, tableEnd);
-        Row previous = null;
+        // The earlier payload that reaches furthest: in offset order, a payload overlaps some
+        // earlier one exactly when it starts before that one ends, even if others lie between
+        Row furthest = null;
         for (Row entry : sorted) {
             if (entry.offset() < reservedEnd) {
                 error(problems, "%s overlaps the header or section table", entry.describe());
             }
-            if (previous != null && entry.offset() < previous.offset() + previous.length()) {
+            // Payloads are inside the file, so their ends can't overflow
+            if (furthest != null && entry.offset() < furthest.offset() + furthest.length()) {
                 error(
                         problems,
                         "%s overlaps section %d (%s)",
                         entry.describe(),
-                        previous.index(),
-                        SectionTag.toString(previous.tag()));
+                        furthest.index(),
+                        SectionTag.toString(furthest.tag()));
             }
-            previous = entry;
+            if (furthest == null
+                    || entry.offset() + entry.length() > furthest.offset() + furthest.length()) {
+                furthest = entry;
+            }
         }
     }
 

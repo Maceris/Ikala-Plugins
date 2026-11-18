@@ -497,6 +497,209 @@ class TestGltfImporter {
     }
 
     /**
+     * Read a small character changed by a test, expecting it to be refused cleanly: with an
+     * exception, never a stack overflow, out of memory or index error.
+     *
+     * @param change Changes the file before it is written.
+     * @return The exception.
+     * @throws IOException If the file can't be written.
+     */
+    private IllegalArgumentException refused(Consumer<GlbBuilder> change) throws IOException {
+        Path path = smallCharacterBuilt(1, change);
+        return Assertions.assertThrows(
+                IllegalArgumentException.class, () -> GltfImporter.read(path));
+    }
+
+    /**
+     * One of the file's nodes.
+     *
+     * @param glb The file.
+     * @param index The node's index.
+     * @return The node's JSON.
+     */
+    private static JsonObject nodeOf(GlbBuilder glb, int index) {
+        return glb.json.getAsJsonArray("nodes").get(index).getAsJsonObject();
+    }
+
+    /**
+     * One of the file's accessors or buffer views.
+     *
+     * @param glb The file.
+     * @param array The array, like "accessors".
+     * @param index The element's index.
+     * @return The element's JSON.
+     */
+    private static JsonObject element(GlbBuilder glb, String array, int index) {
+        return glb.json.getAsJsonArray(array).get(index).getAsJsonObject();
+    }
+
+    /**
+     * A list of child indices.
+     *
+     * @param children The children.
+     * @return The JSON array.
+     */
+    private static JsonArray childList(int... children) {
+        JsonArray list = new JsonArray();
+        for (int child : children) {
+            list.add(child);
+        }
+        return list;
+    }
+
+    /**
+     * Nodes that are their own child, have two parents, or loop round are refused.
+     *
+     * @throws IOException If a file can't be written.
+     */
+    @Test
+    void testNodeLoops() throws IOException {
+        refused(glb -> nodeOf(glb, 2).add("children", childList(2)));
+        // The root's parent is the armature already
+        refused(glb -> nodeOf(glb, 2).add("children", childList(1)));
+        refused(
+                glb -> {
+                    JsonArray nodes = glb.json.getAsJsonArray("nodes");
+                    nodes.add(node("a", null, 5));
+                    nodes.add(node("b", null, 6));
+                    nodes.add(node("c", null, 4));
+                });
+    }
+
+    /**
+     * Children past the node list are refused.
+     *
+     * @throws IOException If a file can't be written.
+     */
+    @Test
+    void testChildOutOfRange() throws IOException {
+        refused(glb -> nodeOf(glb, 2).add("children", childList(99)));
+        refused(glb -> nodeOf(glb, 2).add("children", childList(-1)));
+    }
+
+    /**
+     * A hierarchy far deeper than the stack could recurse through still reads.
+     *
+     * @throws IOException If the file can't be written or read.
+     */
+    @Test
+    void testDeepHierarchy() throws IOException {
+        final int depth = 50_000;
+        Path path =
+                smallCharacterBuilt(
+                        1,
+                        glb -> {
+                            JsonArray nodes = glb.json.getAsJsonArray("nodes");
+                            int first = nodes.size();
+                            // Each parent after its child, so the first link is the deepest
+                            for (int i = 0; i < depth; ++i) {
+                                JsonObject link = new JsonObject();
+                                if (i > 0) {
+                                    link.add("children", childList(first + i - 1));
+                                }
+                                nodes.add(link);
+                            }
+                        });
+        Assertions.assertEquals(2, GltfImporter.read(path).rig().bones().size());
+    }
+
+    /**
+     * Accessor counts that are negative, or would overflow or allocate without bound, are refused.
+     *
+     * @throws IOException If a file can't be written.
+     */
+    @Test
+    void testAccessorCounts() throws IOException {
+        refused(glb -> element(glb, "accessors", 0).addProperty("count", Integer.MAX_VALUE));
+        refused(glb -> element(glb, "accessors", 0).addProperty("count", Long.MAX_VALUE));
+        refused(glb -> element(glb, "accessors", 0).addProperty("count", -3));
+        // With no data behind it, it would be all zeroes, but still too many to allocate
+        refused(
+                glb -> {
+                    JsonObject accessor = element(glb, "accessors", 0);
+                    accessor.remove("bufferView");
+                    accessor.addProperty("count", Integer.MAX_VALUE);
+                });
+    }
+
+    /**
+     * Buffer views past their buffer, and accessors past their view, are refused.
+     *
+     * @throws IOException If a file can't be written.
+     */
+    @Test
+    void testViewsAndOffsets() throws IOException {
+        refused(glb -> element(glb, "bufferViews", 0).addProperty("byteLength", 1 << 30));
+        refused(glb -> element(glb, "bufferViews", 0).addProperty("byteOffset", -4));
+        refused(glb -> element(glb, "bufferViews", 0).addProperty("byteOffset", Long.MAX_VALUE));
+        refused(glb -> element(glb, "bufferViews", 0).addProperty("buffer", 5));
+        // Still inside the buffer, which holds more after the first view, but past the view
+        refused(glb -> element(glb, "accessors", 0).addProperty("byteOffset", 12));
+        refused(glb -> element(glb, "accessors", 0).addProperty("byteOffset", -12));
+        // A stride shorter than an element
+        refused(glb -> element(glb, "bufferViews", 0).addProperty("byteStride", 4));
+    }
+
+    /**
+     * Triangles naming vertices the mesh doesn't have, or a broken triangle, are refused.
+     *
+     * @throws IOException If a file can't be written.
+     */
+    @Test
+    void testTriangleIndices() throws IOException {
+        for (int[] indices : new int[][] {{0, 1, 7}, {0, 1, 0xFFFF}, {0, 1}}) {
+            IllegalArgumentException thrown =
+                    refused(
+                            glb -> {
+                                int accessor = glb.shorts("SCALAR", indices);
+                                glb.json
+                                        .getAsJsonArray("meshes")
+                                        .get(0)
+                                        .getAsJsonObject()
+                                        .getAsJsonArray("primitives")
+                                        .get(0)
+                                        .getAsJsonObject()
+                                        .addProperty("indices", accessor);
+                            });
+            Assertions.assertTrue(thrown.getMessage().contains("body"), thrown.getMessage());
+        }
+    }
+
+    /**
+     * Binary containers with chunks of negative length, or past the end, or JSON that isn't, are
+     * refused with an IO exception.
+     *
+     * @throws IOException If a file can't be written.
+     */
+    @Test
+    void testBrokenChunks() throws IOException {
+        byte[] json = "{}".getBytes(StandardCharsets.UTF_8);
+        int[] lengths = {-1, Integer.MIN_VALUE, 1000, Integer.MAX_VALUE};
+        for (int length : lengths) {
+            ByteBuffer out = ByteBuffer.allocate(12 + 8 + 4).order(ByteOrder.LITTLE_ENDIAN);
+            out.putInt(0x46546C67).putInt(2).putInt(out.capacity());
+            out.putInt(length).putInt(0x4E4F534A).put(json).put((byte) ' ').put((byte) ' ');
+            Path path = temp.resolve("chunk.glb");
+            Files.write(path, out.array());
+            Assertions.assertThrows(IOException.class, () -> GltfFile.read(path), "" + length);
+        }
+        // A JSON chunk holding an array instead of an object, or not JSON at all
+        for (String text : new String[] {"[1]", "{{"}) {
+            byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+            int padded = (bytes.length + 3) & ~3;
+            ByteBuffer out = ByteBuffer.allocate(12 + 8 + padded).order(ByteOrder.LITTLE_ENDIAN);
+            out.putInt(0x46546C67).putInt(2).putInt(out.capacity());
+            out.putInt(padded).putInt(0x4E4F534A).put(bytes);
+            while (out.hasRemaining()) {
+                out.put((byte) ' ');
+            }
+            Path path = temp.resolve("text.glb");
+            Files.write(path, out.array());
+            Assertions.assertThrows(IOException.class, () -> GltfFile.read(path), text);
+        }
+    }
+
+    /**
      * The male and female mannequin exports fit the built-in biped rig, stand their heights and
      * play their clips.
      *

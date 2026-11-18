@@ -59,6 +59,9 @@ public final class SceneImporter {
                     // Drops points and lines, with the property below, which have nothing to light
                     | Assimp.aiProcess_SortByPType
                     | Assimp.aiProcess_GenBoundingBoxes
+                    // Refuses files whose data doesn't hold together, like faces naming
+                    // vertices the mesh doesn't have, before anything reads them
+                    | Assimp.aiProcess_ValidateDataStructure
                     // Texture coordinates start at the bottom in files, at the top for the GPU
                     | Assimp.aiProcess_FlipUVs;
 
@@ -193,7 +196,8 @@ public final class SceneImporter {
             }
             final AIMesh aiMesh = AIMesh.create(aiMeshes.get(i));
             final int material = Math.clamp(aiMesh.mMaterialIndex(), 0, materials.size() - 1);
-            meshes.add(new Mesh(name(aiMesh.mName(), "mesh " + i), mesh(aiMesh), material));
+            final String meshName = name(aiMesh.mName(), "mesh " + i);
+            meshes.add(new Mesh(meshName, mesh(aiMesh, meshName, warnings), material));
         }
 
         final AINode aiRoot = aiScene.mRootNode();
@@ -405,9 +409,11 @@ public final class SceneImporter {
      * vertex. A mesh without texture coordinates gets made up tangents.
      *
      * @param aiMesh The mesh, triangulated.
+     * @param name The mesh's name, for warnings.
+     * @param warnings Where to note faces that are skipped.
      * @return The mesh data, with no material set.
      */
-    private static MeshData mesh(AIMesh aiMesh) {
+    private static MeshData mesh(AIMesh aiMesh, String name, List<String> warnings) {
         final int vertexCount = aiMesh.mNumVertices();
         final AIVector3D.Buffer positions = aiMesh.mVertices();
         final AIVector3D.Buffer normals = aiMesh.mNormals();
@@ -462,15 +468,35 @@ public final class SceneImporter {
         final int faceCount = aiMesh.mNumFaces();
         final int[] indices = new int[faceCount * 3];
         int written = 0;
+        int outOfRange = 0;
         for (int f = 0; f < faceCount; ++f) {
             final AIFace face = faces.get(f);
             if (face.mNumIndices() != 3) {
                 continue;
             }
             final IntBuffer corners = face.mIndices();
-            indices[written++] = corners.get(0);
-            indices[written++] = corners.get(1);
-            indices[written++] = corners.get(2);
+            final int a = corners.get(0);
+            final int b = corners.get(1);
+            final int c = corners.get(2);
+            // Unsigned in assimp, so compared unsigned: past 2^31 they read as negative
+            if (Integer.compareUnsigned(a, vertexCount) >= 0
+                    || Integer.compareUnsigned(b, vertexCount) >= 0
+                    || Integer.compareUnsigned(c, vertexCount) >= 0) {
+                ++outOfRange;
+                continue;
+            }
+            indices[written++] = a;
+            indices[written++] = b;
+            indices[written++] = c;
+        }
+        if (outOfRange > 0) {
+            warnings.add(
+                    "Skipped "
+                            + outOfRange
+                            + " faces of "
+                            + name
+                            + " that name vertices past its "
+                            + vertexCount);
         }
 
         final AIAABB box = aiMesh.mAABB();

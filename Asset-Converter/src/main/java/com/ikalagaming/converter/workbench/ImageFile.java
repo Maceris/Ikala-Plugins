@@ -58,6 +58,18 @@ public record ImageFile(
     /** Channels in the decoded pixels. */
     public static final int CHANNELS = 4;
 
+    /** The widest or tallest image stb may decode, in pixels. */
+    public static final int MAX_SIDE = 16_384;
+
+    /**
+     * The most pixels an image stb decodes may have, 2^28 (16384 x 16384), so a forged header
+     * can't make it allocate without bound.
+     */
+    public static final long MAX_PIXELS = 1L << 28;
+
+    /** What decoding errors start with, before the file's name. */
+    private static final String CANT_DECODE = "Can't decode ";
+
     /** The largest finite half float. */
     private static final float HALF_MAX = 65_504;
 
@@ -191,7 +203,7 @@ public record ImageFile(
             IntBuffer channels = stack.mallocInt(1);
             if (!STBImage.stbi_info_from_memory(encoded, width, height, channels)) {
                 throw new IOException(
-                        "Can't decode " + path.getFileName() + ": " + failureReason());
+                        CANT_DECODE + path.getFileName() + ": " + failureReason());
             }
             final Depth depth;
             if (STBImage.stbi_is_hdr_from_memory(encoded)) {
@@ -201,10 +213,11 @@ public record ImageFile(
             } else {
                 depth = Depth.UNORM8;
             }
+            checkSize(path, width.get(0), height.get(0), depth);
             final ByteBuffer pixels = decode(encoded, depth, width, height, channels);
             if (pixels == null) {
                 throw new IOException(
-                        "Can't decode " + path.getFileName() + ": " + failureReason());
+                        CANT_DECODE + path.getFileName() + ": " + failureReason());
             }
             return new ImageFile(
                     path,
@@ -219,6 +232,39 @@ public record ImageFile(
                     null);
         } finally {
             MemoryUtil.memFree(encoded);
+        }
+    }
+
+    /**
+     * Refuse an image too large to decode, from the size its header claims, before stb allocates
+     * its pixels: past {@link #MAX_SIDE} on a side, past {@link #MAX_PIXELS} in all, or with more
+     * decoded bytes than a buffer can index. HDR images count stb's 32 bit floats, which it decodes
+     * to before they become half floats.
+     *
+     * @param path The file, for the message.
+     * @param width The claimed width.
+     * @param height The claimed height.
+     * @param depth How the pixels will be stored.
+     * @throws IOException If the image is too large.
+     */
+    static void checkSize(@NonNull Path path, int width, int height, @NonNull Depth depth)
+            throws IOException {
+        final long pixels = (long) width * height;
+        final int decodedBytes = depth == Depth.HALF ? Float.BYTES : depth.bytes;
+        if (width <= 0
+                || height <= 0
+                || width > MAX_SIDE
+                || height > MAX_SIDE
+                || pixels > MAX_PIXELS
+                || pixels * CHANNELS * decodedBytes > Integer.MAX_VALUE) {
+            throw new IOException(
+                    CANT_DECODE
+                            + path.getFileName()
+                            + ": it claims to be "
+                            + width
+                            + " x "
+                            + height
+                            + ", past the size limit");
         }
     }
 

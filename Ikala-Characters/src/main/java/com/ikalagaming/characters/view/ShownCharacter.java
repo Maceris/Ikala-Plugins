@@ -41,6 +41,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -49,6 +50,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 
 /**
  * An imported character in the world: its textures, materials and meshes loaded into graphics, an
@@ -62,6 +65,15 @@ import javax.imageio.ImageIO;
 public final class ShownCharacter implements AutoCloseable {
     /** Updates per second. */
     private static final int RATE = 60;
+
+    /** The widest or tallest image a character may use, in pixels. */
+    static final int MAX_IMAGE_SIDE = 16_384;
+
+    /**
+     * The most pixels an image a character uses may have, 2^26 (8192 x 8192), so its RGBA copy
+     * stays under 256 MB and its size in bytes fits an int.
+     */
+    static final long MAX_IMAGE_PIXELS = 1L << 26;
 
     /** How much room to leave around the bones for the skin, in meters. */
     private static final float BOUNDS_MARGIN = 0.4f;
@@ -934,9 +946,10 @@ public final class ShownCharacter implements AutoCloseable {
             TextureWrap wrap) {
         BufferedImage decoded;
         try {
-            decoded = ImageIO.read(new ByteArrayInputStream(image.bytes()));
+            decoded = readImage(image.bytes());
         } catch (IOException e) {
-            decoded = null;
+            log.warn("Couldn't decode the image {}: {}", image.name(), e.getMessage());
+            return null;
         }
         if (decoded == null) {
             log.warn("Couldn't decode the image {} ({})", image.name(), image.mimeType());
@@ -958,6 +971,45 @@ public final class ShownCharacter implements AutoCloseable {
         }
         pixels.flip();
         return textureApi.load(pixels, format, width, height, wrap);
+    }
+
+    /**
+     * Decode an image, reading its size from the header first so a forged one claiming huge
+     * dimensions is refused before any pixels are allocated.
+     *
+     * @param bytes The encoded image.
+     * @return The image, or null if no reader knows its format.
+     * @throws IOException If it can't be decoded, or is larger than {@link #MAX_IMAGE_SIDE} on a
+     *     side or {@link #MAX_IMAGE_PIXELS} in all.
+     */
+    static BufferedImage readImage(@NonNull byte[] bytes) throws IOException {
+        try (ImageInputStream input =
+                ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
+            if (input == null) {
+                return null;
+            }
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
+            if (!readers.hasNext()) {
+                return null;
+            }
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(input, true, true);
+                final int width = reader.getWidth(0);
+                final int height = reader.getHeight(0);
+                if (width <= 0
+                        || height <= 0
+                        || width > MAX_IMAGE_SIDE
+                        || height > MAX_IMAGE_SIDE
+                        || (long) width * height > MAX_IMAGE_PIXELS) {
+                    throw new IOException(
+                            "The image is " + width + " x " + height + ", past the size limit");
+                }
+                return reader.read(0);
+            } finally {
+                reader.dispose();
+            }
+        }
     }
 
     /**

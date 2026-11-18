@@ -71,6 +71,15 @@ public final class GltfImporter {
     /** The extension that scales a material's emissive factor past 1. */
     public static final String EMISSIVE_STRENGTH = "KHR_materials_emissive_strength";
 
+    /** The field listing a node's children. */
+    private static final String CHILDREN = "children";
+
+    /** The text that starts errors about a node, before its index. */
+    private static final String THE_NODE = "The node ";
+
+    /** The text that starts errors about a mesh, before its name. */
+    private static final String THE_MESH = "The mesh ";
+
     /** The glTF primitive mode for triangle lists. */
     private static final int TRIANGLES = 4;
 
@@ -101,8 +110,18 @@ public final class GltfImporter {
         for (int n = 0; n < nodes; ++n) {
             JsonObject node = file.get("nodes", n);
             locals[n] = localMatrix(node);
-            for (JsonElement child : GltfFile.array(node, "children")) {
-                parents[child.getAsInt()] = n;
+            for (JsonElement element : GltfFile.array(node, CHILDREN)) {
+                int child = element.getAsInt();
+                if (child < 0 || child >= nodes) {
+                    throw new IllegalArgumentException(
+                            THE_NODE + n + " names the missing child " + child);
+                }
+                if (child == n || parents[child] >= 0) {
+                    // glTF nodes form trees: each node has at most one parent, never itself
+                    throw new IllegalArgumentException(
+                            THE_NODE + child + " has more than one parent or is its own child");
+                }
+                parents[child] = n;
             }
         }
         for (int n = 0; n < nodes; ++n) {
@@ -140,17 +159,33 @@ public final class GltfImporter {
     }
 
     /**
-     * Work out a node's scene transform, and its parents' on the way.
+     * Work out a node's scene transform, and its parents' on the way. Walks up without recursion,
+     * so a deep hierarchy can't overflow the stack.
      *
      * @param node The node.
      * @return The transform.
+     * @throws IllegalArgumentException If the node's parents loop back around.
      */
     private Matrix4f world(int node) {
-        if (worlds[node] == null) {
-            worlds[node] =
-                    parents[node] < 0
-                            ? new Matrix4f(locals[node])
-                            : new Matrix4f(world(parents[node])).mul(locals[node]);
+        if (worlds[node] != null) {
+            return worlds[node];
+        }
+        // The node and the parents above it with no transform yet, nearest first
+        Deque<Integer> chain = new ArrayDeque<>();
+        int at = node;
+        while (at >= 0 && worlds[at] == null) {
+            chain.push(at);
+            if (chain.size() > parents.length) {
+                throw new IllegalArgumentException(THE_NODE + node + " is in a loop of parents");
+            }
+            at = parents[at];
+        }
+        while (!chain.isEmpty()) {
+            int next = chain.pop();
+            worlds[next] =
+                    parents[next] < 0
+                            ? new Matrix4f(locals[next])
+                            : new Matrix4f(worlds[parents[next]]).mul(locals[next]);
         }
         return worlds[node];
     }
@@ -203,7 +238,14 @@ public final class GltfImporter {
         int[] joints = intArray(skin.getAsJsonArray("joints"));
         Map<Integer, Integer> skinIndexOfNode = new HashMap<>();
         for (int i = 0; i < joints.length; ++i) {
-            skinIndexOfNode.put(joints[i], i);
+            if (joints[i] < 0 || joints[i] >= parents.length) {
+                throw new IllegalArgumentException(
+                        "The skin names the missing node " + joints[i] + " as a joint");
+            }
+            if (skinIndexOfNode.put(joints[i], i) != null) {
+                throw new IllegalArgumentException(
+                        "The skin names the node " + joints[i] + " as a joint twice");
+            }
         }
 
         // Bones in parents-first order, from the one root
@@ -222,7 +264,7 @@ public final class GltfImporter {
         while (!pending.isEmpty()) {
             int node = pending.removeFirst();
             order.add(node);
-            for (JsonElement child : GltfFile.array(file.get("nodes", node), "children")) {
+            for (JsonElement child : GltfFile.array(file.get("nodes", node), CHILDREN)) {
                 if (skinIndexOfNode.containsKey(child.getAsInt())) {
                     pending.addLast(child.getAsInt());
                 }
@@ -278,6 +320,10 @@ public final class GltfImporter {
                 skin.has("inverseBindMatrices")
                         ? file.floats(skin.get("inverseBindMatrices").getAsInt())
                         : null;
+        if (inverseBinds != null && inverseBinds.length < joints.length * 16) {
+            throw new IllegalArgumentException(
+                    "The skin has fewer inverse bind matrices than joints");
+        }
         for (int i = 0; i < joints.length; ++i) {
             Matrix4f inverseBind =
                     inverseBinds == null
@@ -346,12 +392,12 @@ public final class GltfImporter {
             int[] skinToRig,
             Matrix4f[] bindToRest) {
         if (primitive.has("mode") && primitive.get("mode").getAsInt() != TRIANGLES) {
-            throw new IllegalArgumentException("The mesh " + name + " isn't made of triangles");
+            throw new IllegalArgumentException(THE_MESH + name + " isn't made of triangles");
         }
         JsonObject attributes = primitive.getAsJsonObject("attributes");
         for (String needed : new String[] {"POSITION", "NORMAL", "JOINTS_0", "WEIGHTS_0"}) {
             if (!attributes.has(needed)) {
-                throw new IllegalArgumentException("The mesh " + name + " has no " + needed);
+                throw new IllegalArgumentException(THE_MESH + name + " has no " + needed);
             }
         }
         float[] positions = file.floats(attributes.get("POSITION").getAsInt());
@@ -367,10 +413,13 @@ public final class GltfImporter {
         int[] skinJoints = file.ints(attributes.get("JOINTS_0").getAsInt());
         float[] weights = file.floats(attributes.get("WEIGHTS_0").getAsInt());
         final int count = positions.length / 3;
-        if (normals.length != count * 3
+        if (positions.length != count * 3
+                || normals.length != count * 3
                 || skinJoints.length != count * 4
-                || weights.length != count * 4) {
-            throw new IllegalArgumentException("The mesh " + name + " has mismatched attributes");
+                || weights.length != count * 4
+                || tangents != null && tangents.length != count * 4
+                || uvs != null && uvs.length != count * 2) {
+            throw new IllegalArgumentException(THE_MESH + name + " has mismatched attributes");
         }
 
         // Form targets, by slot: moves in the file's bind space, turned as normals are below
@@ -405,7 +454,7 @@ public final class GltfImporter {
                 int skinJoint = skinJoints[v * 4 + b];
                 if (skinJoint < 0 || skinJoint >= skinToRig.length) {
                     throw new IllegalArgumentException(
-                            "The mesh "
+                            THE_MESH
                                     + name
                                     + " names the joint "
                                     + skinJoint
@@ -480,7 +529,27 @@ public final class GltfImporter {
                 indices[i] = i;
             }
         }
+        if (indices.length % 3 != 0) {
+            throw new IllegalArgumentException(
+                    THE_MESH + name + " has " + indices.length + " indices, not whole triangles");
+        }
+        for (int index : indices) {
+            // Unsigned 32 bit indices past 2^31 read as negative
+            if (index < 0 || index >= count) {
+                throw new IllegalArgumentException(
+                        THE_MESH
+                                + name
+                                + " names the vertex "
+                                + Integer.toUnsignedString(index)
+                                + " of "
+                                + count);
+            }
+        }
         int material = primitive.has("material") ? primitive.get("material").getAsInt() : -1;
+        if (material < -1 || material >= file.count("materials")) {
+            throw new IllegalArgumentException(
+                    THE_MESH + name + " names the missing material " + material);
+        }
         return new ImportedCharacter.Part(
                 name, vertices, joints, weights, indices, material, min, max, formTargets);
     }
@@ -538,12 +607,21 @@ public final class GltfImporter {
             if (!"rotation".equals(path) && !"translation".equals(path)) {
                 continue;
             }
-            JsonObject sampler = samplers.get(channel.get("sampler").getAsInt()).getAsJsonObject();
+            int samplerIndex = channel.get("sampler").getAsInt();
+            if (samplerIndex < 0 || samplerIndex >= samplers.size()) {
+                throw new IllegalArgumentException(
+                        "The clip " + clipName + " names the missing sampler " + samplerIndex);
+            }
+            JsonObject sampler = samplers.get(samplerIndex).getAsJsonObject();
             float[] times = file.floats(sampler.get("input").getAsInt());
             float[] values = file.floats(sampler.get("output").getAsInt());
             int size = "rotation".equals(path) ? 4 : 3;
             if (sampler.has("interpolation")
                     && "CUBICSPLINE".equals(sampler.get("interpolation").getAsString())) {
+                if (values.length != times.length * 3 * size) {
+                    // Too few for tangent, value, tangent per key; skipped like other misfits
+                    continue;
+                }
                 // Tangent, value, tangent per key; keep the values
                 float[] kept = new float[times.length * size];
                 for (int k = 0; k < times.length; ++k) {
@@ -725,7 +803,14 @@ public final class GltfImporter {
         }
         JsonObject texture =
                 file.get("textures", owner.getAsJsonObject(field).get("index").getAsInt());
-        return texture.has("source") ? texture.get("source").getAsInt() : -1;
+        if (!texture.has("source")) {
+            return -1;
+        }
+        int source = texture.get("source").getAsInt();
+        if (source < 0 || source >= file.count("images")) {
+            throw new IllegalArgumentException("A texture names the missing image " + source);
+        }
+        return source;
     }
 
     /**
