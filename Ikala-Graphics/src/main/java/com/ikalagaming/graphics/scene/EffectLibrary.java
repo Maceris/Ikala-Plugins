@@ -49,14 +49,8 @@ public class EffectLibrary {
     /** Guards everything here. */
     private final ReentrantLock lock = new ReentrantLock();
 
-    /** Each slot's file, null when free. */
-    private final List<Entry> entries = new ArrayList<>();
-
-    /** How many times each slot was freed. */
-    private final List<Integer> generations = new ArrayList<>();
-
-    /** Slots free to take again. */
-    private final List<Integer> freeSlots = new ArrayList<>();
+    /** The loaded files by slot. */
+    private final SlotMap<Entry> entries = new SlotMap<>();
 
     /** Whether files are checked for changes. */
     private boolean hotReload;
@@ -84,16 +78,8 @@ public class EffectLibrary {
             entry.source = new EffectSource(effect);
             entry.stamp = stamp;
             entry.owner = owner;
-            final int slot;
-            if (freeSlots.isEmpty()) {
-                slot = entries.size();
-                entries.add(entry);
-                generations.add(0);
-            } else {
-                slot = freeSlots.removeLast();
-                entries.set(slot, entry);
-            }
-            return new EffectHandle(slot, generations.get(slot));
+            final int slot = entries.add(entry);
+            return new EffectHandle(slot, entries.generation(slot));
         } finally {
             lock.unlock();
         }
@@ -178,7 +164,7 @@ public class EffectLibrary {
             if (entry == null || !owner.equals(entry.owner)) {
                 return false;
             }
-            free(handle.slot());
+            entries.free(handle.slot());
             return true;
         } finally {
             lock.unlock();
@@ -195,10 +181,10 @@ public class EffectLibrary {
         lock.lock();
         try {
             int removed = 0;
-            for (int slot = 0; slot < entries.size(); ++slot) {
+            for (int slot = 0; slot < entries.slots(); ++slot) {
                 final Entry entry = entries.get(slot);
                 if (entry != null && owner.equals(entry.owner)) {
-                    free(slot);
+                    entries.free(slot);
                     ++removed;
                 }
             }
@@ -266,7 +252,8 @@ public class EffectLibrary {
         final List<Entry> changed = new ArrayList<>();
         lock.lock();
         try {
-            for (Entry entry : entries) {
+            for (int slot = 0; slot < entries.slots(); ++slot) {
+                final Entry entry = entries.get(slot);
                 if (entry == null) {
                     continue;
                 }
@@ -322,23 +309,6 @@ public class EffectLibrary {
      * @return The entry, or null if the handle is null or stale.
      */
     private @Nullable Entry live(@Nullable EffectHandle handle) {
-        if (handle == null
-                || handle.slot() < 0
-                || handle.slot() >= entries.size()
-                || generations.get(handle.slot()) != handle.generation()) {
-            return null;
-        }
-        return entries.get(handle.slot());
-    }
-
-    /**
-     * Free a slot, making handles to it stale. Hold the lock.
-     *
-     * @param slot The slot.
-     */
-    private void free(int slot) {
-        entries.set(slot, null);
-        generations.set(slot, generations.get(slot) + 1);
-        freeSlots.add(slot);
+        return handle == null ? null : entries.get(handle.slot(), handle.generation());
     }
 }

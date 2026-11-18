@@ -496,29 +496,65 @@ public final class TJunctions {
         if (on == null) {
             return new int[0];
         }
-        final Map<Integer, Double> found = new HashMap<>();
+        // Each vertex once, at where it was last found, in two small arrays rather than a map of
+        // boxed vertices: this runs for every open edge of a weld
+        final int[] vertices = new int[2 * on.size()];
+        final double[] along = new double[vertices.length];
+        int count = 0;
         for (Segment segment : on) {
             if (segment.first() >= 0
                     && segment.from() > placed.from() + ALONG_SLACK
                     && segment.from() < placed.to() - ALONG_SLACK) {
-                found.put(segment.first(), segment.from());
+                count = note(vertices, along, count, segment.first(), segment.from());
             }
             if (segment.last() >= 0
                     && segment.to() > placed.from() + ALONG_SLACK
                     && segment.to() < placed.to() - ALONG_SLACK) {
-                found.put(segment.last(), segment.to());
+                count = note(vertices, along, count, segment.last(), segment.to());
             }
         }
-        final List<Map.Entry<Integer, Double>> sorted = new ArrayList<>(found.entrySet());
-        sorted.sort(Map.Entry.comparingByValue());
-        if (!placed.forward()) {
-            java.util.Collections.reverse(sorted);
+        // Insertion sort by where along, then by vertex for a fixed order where two meet; there
+        // are only a few
+        for (int i = 1; i < count; ++i) {
+            final int vertex = vertices[i];
+            final double at = along[i];
+            int j = i - 1;
+            while (j >= 0 && (along[j] > at || (along[j] == at && vertices[j] > vertex))) {
+                vertices[j + 1] = vertices[j];
+                along[j + 1] = along[j];
+                --j;
+            }
+            vertices[j + 1] = vertex;
+            along[j + 1] = at;
         }
-        final int[] out = new int[sorted.size()];
-        for (int i = 0; i < out.length; ++i) {
-            out[i] = sorted.get(i).getKey();
+        final int[] out = new int[count];
+        for (int i = 0; i < count; ++i) {
+            out[i] = vertices[placed.forward() ? i : count - 1 - i];
         }
         return out;
+    }
+
+    /**
+     * Note a vertex found inside an edge, or move it to where it was found again.
+     *
+     * @param vertices The vertices noted so far.
+     * @param along Where along the line each was found.
+     * @param count How many are noted.
+     * @param vertex The vertex.
+     * @param at Where along the line it was found.
+     * @return How many are noted now.
+     */
+    private static int note(
+            int @NonNull [] vertices, double @NonNull [] along, int count, int vertex, double at) {
+        for (int i = 0; i < count; ++i) {
+            if (vertices[i] == vertex) {
+                along[i] = at;
+                return count;
+            }
+        }
+        vertices[count] = vertex;
+        along[count] = at;
+        return count + 1;
     }
 
     /**
@@ -535,13 +571,12 @@ public final class TJunctions {
      */
     public static LodMesh weld(@NonNull LodMesh mesh, @NonNull IntArrayList from) {
         final int triangles = mesh.getTriangleCount();
-        final Map<Long, Integer> uses = new HashMap<>();
+        final LongIntMap uses = new LongIntMap(triangles * CORNERS);
         for (int t = 0; t < triangles; ++t) {
             for (int c = 0; c < CORNERS; ++c) {
-                uses.merge(
-                        edgeKey(mesh.corner(t, c), mesh.corner(t, (c + 1) % CORNERS)),
-                        1,
-                        Integer::sum);
+                final long key = edgeKey(mesh.corner(t, c), mesh.corner(t, (c + 1) % CORNERS));
+                final int count = uses.get(key);
+                uses.put(key, count == LongIntMap.MISSING ? 1 : count + 1);
             }
         }
         final TJunctions index = new TJunctions();
@@ -549,7 +584,7 @@ public final class TJunctions {
             for (int c = 0; c < CORNERS; ++c) {
                 final int v = mesh.corner(t, c);
                 final int w = mesh.corner(t, (c + 1) % CORNERS);
-                if (uses.getOrDefault(edgeKey(v, w), 0) == 1) {
+                if (uses.get(edgeKey(v, w)) == 1) {
                     index.add(position(mesh, v), position(mesh, w), 0, v, w);
                 }
             }
@@ -578,7 +613,7 @@ public final class TJunctions {
                     final int v = piece[c];
                     final int w = piece[(c + 1) % CORNERS];
                     final int across = piece[(c + 2) % CORNERS];
-                    if (uses.getOrDefault(edgeKey(v, w), 0) != 1) {
+                    if (uses.get(edgeKey(v, w)) != 1) {
                         continue;
                     }
                     final int[] between =

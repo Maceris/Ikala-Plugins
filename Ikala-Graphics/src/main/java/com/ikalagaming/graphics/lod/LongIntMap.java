@@ -6,6 +6,10 @@ import java.util.Arrays;
  * A map from long keys to int values, with open addressing and no boxing. Keys here are usually two
  * ints packed into a long, whose own hash (the two halves XORed) collides badly; this mixes every
  * bit first.
+ *
+ * <p>Values must not be negative: {@link #get} and {@link #putIfAbsent} return {@link #MISSING} for
+ * a key that isn't there, which a stored -1 couldn't be told apart from. Use {@link #containsKey}
+ * to ask about a key without that rule.
  */
 public final class LongIntMap {
 
@@ -99,6 +103,16 @@ public final class LongIntMap {
     public int get(long key) {
         final int i = slot(key);
         return used[i] ? values[i] : MISSING;
+    }
+
+    /**
+     * Whether a key is there.
+     *
+     * @param key The key.
+     * @return True if it is.
+     */
+    public boolean containsKey(long key) {
+        return used[slot(key)];
     }
 
     /**

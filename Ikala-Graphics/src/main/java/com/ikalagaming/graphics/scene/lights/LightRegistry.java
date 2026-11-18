@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.scene.lights;
 
 import com.ikalagaming.graphics.LightHandle;
+import com.ikalagaming.graphics.scene.SlotMap;
 
 import lombok.NonNull;
 import org.joml.Vector3d;
@@ -8,8 +9,6 @@ import org.joml.Vector3dc;
 import org.joml.Vector3f;
 import org.joml.Vector3fc;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.Nullable;
 
@@ -125,6 +124,10 @@ public class LightRegistry {
         private float cosInner;
         private float cosOuter;
         private int slot;
+
+        /** The key of the plugin that owns the light. */
+        private String owner;
+
         private boolean castsShadows;
 
         @Override
@@ -186,20 +189,8 @@ public class LightRegistry {
     /** Guards everything below. */
     private final ReentrantLock lock = new ReentrantLock();
 
-    /** The light in each slot, null for a free slot. */
-    private final List<Entry> entries = new ArrayList<>();
-
-    /** The owner of each slot's light. */
-    private final List<String> owners = new ArrayList<>();
-
-    /** How many times each slot has been freed. */
-    private final List<Integer> generations = new ArrayList<>();
-
-    /** Free slots, reused last freed first. */
-    private final List<Integer> freeSlots = new ArrayList<>();
-
-    /** How many lights are live. */
-    private int liveCount;
+    /** The lights by slot. */
+    private final SlotMap<Entry> entries = new SlotMap<>();
 
     /**
      * Add a point light.
@@ -231,8 +222,8 @@ public class LightRegistry {
             entry.explicitRange = range;
             entry.cosInner = 1;
             entry.cosOuter = -1;
-            owners.set(slot, owner);
-            return new LightHandle(slot, generations.get(slot));
+            entry.owner = owner;
+            return new LightHandle(slot, entries.generation(slot));
         } finally {
             lock.unlock();
         }
@@ -277,8 +268,8 @@ public class LightRegistry {
             entry.intensity = intensity;
             entry.explicitRange = range;
             setConeLocked(entry, innerAngle, outerAngle);
-            owners.set(slot, owner);
-            return new LightHandle(slot, generations.get(slot));
+            entry.owner = owner;
+            return new LightHandle(slot, entries.generation(slot));
         } finally {
             lock.unlock();
         }
@@ -514,7 +505,8 @@ public class LightRegistry {
     public String ownerOf(@Nullable LightHandle handle) {
         lock.lock();
         try {
-            return validLocked(handle) == null ? null : owners.get(handle.slot());
+            final Entry entry = validLocked(handle);
+            return entry == null ? null : entry.owner;
         } finally {
             lock.unlock();
         }
@@ -533,7 +525,7 @@ public class LightRegistry {
             if (ownedLocked(owner, handle) == null) {
                 return false;
             }
-            freeLocked(handle.slot());
+            entries.free(handle.slot());
             return true;
         } finally {
             lock.unlock();
@@ -550,9 +542,10 @@ public class LightRegistry {
         lock.lock();
         try {
             int removed = 0;
-            for (int slot = 0; slot < entries.size(); ++slot) {
-                if (entries.get(slot) != null && owner.equals(owners.get(slot))) {
-                    freeLocked(slot);
+            for (int slot = 0; slot < entries.slots(); ++slot) {
+                final Entry entry = entries.get(slot);
+                if (entry != null && owner.equals(entry.owner)) {
+                    entries.free(slot);
                     removed += 1;
                 }
             }
@@ -572,7 +565,8 @@ public class LightRegistry {
         lock.lock();
         try {
             int visited = 0;
-            for (Entry entry : entries) {
+            for (int slot = 0; slot < entries.slots(); ++slot) {
+                final Entry entry = entries.get(slot);
                 if (entry != null && entry.type != null) {
                     visitor.light(entry);
                     visited += 1;
@@ -592,7 +586,7 @@ public class LightRegistry {
     public int getLightCount() {
         lock.lock();
         try {
-            return liveCount;
+            return entries.size();
         } finally {
             lock.unlock();
         }
@@ -605,35 +599,10 @@ public class LightRegistry {
      * @throws IllegalStateException If the registry is full.
      */
     private int takeSlot() {
-        final int slot;
-        if (freeSlots.isEmpty()) {
-            if (entries.size() >= MAX_LIGHTS) {
-                throw new IllegalStateException(
-                        "A scene can hold at most " + MAX_LIGHTS + " lights");
-            }
-            slot = entries.size();
-            entries.add(new Entry());
-            owners.add(null);
-            generations.add(0);
-        } else {
-            slot = freeSlots.removeLast();
-            entries.set(slot, new Entry());
+        if (entries.size() >= MAX_LIGHTS) {
+            throw new IllegalStateException("A scene can hold at most " + MAX_LIGHTS + " lights");
         }
-        liveCount += 1;
-        return slot;
-    }
-
-    /**
-     * Free a slot holding a light. The lock must be held.
-     *
-     * @param slot The slot.
-     */
-    private void freeLocked(int slot) {
-        entries.set(slot, null);
-        owners.set(slot, null);
-        generations.set(slot, generations.get(slot) + 1);
-        freeSlots.add(slot);
-        liveCount -= 1;
+        return entries.add(new Entry());
     }
 
     /**
@@ -646,11 +615,7 @@ public class LightRegistry {
         if (handle == null) {
             return null;
         }
-        final int slot = handle.slot();
-        if (slot < 0 || slot >= entries.size() || generations.get(slot) != handle.generation()) {
-            return null;
-        }
-        return entries.get(slot);
+        return entries.get(handle.slot(), handle.generation());
     }
 
     /**
@@ -662,7 +627,7 @@ public class LightRegistry {
      */
     private Entry ownedLocked(@NonNull String owner, @Nullable LightHandle handle) {
         Entry entry = validLocked(handle);
-        return entry != null && owner.equals(owners.get(handle.slot())) ? entry : null;
+        return entry != null && owner.equals(entry.owner) ? entry : null;
     }
 
     /**

@@ -4,7 +4,6 @@ import com.ikalagaming.graphics.MediumHandle;
 
 import lombok.NonNull;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.Nullable;
@@ -22,20 +21,28 @@ public class MediumRegistry {
     /** Guards everything here. */
     private final ReentrantLock lock = new ReentrantLock();
 
-    /** Each slot's volume, null when free. */
-    private final List<MediumVolume> volumes = new ArrayList<>();
+    /** A volume and the owner that placed it; the volume is replaced in place on update. */
+    private static final class Entry {
+        /** The owning context's key. */
+        private final String owner;
 
-    /** Each slot's owner key, null when free. */
-    private final List<String> owners = new ArrayList<>();
+        /** The volume. */
+        private MediumVolume volume;
 
-    /** How many times each slot was freed. */
-    private final List<Integer> generations = new ArrayList<>();
+        /**
+         * Make an entry.
+         *
+         * @param owner The owning context's key.
+         * @param volume The volume.
+         */
+        private Entry(@NonNull String owner, @NonNull MediumVolume volume) {
+            this.owner = owner;
+            this.volume = volume;
+        }
+    }
 
-    /** Slots free to take again. */
-    private final List<Integer> freeSlots = new ArrayList<>();
-
-    /** How many volumes there are. */
-    private int count;
+    /** The volumes by slot. */
+    private final SlotMap<Entry> entries = new SlotMap<>();
 
     /**
      * Add a volume.
@@ -47,22 +54,11 @@ public class MediumRegistry {
     public @Nullable MediumHandle add(@NonNull String owner, @NonNull MediumVolume volume) {
         lock.lock();
         try {
-            if (count >= MAX_VOLUMES) {
+            if (entries.size() >= MAX_VOLUMES) {
                 return null;
             }
-            final int slot;
-            if (freeSlots.isEmpty()) {
-                slot = volumes.size();
-                volumes.add(volume);
-                owners.add(owner);
-                generations.add(0);
-            } else {
-                slot = freeSlots.removeLast();
-                volumes.set(slot, volume);
-                owners.set(slot, owner);
-            }
-            ++count;
-            return new MediumHandle(slot, generations.get(slot));
+            final int slot = entries.add(new Entry(owner, volume));
+            return new MediumHandle(slot, entries.generation(slot));
         } finally {
             lock.unlock();
         }
@@ -83,7 +79,7 @@ public class MediumRegistry {
             if (!owns(owner, handle)) {
                 return false;
             }
-            volumes.set(handle.slot(), volume);
+            entries.get(handle.slot()).volume = volume;
             return true;
         } finally {
             lock.unlock();
@@ -103,7 +99,7 @@ public class MediumRegistry {
             if (!owns(owner, handle)) {
                 return false;
             }
-            free(handle.slot());
+            entries.free(handle.slot());
             return true;
         } finally {
             lock.unlock();
@@ -120,9 +116,10 @@ public class MediumRegistry {
         lock.lock();
         try {
             int removed = 0;
-            for (int slot = 0; slot < owners.size(); ++slot) {
-                if (owner.equals(owners.get(slot))) {
-                    free(slot);
+            for (int slot = 0; slot < entries.slots(); ++slot) {
+                final Entry entry = entries.get(slot);
+                if (entry != null && owner.equals(entry.owner)) {
+                    entries.free(slot);
                     ++removed;
                 }
             }
@@ -141,7 +138,7 @@ public class MediumRegistry {
     public boolean isValid(@Nullable MediumHandle handle) {
         lock.lock();
         try {
-            return live(handle);
+            return live(handle) != null;
         } finally {
             lock.unlock();
         }
@@ -156,7 +153,8 @@ public class MediumRegistry {
     public @Nullable String ownerOf(@Nullable MediumHandle handle) {
         lock.lock();
         try {
-            return live(handle) ? owners.get(handle.slot()) : null;
+            final Entry entry = live(handle);
+            return entry == null ? null : entry.owner;
         } finally {
             lock.unlock();
         }
@@ -171,9 +169,10 @@ public class MediumRegistry {
         into.clear();
         lock.lock();
         try {
-            for (MediumVolume volume : volumes) {
-                if (volume != null) {
-                    into.add(volume);
+            for (int slot = 0; slot < entries.slots(); ++slot) {
+                final Entry entry = entries.get(slot);
+                if (entry != null) {
+                    into.add(entry.volume);
                 }
             }
         } finally {
@@ -189,24 +188,20 @@ public class MediumRegistry {
     public int getCount() {
         lock.lock();
         try {
-            return count;
+            return entries.size();
         } finally {
             lock.unlock();
         }
     }
 
     /**
-     * Whether a handle refers to a volume now. Hold the lock.
+     * The entry a handle refers to now. Hold the lock.
      *
      * @param handle The handle.
-     * @return True if so.
+     * @return The entry, or null if the handle is null or stale.
      */
-    private boolean live(@Nullable MediumHandle handle) {
-        return handle != null
-                && handle.slot() >= 0
-                && handle.slot() < volumes.size()
-                && volumes.get(handle.slot()) != null
-                && generations.get(handle.slot()) == handle.generation();
+    private @Nullable Entry live(@Nullable MediumHandle handle) {
+        return handle == null ? null : entries.get(handle.slot(), handle.generation());
     }
 
     /**
@@ -217,19 +212,7 @@ public class MediumRegistry {
      * @return True if so.
      */
     private boolean owns(@NonNull String owner, @Nullable MediumHandle handle) {
-        return live(handle) && owner.equals(owners.get(handle.slot()));
-    }
-
-    /**
-     * Free a slot, making handles to it stale. Hold the lock.
-     *
-     * @param slot The slot.
-     */
-    private void free(int slot) {
-        volumes.set(slot, null);
-        owners.set(slot, null);
-        generations.set(slot, generations.get(slot) + 1);
-        freeSlots.add(slot);
-        --count;
+        final Entry entry = live(handle);
+        return entry != null && owner.equals(entry.owner);
     }
 }

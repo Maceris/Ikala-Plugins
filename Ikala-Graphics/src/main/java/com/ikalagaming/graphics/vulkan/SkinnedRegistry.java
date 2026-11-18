@@ -4,6 +4,7 @@ import com.ikalagaming.graphics.SkinnedDecal;
 import com.ikalagaming.graphics.SkinnedInstanceHandle;
 import com.ikalagaming.graphics.SkinnedPart;
 import com.ikalagaming.graphics.Skins;
+import com.ikalagaming.graphics.scene.SlotMap;
 
 import lombok.NonNull;
 import org.joml.Quaternionf;
@@ -43,9 +44,6 @@ public final class SkinnedRegistry {
     public static final class Entry {
         /** The plugin that placed it. */
         String owner;
-
-        /** The slot's generation, which handles must match. */
-        int generation;
 
         /** How many bones its palette holds. */
         int boneCount;
@@ -177,14 +175,8 @@ public final class SkinnedRegistry {
     /** Guards everything here. */
     private final ReentrantLock lock = new ReentrantLock();
 
-    /** Instances by slot, null for free slots. */
-    private final List<Entry> slots = new ArrayList<>();
-
-    /** Each slot's generation, kept while it is free. */
-    private final List<Integer> generations = new ArrayList<>();
-
-    /** Free slots, reused last freed first. */
-    private final List<Integer> free = new ArrayList<>();
+    /** Instances by slot. */
+    private final SlotMap<Entry> slots = new SlotMap<>();
 
     /** The drawable instances handed to {@link #read(Consumer)}, kept to avoid allocating. */
     private final List<Entry> drawable = new ArrayList<>();
@@ -212,23 +204,14 @@ public final class SkinnedRegistry {
         }
         lock.lock();
         try {
-            final int slot;
-            if (free.isEmpty()) {
-                slot = slots.size();
-                slots.add(null);
-                generations.add(0);
-            } else {
-                slot = free.remove(free.size() - 1);
-            }
             Entry entry = new Entry();
             entry.owner = owner;
-            entry.generation = generations.get(slot);
             entry.boneCount = boneCount;
             entry.position.set(position);
             entry.rotation.set(rotation);
             entry.scale = scale;
-            slots.set(slot, entry);
-            return new SkinnedInstanceHandle(slot, entry.generation);
+            final int slot = slots.add(entry);
+            return new SkinnedInstanceHandle(slot, slots.generation(slot));
         } finally {
             lock.unlock();
         }
@@ -242,11 +225,11 @@ public final class SkinnedRegistry {
      * @return The entry, or null if the handle is null, stale or someone else's.
      */
     private Entry find(String owner, SkinnedInstanceHandle handle) {
-        if (handle == null || handle.slot() < 0 || handle.slot() >= slots.size()) {
+        if (handle == null) {
             return null;
         }
-        Entry entry = slots.get(handle.slot());
-        if (entry == null || entry.generation != handle.generation()) {
+        Entry entry = slots.get(handle.slot(), handle.generation());
+        if (entry == null) {
             return null;
         }
         return owner == null || owner.equals(entry.owner) ? entry : null;
@@ -514,7 +497,7 @@ public final class SkinnedRegistry {
             if (entry == null) {
                 return false;
             }
-            free(handle.slot());
+            slots.free(handle.slot());
             return true;
         } finally {
             lock.unlock();
@@ -531,10 +514,10 @@ public final class SkinnedRegistry {
         lock.lock();
         try {
             int removed = 0;
-            for (int slot = 0; slot < slots.size(); ++slot) {
+            for (int slot = 0; slot < slots.slots(); ++slot) {
                 Entry entry = slots.get(slot);
                 if (entry != null && owner.equals(entry.owner)) {
-                    free(slot);
+                    slots.free(slot);
                     ++removed;
                 }
             }
@@ -542,17 +525,6 @@ public final class SkinnedRegistry {
         } finally {
             lock.unlock();
         }
-    }
-
-    /**
-     * Free a slot, making its handles stale. The lock must be held.
-     *
-     * @param slot The slot.
-     */
-    private void free(int slot) {
-        slots.set(slot, null);
-        generations.set(slot, generations.get(slot) + 1);
-        free.add(slot);
     }
 
     /**
@@ -566,7 +538,8 @@ public final class SkinnedRegistry {
         lock.lock();
         try {
             drawable.clear();
-            for (Entry entry : slots) {
+            for (int slot = 0; slot < slots.slots(); ++slot) {
+                final Entry entry = slots.get(slot);
                 if (entry != null && entry.palette != null && !entry.parts.isEmpty()) {
                     drawable.add(entry);
                 }

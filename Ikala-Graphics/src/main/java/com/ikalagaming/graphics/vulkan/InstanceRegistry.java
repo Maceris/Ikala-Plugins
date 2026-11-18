@@ -21,7 +21,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.Nullable;
 
@@ -211,8 +210,11 @@ public class InstanceRegistry {
     /** The generation of each slot, which handles must match. */
     private int[] generations = new int[0];
 
-    /** Slots that are free to reuse, lowest first, which keeps the table compact. */
-    private final TreeSet<Integer> freeSlots = new TreeSet<>();
+    /** Slots that are free to reuse, taken lowest first, which keeps the table compact. */
+    private final BitSet freeSlots = new BitSet();
+
+    /** No slot below this is free. */
+    private int lowestFree;
 
     /** Slots whose GPU copy is out of date. */
     private final BitSet changed = new BitSet();
@@ -543,7 +545,8 @@ public class InstanceRegistry {
     public void free(int slot) {
         lock.lock();
         try {
-            freeSlots.add(slot);
+            freeSlots.set(slot);
+            lowestFree = Math.min(lowestFree, slot);
         } finally {
             lock.unlock();
         }
@@ -739,7 +742,8 @@ public class InstanceRegistry {
      * @return The slot.
      */
     private int takeSlot() {
-        if (freeSlots.isEmpty()) {
+        int slot = freeSlots.nextSetBit(lowestFree);
+        if (slot < 0) {
             final int oldLength = handles.length;
             final int newLength = oldLength + SLOT_GROWTH;
             owners = Arrays.copyOf(owners, newLength);
@@ -752,13 +756,16 @@ public class InstanceRegistry {
             generations = Arrays.copyOf(generations, newLength);
             overrideFirsts = Arrays.copyOf(overrideFirsts, newLength);
             movedRounds = Arrays.copyOf(movedRounds, newLength);
-            for (int slot = oldLength; slot < newLength; ++slot) {
-                positions[slot] = new Vector3d();
-                rotations[slot] = new Quaternionf();
-                freeSlots.add(slot);
+            for (int added = oldLength; added < newLength; ++added) {
+                positions[added] = new Vector3d();
+                rotations[added] = new Quaternionf();
             }
+            freeSlots.set(oldLength, newLength);
+            slot = oldLength;
         }
-        return freeSlots.pollFirst();
+        freeSlots.clear(slot);
+        lowestFree = slot + 1;
+        return slot;
     }
 
     /**

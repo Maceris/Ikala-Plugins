@@ -59,20 +59,28 @@ public class WaterRegistry {
     /** Guards everything below. */
     private final ReentrantLock lock = new ReentrantLock();
 
-    /** The tiles by slot, null where free. */
-    private final List<WaterTile> tiles = new ArrayList<>();
+    /** A tile and who owns it; the tile is replaced in place on update. */
+    private static final class Entry {
+        /** Who owns the tile. */
+        private final String owner;
 
-    /** Who owns each slot's tile. */
-    private final List<String> owners = new ArrayList<>();
+        /** The tile. */
+        private WaterTile tile;
 
-    /** How many times each slot was freed, to tell stale handles apart. */
-    private final List<Integer> generations = new ArrayList<>();
+        /**
+         * Make an entry.
+         *
+         * @param owner Who owns the tile.
+         * @param tile The tile.
+         */
+        private Entry(@NonNull String owner, @NonNull WaterTile tile) {
+            this.owner = owner;
+            this.tile = tile;
+        }
+    }
 
-    /** Slots free to reuse. */
-    private final List<Integer> freeSlots = new ArrayList<>();
-
-    /** How many tiles there are. */
-    private int count;
+    /** The tiles by slot. */
+    private final SlotMap<Entry> tiles = new SlotMap<>();
 
     /** The particles the water throws up, and who set them, null for the water's own. */
     private WaterEffects effects = WaterEffects.DEFAULT;
@@ -92,23 +100,12 @@ public class WaterRegistry {
     public @Nullable WaterHandle add(@NonNull String owner, @NonNull WaterTile tile) {
         lock.lock();
         try {
-            if (count >= MAX_TILES) {
+            if (tiles.size() >= MAX_TILES) {
                 return null;
             }
-            final int slot;
-            if (freeSlots.isEmpty()) {
-                slot = tiles.size();
-                tiles.add(tile);
-                owners.add(owner);
-                generations.add(0);
-            } else {
-                slot = freeSlots.removeLast();
-                tiles.set(slot, tile);
-                owners.set(slot, owner);
-            }
-            ++count;
+            final int slot = tiles.add(new Entry(owner, tile));
             ++version;
-            return new WaterHandle(slot, generations.get(slot));
+            return new WaterHandle(slot, tiles.generation(slot));
         } finally {
             lock.unlock();
         }
@@ -129,7 +126,7 @@ public class WaterRegistry {
             if (!owns(owner, handle)) {
                 return false;
             }
-            tiles.set(handle.slot(), tile);
+            tiles.get(handle.slot()).tile = tile;
             ++version;
             return true;
         } finally {
@@ -171,8 +168,9 @@ public class WaterRegistry {
                 effectsOwner = null;
             }
             int removed = 0;
-            for (int slot = 0; slot < owners.size(); ++slot) {
-                if (owner.equals(owners.get(slot))) {
+            for (int slot = 0; slot < tiles.slots(); ++slot) {
+                final Entry entry = tiles.get(slot);
+                if (entry != null && owner.equals(entry.owner)) {
                     free(slot);
                     ++removed;
                 }
@@ -192,7 +190,7 @@ public class WaterRegistry {
     public boolean isValid(@Nullable WaterHandle handle) {
         lock.lock();
         try {
-            return live(handle);
+            return live(handle) != null;
         } finally {
             lock.unlock();
         }
@@ -207,7 +205,8 @@ public class WaterRegistry {
     public @Nullable String ownerOf(@Nullable WaterHandle handle) {
         lock.lock();
         try {
-            return live(handle) ? owners.get(handle.slot()) : null;
+            final Entry entry = live(handle);
+            return entry == null ? null : entry.owner;
         } finally {
             lock.unlock();
         }
@@ -227,9 +226,10 @@ public class WaterRegistry {
                 return version;
             }
             into.clear();
-            for (WaterTile tile : tiles) {
-                if (tile != null) {
-                    into.add(tile);
+            for (int slot = 0; slot < tiles.slots(); ++slot) {
+                final Entry entry = tiles.get(slot);
+                if (entry != null) {
+                    into.add(entry.tile);
                 }
             }
             return version;
@@ -345,24 +345,20 @@ public class WaterRegistry {
     public int getCount() {
         lock.lock();
         try {
-            return count;
+            return tiles.size();
         } finally {
             lock.unlock();
         }
     }
 
     /**
-     * Whether a handle refers to the tile in its slot. Call with the lock held.
+     * The entry a handle refers to now. Call with the lock held.
      *
      * @param handle The handle.
-     * @return Whether it does.
+     * @return The entry, or null if the handle is null or stale.
      */
-    private boolean live(@Nullable WaterHandle handle) {
-        return handle != null
-                && handle.slot() >= 0
-                && handle.slot() < tiles.size()
-                && tiles.get(handle.slot()) != null
-                && generations.get(handle.slot()) == handle.generation();
+    private @Nullable Entry live(@Nullable WaterHandle handle) {
+        return handle == null ? null : tiles.get(handle.slot(), handle.generation());
     }
 
     /**
@@ -373,7 +369,8 @@ public class WaterRegistry {
      * @return Whether it does.
      */
     private boolean owns(@NonNull String owner, @Nullable WaterHandle handle) {
-        return live(handle) && owner.equals(owners.get(handle.slot()));
+        final Entry entry = live(handle);
+        return entry != null && owner.equals(entry.owner);
     }
 
     /**
@@ -382,11 +379,7 @@ public class WaterRegistry {
      * @param slot The slot.
      */
     private void free(int slot) {
-        tiles.set(slot, null);
-        owners.set(slot, null);
-        generations.set(slot, generations.get(slot) + 1);
-        freeSlots.add(slot);
-        --count;
+        tiles.free(slot);
         ++version;
     }
 }

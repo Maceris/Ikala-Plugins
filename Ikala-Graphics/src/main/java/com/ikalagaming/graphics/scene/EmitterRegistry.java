@@ -10,7 +10,6 @@ import org.joml.Quaternionfc;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.Nullable;
@@ -100,23 +99,14 @@ public class EmitterRegistry {
     /** Guards everything here. */
     private final ReentrantLock lock = new ReentrantLock();
 
-    /** Each slot's emitter, null when free. */
-    private final List<Emitter> emitters = new ArrayList<>();
-
-    /** How many times each slot was freed. */
-    private final List<Integer> generations = new ArrayList<>();
-
-    /** Slots free to take again. */
-    private final List<Integer> freeSlots = new ArrayList<>();
+    /** The emitters by slot. */
+    private final SlotMap<Emitter> emitters = new SlotMap<>();
 
     /** Which links emitters hold, by link; link 0 is none and never held. */
     private final boolean[] linksHeld = new boolean[ParticleMath.MAX_LINKS + 1];
 
     /** Whether running out of links was logged, so it is logged once. */
     private boolean linksFullLogged;
-
-    /** How many emitters there are. */
-    private int count;
 
     /**
      * Add an emitter, which spawns its effect's burst on the next frame and its rate from then on.
@@ -144,7 +134,7 @@ public class EmitterRegistry {
             @NonNull String owner, @NonNull EffectSource source, @NonNull Vector3dc position) {
         lock.lock();
         try {
-            if (count >= MAX_EMITTERS) {
+            if (emitters.size() >= MAX_EMITTERS) {
                 return null;
             }
             final Emitter emitter = new Emitter();
@@ -153,17 +143,8 @@ public class EmitterRegistry {
             emitter.end.set(position);
             emitter.pendingBurst = Math.max(0, source.get().getBurst());
             emitter.owner = owner;
-            final int slot;
-            if (freeSlots.isEmpty()) {
-                slot = emitters.size();
-                emitters.add(emitter);
-                generations.add(0);
-            } else {
-                slot = freeSlots.removeLast();
-                emitters.set(slot, emitter);
-            }
-            ++count;
-            return new EmitterHandle(slot, generations.get(slot));
+            final int slot = emitters.add(emitter);
+            return new EmitterHandle(slot, emitters.generation(slot));
         } finally {
             lock.unlock();
         }
@@ -337,7 +318,7 @@ public class EmitterRegistry {
         lock.lock();
         try {
             int removed = 0;
-            for (int slot = 0; slot < emitters.size(); ++slot) {
+            for (int slot = 0; slot < emitters.slots(); ++slot) {
                 final Emitter emitter = emitters.get(slot);
                 if (emitter != null && owner.equals(emitter.owner)) {
                     free(slot);
@@ -393,7 +374,8 @@ public class EmitterRegistry {
         into.clear();
         lock.lock();
         try {
-            for (Emitter emitter : emitters) {
+            for (int slot = 0; slot < emitters.slots(); ++slot) {
+                final Emitter emitter = emitters.get(slot);
                 if (emitter == null) {
                     continue;
                 }
@@ -458,7 +440,7 @@ public class EmitterRegistry {
     public int getCount() {
         lock.lock();
         try {
-            return count;
+            return emitters.size();
         } finally {
             lock.unlock();
         }
@@ -471,11 +453,7 @@ public class EmitterRegistry {
      * @return True if so.
      */
     private boolean live(@Nullable EmitterHandle handle) {
-        return handle != null
-                && handle.slot() >= 0
-                && handle.slot() < emitters.size()
-                && emitters.get(handle.slot()) != null
-                && generations.get(handle.slot()) == handle.generation();
+        return handle != null && emitters.isLive(handle.slot(), handle.generation());
     }
 
     /**
@@ -537,10 +515,6 @@ public class EmitterRegistry {
      * @param slot The slot.
      */
     private void free(int slot) {
-        releaseLink(emitters.get(slot));
-        emitters.set(slot, null);
-        generations.set(slot, generations.get(slot) + 1);
-        freeSlots.add(slot);
-        --count;
+        releaseLink(emitters.free(slot));
     }
 }
