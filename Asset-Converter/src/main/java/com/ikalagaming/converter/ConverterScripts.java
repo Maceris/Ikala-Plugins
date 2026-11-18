@@ -103,7 +103,9 @@ public final class ConverterScripts {
             log.info(
                     "Allocation {}: {} KiB per frame over {} frames",
                     label,
-                    String.format("%.2f", (allocated - lastAllocated) / BYTES_PER_KIB / (frame - lastFrame)),
+                    String.format(
+                            "%.2f",
+                            (allocated - lastAllocated) / BYTES_PER_KIB / (frame - lastFrame)),
                     frame - lastFrame);
         } else {
             log.info("Allocation {}: counting from frame {}", label, frame);
