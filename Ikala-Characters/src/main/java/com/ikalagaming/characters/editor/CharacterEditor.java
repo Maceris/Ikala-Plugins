@@ -798,8 +798,8 @@ public final class CharacterEditor {
                         built.formMeshes());
         look.start(
                 plan.variants().indexOf(plan.variant(design.variant())),
-                sliderValues(design),
-                colorCodes(design),
+                DesignSnapshot.sliderValues(design),
+                DesignSnapshot.colorCodes(design),
                 design.fx(),
                 design.style(),
                 design.decal());
@@ -870,115 +870,6 @@ public final class CharacterEditor {
     }
 
     /**
-     * A design's slider values as the look keeps them.
-     *
-     * @param design The design.
-     * @return The values, by slider ID.
-     */
-    private static Map<Id, float[]> sliderValues(Design design) {
-        Map<Id, float[]> values = new HashMap<>();
-        design.sliders()
-                .forEach(
-                        (id, list) -> {
-                            float[] value = new float[list.size()];
-                            for (int i = 0; i < value.length; ++i) {
-                                value[i] = list.get(i);
-                            }
-                            values.put(Id.parse(id), value);
-                        });
-        return values;
-    }
-
-    /**
-     * A design's colors as the look keeps them.
-     *
-     * @param design The design.
-     * @return The color codes, by palette channel.
-     */
-    private static Map<String, Integer> colorCodes(Design design) {
-        Map<String, Integer> codes = new HashMap<>();
-        design.colors().forEach((channel, color) -> codes.put(channel, ColorCode.encode(color)));
-        return codes;
-    }
-
-    /**
-     * The design the editor shows, as it is now.
-     *
-     * @param id The ID to give it.
-     * @param variant The variant to make it.
-     * @param withSliders Whether to keep the slider values, or leave them for the variant to start.
-     * @return The design.
-     */
-    private Design currentDesign(Id id, String variant, boolean withSliders) {
-        Map<String, Id> parts = new LinkedHashMap<>();
-        Map<String, Id> layers = new LinkedHashMap<>();
-        Map<String, Id> chains = new LinkedHashMap<>();
-        for (int s = 0; s < look.slots().slots().size(); ++s) {
-            int choice = look.choice(s);
-            if (choice == CharacterLook.EMPTY) {
-                continue;
-            }
-            String place = look.slots().slots().get(s).id();
-            if (plan.socket(place) != null) {
-                // Designs don't list accessories yet, so they are only tried on here
-                continue;
-            }
-            Id part = prepared.optionIds().get(s).get(choice);
-            if (plan.layer(place) != null) {
-                layers.put(place, part);
-            } else if (plan.extension(place) != null) {
-                chains.put(place, part);
-            } else {
-                parts.put(place, part);
-            }
-        }
-        Map<String, List<Float>> sliders = new LinkedHashMap<>();
-        if (withSliders) {
-            BodyPlan.Variant shape = plan.variant(variant);
-            look.values()
-                    .forEach(
-                            (sliderId, value) -> {
-                                // Sliders where the variant starts them are left out
-                                BodyPlan.SliderSetting setting =
-                                        shape == null
-                                                ? null
-                                                : shape.sliders().get(sliderId.toString());
-                                float start = setting == null ? 0 : setting.initial();
-                                List<Float> snapped = new ArrayList<>();
-                                boolean moved = false;
-                                for (float v : value) {
-                                    float step = DesignCodec.snap(v);
-                                    snapped.add(step);
-                                    moved |= step != DesignCodec.snap(start);
-                                }
-                                if (moved) {
-                                    sliders.put(sliderId.toString(), snapped);
-                                }
-                            });
-        }
-        Map<String, Color> colors = new LinkedHashMap<>();
-        for (String channel : look.channels()) {
-            Integer code = look.color(channel);
-            if (code != null) {
-                colors.put(channel, ColorCode.toColor(code));
-            }
-        }
-        return new Design(
-                id,
-                plan.id(),
-                variant,
-                look.style(),
-                sliders,
-                parts,
-                layers,
-                null,
-                colors,
-                List.copyOf(look.fx()),
-                look.decal(),
-                chains);
-    }
-
-    /**
      * Make the character another variant: the same parts and colors on the variant's meshes, with
      * the sliders where the variant starts them. The parts are loaded again, so there is nothing to
      * undo afterward.
@@ -989,7 +880,14 @@ public final class CharacterEditor {
         if (prepared == null || index == look.variant()) {
             return;
         }
-        showDesign(currentDesign(prepared.design().id(), plan.variants().get(index).id(), false));
+        showDesign(
+                DesignSnapshot.of(
+                        look,
+                        plan,
+                        prepared,
+                        prepared.design().id(),
+                        plan.variants().get(index).id(),
+                        false));
     }
 
     /**
@@ -1008,7 +906,13 @@ public final class CharacterEditor {
         }
         Id id = Id.parse(current.saveNamespace() + ":design/" + name);
         Design design =
-                currentDesign(id, plan.variants().get(Math.max(0, look.variant())).id(), true);
+                DesignSnapshot.of(
+                        look,
+                        plan,
+                        prepared,
+                        id,
+                        plan.variants().get(Math.max(0, look.variant())).id(),
+                        true);
         List<Problem> problems = design.validate(registry.get(), SLIDER_CONTEXT);
         if (!problems.isEmpty()) {
             saveStatus = "Not saved: " + problems.get(0).message();
@@ -2808,8 +2712,13 @@ public final class CharacterEditor {
         }
         CharacterRegistry definitions = registry.get();
         Design design =
-                currentDesign(
-                        prepared.design().id(), look.variants().get(look.variant()).id(), true);
+                DesignSnapshot.of(
+                        look,
+                        plan,
+                        prepared,
+                        prepared.design().id(),
+                        look.variants().get(look.variant()).id(),
+                        true);
         LookStack.Shown stack = LookStack.resolve(design, equipment, definitions);
         List<Part> worn = new ArrayList<>();
         for (Id partId : stack.worn().values()) {
