@@ -29,16 +29,16 @@ class TestEditorScripts {
     @Test
     void findsSlotAndOption() {
         Assertions.assertArrayEquals(
-                new int[] {0, 1}, CharacterEditor.findOption(OPTIONS, "gen:part/body/bone_l"));
+                new int[] {0, 1}, PreparedDesign.findOption(OPTIONS, "gen:part/body/bone_l"));
         Assertions.assertArrayEquals(
-                new int[] {1, 0}, CharacterEditor.findOption(OPTIONS, "gen:part/body/robot_leg_l"));
+                new int[] {1, 0}, PreparedDesign.findOption(OPTIONS, "gen:part/body/robot_leg_l"));
     }
 
     /** A part no slot offers, or an ID without its namespace, isn't found. */
     @Test
     void missingPartIsNotFound() {
-        Assertions.assertNull(CharacterEditor.findOption(OPTIONS, "gen:part/body/robot_leg_r"));
-        Assertions.assertNull(CharacterEditor.findOption(OPTIONS, "part/body/bone_l"));
+        Assertions.assertNull(PreparedDesign.findOption(OPTIONS, "gen:part/body/robot_leg_r"));
+        Assertions.assertNull(PreparedDesign.findOption(OPTIONS, "part/body/bone_l"));
     }
 
     /** Calls fail plainly, rather than hang, while the plugin isn't enabled. */
