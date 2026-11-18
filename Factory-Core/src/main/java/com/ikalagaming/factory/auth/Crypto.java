@@ -31,6 +31,15 @@ public class Crypto {
     /** Used to ensure unique challenge payloads within the lifetime of an application. */
     private static final AtomicInteger challengeCounter = new AtomicInteger();
 
+    /** How many unpredictable bytes start each challenge. */
+    static final int CHALLENGE_RANDOM_BYTES = 12;
+
+    /**
+     * Unpredictable bytes for challenges. Not the strong instance from {@link RandomGen}, which can
+     * block waiting for entropy on some systems, while a connection is waiting for its challenge.
+     */
+    private static final SecureRandom challengeRandom = new SecureRandom();
+
     /**
      * The header we use before the private key in our key file. Partially there to fit the PEM
      * format, but mostly to assist with parsing in general.
@@ -94,24 +103,23 @@ public class Crypto {
     }
 
     /**
-     * Return a 64-bit (8 byte) value to be sent as a challenge for authentication. These are
-     * guaranteed to be unique within one run of the application, but not universally.
+     * Return a 16 byte value to be sent as a challenge for authentication: 12 bytes from a secure
+     * random source, so a client can't predict challenges and sign them ahead of time, then a
+     * counter, so they are guaranteed to be unique within one run of the application.
      *
-     * @return The 8 byte array value.
+     * @return The 16 byte array value.
      */
     public static byte[] getChallenge() {
-        final int random = RandomGen.getFastRandom().nextInt();
         final int counter = challengeCounter.getAndIncrement();
-        return new byte[] {
-            (byte) (random >>> 24),
-            (byte) (random >>> 16),
-            (byte) (random >>> 8),
-            (byte) random,
-            (byte) (counter >>> 24),
-            (byte) (counter >>> 16),
-            (byte) (counter >>> 8),
-            (byte) counter
-        };
+        byte[] challenge = new byte[CHALLENGE_RANDOM_BYTES + Integer.BYTES];
+        byte[] random = new byte[CHALLENGE_RANDOM_BYTES];
+        challengeRandom.nextBytes(random);
+        System.arraycopy(random, 0, challenge, 0, CHALLENGE_RANDOM_BYTES);
+        challenge[CHALLENGE_RANDOM_BYTES] = (byte) (counter >>> 24);
+        challenge[CHALLENGE_RANDOM_BYTES + 1] = (byte) (counter >>> 16);
+        challenge[CHALLENGE_RANDOM_BYTES + 2] = (byte) (counter >>> 8);
+        challenge[CHALLENGE_RANDOM_BYTES + 3] = (byte) counter;
+        return challenge;
     }
 
     /**

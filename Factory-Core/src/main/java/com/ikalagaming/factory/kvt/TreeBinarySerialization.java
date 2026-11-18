@@ -28,6 +28,27 @@ import java.util.Optional;
 public class TreeBinarySerialization {
 
     /**
+     * How deep nodes may nest. Reading recurses for each level, so without a limit a small forged
+     * tree of nested nodes could overflow the stack.
+     */
+    static final int MAX_DEPTH = 64;
+
+    /**
+     * The most entries a boolean array may claim. They take one bit each, so a few bytes of input
+     * would otherwise grow into a large list.
+     */
+    static final int MAX_BOOLEANS = 1 << 20;
+
+    /** The smallest a node can be: just its size. */
+    private static final int NODE_HEADER_BYTES = 8;
+
+    /** The smallest a node array or string array can be: its size and its count. */
+    private static final int ARRAY_HEADER_BYTES = 12;
+
+    /** The smallest a string can be: its length. */
+    private static final int STRING_HEADER_BYTES = 4;
+
+    /**
      * Used to track how many bytes we have read so far, and how many in total we expect there to
      * be.
      *
@@ -48,6 +69,9 @@ public class TreeBinarySerialization {
          * read in, every node up the stack tracks that information.
          */
         private ReadCount parent;
+
+        /** How many nodes and arrays this is nested in. */
+        private int depth;
 
         /**
          * Return the number of remaining bytes we expect to read.
@@ -78,6 +102,56 @@ public class TreeBinarySerialization {
                 parent.recordRead(count);
             }
         }
+    }
+
+    /**
+     * Check that a count read from the input could fit in what is left, before making room for it.
+     *
+     * @param count The number of elements.
+     * @param elementBytes The fewest bytes each element takes, or 0 for bits.
+     * @param readCount Tracking for how much is left.
+     * @throws IOException If the count is negative or more than could fit.
+     */
+    private static void checkCount(int count, int elementBytes, ReadCount readCount)
+            throws IOException {
+        long needed = elementBytes == 0 ? (count + 7L) / 8 : (long) count * elementBytes;
+        if (count < 0 || needed > readCount.getRemaining()) {
+            throw new IOException(
+                    SafeResourceLoader.getStringFormatted(
+                            "NODE_BAD_COUNT",
+                            FactoryStrings.bundle(),
+                            "" + count,
+                            "" + readCount.getRemaining()));
+        }
+    }
+
+    /**
+     * Start tracking a nested node or array, whose size was just read. It has to fit inside its
+     * parent, and can't nest too deep.
+     *
+     * @param size The size it claims, including the size field already read.
+     * @param parent Tracking for what it is inside.
+     * @param smallest The smallest size it could be.
+     * @return Tracking for the nested part.
+     * @throws IOException If the size doesn't fit, or it nests too deep.
+     */
+    private static ReadCount nested(long size, ReadCount parent, int smallest) throws IOException {
+        // The 8 byte size field is already counted in the parent
+        if (size < smallest || size - 8 > parent.getRemaining()) {
+            throw new IOException(
+                    SafeResourceLoader.getStringFormatted(
+                            "NODE_BAD_SIZE", FactoryStrings.bundle(), "" + size));
+        }
+        if (parent.getDepth() >= MAX_DEPTH) {
+            throw new IOException(
+                    SafeResourceLoader.getStringFormatted(
+                            "NODE_TOO_DEEP", FactoryStrings.bundle(), "" + MAX_DEPTH));
+        }
+        ReadCount nested = new ReadCount(size);
+        nested.recordRead(8);
+        nested.setParent(parent);
+        nested.setDepth(parent.getDepth() + 1);
+        return nested;
     }
 
     /**
@@ -206,12 +280,18 @@ public class TreeBinarySerialization {
         long totalSize = 0;
         try {
             totalSize = TreeBinarySerialization.readLongDirectly(input);
+            if (totalSize < NODE_HEADER_BYTES) {
+                throw new IOException(
+                        SafeResourceLoader.getStringFormatted(
+                                "NODE_BAD_SIZE", FactoryStrings.bundle(), "" + totalSize));
+            }
             ReadCount count = new ReadCount(totalSize);
             // NOTE(ches) The size that we just read.
             count.recordRead(8);
 
             return Optional.of(TreeBinarySerialization.readNode(input, count, totalSize));
-        } catch (IOException e) {
+        } catch (IOException | IllegalArgumentException e) {
+            // IllegalArgumentException is an unknown node type
             log.warn(
                     SafeResourceLoader.getString(
                             "NODE_SERIALIZATION_FAILED", FactoryStrings.bundle()),
@@ -231,10 +311,16 @@ public class TreeBinarySerialization {
     private static List<Boolean> readBooleanArray(InputStream input, ReadCount readCount)
             throws IOException {
 
-        List<Boolean> result = new ArrayList<>();
-
         final int booleanCount = TreeBinarySerialization.readInteger(input, readCount);
-        final int byteCount = (int) Math.ceil(booleanCount / 8.0f);
+        if (booleanCount > MAX_BOOLEANS) {
+            throw new IOException(
+                    SafeResourceLoader.getStringFormatted(
+                            "NODE_BAD_SIZE", FactoryStrings.bundle(), "" + booleanCount));
+        }
+        TreeBinarySerialization.checkCount(booleanCount, 0, readCount);
+        final int byteCount = (booleanCount + 7) / 8;
+
+        List<Boolean> result = new ArrayList<>(booleanCount);
 
         byte[] data = TreeBinarySerialization.readBytes(input, byteCount, readCount);
 
@@ -280,9 +366,10 @@ public class TreeBinarySerialization {
     private static List<Byte> readByteArray(InputStream input, ReadCount readCount)
             throws IOException {
 
-        List<Byte> result = new ArrayList<>();
-
         final int size = TreeBinarySerialization.readInteger(input, readCount);
+        TreeBinarySerialization.checkCount(size, 1, readCount);
+
+        List<Byte> result = new ArrayList<>(size);
 
         for (int i = 0; i < size; ++i) {
             result.add(TreeBinarySerialization.readByte(input, readCount));
@@ -304,10 +391,16 @@ public class TreeBinarySerialization {
     private static byte[] readBytes(InputStream input, int count, ReadCount readCount)
             throws IOException {
 
+        if (count < 0) {
+            throw new IOException(
+                    SafeResourceLoader.getStringFormatted(
+                            "NODE_BAD_SIZE", FactoryStrings.bundle(), "" + count));
+        }
         final int toRead = (int) Math.min(count, readCount.getRemaining());
 
-        byte[] output = new byte[toRead];
-        int actuallyRead = input.read(output);
+        // read() may return fewer bytes than asked even when more are coming
+        byte[] output = input.readNBytes(toRead);
+        int actuallyRead = output.length;
         readCount.recordRead(actuallyRead);
 
         if (actuallyRead < count) {
@@ -333,9 +426,10 @@ public class TreeBinarySerialization {
     private static List<Double> readDoubleArray(InputStream input, ReadCount readCount)
             throws IOException {
 
-        List<Double> result = new ArrayList<>();
-
         final int size = TreeBinarySerialization.readInteger(input, readCount);
+        TreeBinarySerialization.checkCount(size, 8, readCount);
+
+        List<Double> result = new ArrayList<>(size);
 
         for (int i = 0; i < size; ++i) {
             result.add(Double.longBitsToDouble(TreeBinarySerialization.readLong(input, readCount)));
@@ -355,9 +449,10 @@ public class TreeBinarySerialization {
     private static List<Float> readFloatArray(InputStream input, ReadCount readCount)
             throws IOException {
 
-        List<Float> result = new ArrayList<>();
-
         final int size = TreeBinarySerialization.readInteger(input, readCount);
+        TreeBinarySerialization.checkCount(size, 4, readCount);
+
+        List<Float> result = new ArrayList<>(size);
 
         for (int i = 0; i < size; ++i) {
             result.add(Float.intBitsToFloat(TreeBinarySerialization.readInteger(input, readCount)));
@@ -399,9 +494,10 @@ public class TreeBinarySerialization {
     private static List<Integer> readIntegerArray(InputStream input, ReadCount readCount)
             throws IOException {
 
-        List<Integer> result = new ArrayList<>();
-
         final int size = TreeBinarySerialization.readInteger(input, readCount);
+        TreeBinarySerialization.checkCount(size, 4, readCount);
+
+        List<Integer> result = new ArrayList<>(size);
 
         for (int i = 0; i < size; ++i) {
             result.add(TreeBinarySerialization.readInteger(input, readCount));
@@ -443,9 +539,10 @@ public class TreeBinarySerialization {
     private static List<Long> readLongArray(InputStream input, ReadCount readCount)
             throws IOException {
 
-        List<Long> result = new ArrayList<>();
-
         final int size = TreeBinarySerialization.readInteger(input, readCount);
+        TreeBinarySerialization.checkCount(size, 8, readCount);
+
+        List<Long> result = new ArrayList<>(size);
 
         for (int i = 0; i < size; ++i) {
             result.add(TreeBinarySerialization.readLong(input, readCount));
@@ -465,10 +562,12 @@ public class TreeBinarySerialization {
     private static long readLongDirectly(InputStream input) throws IOException {
         final int BYTES = 8;
 
-        byte[] data = new byte[BYTES];
+        byte[] data = input.readNBytes(BYTES);
 
-        if (input.read(data) < 8) {
-            throw new IOException();
+        if (data.length < BYTES) {
+            throw new IOException(
+                    SafeResourceLoader.getStringFormatted(
+                            "NODE_OUT_OF_DATA", FactoryStrings.bundle(), "" + BYTES, "" + data.length));
         }
 
         long value = 0;
@@ -507,9 +606,7 @@ public class TreeBinarySerialization {
      */
     private static Node readNode(InputStream input, ReadCount count, long size) throws IOException {
 
-        ReadCount subCount = new ReadCount(size);
-        subCount.recordRead(8);
-        subCount.setParent(count);
+        ReadCount subCount = TreeBinarySerialization.nested(size, count, NODE_HEADER_BYTES);
 
         Node result = new Node();
         while (!subCount.isDone()) {
@@ -601,15 +698,15 @@ public class TreeBinarySerialization {
     private static List<Node> readNodeArray(InputStream input, ReadCount readCount)
             throws IOException {
 
-        List<Node> result = new ArrayList<>();
-
         final long sizeInBytes = TreeBinarySerialization.readLong(input, readCount);
 
-        ReadCount arrayCount = new ReadCount(sizeInBytes);
-        arrayCount.recordRead(8);
-        arrayCount.setParent(readCount);
+        ReadCount arrayCount =
+                TreeBinarySerialization.nested(sizeInBytes, readCount, ARRAY_HEADER_BYTES);
 
         final int size = TreeBinarySerialization.readInteger(input, arrayCount);
+        TreeBinarySerialization.checkCount(size, NODE_HEADER_BYTES, arrayCount);
+
+        List<Node> result = new ArrayList<>(size);
 
         for (int i = 0; i < size; ++i) {
             result.add(TreeBinarySerialization.readNode(input, arrayCount));
@@ -651,9 +748,10 @@ public class TreeBinarySerialization {
     private static List<Short> readShortArray(InputStream input, ReadCount readCount)
             throws IOException {
 
-        List<Short> result = new ArrayList<>();
-
         final int size = TreeBinarySerialization.readInteger(input, readCount);
+        TreeBinarySerialization.checkCount(size, 2, readCount);
+
+        List<Short> result = new ArrayList<>(size);
 
         for (int i = 0; i < size; ++i) {
             result.add(TreeBinarySerialization.readShort(input, readCount));
@@ -689,14 +787,14 @@ public class TreeBinarySerialization {
     private static List<String> readStringArray(InputStream input, ReadCount readCount)
             throws IOException {
 
-        List<String> result = new ArrayList<>();
-
         final long sizeInBytes = TreeBinarySerialization.readLong(input, readCount);
-        ReadCount arrayCount = new ReadCount(sizeInBytes);
-        arrayCount.recordRead(8);
-        arrayCount.setParent(readCount);
+        ReadCount arrayCount =
+                TreeBinarySerialization.nested(sizeInBytes, readCount, ARRAY_HEADER_BYTES);
 
         final int size = TreeBinarySerialization.readInteger(input, arrayCount);
+        TreeBinarySerialization.checkCount(size, STRING_HEADER_BYTES, arrayCount);
+
+        List<String> result = new ArrayList<>(size);
 
         for (int i = 0; i < size; ++i) {
             result.add(TreeBinarySerialization.readString(input, arrayCount));
