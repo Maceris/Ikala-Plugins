@@ -387,7 +387,7 @@ public final class ScenePlacement {
      * @param origin Where positions are measured from.
      * @return The baked copy.
      */
-    static MeshData bakeMesh(
+    public static MeshData bakeMesh(
             @NonNull MeshData source, @NonNull Matrix4dc world, @NonNull Vector3d origin) {
         final Matrix4d relative = new Matrix4d().translation(origin.negate(new Vector3d()));
         relative.mul(world);
@@ -453,7 +453,7 @@ public final class ScenePlacement {
      * @param source The imported material.
      * @return The material.
      */
-    private static Material material(ImportedMaterial source) {
+    public static Material material(@NonNull ImportedMaterial source) {
         Material material = new Material();
         material.getBaseColor().set(source.color());
         material.setRoughness(Float.isNaN(source.roughness()) ? 0.5f : source.roughness());
