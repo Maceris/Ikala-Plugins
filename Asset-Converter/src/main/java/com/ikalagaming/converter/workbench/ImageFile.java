@@ -62,8 +62,8 @@ public record ImageFile(
     public static final int MAX_SIDE = 16_384;
 
     /**
-     * The most pixels an image stb decodes may have, 2^28 (16384 x 16384), so a forged header
-     * can't make it allocate without bound.
+     * The most pixels an image stb decodes may have, 2^28 (16384 x 16384), so a forged header can't
+     * make it allocate without bound.
      */
     public static final long MAX_PIXELS = 1L << 28;
 
@@ -202,8 +202,7 @@ public record ImageFile(
             IntBuffer height = stack.mallocInt(1);
             IntBuffer channels = stack.mallocInt(1);
             if (!STBImage.stbi_info_from_memory(encoded, width, height, channels)) {
-                throw new IOException(
-                        CANT_DECODE + path.getFileName() + ": " + failureReason());
+                throw new IOException(CANT_DECODE + path.getFileName() + ": " + failureReason());
             }
             final Depth depth;
             if (STBImage.stbi_is_hdr_from_memory(encoded)) {
@@ -216,8 +215,7 @@ public record ImageFile(
             checkSize(path, width.get(0), height.get(0), depth);
             final ByteBuffer pixels = decode(encoded, depth, width, height, channels);
             if (pixels == null) {
-                throw new IOException(
-                        CANT_DECODE + path.getFileName() + ": " + failureReason());
+                throw new IOException(CANT_DECODE + path.getFileName() + ": " + failureReason());
             }
             return new ImageFile(
                     path,

@@ -244,8 +244,7 @@ class LodCellFileTest {
         final AssetWriter writer = new AssetWriter().metadata(valid.metadata());
         for (Map.Entry<Integer, ByteBuffer> entry : payloads.entrySet()) {
             final int tag = entry.getKey();
-            final int version =
-                    valid.section(tag).map(Section::version).orElse(versionOf(tag));
+            final int version = valid.section(tag).map(Section::version).orElse(versionOf(tag));
             writer.section(tag, version, true, entry.getValue());
         }
         return writer.toBuffer();

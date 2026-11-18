@@ -19,11 +19,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Slf4j
 public class Server {
     private World loadedWorld;
+
     /**
      * The definitions loaded for this run. Replaced on each start; read by event handlers on the
      * event thread.
      */
     @Getter private volatile Registries registries;
+
     private final AtomicBoolean running;
     private final List<ServerBoundRequestHandler> activeConnections;
 

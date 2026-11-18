@@ -154,8 +154,8 @@ public final class CharacterRegistry {
      * @param namespace The namespace of the definition that names it.
      * @param path The asset's path, with / between folders.
      * @return The file, or null if the namespace has no folder on disk, like the built-in content
-     *     inside the plugin, or if the path would leave the folder (which is logged). An empty
-     *     path is the folder itself.
+     *     inside the plugin, or if the path would leave the folder (which is logged). An empty path
+     *     is the folder itself.
      */
     public Path asset(@NonNull String namespace, @NonNull String path) {
         Path root = roots.get(namespace);
@@ -167,7 +167,10 @@ public final class CharacterRegistry {
         }
         Path file = FileUtils.resolveInside(root, path).orElse(null);
         if (file == null) {
-            log.warn("Ignoring the asset path '{}' in {}: it leaves the content folder", path, namespace);
+            log.warn(
+                    "Ignoring the asset path '{}' in {}: it leaves the content folder",
+                    path,
+                    namespace);
         }
         return file;
     }

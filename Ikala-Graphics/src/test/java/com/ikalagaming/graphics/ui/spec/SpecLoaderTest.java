@@ -276,7 +276,8 @@ class SpecLoaderTest {
                 folder.resolve("common.yml"),
                 "templates:\n  shared: { node: { type: label, id: shared, text: Shared } }\n");
         Path menus = Files.createDirectory(folder.resolve("menus"));
-        for (String escape : new String[] {"../common.yml", folder.resolve("common.yml").toString()}) {
+        for (String escape :
+                new String[] {"../common.yml", folder.resolve("common.yml").toString()}) {
             Path spec = menus.resolve("menu.yml");
             Files.writeString(
                     spec,
@@ -285,7 +286,8 @@ class SpecLoaderTest {
                             + escape
                             + "']\ncontent: { use: shared }\n");
             SpecException thrown = assertThrows(SpecException.class, () -> SpecLoader.load(spec));
-            assertTrue(thrown.getMessage().contains("outside the spec's folder"), thrown::getMessage);
+            assertTrue(
+                    thrown.getMessage().contains("outside the spec's folder"), thrown::getMessage);
         }
     }
 

@@ -451,7 +451,11 @@ public final class LodCellFile {
                         final int size = in.getInt(at);
                         if (size < CLUSTER_HEADER_BYTES || size > in.remaining()) {
                             throw new IllegalArgumentException(
-                                    file + "'s cluster " + i + " has a record of " + size
+                                    file
+                                            + "'s cluster "
+                                            + i
+                                            + " has a record of "
+                                            + size
                                             + " bytes");
                         }
                         in.position(at + size);

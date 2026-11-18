@@ -54,8 +54,7 @@ class TestShownCharacterImages {
         for (int[] size : sizes) {
             byte[] png = forgedPng(size[0], size[1]);
             IOException thrown =
-                    Assertions.assertThrows(
-                            IOException.class, () -> ShownCharacter.readImage(png));
+                    Assertions.assertThrows(IOException.class, () -> ShownCharacter.readImage(png));
             Assertions.assertTrue(thrown.getMessage().contains("size limit"), thrown.getMessage());
         }
     }

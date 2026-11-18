@@ -325,7 +325,8 @@ public class SceneView {
         // The debug stage draws the selection's outline
         GraphicsManager.swapPipeline(RenderConfig.WORLD.withDebug(true));
         scene.getSceneLights()
-                .setDirLight(new DirectionalLight(
+                .setDirLight(
+                        new DirectionalLight(
                                 // Copies, since the lighting panel edits the light's in place
                                 new Vector3f(SUN_COLOR),
                                 new Vector3f(SUN_DIRECTION),

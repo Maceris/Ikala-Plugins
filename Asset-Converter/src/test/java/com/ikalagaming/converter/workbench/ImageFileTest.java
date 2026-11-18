@@ -228,8 +228,7 @@ class ImageFileTest {
         assertTrue(thrown.getMessage().contains("size limit"), thrown.getMessage());
 
         assertThrows(
-                IOException.class,
-                () -> ImageFile.checkSize(wide, 0, 1, ImageFile.Depth.UNORM8));
+                IOException.class, () -> ImageFile.checkSize(wide, 0, 1, ImageFile.Depth.UNORM8));
         assertThrows(
                 IOException.class,
                 () -> ImageFile.checkSize(wide, 1, ImageFile.MAX_SIDE + 1, ImageFile.Depth.UNORM8));

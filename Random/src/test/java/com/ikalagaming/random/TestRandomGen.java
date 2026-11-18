@@ -310,8 +310,7 @@ class TestRandomGen {
 
                         Assertions.assertEquals(
                                 0,
-                                RandomGen.selectUpToWeight(List.of(Integer.MIN_VALUE), 100)
-                                        .size());
+                                RandomGen.selectUpToWeight(List.of(Integer.MIN_VALUE), 100).size());
                     }
                 });
     }

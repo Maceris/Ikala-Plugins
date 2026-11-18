@@ -37,8 +37,7 @@ class TextureLoaderVulkanTest {
     @Test
     void testShortDataIsRefused() {
         final ByteBuffer exact = ByteBuffer.allocate(4 * 4 * 4);
-        assertDoesNotThrow(
-                () -> TextureLoaderVulkan.checkData(exact, Format.R8G8B8A8_UNORM, 4, 4));
+        assertDoesNotThrow(() -> TextureLoaderVulkan.checkData(exact, Format.R8G8B8A8_UNORM, 4, 4));
         assertDoesNotThrow(() -> TextureLoaderVulkan.checkData(null, Format.R8G8B8A8_UNORM, 4, 4));
 
         final ByteBuffer moved = ByteBuffer.allocate(4 * 4 * 4).position(1);
@@ -61,7 +60,10 @@ class TextureLoaderVulkanTest {
                 IllegalArgumentException.class,
                 () ->
                         TextureLoaderVulkan.checkData(
-                                ByteBuffer.allocate(16), Format.R32G32B32A32_SFLOAT, 16384, 16384));
+                                ByteBuffer.allocate(16),
+                                Format.R32G32B32A32_SFLOAT,
+                                16_384,
+                                16_384));
         assertThrows(
                 IllegalArgumentException.class,
                 () ->

@@ -129,9 +129,9 @@ public final class LodCache {
     }
 
     /**
-     * Read a cell, if it is there and sound. A file that breaks the format is a miss, and is deleted
-     * so the cell's next build replaces it. A file that can't be read right now, like one another
-     * thread is replacing, is a miss but is kept.
+     * Read a cell, if it is there and sound. A file that breaks the format is a miss, and is
+     * deleted so the cell's next build replaces it. A file that can't be read right now, like one
+     * another thread is replacing, is a miss but is kept.
      *
      * @param key The cell's cache key.
      * @param builderVersion The builder version it must have.

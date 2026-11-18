@@ -69,7 +69,7 @@ public final class DdsFile {
      * it keeps a forged header's size math far from overflowing; it also caps the mip chain at 15
      * levels.
      */
-    static final int MAX_DIMENSION = 16384;
+    static final int MAX_DIMENSION = 16_384;
 
     /**
      * The most bytes the levels may take once loaded, since the data is one buffer indexed by int.
@@ -474,8 +474,7 @@ public final class DdsFile {
     public static long byteCount(@NonNull Format format, int width, int height) {
         final int block = blockBytes(format);
         if (block > 0) {
-            final long blocks =
-                    Math.multiplyExact(((long) width + 3) / 4, ((long) height + 3) / 4);
+            final long blocks = Math.multiplyExact(((long) width + 3) / 4, ((long) height + 3) / 4);
             return Math.multiplyExact(blocks, block);
         }
         return Math.multiplyExact(Math.multiplyExact((long) width, height), pixelBytes(format));

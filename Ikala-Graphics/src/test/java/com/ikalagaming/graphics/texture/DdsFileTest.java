@@ -243,7 +243,7 @@ class DdsFileTest {
     @Test
     void testByteCountsDoNotWrap() {
         // Exactly 2^32, which an int holds as 0
-        assertEquals(1L << 32, DdsFile.byteCount(Format.R32G32B32A32_SFLOAT, 16384, 16384));
+        assertEquals(1L << 32, DdsFile.byteCount(Format.R32G32B32A32_SFLOAT, 16_384, 16_384));
         assertEquals(
                 (long) Integer.MAX_VALUE * Integer.MAX_VALUE,
                 DdsFile.byteCount(Format.R8_UNORM, Integer.MAX_VALUE, Integer.MAX_VALUE));
@@ -299,8 +299,8 @@ class DdsFileTest {
     void testForgedTwentyFourBitSizeIsRefused() {
         ByteBuffer bytes =
                 file(
-                        16384,
-                        16384,
+                        16_384,
+                        16_384,
                         1,
                         DdsFile.PIXEL_RGB,
                         0,
@@ -322,12 +322,12 @@ class DdsFileTest {
             expected +=
                     DdsFile.byteCount(
                             Format.BC1_RGBA_UNORM_BLOCK,
-                            DdsFile.levelSize(16384, level),
+                            DdsFile.levelSize(16_384, level),
                             DdsFile.levelSize(4, level));
         }
         ByteBuffer bytes =
                 file(
-                        16384,
+                        16_384,
                         4,
                         99,
                         DdsFile.PIXEL_FOURCC,
