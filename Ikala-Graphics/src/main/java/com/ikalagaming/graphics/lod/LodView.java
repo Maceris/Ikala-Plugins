@@ -5,6 +5,7 @@ import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.InstanceHandle;
 import com.ikalagaming.graphics.LodHandle;
+import com.ikalagaming.graphics.ThreadStops;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
@@ -337,7 +338,10 @@ public final class LodView implements AutoCloseable {
         this.graphics = graphics;
         this.name = name;
         this.dag = dag;
-        worker = Executors.newSingleThreadExecutor(DagBuilder.daemonThreads("LOD view " + name));
+        worker =
+                ThreadStops.track(
+                        Executors.newSingleThreadExecutor(
+                                DagBuilder.daemonThreads("LOD view " + name)));
         double radius = 0;
         for (LodDag.Cluster cluster : dag.clusters()) {
             if (dag.consumer(cluster.id()) < 0) {
@@ -981,7 +985,7 @@ public final class LodView implements AutoCloseable {
     @Override
     public void close() {
         closed = true;
-        worker.shutdownNow();
+        ThreadStops.stop(worker, ThreadStops.STOP_WAIT, "LOD view worker");
         final Scene scene = GraphicsManager.getScene();
         if (scene == null) {
             return;

@@ -25,6 +25,7 @@ import com.ikalagaming.graphics.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
+import com.ikalagaming.plugins.PluginThreads;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -35,7 +36,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -188,18 +188,8 @@ final class LabPreview implements AutoCloseable {
         lod = new LabLod(graphics, this::composeAgain);
         // At least two: one build waits on the chunks the others generate
         final int count = Math.max(2, Runtime.getRuntime().availableProcessors() - 1);
-        final AtomicInteger threads = new AtomicInteger();
-        workers =
-                Executors.newFixedThreadPool(
-                        count,
-                        runnable -> {
-                            Thread thread =
-                                    new Thread(
-                                            runnable,
-                                            "Worldgen Lab preview " + threads.incrementAndGet());
-                            thread.setDaemon(true);
-                            return thread;
-                        });
+        // Owned by the plugin, so they stop when it unloads even if the Lab is never closed
+        workers = PluginThreads.fixedPool(graphics.getOwner(), "lab-preview", count);
     }
 
     /**
@@ -845,6 +835,18 @@ final class LabPreview implements AutoCloseable {
             GraphicsManager.getUiManager().post(() -> restoreScene(sun, ambient, pipeline));
         }
         blockMeshes.removeMaterials();
+    }
+
+    /**
+     * Wait for the build threads to stop after {@link #stop()}.
+     *
+     * @param deadline When to give up, from {@link System#nanoTime()}.
+     * @return True if they stopped in time.
+     * @throws InterruptedException If interrupted while waiting.
+     */
+    boolean awaitStopped(long deadline) throws InterruptedException {
+        return workers.awaitTermination(
+                Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
     }
 
     /** Stop, remove the sections, and release the meshes. Render thread. */

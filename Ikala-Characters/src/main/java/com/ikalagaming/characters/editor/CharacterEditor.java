@@ -66,6 +66,7 @@ import com.ikalagaming.graphics.ui.spec.Observable;
 import com.ikalagaming.graphics.ui.spec.SpecBindings;
 import com.ikalagaming.graphics.ui.spec.SpecInstance;
 import com.ikalagaming.graphics.ui.spec.SpecLoader;
+import com.ikalagaming.plugins.PluginThreads;
 import com.ikalagaming.random.SeededRandom;
 
 import com.google.gson.GsonBuilder;
@@ -95,6 +96,9 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -302,6 +306,21 @@ public final class CharacterEditor {
 
     /** The plugin's name, which owns what is shown. */
     private final String plugin;
+
+    /** What the build threads are named after the plugin's name. */
+    private static final String BUILDS_NAME = "character-builds";
+
+    /** How many designs and clip sets build at once. */
+    private static final int BUILD_THREADS = 2;
+
+    /** How long {@link #stopWork()} waits for builds in flight, in milliseconds. */
+    private static final long STOP_WAIT_MS = 1000;
+
+    /**
+     * Builds designs and reads clip files off the render thread. Owned by the plugin, so unloading
+     * stops it even if {@link #stopWork()} isn't called.
+     */
+    private final ExecutorService builds;
 
     /** The loaded definitions. */
     private final Supplier<CharacterRegistry> registry;
@@ -778,6 +797,7 @@ public final class CharacterEditor {
             @NonNull Supplier<EditorSettings> settings) {
         this.graphics = graphics;
         this.plugin = plugin;
+        builds = PluginThreads.fixedPool(plugin, BUILDS_NAME, BUILD_THREADS);
         this.registry = registry;
         this.settings = settings;
         stage = new CharacterStage(graphics);
@@ -909,11 +929,16 @@ public final class CharacterEditor {
         final CharacterRegistry definitions = registry.get();
         final int load = ++loads;
         characterName.set("Loading " + design.id() + "...");
-        CompletableFuture.supplyAsync(
-                        () -> Prepared.build(design, definitions, reference, readFiles))
-                .whenComplete(
-                        (built, failure) ->
-                                graphics.ui().post(() -> loaded(load, design, built, failure)));
+        try {
+            CompletableFuture.supplyAsync(
+                            () -> Prepared.build(design, definitions, reference, readFiles), builds)
+                    .whenComplete(
+                            (built, failure) ->
+                                    graphics.ui().post(() -> loaded(load, design, built, failure)));
+        } catch (RejectedExecutionException e) {
+            // The plugin is being disabled, and the editor is about to close
+            characterName.set("Closing...");
+        }
     }
 
     /**
@@ -1034,6 +1059,7 @@ public final class CharacterEditor {
                 motionStyles,
                 current.reference(),
                 shown,
+                builds,
                 task -> graphics.ui().post(task));
     }
 
@@ -3088,6 +3114,60 @@ public final class CharacterEditor {
         rested.clear();
         stage.leave();
         goBack.run();
+    }
+
+    /**
+     * Let go of the editor after the plugin's graphics closed, as when the plugin is disabled after
+     * them: stop the shown character's timer and forget what was shown, without touching the UI or
+     * anything else on the GPU, which went with the graphics. Doesn't go back to what opened it.
+     * Call on the thread disabling the plugin, since the render thread is gone.
+     */
+    public void abandon() {
+        if (back == null) {
+            return;
+        }
+        back = null;
+        ++loads;
+        panels.clear();
+        if (shown != null) {
+            // Stops its timer, and skips releasing graphics once they are closed
+            shown.close();
+            shown = null;
+        }
+        motion.detach();
+        shownEffects = null;
+        shownUses = List.of();
+        look = null;
+        prepared = null;
+        readFiles.clear();
+        shownFx = List.of();
+        if (fxEffects != null) {
+            // Skips unloading effects once graphics are closed
+            fxEffects.close();
+            fxEffects = null;
+        }
+        regions = null;
+        categories = null;
+        openCategory = -1;
+        lastWorn = List.of();
+        pushed.clear();
+        rested.clear();
+    }
+
+    /**
+     * Stop building designs and reading clips, when the plugin is disabled. Builds in flight are
+     * interrupted and waited for briefly; ones not started are dropped. Doesn't need graphics, and
+     * can be called from any thread. The editor can't show designs afterward.
+     */
+    public void stopWork() {
+        builds.shutdownNow();
+        try {
+            if (!builds.awaitTermination(STOP_WAIT_MS, TimeUnit.MILLISECONDS)) {
+                log.warn("Character editor builds did not stop in time");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     /**

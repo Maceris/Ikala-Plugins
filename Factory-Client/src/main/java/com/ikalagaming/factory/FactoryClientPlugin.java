@@ -96,6 +96,11 @@ public class FactoryClientPlugin extends Plugin {
 
     @Override
     public boolean onDisable() {
+        var graphics = GraphicsManager.forPlugin(getName());
+        if (!graphics.isClosed()) {
+            // Otherwise menus keep offering it, and opening it builds a Lab while disabled
+            graphics.ui().removeTool(WorldgenLab.SURFACE_ID);
+        }
         if (labTool != null) {
             labTool.close();
             labTool = null;

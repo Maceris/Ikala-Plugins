@@ -5,6 +5,7 @@ import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
+import com.ikalagaming.graphics.ThreadStops;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.WaterRegistry;
 import com.ikalagaming.graphics.scene.WaterTile;
@@ -403,6 +404,11 @@ public class WaterRender implements RenderStage {
 
     @Override
     public void cleanup(@NonNull VulkanState state) {
+        // The mesh builder ends before anything it could hand over is freed
+        if (builder != null) {
+            ThreadStops.stop(builder, ThreadStops.STOP_WAIT, "water mesh builder");
+            builder = null;
+        }
         for (SharedBuffer[] buffers :
                 new SharedBuffer[][] {
                     vertexBuffers,
@@ -420,10 +426,6 @@ public class WaterRender implements RenderStage {
             }
         }
         Arrays.fill(vertexVersions, -1);
-        if (builder != null) {
-            builder.shutdownNow();
-            builder = null;
-        }
         building = null;
         seenVersion = version;
         vkDestroyPipeline(state.device.logical, pipeline, null);
@@ -551,12 +553,14 @@ public class WaterRender implements RenderStage {
             final List<WaterTile> snapshot = List.copyOf(seenTiles);
             if (builder == null) {
                 builder =
-                        Executors.newSingleThreadExecutor(
-                                runnable -> {
-                                    final Thread thread = new Thread(runnable, "Water mesh");
-                                    thread.setDaemon(true);
-                                    return thread;
-                                });
+                        ThreadStops.track(
+                                Executors.newSingleThreadExecutor(
+                                        runnable -> {
+                                            final Thread thread =
+                                                    new Thread(runnable, "Water mesh");
+                                            thread.setDaemon(true);
+                                            return thread;
+                                        }));
             }
             building = CompletableFuture.supplyAsync(() -> build(now, snapshot), builder);
         }

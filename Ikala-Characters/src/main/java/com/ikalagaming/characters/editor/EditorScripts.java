@@ -2,19 +2,24 @@ package com.ikalagaming.characters.editor;
 
 import com.ikalagaming.characters.pose.WingMotion;
 import com.ikalagaming.graphics.GraphicsContext;
+import com.ikalagaming.plugins.PluginThreads;
 import com.ikalagaming.scripting.ScriptManager;
 import com.ikalagaming.scripting.interpreter.ScriptRuntime;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 
 /**
@@ -55,17 +60,29 @@ public final class EditorScripts {
     /** Prefix of the tags {@link #settle()} resumes with. */
     private static final String TAG_PREFIX = "characters/";
 
+    /** Why a call failed while the plugin is disabled. */
+    private static final String NOT_LOADED = "The character editor isn't loaded";
+
     /** Numbers the tags, so each wait's is unique. */
     private static final AtomicInteger NEXT_TAG = new AtomicInteger();
 
-    /** Looks for {@link #settle()}, on one daemon thread. */
-    private static final ScheduledExecutorService POLLER =
-            Executors.newSingleThreadScheduledExecutor(
-                    work -> {
-                        Thread thread = new Thread(work, "characters-script-settle");
-                        thread.setDaemon(true);
-                        return thread;
-                    });
+    /** What the thread that looks for {@link #settle()} is named after its plugin's name. */
+    static final String POLLER_NAME = "script-settle";
+
+    /** How long {@link #stopPolling()} waits for a look in flight, in milliseconds. */
+    private static final long STOP_WAIT_MS = 1000;
+
+    /** Guards starting and stopping the poller. */
+    private static final ReentrantLock POLLER_LOCK = new ReentrantLock();
+
+    /**
+     * Looks for {@link #settle()}, on one thread owned by the plugin, while it is enabled; null
+     * while disabled.
+     */
+    private static volatile ScheduledExecutorService poller;
+
+    /** The scripts waiting in {@link #settle()}, by the tag they wait for. */
+    private static final Map<String, ScriptRuntime> WAITING = new ConcurrentHashMap<>();
 
     /**
      * The editor and its plugin's graphics, while the plugin is enabled.
@@ -91,6 +108,65 @@ public final class EditorScripts {
     }
 
     /**
+     * Start the thread that {@link #settle()} looks on, owned by the plugin so it stops with it.
+     * Nothing happens if it is running.
+     *
+     * @param owner The plugin's name.
+     */
+    public static void startPolling(@NonNull String owner) {
+        POLLER_LOCK.lock();
+        try {
+            if (poller == null) {
+                poller = PluginThreads.scheduled(owner, POLLER_NAME);
+            }
+        } finally {
+            POLLER_LOCK.unlock();
+        }
+    }
+
+    /**
+     * Stop the thread that {@link #settle()} looks on, when the plugin is disabled. Scripts still
+     * waiting for the editor to settle are stopped, since nothing would resume them.
+     */
+    public static void stopPolling() {
+        ScheduledExecutorService stopping;
+        POLLER_LOCK.lock();
+        try {
+            stopping = poller;
+            poller = null;
+        } finally {
+            POLLER_LOCK.unlock();
+        }
+        if (stopping == null) {
+            return;
+        }
+        stopping.shutdownNow();
+        try {
+            if (!stopping.awaitTermination(STOP_WAIT_MS, TimeUnit.MILLISECONDS)) {
+                log.warn("The character editor's script poller did not stop in time");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        for (String tag : List.copyOf(WAITING.keySet())) {
+            ScriptRuntime runtime = WAITING.remove(tag);
+            if (runtime != null) {
+                log.warn("Script: the character editor closed while it waited to settle");
+                ScriptManager.terminate(runtime);
+            }
+        }
+    }
+
+    /**
+     * The executor {@link #settle()} looks on, for tests.
+     *
+     * @return The executor between {@link #startPolling} and {@link #stopPolling}, otherwise null.
+     */
+    static ScheduledExecutorService poller() {
+        return poller;
+    }
+
+    /**
      * Show a design by its ID. It loads on another thread; {@link #settle()} waits for it.
      *
      * @param id The design's ID, like "characters:design/fighter".
@@ -106,7 +182,7 @@ public final class EditorScripts {
      * Wait until the design asked for last is on the stage, or failed to load.
      *
      * @return The tag to await.
-     * @throws IllegalStateException If not called from a script.
+     * @throws IllegalStateException If not called from a script, or the plugin is disabled.
      */
     public static String settle() {
         final ScriptRuntime runtime =
@@ -115,30 +191,48 @@ public final class EditorScripts {
                                 () ->
                                         new IllegalStateException(
                                                 "characters.settle() is only for scripts"));
+        final ScheduledExecutorService looking = poller;
+        if (looking == null) {
+            throw new IllegalStateException(NOT_LOADED);
+        }
         final String tag = TAG_PREFIX + NEXT_TAG.incrementAndGet();
         final long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(SETTLE_TIMEOUT_SECONDS);
-        POLLER.schedule(
-                new Runnable() {
-                    @Override
-                    public void run() {
-                        boolean settled;
-                        try {
-                            settled = call(CharacterEditor::isSettled);
-                        } catch (IllegalStateException e) {
-                            settled = false;
+        WAITING.put(tag, runtime);
+        try {
+            looking.schedule(
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            boolean settled;
+                            try {
+                                settled = call(CharacterEditor::isSettled);
+                            } catch (IllegalStateException e) {
+                                settled = false;
+                            }
+                            if (settled) {
+                                if (WAITING.remove(tag) != null) {
+                                    ScriptManager.resume(runtime, tag, true);
+                                }
+                            } else if (System.nanoTime() > deadline) {
+                                log.warn("Script: the character editor never settled, stopping it");
+                                if (WAITING.remove(tag) != null) {
+                                    ScriptManager.terminate(runtime);
+                                }
+                            } else {
+                                try {
+                                    looking.schedule(this, SETTLE_POLL_MS, TimeUnit.MILLISECONDS);
+                                } catch (RejectedExecutionException e) {
+                                    // Stopping; stopPolling() stops the script
+                                }
+                            }
                         }
-                        if (settled) {
-                            ScriptManager.resume(runtime, tag, true);
-                        } else if (System.nanoTime() > deadline) {
-                            log.warn("Script: the character editor never settled, stopping it");
-                            ScriptManager.terminate(runtime);
-                        } else {
-                            POLLER.schedule(this, SETTLE_POLL_MS, TimeUnit.MILLISECONDS);
-                        }
-                    }
-                },
-                SETTLE_POLL_MS,
-                TimeUnit.MILLISECONDS);
+                    },
+                    SETTLE_POLL_MS,
+                    TimeUnit.MILLISECONDS);
+        } catch (RejectedExecutionException e) {
+            WAITING.remove(tag);
+            throw new IllegalStateException(NOT_LOADED, e);
+        }
         return tag;
     }
 
@@ -326,7 +420,7 @@ public final class EditorScripts {
     private static boolean call(Function<CharacterEditor, Boolean> work) {
         final Target to = target;
         if (to == null || to.graphics().isClosed()) {
-            throw new IllegalStateException("The character editor isn't loaded");
+            throw new IllegalStateException(NOT_LOADED);
         }
         CompletableFuture<Boolean> done = new CompletableFuture<>();
         to.graphics()

@@ -5,6 +5,7 @@ import static org.lwjgl.vulkan.VK12.vkCmdDrawIndexedIndirectCount;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MeshHandle;
+import com.ikalagaming.graphics.ThreadStops;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.lod.ClusterBodies;
 import com.ikalagaming.graphics.lod.ClusterFile;
@@ -2568,16 +2569,18 @@ public class LodRenderer {
         if (streamer == null) {
             final AtomicInteger count = new AtomicInteger();
             streamer =
-                    Executors.newFixedThreadPool(
-                            STREAM_THREADS,
-                            runnable -> {
-                                final Thread thread =
-                                        new Thread(
-                                                runnable, "LOD stream " + count.incrementAndGet());
-                                thread.setDaemon(true);
-                                thread.setPriority(Thread.MIN_PRIORITY);
-                                return thread;
-                            });
+                    ThreadStops.track(
+                            Executors.newFixedThreadPool(
+                                    STREAM_THREADS,
+                                    runnable -> {
+                                        final Thread thread =
+                                                new Thread(
+                                                        runnable,
+                                                        "LOD stream " + count.incrementAndGet());
+                                        thread.setDaemon(true);
+                                        thread.setPriority(Thread.MIN_PRIORITY);
+                                        return thread;
+                                    }));
         }
         return streamer;
     }
@@ -3756,7 +3759,8 @@ public class LodRenderer {
      */
     public void cleanup(@NonNull VulkanState state) {
         if (streamer != null) {
-            streamer.shutdownNow();
+            // Its tasks read the worlds' pieces, so they end before those are dropped
+            ThreadStops.stop(streamer, ThreadStops.STOP_WAIT, "LOD streamers");
             streamer = null;
         }
         lock.lock();

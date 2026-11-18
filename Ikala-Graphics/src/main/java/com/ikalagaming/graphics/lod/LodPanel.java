@@ -276,25 +276,27 @@ public final class LodPanel implements AutoCloseable {
      * @return The flattened DAG.
      */
     private static LodDag inCells(@NonNull List<LodMesh> sections) {
-        final LodStore store =
+        // Closed once built, so its workers don't wait out their idle time
+        try (LodStore store =
                 new LodStore(
                         new double[AXES],
                         Sections.SECTION_SIZE,
                         LodStore.DEFAULT_CELL_SECTIONS,
                         LodStore.DEFAULT_STOP_AT,
                         DagBuilder.Options.defaults(),
-                        LodCache.fromSettings());
-        for (LodMesh mesh : sections) {
-            final double[] origin = mesh.getOrigin();
-            store.put(
-                    new LodStore.SectionPos(
-                            (int) Math.floor(origin[0] / Sections.SECTION_SIZE),
-                            (int) Math.floor(origin[1] / Sections.SECTION_SIZE),
-                            (int) Math.floor(origin[2] / Sections.SECTION_SIZE)),
-                    mesh);
+                        LodCache.fromSettings())) {
+            for (LodMesh mesh : sections) {
+                final double[] origin = mesh.getOrigin();
+                store.put(
+                        new LodStore.SectionPos(
+                                (int) Math.floor(origin[0] / Sections.SECTION_SIZE),
+                                (int) Math.floor(origin[1] / Sections.SECTION_SIZE),
+                                (int) Math.floor(origin[2] / Sections.SECTION_SIZE)),
+                        mesh);
+            }
+            store.rebuild();
+            return store.snapshot();
         }
-        store.rebuild();
-        return store.snapshot();
     }
 
     /**

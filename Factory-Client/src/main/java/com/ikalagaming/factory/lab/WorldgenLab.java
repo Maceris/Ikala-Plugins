@@ -20,6 +20,7 @@ import com.ikalagaming.graphics.gui.enums.MouseButton;
 import com.ikalagaming.graphics.gui.flags.TreeNodeFlags;
 import com.ikalagaming.graphics.gui.util.Color;
 import com.ikalagaming.graphics.ui.*;
+import com.ikalagaming.plugins.PluginThreads;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -62,6 +63,9 @@ public final class WorldgenLab implements AutoCloseable {
 
     /** How often data folders are checked for changes, in milliseconds. */
     private static final long WATCH_MILLIS = 1000;
+
+    /** How long closing waits for the Lab's threads to stop, in milliseconds. */
+    private static final long STOP_WAIT_MS = 2000;
 
     /** The smallest drawn chunk, in pixels, at which the chunk grid shows. */
     private static final double GRID_MIN_PIXELS = 12;
@@ -257,26 +261,14 @@ public final class WorldgenLab implements AutoCloseable {
         nodeTree = new NodeTree(renderer, this::post, this::viewNode);
         preview = new LabPreview(graphics, dataFolder);
         bookmarks = new Bookmarks(dataFolder.resolve("lab").resolve("bookmarks.kvt"));
-        loader = Executors.newSingleThreadExecutor(daemon("Worldgen Lab load"));
-        inspector = Executors.newSingleThreadExecutor(daemon("Worldgen Lab inspect"));
-        watcher = Executors.newSingleThreadScheduledExecutor(daemon("Worldgen Lab watch"));
+        // Owned by the plugin, so they stop when it unloads even if the Lab is never closed
+        final String owner = graphics.getOwner();
+        loader = PluginThreads.singleThread(owner, "lab-load");
+        inspector = PluginThreads.singleThread(owner, "lab-inspect");
+        watcher = PluginThreads.scheduled(owner, "lab-watch");
         watcher.scheduleWithFixedDelay(
                 this::checkForChanges, WATCH_MILLIS, WATCH_MILLIS, TimeUnit.MILLISECONDS);
         load(settings);
-    }
-
-    /**
-     * A thread factory for one daemon thread.
-     *
-     * @param name The thread's name.
-     * @return The factory.
-     */
-    private static ThreadFactory daemon(@NonNull String name) {
-        return runnable -> {
-            Thread thread = new Thread(runnable, name);
-            thread.setDaemon(true);
-            return thread;
-        };
     }
 
     /**
@@ -1236,8 +1228,8 @@ public final class WorldgenLab implements AutoCloseable {
     }
 
     /**
-     * Stop every thread now, then remove the surface and release textures on the render thread. If
-     * the plugin's graphics context closes first, it releases them itself.
+     * Stop every thread now and wait briefly for them, then remove the surface and release textures
+     * on the render thread. If the plugin's graphics context closes first, it releases them itself.
      */
     @Override
     public void close() {
@@ -1246,6 +1238,22 @@ public final class WorldgenLab implements AutoCloseable {
         inspector.shutdownNow();
         renderer.close();
         preview.stop();
+        final long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(STOP_WAIT_MS);
+        try {
+            boolean stopped = true;
+            for (ExecutorService executor : List.of(watcher, loader, inspector)) {
+                stopped &=
+                        executor.awaitTermination(
+                                Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+            }
+            stopped &= renderer.awaitStopped(deadline);
+            stopped &= preview.awaitStopped(deadline);
+            if (!stopped) {
+                log.warn("Some Worldgen Lab threads did not stop in time");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
         post(
                 () -> {
                     graphics.ui().remove(SURFACE_ID);

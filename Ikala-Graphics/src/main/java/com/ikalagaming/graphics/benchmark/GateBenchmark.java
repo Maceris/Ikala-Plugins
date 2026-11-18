@@ -17,6 +17,7 @@ import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.SectionHandle;
 import com.ikalagaming.graphics.Sections;
 import com.ikalagaming.graphics.TextureHandle;
+import com.ikalagaming.graphics.ThreadStops;
 import com.ikalagaming.graphics.WaterHandle;
 import com.ikalagaming.graphics.bake.BakeSource;
 import com.ikalagaming.graphics.bake.SectionBaker;
@@ -106,6 +107,9 @@ public final class GateBenchmark {
 
     /** The option that lights the scene with the physical sky. */
     private static final String OPTION_PHYSICAL_SKY = "physicalSky";
+
+    /** The name of the thread laying out the world. */
+    private static final String BUILDER_NAME = "Gate benchmark builder";
 
     /** The {@code .waterBody} value for the ocean, the default. */
     private static final String WATER_BODY_OCEAN = "ocean";
@@ -642,8 +646,14 @@ public final class GateBenchmark {
     /** Whether to leave the world in place when the run finishes. */
     private final boolean keepWorld;
 
-    /** Whether the world has been released. */
-    private boolean released;
+    /**
+     * Whether the world has been released. Set by the render thread, and read by workers that make
+     * sections or lights, which release what they make once it is set.
+     */
+    private volatile boolean released;
+
+    /** The thread laying out and composing the world, or null once it was waited for. */
+    @Nullable private Thread builder;
 
     /** The scene's lights before the run set its own, put back when the world is released. */
     @Nullable private DirectionalLight previousSun;
@@ -1309,13 +1319,33 @@ public final class GateBenchmark {
         return keepWorld && phase == Phase.DONE && !released;
     }
 
-    /** Stop the run in progress, releasing what it made. Render thread only. */
+    /**
+     * Stop the run in progress, releasing what it made. A builder still laying out the world is
+     * stopped and waited for first, so it doesn't add sections after they are released. Render
+     * thread only.
+     */
     public static void stop() {
         if (current != null && current.phase != Phase.DONE && current.phase != Phase.STOPPED) {
-            current.phase = Phase.STOPPED;
+            current.halt();
             current.release();
             log.info("Gate benchmark stopped");
         }
+    }
+
+    /**
+     * Mark the run stopped, so its builder moves it on no further, and wait a little for the
+     * builder to end. One that outlasts the wait releases whatever it makes afterward itself, see
+     * {@link #released}. Render thread only.
+     */
+    private void halt() {
+        sectionsLock.lock();
+        try {
+            phase = Phase.STOPPED;
+        } finally {
+            sectionsLock.unlock();
+        }
+        ThreadStops.join(builder, ThreadStops.STOP_WAIT, BUILDER_NAME);
+        builder = null;
     }
 
     /**
@@ -1588,8 +1618,7 @@ public final class GateBenchmark {
             }
         }
 
-        final Thread builder = new Thread(() -> build(sources), "Gate benchmark builder");
-        builder.setDaemon(true);
+        builder = ThreadStops.thread(BUILDER_NAME, () -> build(sources));
         builder.start();
     }
 
@@ -1639,11 +1668,34 @@ public final class GateBenchmark {
                     load.contentSections(),
                     load.sectionsInSphere(),
                     buildMilliseconds);
-            phase = Phase.BAKING;
+            moveOn(Phase.BAKING, null);
         } catch (RuntimeException e) {
-            log.error("Gate benchmark failed to build", e);
-            failure = e.getMessage();
-            phase = Phase.STOPPED;
+            if (moveOn(Phase.STOPPED, e.getMessage())) {
+                log.error("Gate benchmark failed to build", e);
+            }
+        }
+    }
+
+    /**
+     * Move a run the builder finished on, unless it was stopped meanwhile. On the builder.
+     *
+     * @param next The phase it goes to.
+     * @param failed What went wrong, or null if nothing did.
+     * @return True if it moved on, false if it was stopped already.
+     */
+    private boolean moveOn(@NonNull Phase next, @Nullable String failed) {
+        sectionsLock.lock();
+        try {
+            if (phase != Phase.BUILDING) {
+                return false;
+            }
+            if (failed != null) {
+                failure = failed;
+            }
+            phase = next;
+            return true;
+        } finally {
+            sectionsLock.unlock();
         }
     }
 
@@ -1674,12 +1726,7 @@ public final class GateBenchmark {
         final Vector3d at = new Vector3d(hut[0] + 0.5, hut[1] + TORCH_HEIGHT, hut[2] + 0.5);
         final LightHandle light = graphics.lights().point(at, TORCH_COLOR, TORCH_INTENSITY);
         log.info("Gate benchmark hut torch at ({}, {}, {})", at.x, at.y, at.z);
-        sectionsLock.lock();
-        try {
-            lights.add(light);
-        } finally {
-            sectionsLock.unlock();
-        }
+        keepLight(light);
     }
 
     /**
@@ -1721,12 +1768,7 @@ public final class GateBenchmark {
                         y + 1 + TORCH_HEIGHT,
                         z + 0.5);
             }
-            sectionsLock.lock();
-            try {
-                lights.add(light);
-            } finally {
-                sectionsLock.unlock();
-            }
+            keepLight(light);
         }
     }
 
@@ -1852,8 +1894,11 @@ public final class GateBenchmark {
                 placeView(scene);
                 updateDigs();
             }
+                // A builder that failed stops the run itself, leaving what it made to release here;
+                // once released, nothing more to do
+            case STOPPED -> release();
             default -> {
-                // Nothing to do while building, or once stopped
+                // Nothing to do while building
             }
         }
     }
@@ -3884,14 +3929,45 @@ public final class GateBenchmark {
             return null;
         }
         final SectionHandle handle = request(position, placed).submit();
+        final boolean late;
         sectionsLock.lock();
         try {
-            sections.add(handle);
-            sectionAt.put(position, handle);
+            // Released meanwhile: the release took what was kept, so this one goes here
+            late = released;
+            if (!late) {
+                sections.add(handle);
+                sectionAt.put(position, handle);
+            }
         } finally {
             sectionsLock.unlock();
         }
+        if (late) {
+            graphics.sections().remove(handle);
+            return null;
+        }
         return handle;
+    }
+
+    /**
+     * Keep a torch to remove with the world, or remove it now if the world was released while it
+     * was being placed. On a worker.
+     *
+     * @param light The torch.
+     */
+    private void keepLight(@NonNull LightHandle light) {
+        final boolean late;
+        sectionsLock.lock();
+        try {
+            late = released;
+            if (!late) {
+                lights.add(light);
+            }
+        } finally {
+            sectionsLock.unlock();
+        }
+        if (late) {
+            graphics.lights().remove(light);
+        }
     }
 
     /**
@@ -4199,6 +4275,10 @@ public final class GateBenchmark {
         final var request = request(position, placed);
         sectionsLock.lock();
         try {
+            if (released) {
+                // Nothing made now would be released
+                return null;
+            }
             final SectionHandle handle = sectionAt.get(position);
             if (handle != null) {
                 graphics.sections().rebake(handle, request);

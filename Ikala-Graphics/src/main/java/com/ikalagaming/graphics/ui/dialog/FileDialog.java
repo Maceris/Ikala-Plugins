@@ -22,12 +22,13 @@ import com.ikalagaming.graphics.ui.VirtualGrid;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import java.lang.ref.WeakReference;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import javax.annotation.Nullable;
@@ -160,8 +161,16 @@ public final class FileDialog {
     /** The folder last picked from in each mode. */
     private static final Map<Mode, Path> LAST_FOLDERS = new ConcurrentHashMap<>();
 
-    /** The dialog open now, or null. */
-    private static final AtomicReference<FileDialog> OPEN = new AtomicReference<>();
+    /** Guards {@link #open}. */
+    private static final ReentrantLock OPEN_LOCK = new ReentrantLock();
+
+    /**
+     * The dialog open now, or null. Held weakly, so a dialog left open when the plugin that opened
+     * it unloads doesn't keep that plugin's callback, and its classes, in memory: while it shows,
+     * its surfaces hold it, and they go with the plugin. One whose plugin has unloaded is dropped
+     * the next time this is looked at, too.
+     */
+    private static WeakReference<FileDialog> open;
 
     /** The plugin's UI, which shows the surfaces. */
     private final UI ui;
@@ -207,7 +216,7 @@ public final class FileDialog {
      * @param options What to ask for.
      * @param chosen Gets the path picked.
      */
-    private FileDialog(UI ui, BooleanSupplier ownerClosed, Options options, Consumer<Path> chosen) {
+    FileDialog(UI ui, BooleanSupplier ownerClosed, Options options, Consumer<Path> chosen) {
         this.ui = ui;
         this.ownerClosed = ownerClosed;
         this.options = options;
@@ -246,7 +255,7 @@ public final class FileDialog {
         ui.post(
                 () -> {
                     FileDialog dialog = new FileDialog(ui, ownerClosed, options, chosen);
-                    FileDialog previous = OPEN.getAndSet(dialog);
+                    FileDialog previous = remember(dialog);
                     if (previous != null) {
                         // Its surfaces are replaced by this one's, so only its answer is left
                         previous.answer(null);
@@ -256,12 +265,68 @@ public final class FileDialog {
     }
 
     /**
-     * Whether a dialog is open.
+     * Whether a dialog is open. One whose plugin has unloaded isn't.
      *
      * @return True if one is open.
      */
     public static boolean isOpen() {
-        return OPEN.get() != null;
+        return current() != null;
+    }
+
+    /**
+     * The dialog open now, dropping one whose plugin has unloaded.
+     *
+     * @return The dialog, or null if none is open.
+     */
+    static FileDialog current() {
+        OPEN_LOCK.lock();
+        try {
+            FileDialog dialog = open == null ? null : open.get();
+            if (dialog == null || dialog.ownerClosed.getAsBoolean()) {
+                // Nothing may answer it now, so let go of its callback
+                open = null;
+                return null;
+            }
+            return dialog;
+        } finally {
+            OPEN_LOCK.unlock();
+        }
+    }
+
+    /**
+     * Make a dialog the open one.
+     *
+     * @param dialog The dialog.
+     * @return The dialog that was open, whose plugin is still loaded, or null.
+     */
+    static FileDialog remember(@NonNull FileDialog dialog) {
+        OPEN_LOCK.lock();
+        try {
+            FileDialog previous = current();
+            open = new WeakReference<>(dialog);
+            return previous;
+        } finally {
+            OPEN_LOCK.unlock();
+        }
+    }
+
+    /**
+     * Forget a dialog if it is the open one.
+     *
+     * @param dialog The dialog.
+     * @return True if it was the open one.
+     */
+    private static boolean forget(FileDialog dialog) {
+        OPEN_LOCK.lock();
+        try {
+            if (open != null && open.get() == dialog) {
+                open = null;
+                return true;
+            }
+            return false;
+        } finally {
+            OPEN_LOCK.unlock();
+        }
     }
 
     /** Build the surfaces and show them, the backdrop first so the dialog draws over it. */
@@ -528,7 +593,7 @@ public final class FileDialog {
         finished = true;
         // Only this dialog's own surfaces are removed; a newer one has taken their IDs, and an
         // unloaded plugin's went with it
-        if (OPEN.compareAndSet(this, null) && !ownerClosed.getAsBoolean()) {
+        if (forget(this) && !ownerClosed.getAsBoolean()) {
             ui.remove(SURFACE_ID);
             ui.remove(BACKDROP_ID);
         }

@@ -8,6 +8,7 @@ import com.ikalagaming.factory.world.gen.density.DensityNode;
 import com.ikalagaming.graphics.Format;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.TextureHandle;
+import com.ikalagaming.plugins.PluginThreads;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +19,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
@@ -102,24 +102,11 @@ public final class LabRenderer implements AutoCloseable {
         this.graphics = graphics;
         this.onFrame = onFrame;
         final int workers = Math.max(1, Runtime.getRuntime().availableProcessors() - 1);
-        bands = Executors.newFixedThreadPool(workers, named("Worldgen Lab band"));
-        coordinator = Executors.newSingleThreadExecutor(named("Worldgen Lab view"));
-        thumbnails = Executors.newSingleThreadExecutor(named("Worldgen Lab thumbnail"));
-    }
-
-    /**
-     * Name the threads, and make them daemons so they never keep the process alive.
-     *
-     * @param prefix The name prefix.
-     * @return The thread factory.
-     */
-    private static ThreadFactory named(@NonNull String prefix) {
-        final AtomicInteger count = new AtomicInteger();
-        return runnable -> {
-            Thread thread = new Thread(runnable, prefix + " " + count.incrementAndGet());
-            thread.setDaemon(true);
-            return thread;
-        };
+        // Owned by the plugin, so they stop when it unloads even if the Lab is never closed
+        final String owner = graphics.getOwner();
+        bands = PluginThreads.fixedPool(owner, "lab-band", workers);
+        coordinator = PluginThreads.singleThread(owner, "lab-view");
+        thumbnails = PluginThreads.singleThread(owner, "lab-thumbnail");
     }
 
     /**
@@ -299,12 +286,32 @@ public final class LabRenderer implements AutoCloseable {
         graphics.textures().release(texture);
     }
 
-    /** Stop drawing and stop the threads. Textures go with the plugin's graphics context. */
+    /**
+     * Stop drawing and stop the threads, without waiting for them. Textures go with the plugin's
+     * graphics context.
+     */
     @Override
     public void close() {
         generation.incrementAndGet();
         coordinator.shutdownNow();
         thumbnails.shutdownNow();
         bands.shutdownNow();
+    }
+
+    /**
+     * Wait for the threads to stop after {@link #close()}.
+     *
+     * @param deadline When to give up, from {@link System#nanoTime()}.
+     * @return True if they all stopped in time.
+     * @throws InterruptedException If interrupted while waiting.
+     */
+    boolean awaitStopped(long deadline) throws InterruptedException {
+        boolean stopped = true;
+        for (ExecutorService executor : List.of(coordinator, thumbnails, bands)) {
+            stopped &=
+                    executor.awaitTermination(
+                            Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+        }
+        return stopped;
     }
 }

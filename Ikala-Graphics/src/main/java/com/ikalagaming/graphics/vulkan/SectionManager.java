@@ -5,6 +5,7 @@ import com.ikalagaming.graphics.InstanceHandle;
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.MeshKind;
 import com.ikalagaming.graphics.Sections;
+import com.ikalagaming.graphics.ThreadStops;
 import com.ikalagaming.graphics.bake.BakeSource;
 import com.ikalagaming.graphics.bake.BakedVertex;
 import com.ikalagaming.graphics.bake.SectionBaker;
@@ -594,14 +595,16 @@ public class SectionManager {
         final int threads = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
         final AtomicInteger counter = new AtomicInteger();
         workers =
-                Executors.newFixedThreadPool(
-                        threads,
-                        task -> {
-                            Thread thread =
-                                    new Thread(task, WORKER_NAME + counter.incrementAndGet());
-                            thread.setDaemon(true);
-                            return thread;
-                        });
+                ThreadStops.track(
+                        Executors.newFixedThreadPool(
+                                threads,
+                                task -> {
+                                    Thread thread =
+                                            new Thread(
+                                                    task, WORKER_NAME + counter.incrementAndGet());
+                                    thread.setDaemon(true);
+                                    return thread;
+                                }));
     }
 
     /**
@@ -912,6 +915,8 @@ public class SectionManager {
      * @return How many sections were forgotten.
      */
     public int removeAllOwnedBy(@NonNull String owner) {
+        final Live world;
+        final int removed;
         lock.lock();
         try {
             int before = sections.size();
@@ -932,15 +937,17 @@ public class SectionManager {
                                 }
                                 return true;
                             });
-            final Live world = live.remove(owner);
-            if (world != null) {
-                world.lod().close();
-            }
+            world = live.remove(owner);
             warnedOffGrid.remove(owner);
-            return before - sections.size();
+            removed = before - sections.size();
         } finally {
             lock.unlock();
         }
+        if (world != null) {
+            // Outside the lock: closing waits for the world's builder, and bakes take the lock
+            world.lod().close();
+        }
+        return removed;
     }
 
     /**
@@ -2765,14 +2772,31 @@ public class SectionManager {
     }
 
     /**
+     * Stop the bakers and every live world's builder, and wait a little for them to end, before the
+     * renderer frees what they read and write: bake sources, the level of detail renderer and the
+     * baked geometry. Safe to call more than once; {@link #cleanup()} calls it too.
+     */
+    public void stopWorkers() {
+        ThreadStops.stop(workers, ThreadStops.STOP_WAIT, "section bakers");
+        final List<Live> worlds;
+        lock.lock();
+        try {
+            worlds = new ArrayList<>(live.values());
+        } finally {
+            lock.unlock();
+        }
+        // Outside the lock: closing waits for each world's builder
+        worlds.forEach(world -> world.lod().close());
+    }
+
+    /**
      * Stop the workers and forget every section, when the renderer shuts down. Their instances and
      * meshes go with the instance table and baked geometry buffers.
      */
     public void cleanup() {
-        workers.shutdownNow();
+        stopWorkers();
         lock.lock();
         try {
-            live.values().forEach(world -> world.lod().close());
             live.clear();
             sections.clear();
             checks.clear();

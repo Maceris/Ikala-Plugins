@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.lod;
 
+import com.ikalagaming.graphics.ThreadStops;
+
 import lombok.Getter;
 import lombok.NonNull;
 
@@ -41,7 +43,7 @@ import java.util.function.Predicate;
  * workers of its own, each cell from inputs gathered beforehand, so the store's own state is only
  * touched by the thread calling it.
  */
-public final class LodStore {
+public final class LodStore implements AutoCloseable {
 
     /** Coordinates in a position. */
     private static final int AXES = 3;
@@ -496,6 +498,17 @@ public final class LodStore {
                                 options.mergePlanar(),
                                 options.averages())
                         .withVolumes(options.volumes());
+    }
+
+    /**
+     * Stop its workers, interrupting a rebuild in progress, and wait a little for them to end. The
+     * store can't rebuild afterward. From the thread that rebuilds it, or with that thread stopped.
+     */
+    @Override
+    public void close() {
+        // Cells hand their groups to the group workers, so the cells stop first
+        ThreadStops.stop(cellWorkers, ThreadStops.STOP_WAIT, "LOD cell workers");
+        ThreadStops.stop(groupWorkers, ThreadStops.STOP_WAIT, "LOD build workers");
     }
 
     /**
@@ -1372,7 +1385,7 @@ public final class LodStore {
                         new LinkedBlockingQueue<>(),
                         DagBuilder.daemonThreads(name));
         pool.allowCoreThreadTimeOut(true);
-        return pool;
+        return ThreadStops.track(pool);
     }
 
     /**

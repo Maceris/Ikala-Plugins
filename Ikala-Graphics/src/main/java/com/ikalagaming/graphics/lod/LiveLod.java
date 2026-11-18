@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.lod;
 
+import com.ikalagaming.graphics.ThreadStops;
+
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
@@ -65,6 +67,9 @@ public final class LiveLod implements AutoCloseable {
 
     /** How long a level 0 cell's sections must stay unchanged before it is built, by default. */
     public static final long SETTLE_NANOS = TimeUnit.MILLISECONDS.toNanos(500);
+
+    /** The builder thread's name. */
+    private static final String BUILDER_NAME = "LOD builder";
 
     /** How long the builder waits for changes before checking whether it was closed. */
     private static final long POLL_MILLIS = 100;
@@ -435,8 +440,7 @@ public final class LiveLod implements AutoCloseable {
 
     /** Start the builder thread. */
     public void start() {
-        builder = new Thread(this::run, "LOD builder");
-        builder.setDaemon(true);
+        builder = ThreadStops.thread(BUILDER_NAME, this::run);
         builder.start();
     }
 
@@ -703,12 +707,15 @@ public final class LiveLod implements AutoCloseable {
         return store.snapshot();
     }
 
-    /** Stop the builder thread. Batches already published stay with their sink. */
+    /**
+     * Stop the builder thread and wait a little for it to end, then stop the store's workers.
+     * Batches already published stay with their sink.
+     */
     @Override
     public void close() {
         closed = true;
-        if (builder != null) {
-            builder.interrupt();
-        }
+        // Interrupting cancels a build in progress, see LodStore.rebuild
+        ThreadStops.join(builder, ThreadStops.STOP_WAIT, BUILDER_NAME);
+        store.close();
     }
 }

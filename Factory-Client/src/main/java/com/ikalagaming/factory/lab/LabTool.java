@@ -40,6 +40,12 @@ public final class LabTool implements AutoCloseable {
     private WorldgenLab lab;
 
     /**
+     * Whether the tool was closed with the plugin. Set on the thread disabling the plugin, read on
+     * the render thread.
+     */
+    private volatile boolean closed;
+
+    /**
      * Set up the tool; nothing starts until it is opened.
      *
      * @param graphics The plugin's graphics context.
@@ -64,8 +70,12 @@ public final class LabTool implements AutoCloseable {
         return new LabSession.Settings(folders, worldType, seed.longValue());
     }
 
-    /** Open the Lab, building it the first time. */
+    /** Open the Lab, building it the first time. Nothing happens once the tool is closed. */
     public void open() {
+        if (closed) {
+            // A menu can still offer it until the plugin's tool is withdrawn
+            return;
+        }
         if (lab == null) {
             lab =
                     new WorldgenLab(
@@ -98,9 +108,10 @@ public final class LabTool implements AutoCloseable {
         }
     }
 
-    /** Stop the Lab's threads and release what it holds. */
+    /** Stop the Lab's threads and release what it holds. The tool can't open it again. */
     @Override
     public void close() {
+        closed = true;
         if (lab != null) {
             lab.close();
             lab = null;

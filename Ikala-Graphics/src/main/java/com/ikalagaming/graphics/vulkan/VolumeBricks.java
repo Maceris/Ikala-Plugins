@@ -5,6 +5,7 @@ import static org.lwjgl.util.vma.Vma.*;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.ThreadStops;
 import com.ikalagaming.graphics.graph.CoarseBricks;
 import com.ikalagaming.graphics.graph.OccupancyClipmap;
 import com.ikalagaming.graphics.graph.VolumeMath;
@@ -1308,17 +1309,18 @@ public class VolumeBricks {
         if (coarseWorkers == null) {
             final AtomicInteger count = new AtomicInteger();
             coarseWorkers =
-                    Executors.newFixedThreadPool(
-                            COARSE_THREADS,
-                            runnable -> {
-                                final Thread thread =
-                                        new Thread(
-                                                runnable,
-                                                "Coarse bricks " + count.incrementAndGet());
-                                thread.setDaemon(true);
-                                thread.setPriority(Thread.MIN_PRIORITY);
-                                return thread;
-                            });
+                    ThreadStops.track(
+                            Executors.newFixedThreadPool(
+                                    COARSE_THREADS,
+                                    runnable -> {
+                                        final Thread thread =
+                                                new Thread(
+                                                        runnable,
+                                                        "Coarse bricks " + count.incrementAndGet());
+                                        thread.setDaemon(true);
+                                        thread.setPriority(Thread.MIN_PRIORITY);
+                                        return thread;
+                                    }));
         }
         return coarseWorkers;
     }
@@ -2216,7 +2218,8 @@ public class VolumeBricks {
      */
     public void cleanup(@NonNull VulkanState state) {
         if (coarseWorkers != null) {
-            coarseWorkers.shutdownNow();
+            // They only make bricks on the heap, but end them before the rest goes all the same
+            ThreadStops.stop(coarseWorkers, ThreadStops.STOP_WAIT, "coarse brick workers");
             coarseWorkers = null;
         }
         for (int i = 0; i < drawLists.length; ++i) {

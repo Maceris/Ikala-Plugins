@@ -21,6 +21,7 @@ import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.TextureWrap;
 import com.ikalagaming.graphics.Textures;
 import com.ikalagaming.graphics.graph.Material;
+import com.ikalagaming.plugins.PluginThreads;
 
 import lombok.Getter;
 import lombok.NonNull;
@@ -45,7 +46,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
@@ -65,6 +65,9 @@ import javax.imageio.stream.ImageInputStream;
 public final class ShownCharacter implements AutoCloseable {
     /** Updates per second. */
     private static final int RATE = 60;
+
+    /** What the timer's thread is named after its plugin's name. */
+    private static final String TIMER_NAME = "shown-character";
 
     /** The widest or tallest image a character may use, in pixels. */
     static final int MAX_IMAGE_SIDE = 16_384;
@@ -323,13 +326,8 @@ public final class ShownCharacter implements AutoCloseable {
         instance = skins.place(skeleton.size(), position, facing, 1);
         showParts(shown);
 
-        timer =
-                Executors.newSingleThreadScheduledExecutor(
-                        runnable -> {
-                            Thread thread = new Thread(runnable, "Shown character");
-                            thread.setDaemon(true);
-                            return thread;
-                        });
+        // Owned by the plugin, so it stops when the plugin unloads even if this is never closed
+        timer = PluginThreads.scheduled(plugin, TIMER_NAME);
         timer.scheduleAtFixedRate(new Updater(skins), 0, 1000 / RATE, TimeUnit.MILLISECONDS);
     }
 

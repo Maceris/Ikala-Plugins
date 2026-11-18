@@ -16,8 +16,18 @@ import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.ref.WeakReference;
+import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.ResourceBundle;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 class TestTreeRequestSerialization {
 
@@ -187,6 +197,123 @@ class TestTreeRequestSerialization {
         assertNull(result.getShortList());
         assertNull(result.getStringList());
         assertNull(result.getEnumList());
+    }
+
+    /** Fields are found once per class, by name, without statics, and can't be changed. */
+    @Test
+    void testFieldsAreCached() {
+        Map<String, Field> fields = TreeRequestSerialization.fieldsOf(Holder.class);
+        assertSame(fields, TreeRequestSerialization.fieldsOf(Holder.class));
+        assertEquals(List.of("count", "name"), List.copyOf(fields.keySet()));
+        assertThrows(UnsupportedOperationException.class, fields::clear);
+    }
+
+    /** Many threads can serialize at once, the cache filling as they go. */
+    @Test
+    void testConcurrentSerialization() throws Exception {
+        final int threads = 8;
+        final int rounds = 200;
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        try {
+            List<Future<Boolean>> results = new ArrayList<>();
+            for (int t = 0; t < threads; ++t) {
+                results.add(
+                        pool.submit(
+                                () -> {
+                                    for (int r = 0; r < rounds; ++r) {
+                                        var encoded =
+                                                TreeRequestSerialization.fromObject(
+                                                        expectedRequest);
+                                        var decoded =
+                                                TreeRequestSerialization.toObject(
+                                                        encoded.orElseThrow(),
+                                                        ComplexRequest.class);
+                                        if (decoded.isEmpty()
+                                                || decoded.get().getIntValue()
+                                                        != expectedIntValue) {
+                                            return false;
+                                        }
+                                    }
+                                    return true;
+                                }));
+            }
+            for (Future<Boolean> result : results) {
+                assertTrue(result.get(30, TimeUnit.SECONDS));
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    /**
+     * Caching a class doesn't keep it in memory, so a plugin's classes can go when it unloads. The
+     * class here is loaded by a class loader of its own, standing in for a plugin's.
+     */
+    @Test
+    void testCacheDoesNotKeepClasses() throws Exception {
+        WeakReference<Class<?>> loaded = loadAndCache();
+        for (int tries = 0; tries < GC_TRIES && loaded.get() != null; ++tries) {
+            System.gc();
+            Thread.sleep(GC_PAUSE_MS);
+        }
+        assertNull(loaded.get(), "The cached class was kept in memory");
+    }
+
+    /**
+     * Load {@link Holder} again by a class loader of its own, and cache its fields.
+     *
+     * @return The class loaded, weakly held.
+     * @throws IOException If its class file can't be read.
+     */
+    private static WeakReference<Class<?>> loadAndCache() throws IOException {
+        byte[] bytes;
+        try (InputStream in =
+                TestTreeRequestSerialization.class.getResourceAsStream(
+                        "TestTreeRequestSerialization$Holder.class")) {
+            assertNotNull(in);
+            bytes = in.readAllBytes();
+        }
+        Class<?> copy = new OneClassLoader().define(Holder.class.getName(), bytes);
+        assertNotSame(Holder.class, copy);
+        assertEquals(2, TreeRequestSerialization.fieldsOf(copy).size());
+        return new WeakReference<>(copy);
+    }
+
+    /** How many times to ask for a collection before giving up. */
+    private static final int GC_TRIES = 20;
+
+    /** How long to wait between collections, in milliseconds. */
+    private static final long GC_PAUSE_MS = 50;
+
+    /** A class with fields to find. */
+    public static class Holder {
+        /** Shared, so not serialized. */
+        static int shared;
+
+        /** A number. */
+        private int count;
+
+        /** A name. */
+        private String name;
+    }
+
+    /** Defines one class, standing in for a plugin's class loader. */
+    private static final class OneClassLoader extends ClassLoader {
+        /** Look up everything else through the test's class loader. */
+        OneClassLoader() {
+            super(TestTreeRequestSerialization.class.getClassLoader());
+        }
+
+        /**
+         * Define a class from its bytes.
+         *
+         * @param name The class's name.
+         * @param bytes Its class file.
+         * @return The class.
+         */
+        Class<?> define(String name, byte[] bytes) {
+            return defineClass(name, bytes, 0, bytes.length);
+        }
     }
 
     @Test

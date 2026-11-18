@@ -125,6 +125,7 @@ public class CharacterPlugin extends Plugin {
         // Listed in editors' tool menus, like the asset editor's main menu
         graphics.ui().registerTool(CharacterEditor.TOOL_ID, CharacterEditor.LABEL, editor::open);
         EditorScripts.attach(editor, graphics);
+        EditorScripts.startPolling(getName());
         PluginManager.getInstance()
                 .registerCommand(CHARACTER_COMMAND, this::onCharacterCommand, getName());
         return true;
@@ -135,15 +136,22 @@ public class CharacterPlugin extends Plugin {
         // Unloading also removes the plugin's commands, but they shouldn't run while disabled
         PluginManager.getInstance().unregisterCommand(CHARACTER_COMMAND);
         EditorScripts.attach(null, null);
+        EditorScripts.stopPolling();
         demo.stop();
         preview.hide();
         if (editor != null) {
             final CharacterEditor closing = editor;
+            editor = null;
             var graphics = GraphicsManager.forPlugin(getName());
-            if (!graphics.isClosed()) {
+            if (graphics.isClosed()) {
+                // The UI and GPU went with the graphics; still stop the shown character's timer
+                closing.abandon();
+            } else {
+                graphics.ui().removeTool(CharacterEditor.TOOL_ID);
                 graphics.ui().post(closing::close);
             }
-            editor = null;
+            // Builds don't need graphics, so they stop either way
+            closing.stopWork();
         }
         registry = CharacterRegistry.EMPTY;
         return true;

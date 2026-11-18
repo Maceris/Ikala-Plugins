@@ -28,6 +28,8 @@ import java.util.Set;
 import java.util.SplittableRandom;
 import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Consumer;
 
 /**
@@ -119,6 +121,7 @@ final class CharacterMotion {
      * @param styles Its styles, the first winning, like its items' and then its design's.
      * @param reference The rig's reference file.
      * @param character The shown character.
+     * @param readOn Where the clips are read, a pool the plugin owns.
      * @param post Runs a task on the render thread.
      */
     void build(
@@ -128,6 +131,7 @@ final class CharacterMotion {
             @NonNull List<Id> styles,
             @NonNull Path reference,
             @NonNull ShownCharacter character,
+            @NonNull Executor readOn,
             @NonNull Consumer<Runnable> post) {
         detach();
         shown = character;
@@ -145,28 +149,36 @@ final class CharacterMotion {
                         plan.id(),
                         id -> new ClipLibrary(registry, reference, character.getSkeleton()));
         final int build = ++builds;
-        CompletableFuture.runAsync(
-                        () -> lookup.actions().forEach(a -> library.clips(lookup.resolve(a))))
-                .whenComplete(
-                        (done, failure) ->
-                                post.accept(
-                                        () -> {
-                                            if (build != builds || shown != character) {
-                                                return;
-                                            }
-                                            animator =
-                                                    new Animator(
-                                                            lookup,
-                                                            library::clips,
-                                                            character.getSkeleton(),
-                                                            plan,
-                                                            new SplittableRandom());
-                                            animator.setMovement(movementAction(), speed[0]);
-                                            if (action != null) {
-                                                animator.play(action, false);
-                                            }
-                                            attach();
-                                        }));
+        final CompletableFuture<Void> reading;
+        try {
+            reading =
+                    CompletableFuture.runAsync(
+                            () -> lookup.actions().forEach(a -> library.clips(lookup.resolve(a))),
+                            readOn);
+        } catch (RejectedExecutionException e) {
+            // The plugin is being disabled; the character keeps its file's clip until it closes
+            return;
+        }
+        reading.whenComplete(
+                (done, failure) ->
+                        post.accept(
+                                () -> {
+                                    if (build != builds || shown != character) {
+                                        return;
+                                    }
+                                    animator =
+                                            new Animator(
+                                                    lookup,
+                                                    library::clips,
+                                                    character.getSkeleton(),
+                                                    plan,
+                                                    new SplittableRandom());
+                                    animator.setMovement(movementAction(), speed[0]);
+                                    if (action != null) {
+                                        animator.play(action, false);
+                                    }
+                                    attach();
+                                }));
     }
 
     /**

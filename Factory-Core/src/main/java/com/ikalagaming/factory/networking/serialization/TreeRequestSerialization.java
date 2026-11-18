@@ -20,7 +20,28 @@ import java.util.*;
  */
 @Slf4j
 public class TreeRequestSerialization {
-    private static final Map<Class<?>, Map<String, Field>> fieldCache = new HashMap<>();
+    /**
+     * Each class's fields by name, made accessible. A {@link ClassValue} is safe to use from many
+     * threads, and keeps each entry with its class, so caching a class from a plugin doesn't keep
+     * it, or its plugin's class loader, in memory after the plugin unloads.
+     */
+    private static final ClassValue<Map<String, Field>> FIELD_CACHE =
+            new ClassValue<>() {
+                @Override
+                protected Map<String, Field> computeValue(Class<?> type) {
+                    return findFieldsAndSetAccessible(type);
+                }
+            };
+
+    /**
+     * The fields of a class, by name, made accessible.
+     *
+     * @param type The class.
+     * @return Its non-static fields by name, in name order; not modifiable.
+     */
+    static Map<String, Field> fieldsOf(@NonNull Class<?> type) {
+        return FIELD_CACHE.get(type);
+    }
 
     /**
      * Add an object to a specified node, which may recursively handle sub-objects.
@@ -32,9 +53,7 @@ public class TreeRequestSerialization {
     private static void addToNode(@NonNull Object input, @NonNull Node node)
             throws IllegalAccessException {
         var clazz = input.getClass();
-        var fields =
-                fieldCache.computeIfAbsent(
-                        clazz, TreeRequestSerialization::findFieldsAndSetAccessible);
+        var fields = fieldsOf(clazz);
 
         for (var entry : fields.entrySet()) {
             var name = entry.getKey();
@@ -71,9 +90,7 @@ public class TreeRequestSerialization {
 
         T result = type.getConstructor().newInstance();
 
-        var fields =
-                fieldCache.computeIfAbsent(
-                        type, TreeRequestSerialization::findFieldsAndSetAccessible);
+        var fields = fieldsOf(type);
 
         for (var entry : fields.entrySet()) {
             var name = entry.getKey();
@@ -301,7 +318,8 @@ public class TreeRequestSerialization {
             field.setAccessible(true); // NOSONAR
             fieldMap.put(field.getName(), field);
         }
-        return fieldMap;
+        // Shared by every thread that serializes the class
+        return Collections.unmodifiableMap(fieldMap);
     }
 
     /**

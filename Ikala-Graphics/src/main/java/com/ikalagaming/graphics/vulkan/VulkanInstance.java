@@ -395,6 +395,9 @@ public class VulkanInstance {
     /** Clean up all the rendering resources. */
     public void cleanup() {
         checkError(vkDeviceWaitIdle(state.device.logical));
+        // Bakers and level of detail builders read bake sources and hand batches to the level of
+        // detail renderer, so they end before anything below is freed
+        state.sections.stopWorkers();
 
         pipelineManager.cleanup(state);
         // Queues them up for deletion below

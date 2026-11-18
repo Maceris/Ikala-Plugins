@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.benchmark;
 
 import com.ikalagaming.graphics.SectionHandle;
+import com.ikalagaming.graphics.ThreadStops;
 import com.ikalagaming.graphics.lod.LodStore;
 
 import lombok.NonNull;
@@ -226,8 +227,7 @@ final class WorldStream {
         partial.addAll(edgeCells(start, radius));
         knownTiles.addAll(startTiles);
         center = start;
-        worker = new Thread(this::run, "Gate benchmark streamer");
-        worker.setDaemon(true);
+        worker = ThreadStops.thread("Gate benchmark streamer", this::run);
         worker.start();
     }
 
