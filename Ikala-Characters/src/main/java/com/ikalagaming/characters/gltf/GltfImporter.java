@@ -111,7 +111,7 @@ public final class GltfImporter {
             JsonObject node = file.get("nodes", n);
             locals[n] = localMatrix(node);
             for (JsonElement element : GltfFile.array(node, CHILDREN)) {
-                int child = element.getAsInt();
+                int child = GltfJson.integer(element, CHILDREN);
                 if (child < 0 || child >= nodes) {
                     throw new IllegalArgumentException(
                             THE_NODE + n + " names the missing child " + child);
@@ -198,17 +198,19 @@ public final class GltfImporter {
      */
     private static Matrix4f localMatrix(JsonObject node) {
         if (node.has("matrix")) {
-            float[] values = floats(node.getAsJsonArray("matrix"));
+            float[] values = floats(GltfJson.array(node, "matrix"));
             return new Matrix4f().set(values);
         }
         float[] t =
-                node.has("translation") ? floats(node.getAsJsonArray("translation")) : new float[3];
+                node.has("translation")
+                        ? floats(GltfJson.array(node, "translation"))
+                        : new float[3];
         float[] r =
                 node.has("rotation")
-                        ? floats(node.getAsJsonArray("rotation"))
+                        ? floats(GltfJson.array(node, "rotation"))
                         : new float[] {0, 0, 0, 1};
         float[] s =
-                node.has("scale") ? floats(node.getAsJsonArray("scale")) : new float[] {1, 1, 1};
+                node.has("scale") ? floats(GltfJson.array(node, "scale")) : new float[] {1, 1, 1};
         return new Matrix4f()
                 .translationRotateScale(t[0], t[1], t[2], r[0], r[1], r[2], r[3], s[0], s[1], s[2]);
     }
@@ -222,7 +224,7 @@ public final class GltfImporter {
     private static float[] floats(JsonArray array) {
         float[] values = new float[array.size()];
         for (int i = 0; i < values.length; ++i) {
-            values[i] = array.get(i).getAsFloat();
+            values[i] = GltfJson.number(array.get(i), "numbers");
         }
         return values;
     }
@@ -235,7 +237,7 @@ public final class GltfImporter {
      */
     private ImportedCharacter character(String name) {
         JsonObject skin = file.get("skins", 0);
-        int[] joints = intArray(skin.getAsJsonArray("joints"));
+        int[] joints = intArray(GltfJson.array(skin, "joints"));
         Map<Integer, Integer> skinIndexOfNode = new HashMap<>();
         for (int i = 0; i < joints.length; ++i) {
             if (joints[i] < 0 || joints[i] >= parents.length) {
@@ -265,8 +267,8 @@ public final class GltfImporter {
             int node = pending.removeFirst();
             order.add(node);
             for (JsonElement child : GltfFile.array(file.get("nodes", node), CHILDREN)) {
-                if (skinIndexOfNode.containsKey(child.getAsInt())) {
-                    pending.addLast(child.getAsInt());
+                if (skinIndexOfNode.containsKey(GltfJson.integer(child, CHILDREN))) {
+                    pending.addLast(GltfJson.integer(child, CHILDREN));
                 }
             }
         }
@@ -318,7 +320,7 @@ public final class GltfImporter {
         Matrix4f[] bindToRest = new Matrix4f[joints.length];
         float[] inverseBinds =
                 skin.has("inverseBindMatrices")
-                        ? file.floats(skin.get("inverseBindMatrices").getAsInt())
+                        ? file.floats(GltfJson.integer(skin, "inverseBindMatrices"))
                         : null;
         if (inverseBinds != null && inverseBinds.length < joints.length * 16) {
             throw new IllegalArgumentException(
@@ -335,7 +337,7 @@ public final class GltfImporter {
         List<ImportedCharacter.Part> parts = new ArrayList<>();
         for (int n = 0; n < file.count("nodes"); ++n) {
             JsonObject node = file.get("nodes", n);
-            if (!node.has("mesh") || !node.has("skin") || node.get("skin").getAsInt() != 0) {
+            if (!node.has("mesh") || !node.has("skin") || GltfJson.integer(node, "skin") != 0) {
                 if (node.has("mesh")) {
                     log.warn(
                             "Skipping the mesh on {}, which isn't skinned to the skeleton",
@@ -343,17 +345,17 @@ public final class GltfImporter {
                 }
                 continue;
             }
-            JsonObject mesh = file.get("meshes", node.get("mesh").getAsInt());
-            JsonArray primitives = mesh.getAsJsonArray("primitives");
+            JsonObject mesh = file.get("meshes", GltfJson.integer(node, "mesh"));
+            JsonArray primitives = GltfJson.array(mesh, "primitives");
             String meshName =
-                    mesh.has("name") ? mesh.get("name").getAsString() : nodeName(n, "mesh");
+                    mesh.has("name") ? GltfJson.string(mesh, "name") : nodeName(n, "mesh");
             List<String> targetNames = targetNames(mesh);
             for (int p = 0; p < primitives.size(); ++p) {
                 String partName = primitives.size() == 1 ? meshName : meshName + "." + p;
                 parts.add(
                         part(
                                 partName,
-                                primitives.get(p).getAsJsonObject(),
+                                GltfJson.object(primitives.get(p), "primitives"),
                                 targetNames,
                                 skinToRig,
                                 bindToRest));
@@ -391,27 +393,27 @@ public final class GltfImporter {
             List<String> targetNames,
             int[] skinToRig,
             Matrix4f[] bindToRest) {
-        if (primitive.has("mode") && primitive.get("mode").getAsInt() != TRIANGLES) {
+        if (primitive.has("mode") && GltfJson.integer(primitive, "mode") != TRIANGLES) {
             throw new IllegalArgumentException(THE_MESH + name + " isn't made of triangles");
         }
-        JsonObject attributes = primitive.getAsJsonObject("attributes");
+        JsonObject attributes = GltfJson.object(primitive, "attributes");
         for (String needed : new String[] {"POSITION", "NORMAL", "JOINTS_0", "WEIGHTS_0"}) {
             if (!attributes.has(needed)) {
                 throw new IllegalArgumentException(THE_MESH + name + " has no " + needed);
             }
         }
-        float[] positions = file.floats(attributes.get("POSITION").getAsInt());
-        float[] normals = file.floats(attributes.get("NORMAL").getAsInt());
+        float[] positions = file.floats(GltfJson.integer(attributes, "POSITION"));
+        float[] normals = file.floats(GltfJson.integer(attributes, "NORMAL"));
         float[] tangents =
                 attributes.has("TANGENT")
-                        ? file.floats(attributes.get("TANGENT").getAsInt())
+                        ? file.floats(GltfJson.integer(attributes, "TANGENT"))
                         : null;
         float[] uvs =
                 attributes.has("TEXCOORD_0")
-                        ? file.floats(attributes.get("TEXCOORD_0").getAsInt())
+                        ? file.floats(GltfJson.integer(attributes, "TEXCOORD_0"))
                         : null;
-        int[] skinJoints = file.ints(attributes.get("JOINTS_0").getAsInt());
-        float[] weights = file.floats(attributes.get("WEIGHTS_0").getAsInt());
+        int[] skinJoints = file.ints(GltfJson.integer(attributes, "JOINTS_0"));
+        float[] weights = file.floats(GltfJson.integer(attributes, "WEIGHTS_0"));
         final int count = positions.length / 3;
         if (positions.length != count * 3
                 || normals.length != count * 3
@@ -425,12 +427,13 @@ public final class GltfImporter {
         // Form targets, by slot: moves in the file's bind space, turned as normals are below
         Map<String, float[]> formDeltas = new LinkedHashMap<>();
         Map<String, float[]> formTargets = new LinkedHashMap<>();
-        JsonArray targets = primitive.getAsJsonArray("targets");
-        for (int t = 0; targets != null && t < targets.size() && t < targetNames.size(); ++t) {
+        // Morph targets are optional: none reads as an empty list
+        JsonArray targets = GltfFile.array(primitive, "targets");
+        for (int t = 0; t < targets.size() && t < targetNames.size(); ++t) {
             String targetName = targetNames.get(t);
-            JsonObject target = targets.get(t).getAsJsonObject();
+            JsonObject target = GltfJson.object(targets.get(t), "targets");
             if (targetName.startsWith(FORM_TARGET_PREFIX) && target.has("POSITION")) {
-                float[] deltas = file.floats(target.get("POSITION").getAsInt());
+                float[] deltas = file.floats(GltfJson.integer(target, "POSITION"));
                 if (deltas.length == count * 3) {
                     String slot = targetName.substring(FORM_TARGET_PREFIX.length());
                     formDeltas.put(slot, deltas);
@@ -522,7 +525,7 @@ public final class GltfImporter {
 
         int[] indices;
         if (primitive.has("indices")) {
-            indices = file.ints(primitive.get("indices").getAsInt());
+            indices = file.ints(GltfJson.integer(primitive, "indices"));
         } else {
             indices = new int[count];
             for (int i = 0; i < count; ++i) {
@@ -545,7 +548,7 @@ public final class GltfImporter {
                                 + count);
             }
         }
-        int material = primitive.has("material") ? primitive.get("material").getAsInt() : -1;
+        int material = primitive.has("material") ? GltfJson.integer(primitive, "material") : -1;
         if (material < -1 || material >= file.count("materials")) {
             throw new IllegalArgumentException(
                     THE_MESH + name + " names the missing material " + material);
@@ -562,10 +565,9 @@ public final class GltfImporter {
      */
     private static List<String> targetNames(JsonObject mesh) {
         List<String> names = new ArrayList<>();
-        if (mesh.has(EXTRAS) && mesh.getAsJsonObject(EXTRAS).has(TARGET_NAMES)) {
-            mesh.getAsJsonObject(EXTRAS)
-                    .getAsJsonArray(TARGET_NAMES)
-                    .forEach(name -> names.add(name.getAsString()));
+        if (mesh.has(EXTRAS) && GltfJson.object(mesh, EXTRAS).has(TARGET_NAMES)) {
+            GltfJson.array(GltfJson.object(mesh, EXTRAS), TARGET_NAMES)
+                    .forEach(name -> names.add(GltfJson.string(name, TARGET_NAMES)));
         }
         return names;
     }
@@ -585,8 +587,8 @@ public final class GltfImporter {
             Map<Integer, Integer> rigIndexOfNode,
             Map<String, Skeleton.Rest> rest) {
         JsonObject json = file.get("animations", animation);
-        String clipName = json.has("name") ? json.get("name").getAsString() : "clip " + animation;
-        JsonArray samplers = json.getAsJsonArray("samplers");
+        String clipName = json.has("name") ? GltfJson.string(json, "name") : "clip " + animation;
+        JsonArray samplers = GltfJson.array(json, "samplers");
         List<Clip.RotationTrack> rotations = new ArrayList<>();
         List<Clip.TranslationTrack> translations = new ArrayList<>();
         float start = Float.POSITIVE_INFINITY;
@@ -597,27 +599,28 @@ public final class GltfImporter {
         Quaternionf aboveRotation = above.getNormalizedRotation(new Quaternionf());
 
         List<Object[]> raw = new ArrayList<>();
-        for (JsonElement element : json.getAsJsonArray("channels")) {
-            JsonObject channel = element.getAsJsonObject();
-            JsonObject target = channel.getAsJsonObject("target");
-            if (!target.has("node") || !rigIndexOfNode.containsKey(target.get("node").getAsInt())) {
+        for (JsonElement element : GltfJson.array(json, "channels")) {
+            JsonObject channel = GltfJson.object(element, "channels");
+            JsonObject target = GltfJson.object(channel, "target");
+            if (!target.has("node")
+                    || !rigIndexOfNode.containsKey(GltfJson.integer(target, "node"))) {
                 continue;
             }
-            String path = target.get("path").getAsString();
+            String path = GltfJson.string(target, "path");
             if (!"rotation".equals(path) && !"translation".equals(path)) {
                 continue;
             }
-            int samplerIndex = channel.get("sampler").getAsInt();
+            int samplerIndex = GltfJson.integer(channel, "sampler");
             if (samplerIndex < 0 || samplerIndex >= samplers.size()) {
                 throw new IllegalArgumentException(
                         "The clip " + clipName + " names the missing sampler " + samplerIndex);
             }
-            JsonObject sampler = samplers.get(samplerIndex).getAsJsonObject();
-            float[] times = file.floats(sampler.get("input").getAsInt());
-            float[] values = file.floats(sampler.get("output").getAsInt());
+            JsonObject sampler = GltfJson.object(samplers.get(samplerIndex), "samplers");
+            float[] times = file.floats(GltfJson.integer(sampler, "input"));
+            float[] values = file.floats(GltfJson.integer(sampler, "output"));
             int size = "rotation".equals(path) ? 4 : 3;
             if (sampler.has("interpolation")
-                    && "CUBICSPLINE".equals(sampler.get("interpolation").getAsString())) {
+                    && "CUBICSPLINE".equals(GltfJson.string(sampler, "interpolation"))) {
                 if (values.length != times.length * 3 * size) {
                     // Too few for tangent, value, tangent per key; skipped like other misfits
                     continue;
@@ -634,7 +637,7 @@ public final class GltfImporter {
             }
             start = Math.min(start, times[0]);
             end = Math.max(end, times[times.length - 1]);
-            raw.add(new Object[] {target.get("node").getAsInt(), path, times, values});
+            raw.add(new Object[] {GltfJson.integer(target, "node"), path, times, values});
         }
         if (raw.isEmpty()) {
             return null;
@@ -739,11 +742,11 @@ public final class GltfImporter {
             JsonObject material = file.get("materials", m);
             JsonObject pbr =
                     material.has("pbrMetallicRoughness")
-                            ? material.getAsJsonObject("pbrMetallicRoughness")
+                            ? GltfJson.object(material, "pbrMetallicRoughness")
                             : new JsonObject();
             float[] color =
                     pbr.has("baseColorFactor")
-                            ? floats(pbr.getAsJsonArray("baseColorFactor"))
+                            ? floats(GltfJson.array(pbr, "baseColorFactor"))
                             : new float[] {1, 1, 1, 1};
             int orm = textureImage(pbr, "metallicRoughnessTexture");
             int occlusion = textureImage(material, "occlusionTexture");
@@ -753,17 +756,17 @@ public final class GltfImporter {
             }
             float[] emissive =
                     material.has("emissiveFactor")
-                            ? floats(material.getAsJsonArray("emissiveFactor"))
+                            ? floats(GltfJson.array(material, "emissiveFactor"))
                             : new float[3];
             JsonObject extensions =
                     material.has("extensions")
-                            ? material.getAsJsonObject("extensions")
+                            ? GltfJson.object(material, "extensions")
                             : new JsonObject();
             if (extensions.has(EMISSIVE_STRENGTH)) {
-                JsonObject strength = extensions.getAsJsonObject(EMISSIVE_STRENGTH);
+                JsonObject strength = GltfJson.object(extensions, EMISSIVE_STRENGTH);
                 float scale =
                         strength.has("emissiveStrength")
-                                ? strength.get("emissiveStrength").getAsFloat()
+                                ? GltfJson.number(strength, "emissiveStrength")
                                 : 1;
                 for (int c = 0; c < emissive.length; ++c) {
                     emissive[c] *= scale;
@@ -772,13 +775,13 @@ public final class GltfImporter {
             materials.add(
                     new ImportedCharacter.MaterialData(
                             material.has("name")
-                                    ? material.get("name").getAsString()
+                                    ? GltfJson.string(material, "name")
                                     : "material " + m,
                             color,
                             textureImage(pbr, "baseColorTexture"),
-                            pbr.has("metallicFactor") ? pbr.get("metallicFactor").getAsFloat() : 1,
+                            pbr.has("metallicFactor") ? GltfJson.number(pbr, "metallicFactor") : 1,
                             pbr.has("roughnessFactor")
-                                    ? pbr.get("roughnessFactor").getAsFloat()
+                                    ? GltfJson.number(pbr, "roughnessFactor")
                                     : 1,
                             -1,
                             textureImage(material, "normalTexture"),
@@ -802,11 +805,11 @@ public final class GltfImporter {
             return -1;
         }
         JsonObject texture =
-                file.get("textures", owner.getAsJsonObject(field).get("index").getAsInt());
+                file.get("textures", GltfJson.integer(GltfJson.object(owner, field), "index"));
         if (!texture.has("source")) {
             return -1;
         }
-        int source = texture.get("source").getAsInt();
+        int source = GltfJson.integer(texture, "source");
         if (source < 0 || source >= file.count("images")) {
             throw new IllegalArgumentException("A texture names the missing image " + source);
         }
@@ -822,14 +825,14 @@ public final class GltfImporter {
         List<ImportedCharacter.ImageData> images = new ArrayList<>();
         for (int i = 0; i < file.count("images"); ++i) {
             JsonObject image = file.get("images", i);
-            String name = image.has("name") ? image.get("name").getAsString() : "image " + i;
-            String mime = image.has("mimeType") ? image.get("mimeType").getAsString() : null;
+            String name = image.has("name") ? GltfJson.string(image, "name") : "image " + i;
+            String mime = image.has("mimeType") ? GltfJson.string(image, "mimeType") : null;
             byte[] bytes;
             try {
                 bytes =
                         image.has("bufferView")
-                                ? file.bufferViewBytes(image.get("bufferView").getAsInt())
-                                : file.uriBytes(image.get("uri").getAsString());
+                                ? file.bufferViewBytes(GltfJson.integer(image, "bufferView"))
+                                : file.uriBytes(GltfJson.string(image, "uri"));
             } catch (IOException e) {
                 log.warn("Couldn't read the image {}: {}", name, e.getMessage());
                 bytes = new byte[0];
@@ -848,7 +851,7 @@ public final class GltfImporter {
      */
     private String nodeName(int node, String what) {
         JsonObject json = file.get("nodes", node);
-        return json.has("name") ? json.get("name").getAsString() : what + "_" + node;
+        return json.has("name") ? GltfJson.string(json, "name") : what + "_" + node;
     }
 
     /**
@@ -860,7 +863,7 @@ public final class GltfImporter {
     private static int[] intArray(JsonArray array) {
         int[] values = new int[array.size()];
         for (int i = 0; i < values.length; ++i) {
-            values[i] = array.get(i).getAsInt();
+            values[i] = GltfJson.integer(array.get(i), "numbers");
         }
         return values;
     }

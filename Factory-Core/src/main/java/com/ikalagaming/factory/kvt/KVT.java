@@ -409,11 +409,8 @@ public interface KVT {
      * @return The boolean value. If it does not exist, will be false.
      */
     default boolean getBoolean(final String name) {
-        try {
-            return this.get(name);
-        } catch (NullPointerException | ClassCastException ignored) {
-            return false;
-        }
+        final Boolean value = this.valueAs(name, Boolean.class);
+        return value != null && value;
     }
 
     /**
@@ -423,11 +420,7 @@ public interface KVT {
      * @return The list of values. If it does not exist, may be null or an empty unmodifiable list.
      */
     default List<Boolean> getBooleanArray(final @NonNull String name) {
-        try {
-            return this.get(name);
-        } catch (NullPointerException | ClassCastException ignored) {
-            return Collections.emptyList();
-        }
+        return this.listAs(name);
     }
 
     /**
@@ -437,11 +430,8 @@ public interface KVT {
      * @return The boolean value. If it does not exist, will be 0.
      */
     default byte getByte(final @NonNull String name) {
-        try {
-            return this.get(name);
-        } catch (NullPointerException | ClassCastException ignored) {
-            return 0;
-        }
+        final Byte value = this.valueAs(name, Byte.class);
+        return value == null ? 0 : value;
     }
 
     /**
@@ -451,11 +441,7 @@ public interface KVT {
      * @return The list of values. If it does not exist, may be null or an empty unmodifiable list.
      */
     default List<Byte> getByteArray(final @NonNull String name) {
-        try {
-            return this.get(name);
-        } catch (NullPointerException | ClassCastException ignored) {
-            return Collections.emptyList();
-        }
+        return this.listAs(name);
     }
 
     /**
@@ -465,11 +451,8 @@ public interface KVT {
      * @return The boolean value. If it does not exist, will be 0.
      */
     default double getDouble(final @NonNull String name) {
-        try {
-            return this.get(name);
-        } catch (NullPointerException | ClassCastException ignored) {
-            return 0;
-        }
+        final Double value = this.valueAs(name, Double.class);
+        return value == null ? 0 : value;
     }
 
     /**
@@ -479,11 +462,7 @@ public interface KVT {
      * @return The list of values. If it does not exist, may be null or an empty unmodifiable list.
      */
     default List<Double> getDoubleArray(final @NonNull String name) {
-        try {
-            return this.get(name);
-        } catch (NullPointerException | ClassCastException ignored) {
-            return Collections.emptyList();
-        }
+        return this.listAs(name);
     }
 
     /**
@@ -493,11 +472,8 @@ public interface KVT {
      * @return The boolean value. If it does not exist, will be 0.
      */
     default float getFloat(final @NonNull String name) {
-        try {
-            return this.get(name);
-        } catch (NullPointerException | ClassCastException ignored) {
-            return 0;
-        }
+        final Float value = this.valueAs(name, Float.class);
+        return value == null ? 0 : value;
     }
 
     /**
@@ -507,11 +483,7 @@ public interface KVT {
      * @return The list of values. If it does not exist, may be null or an empty unmodifiable list.
      */
     default List<Float> getFloatArray(final @NonNull String name) {
-        try {
-            return this.get(name);
-        } catch (NullPointerException | ClassCastException ignored) {
-            return Collections.emptyList();
-        }
+        return this.listAs(name);
     }
 
     /**
@@ -521,11 +493,8 @@ public interface KVT {
      * @return The boolean value. If it does not exist, will be 0.
      */
     default int getInteger(final String name) {
-        try {
-            return this.get(name);
-        } catch (NullPointerException | ClassCastException ignored) {
-            return 0;
-        }
+        final Integer value = this.valueAs(name, Integer.class);
+        return value == null ? 0 : value;
     }
 
     /**
@@ -535,11 +504,7 @@ public interface KVT {
      * @return The list of values. If it does not exist, may be null or an empty unmodifiable list.
      */
     default List<Integer> getIntegerArray(final @NonNull String name) {
-        try {
-            return this.get(name);
-        } catch (NullPointerException | ClassCastException ignored) {
-            return Collections.emptyList();
-        }
+        return this.listAs(name);
     }
 
     /**
@@ -558,11 +523,8 @@ public interface KVT {
      * @return The boolean value. If it does not exist, will be 0.
      */
     default long getLong(final @NonNull String name) {
-        try {
-            return this.get(name);
-        } catch (NullPointerException | ClassCastException ignored) {
-            return 0;
-        }
+        final Long value = this.valueAs(name, Long.class);
+        return value == null ? 0 : value;
     }
 
     /**
@@ -572,11 +534,7 @@ public interface KVT {
      * @return The list of values. If it does not exist, may be null or an empty unmodifiable list.
      */
     default List<Long> getLongArray(final @NonNull String name) {
-        try {
-            return this.get(name);
-        } catch (NullPointerException | ClassCastException ignored) {
-            return Collections.emptyList();
-        }
+        return this.listAs(name);
     }
 
     /**
@@ -586,11 +544,7 @@ public interface KVT {
      * @return The boolean value. If it does not exist, will be null.
      */
     default Node getNode(final @NonNull String name) {
-        try {
-            return this.get(name);
-        } catch (NullPointerException | ClassCastException ignored) {
-            return null;
-        }
+        return this.valueAs(name, Node.class);
     }
 
     /**
@@ -600,11 +554,7 @@ public interface KVT {
      * @return The list of values. If it does not exist, may be null or an empty unmodifiable list.
      */
     default List<Node> getNodeArray(final @NonNull String name) {
-        try {
-            return this.get(name);
-        } catch (NullPointerException | ClassCastException ignored) {
-            return Collections.emptyList();
-        }
+        return this.listAs(name);
     }
 
     /**
@@ -614,11 +564,8 @@ public interface KVT {
      * @return The boolean value. If it does not exist, will be 0.
      */
     default short getShort(final @NonNull String name) {
-        try {
-            return this.get(name);
-        } catch (NullPointerException | ClassCastException ignored) {
-            return 0;
-        }
+        final Short value = this.valueAs(name, Short.class);
+        return value == null ? 0 : value;
     }
 
     /**
@@ -628,11 +575,7 @@ public interface KVT {
      * @return The list of values. If it does not exist, may be null or an empty unmodifiable list.
      */
     default List<Short> getShortArray(final @NonNull String name) {
-        try {
-            return this.get(name);
-        } catch (NullPointerException | ClassCastException ignored) {
-            return Collections.emptyList();
-        }
+        return this.listAs(name);
     }
 
     /**
@@ -642,11 +585,7 @@ public interface KVT {
      * @return The boolean value. If it does not exist, will be null.
      */
     default String getString(final @NonNull String name) {
-        try {
-            return this.get(name);
-        } catch (NullPointerException | ClassCastException ignored) {
-            return null;
-        }
+        return this.valueAs(name, String.class);
     }
 
     /**
@@ -656,11 +595,7 @@ public interface KVT {
      * @return The list of values. If it does not exist, may be null or an empty unmodifiable list.
      */
     default List<String> getStringArray(final @NonNull String name) {
-        try {
-            return this.get(name);
-        } catch (NullPointerException | ClassCastException ignored) {
-            return Collections.emptyList();
-        }
+        return this.listAs(name);
     }
 
     /**
@@ -686,4 +621,34 @@ public interface KVT {
      * @return Whether a child with that name exists on this node.
      */
     boolean hasChild(final @NonNull String name);
+
+    /**
+     * A value, if it is of a type.
+     *
+     * @param name The value's name; null finds nothing.
+     * @param type The type wanted.
+     * @param <V> The type wanted.
+     * @return The value, or null if there is none or it is of another type.
+     */
+    private <V> V valueAs(final String name, final @NonNull Class<V> type) {
+        final Object value = name == null ? null : this.get(name);
+        return type.isInstance(value) ? type.cast(value) : null;
+    }
+
+    /**
+     * A list value. Its elements aren't checked, so a list of another element type comes back as it
+     * is.
+     *
+     * @param name The value's name; null finds nothing.
+     * @param <E> The element type wanted.
+     * @return The list, null if there is none, or an empty list if the value isn't a list.
+     */
+    @SuppressWarnings("unchecked")
+    private <E> List<E> listAs(final String name) {
+        final Object value = name == null ? null : this.get(name);
+        if (value == null) {
+            return null;
+        }
+        return value instanceof List<?> list ? (List<E>) list : Collections.emptyList();
+    }
 }

@@ -223,8 +223,12 @@ public class GuiRender {
 
             final GuiLayout.DrawListOffsets[] offsets =
                     drawData == null ? null : prepared.offsetsOf(drawData);
-            if (offsets != null && offsets.length > 0) {
-                drawLists(commandBuffer, vulkanState, drawData, offsets, imageWidth, imageHeight);
+            if (offsets != null) {
+                // No draw lists, as once the last plugin showing GUI unloads, draws nothing
+                if (offsets.length > 0) {
+                    drawLists(
+                            commandBuffer, vulkanState, drawData, offsets, imageWidth, imageHeight);
+                }
             } else if (drawData != null) {
                 log.warn("GUI draw data for {} wasn't prepared this frame", where);
             }

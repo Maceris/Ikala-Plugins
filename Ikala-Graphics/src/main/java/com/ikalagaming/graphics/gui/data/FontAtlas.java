@@ -742,6 +742,9 @@ public class FontAtlas {
         final Font font = resolvedFirst.font();
         font.lock.lock();
         try {
+            if (font.isDestroyed()) {
+                return 0.0f;
+            }
             font.setSize(fontSize);
             final int firstIndex = FT_Get_Char_Index(font.face, resolvedFirst.value());
             final int secondIndex = FT_Get_Char_Index(font.face, resolvedSecond.value());
@@ -846,6 +849,9 @@ public class FontAtlas {
     private StagedBitmap loadGlyph(@NonNull Font font, char c, @NonNull CacheElement element) {
         font.lock.lock();
         try {
+            if (font.isDestroyed()) {
+                return null;
+            }
             // Tabs and line breaks use the space glyph
             int glyphIndex = FT_Get_Char_Index(font.face, isSpecialWhitespace(c) ? ' ' : c);
             int error = FT_Load_Glyph(font.face, glyphIndex, FT_LOAD_DEFAULT);

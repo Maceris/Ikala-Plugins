@@ -190,7 +190,7 @@ public final class GltfFile {
             throws IOException {
         List<ByteBuffer> buffers = new ArrayList<>();
         for (JsonElement element : array(json, "buffers")) {
-            JsonObject buffer = element.getAsJsonObject();
+            JsonObject buffer = GltfJson.object(element, "buffers");
             if (!buffer.has("uri")) {
                 if (binary == null) {
                     throw new IOException("A buffer has no URI and there is no binary chunk");
@@ -198,7 +198,7 @@ public final class GltfFile {
                 buffers.add(binary);
             } else {
                 buffers.add(
-                        ByteBuffer.wrap(uriBytes(buffer.get("uri").getAsString(), folder))
+                        ByteBuffer.wrap(uriBytes(GltfJson.string(buffer, "uri"), folder))
                                 .order(ByteOrder.LITTLE_ENDIAN));
             }
         }
@@ -267,7 +267,7 @@ public final class GltfFile {
      * @return The array.
      */
     static JsonArray array(JsonObject object, String name) {
-        return object.has(name) ? object.getAsJsonArray(name) : new JsonArray();
+        return object.has(name) ? GltfJson.array(object, name) : new JsonArray();
     }
 
     /**
@@ -283,7 +283,7 @@ public final class GltfFile {
         if (index < 0 || index >= items.size()) {
             throw new IllegalArgumentException("There is no " + name + "[" + index + "]");
         }
-        return items.get(index).getAsJsonObject();
+        return GltfJson.object(items.get(index), name + "[" + index + "]");
     }
 
     /**
@@ -337,7 +337,7 @@ public final class GltfFile {
      * @return The component count.
      */
     public int components(int accessor) {
-        return components(get("accessors", accessor).get("type").getAsString());
+        return components(GltfJson.string(get("accessors", accessor), "type"));
     }
 
     /**
@@ -347,7 +347,7 @@ public final class GltfFile {
      * @return The element count.
      */
     public int count(int accessor) {
-        return get("accessors", accessor).get("count").getAsInt();
+        return GltfJson.integer(get("accessors", accessor), "count");
     }
 
     /**
@@ -412,14 +412,14 @@ public final class GltfFile {
      */
     private View view(int bufferView) {
         JsonObject view = get("bufferViews", bufferView);
-        int bufferIndex = view.get("buffer").getAsInt();
+        int bufferIndex = GltfJson.integer(view, "buffer");
         if (bufferIndex < 0 || bufferIndex >= buffers.size()) {
             throw new IllegalArgumentException(
                     "Buffer view " + bufferView + " names the missing buffer " + bufferIndex);
         }
         ByteBuffer buffer = buffers.get(bufferIndex);
-        long offset = view.has(BYTE_OFFSET) ? view.get(BYTE_OFFSET).getAsLong() : 0;
-        long length = view.get("byteLength").getAsLong();
+        long offset = view.has(BYTE_OFFSET) ? GltfJson.longInteger(view, BYTE_OFFSET) : 0;
+        long length = GltfJson.longInteger(view, "byteLength");
         // Subtracted, so huge values can't wrap past the check
         if (offset < 0
                 || length < 0
@@ -428,7 +428,7 @@ public final class GltfFile {
             throw new IllegalArgumentException(
                     "Buffer view " + bufferView + " runs past its buffer");
         }
-        int stride = view.has(BYTE_STRIDE) ? view.get(BYTE_STRIDE).getAsInt() : 0;
+        int stride = view.has(BYTE_STRIDE) ? GltfJson.integer(view, BYTE_STRIDE) : 0;
         if (stride < 0) {
             throw new IllegalArgumentException(
                     "Buffer view " + bufferView + " has a negative stride");
@@ -458,10 +458,10 @@ public final class GltfFile {
         if (object.has("sparse")) {
             throw new IllegalArgumentException("Sparse accessors aren't supported");
         }
-        int componentType = object.get("componentType").getAsInt();
-        int components = components(object.get("type").getAsString());
-        long count = object.get("count").getAsLong();
-        boolean normalized = object.has("normalized") && object.get("normalized").getAsBoolean();
+        int componentType = GltfJson.integer(object, "componentType");
+        int components = components(GltfJson.string(object, "type"));
+        long count = GltfJson.longInteger(object, "count");
+        boolean normalized = object.has("normalized") && GltfJson.bool(object, "normalized");
         int size = componentSize(componentType);
         // Divided, so a forged count can't overflow the product
         if (count < 0 || count > MAX_ACCESSOR_VALUES / components) {
@@ -474,8 +474,9 @@ public final class GltfFile {
             return new Reader(
                     null, 0, elementSize, componentType, components, (int) count, normalized);
         }
-        View view = view(object.get("bufferView").getAsInt());
-        long accessorOffset = object.has(BYTE_OFFSET) ? object.get(BYTE_OFFSET).getAsLong() : 0;
+        View view = view(GltfJson.integer(object, "bufferView"));
+        long accessorOffset =
+                object.has(BYTE_OFFSET) ? GltfJson.longInteger(object, BYTE_OFFSET) : 0;
         int stride = view.stride == 0 ? elementSize : view.stride;
         if (accessorOffset < 0 || accessorOffset > view.length || stride < elementSize) {
             throw new IllegalArgumentException(

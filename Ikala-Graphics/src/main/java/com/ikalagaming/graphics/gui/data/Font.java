@@ -184,24 +184,38 @@ public class Font {
     }
 
     /**
+     * Whether the font's face was freed, after which it can't load glyphs. Hold the lock.
+     *
+     * @return True once {@link #destroy()} ran.
+     */
+    boolean isDestroyed() {
+        return freeTypeFont == null;
+    }
+
+    /**
      * Free up resources for the font. This must be done when we are done with the font, or it will
-     * leak resources.
+     * leak resources. Takes the lock, so a glyph being loaded finishes before the face goes.
      */
     void destroy() {
-        if (freeTypeFont != null) {
-            int error = nFT_Done_Face(freeTypeFont.get(0));
-            if (error != FT_Err_Ok) {
-                IkGuiInternal.reportError(
-                        log,
-                        "Failed to destroy face for font {}: {}",
-                        name,
-                        FT_Error_String(error));
+        this.lock.lock();
+        try {
+            if (freeTypeFont != null) {
+                int error = nFT_Done_Face(freeTypeFont.get(0));
+                if (error != FT_Err_Ok) {
+                    IkGuiInternal.reportError(
+                            log,
+                            "Failed to destroy face for font {}: {}",
+                            name,
+                            FT_Error_String(error));
+                }
+                freeTypeFont = null;
+                fontData = null;
+                // Allocated with create(), so the garbage collector frees it, calling free()
+                // would corrupt the heap
+                sizeRequest = null;
             }
-            freeTypeFont = null;
-            fontData = null;
-            // Allocated with create(), so the garbage collector frees it, calling free() would
-            // corrupt the heap
-            sizeRequest = null;
+        } finally {
+            this.lock.unlock();
         }
     }
 }

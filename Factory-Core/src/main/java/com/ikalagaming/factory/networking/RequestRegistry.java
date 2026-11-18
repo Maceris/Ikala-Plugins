@@ -24,8 +24,8 @@ public class RequestRegistry {
     /** Requests headed towards the server. */
     private static final BiMap<Integer, Class<? extends Request>> serverBound = HashBiMap.create();
 
-    /** Whether we have set up the registry. */
-    @Getter private static boolean setUp;
+    /** Whether we have set up the registry; volatile since it is read without the lock. */
+    @Getter private static volatile boolean setUp;
 
     /**
      * Fetch the ID for the specified type.
@@ -34,6 +34,7 @@ public class RequestRegistry {
      * @param type The type we want the ID of.
      * @return The ID of the packet in that direction. -1 if it is not found.
      */
+    @Synchronized
     public static int getID(
             @NonNull RequestDirection direction, @NonNull Class<? extends Request> type) {
         var map =
@@ -52,6 +53,7 @@ public class RequestRegistry {
      * @param id The ID we want the class of.
      * @return The class of the packet with that ID in that direction, or null if not found.
      */
+    @Synchronized
     public static Class<? extends Request> getType(@NonNull RequestDirection direction, int id) {
         var map =
                 switch (direction) {
