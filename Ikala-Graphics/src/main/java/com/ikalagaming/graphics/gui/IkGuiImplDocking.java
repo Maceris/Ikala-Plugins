@@ -502,10 +502,19 @@ class IkGuiImplDocking {
                 continue;
             }
             final DockNode node = dockContextAddNode(settings.id);
-            node.parentNode =
+            DockNode parent =
                     settings.parentNodeID != 0
                             ? dockContextFindNodeByID(settings.parentNodeID)
                             : null;
+            if (parent != null && dockNodeIsInHierarchyOf(parent, node)) {
+                // Like Parent= naming the node itself in a broken .ini; walking to the root
+                // would never end
+                log.warn(
+                        "dockContextBuildNodesFromSettings: node 0x{} can't be its own ancestor",
+                        Integer.toHexString(settings.id));
+                parent = null;
+            }
+            node.parentNode = parent;
             node.position.set(settings.positionX, settings.positionY);
             node.size.set(settings.sizeX, settings.sizeY);
             node.sizeRef.set(settings.sizeRefX, settings.sizeRefY);

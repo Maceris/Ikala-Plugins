@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.ikalagaming.graphics.gui.data.Context;
@@ -585,6 +586,25 @@ class IkGuiDockingTest {
         frames(3, ui);
         assertNull(docked.dockNode);
         assertFalse(docked.dockIsActive);
+    }
+
+    /** A node naming itself as its parent in the .ini must not hang finding its root. */
+    @Test
+    void settingsWithSelfParentDoNotHang() {
+        final String ini =
+                "[Docking][Data]\n"
+                        + "DockNode ID=0x00000001 Parent=0x00000001 SizeRef=100,100\n"
+                        + "DockNode ID=0x00000002 Parent=0x00000001 SizeRef=100,100\n";
+        assertTimeoutPreemptively(
+                java.time.Duration.ofSeconds(10),
+                () -> {
+                    IkGui.loadIniSettingsFromMemory(ini);
+                    frames(2, () -> window("Plain", -1, -1, null));
+                });
+        final DockNode node = IkGuiInternal.dockBuilderGetNode(1);
+        if (node != null) {
+            assertNull(node.parentNode);
+        }
     }
 
     @Test

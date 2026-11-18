@@ -82,6 +82,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -94,7 +95,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -561,8 +561,13 @@ public final class CharacterEditor {
     /** The design shown, built and sorted, or null while loading. */
     private Prepared prepared;
 
-    /** Files read while the editor is open, on their plan's rig, for switching designs fast. */
-    private final Map<Path, ImportedCharacter> readFiles = new ConcurrentHashMap<>();
+    /**
+     * Files read while the editor is open, on their plan's rig, for switching designs fast. Holds
+     * null for a file that couldn't be read, so it isn't tried again; a concurrent map can't hold
+     * null, so this is a synchronized one. Builds run on other threads.
+     */
+    private final Map<Path, ImportedCharacter> readFiles =
+            Collections.synchronizedMap(new HashMap<>());
 
     /** The name to save the design as. */
     private final IkString saveName = new IkString(SAVE_NAME_CAPACITY);

@@ -129,8 +129,9 @@ public final class LodCache {
     }
 
     /**
-     * Read a cell, if it is there and sound. A file that can't be read is a miss, and is deleted so
-     * the cell's next build replaces it.
+     * Read a cell, if it is there and sound. A file that breaks the format is a miss, and is deleted
+     * so the cell's next build replaces it. A file that can't be read right now, like one another
+     * thread is replacing, is a miss but is kept.
      *
      * @param key The cell's cache key.
      * @param builderVersion The builder version it must have.
@@ -142,27 +143,40 @@ public final class LodCache {
             misses.incrementAndGet();
             return null;
         }
+        final LodCellFile.Stored stored;
         try {
             // Decoding copies everything out, so the file can be read into a reused buffer
-            final LodCellFile.Stored stored =
+            stored =
                     AssetFile.withFile(
                             file,
                             LodCellFile.known(),
                             asset -> LodCellFile.decode(asset, key, builderVersion));
-            bytesRead.addAndGet(Files.size(file));
-            // Used now, so the last to go
-            Files.setLastModifiedTime(file, FileTime.fromMillis(System.currentTimeMillis()));
-            hits.incrementAndGet();
-            return stored;
-        } catch (NoSuchFileException e) {
+        } catch (UncheckedIOException e) {
+            // Reading failed, not the format, so the file may be fine; don't delete it
             misses.incrementAndGet();
+            if (!(e.getCause() instanceof NoSuchFileException)) {
+                log.warn(
+                        "The cached LOD cell {} can't be read now, rebuilding it: {}",
+                        file,
+                        e.getCause().toString());
+            }
             return null;
-        } catch (IOException | RuntimeException e) {
-            log.warn("The cached LOD cell {} can't be read, rebuilding it: {}", file, e.toString());
+        } catch (RuntimeException e) {
+            log.warn("The cached LOD cell {} is broken, rebuilding it: {}", file, e.toString());
             misses.incrementAndGet();
             deleteQuietly(file);
             return null;
         }
+        hits.incrementAndGet();
+        try {
+            bytesRead.addAndGet(Files.size(file));
+            // Used now, so the last to go
+            Files.setLastModifiedTime(file, FileTime.fromMillis(System.currentTimeMillis()));
+        } catch (IOException e) {
+            // Only bookkeeping for eviction; the cell was read
+            log.debug("Couldn't touch the cached LOD cell {}: {}", file, e.toString());
+        }
+        return stored;
     }
 
     /**

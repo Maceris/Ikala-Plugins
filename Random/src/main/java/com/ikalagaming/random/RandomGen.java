@@ -6,6 +6,7 @@ import lombok.NonNull;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Random generation functions.
@@ -15,15 +16,6 @@ import java.util.*;
 public class RandomGen {
 
     /**
-     * An interval along a number line.
-     *
-     * @author Ches Burks
-     * @param start The start of the interval.
-     * @param end The end of the interval.
-     */
-    private record Interval(double start, double end) {}
-
-    /**
      * Used for selecting items from a list up to a certain weight.
      *
      * @author Ches Burks
@@ -31,12 +23,15 @@ public class RandomGen {
      * @param weight The weight of the index.
      * @see RandomGen#selectUpToWeight(int[], int)
      */
-    private record WeightEntry(int index, int weight) {}
+    private record WeightEntry(int index, long weight) {}
 
     /** A secure source of strong random data, for use in things like cryptography. */
     @Getter private static final SecureRandom secureRandom;
 
-    /** A fast source of random data, for use in non-security related things. */
+    /**
+     * A fast source of random data, for use in non-security related things. This is not safe to
+     * share between threads, so the selection methods here use {@link ThreadLocalRandom} instead.
+     */
     @Getter private static final SplittableRandom fastRandom;
 
     static {
@@ -46,25 +41,6 @@ public class RandomGen {
         } catch (NoSuchAlgorithmException e) {
             throw new UnsupportedOperationException(e);
         }
-    }
-
-    /**
-     * Takes a cumulative distribution function and turns it into intervals representing the
-     * sections of the line from 0 to 1 that is split at the values at each index.
-     *
-     * @param cdf The cumulative distribution function values.
-     * @return The list of intervals that represent the CDF.
-     */
-    private static Interval[] calculateIntervals(double[] cdf) {
-        if (cdf == null || cdf.length == 0) {
-            return new Interval[0];
-        }
-        Interval[] intervals = new Interval[cdf.length];
-        intervals[0] = new Interval(0, cdf[0]);
-        for (int i = 1; i < cdf.length; ++i) {
-            intervals[i] = new Interval(cdf[i - 1], cdf[i]);
-        }
-        return intervals;
     }
 
     /**
@@ -137,7 +113,7 @@ public class RandomGen {
      */
     public static <T extends Enum<T>> T selectEnumValue(Class<T> enumClass) {
         final T[] enumValues = enumClass.getEnumConstants();
-        return enumValues[RandomGen.fastRandom.nextInt(enumValues.length)];
+        return enumValues[ThreadLocalRandom.current().nextInt(enumValues.length)];
     }
 
     /**
@@ -161,40 +137,40 @@ public class RandomGen {
         RandomGen.normalize(normalizedWeights);
 
         double[] cdf = RandomGen.generateCDF(normalizedWeights);
-        Interval[] intervals = RandomGen.calculateIntervals(cdf);
 
         int[] selections = new int[count];
         for (int i = 0; i < count; ++i) {
-            selections[i] = RandomGen.selectFromWeightedList(intervals);
+            selections[i] = RandomGen.selectFromCDF(cdf);
         }
         return selections;
     }
 
     /**
-     * Select a random item out of a list of intervals. Selects a number from 0 to 1, finds the
-     * interval that contains that number using a binary search, and returns its index.
+     * Select a random index using a cumulative distribution function. Picks a number in [0, 1) and
+     * returns the first index whose cumulative value is above it, so indices with no weight are
+     * never chosen. If every weight is zero, all indices are equally likely.
      *
-     * @param intervals The intervals that the number line is split into.
-     * @return The selection index.
+     * @param cdf The cumulative distribution function, which is not empty.
+     * @return The selected index.
      */
-    private static int selectFromWeightedList(Interval[] intervals) {
-        double selection = RandomGen.fastRandom.nextDouble();
-
-        return Arrays.binarySearch(
-                intervals,
-                new Interval(selection, selection),
-                (b, a) -> {
-                    int startCompare = Double.compare(a.start(), b.start());
-                    int endCompare = Double.compare(a.end(), b.end());
-
-                    if (startCompare > 0 && endCompare >= 0) {
-                        return -1;
-                    }
-                    if (startCompare <= 0 && endCompare < 0) {
-                        return 1;
-                    }
-                    return 0;
-                });
+    private static int selectFromCDF(double[] cdf) {
+        final int last = cdf.length - 1;
+        if (cdf[last] <= 0) {
+            return ThreadLocalRandom.current().nextInt(cdf.length);
+        }
+        // Scale by the total so rounding in the normalized weights can't leave a gap at the top
+        final double selection = ThreadLocalRandom.current().nextDouble() * cdf[last];
+        int low = 0;
+        int high = last;
+        while (low < high) {
+            final int middle = (low + high) >>> 1;
+            if (cdf[middle] > selection) {
+                high = middle;
+            } else {
+                low = middle + 1;
+            }
+        }
+        return low;
     }
 
     /**
@@ -221,12 +197,11 @@ public class RandomGen {
         RandomGen.normalize(normalizedWeights);
 
         double[] cdf = RandomGen.generateCDF(normalizedWeights);
-        Interval[] intervals = RandomGen.calculateIntervals(cdf);
 
         List<Integer> selections = new ArrayList<>(count);
 
         for (int i = 0; i < count; ++i) {
-            selections.add(RandomGen.selectFromWeightedList(intervals));
+            selections.add(RandomGen.selectFromCDF(cdf));
         }
         return selections;
     }
@@ -247,40 +222,13 @@ public class RandomGen {
         if (maxWeight <= 0 || weights.length == 0) {
             return new int[0];
         }
-
-        int remainingWeight = maxWeight;
-
-        List<WeightEntry> validChoices = new ArrayList<>();
-        List<Integer> selections = new ArrayList<>();
-
+        List<WeightEntry> choices = new ArrayList<>(weights.length);
         for (int i = 0; i < weights.length; ++i) {
-            validChoices.add(new WeightEntry(i, weights[i]));
+            choices.add(new WeightEntry(i, Math.abs((long) weights[i])));
         }
-        while (remainingWeight > 0) {
-            /*
-             * Java complains that the weight is not effectively final, even
-             * though the lambda does not modify it. Annoying workaround.
-             */
-            final int weightBecauseLambdas = remainingWeight;
-
-            // get rid of any values that are too expensive to select
-            validChoices.removeIf(entry -> entry.weight() > weightBecauseLambdas);
-            // if we can't make any more valid choices, then bail
-            int size = validChoices.size();
-            if (size == 0) {
-                break;
-            }
-            WeightEntry selection = validChoices.get(RandomGen.fastRandom.nextInt(size));
-            remainingWeight -= Math.abs(selection.weight());
-            selections.add(selection.index());
-        }
-
-        int[] values = new int[selections.size()];
-
-        for (int i = 0; i < selections.size(); ++i) {
-            values[i] = selections.get(i);
-        }
-        return values;
+        return selectEntriesUpToWeight(choices, maxWeight).stream()
+                .mapToInt(Integer::intValue)
+                .toArray();
     }
 
     /**
@@ -301,33 +249,39 @@ public class RandomGen {
             return new ArrayList<>();
         }
 
-        int remainingWeight = maxWeight;
-
-        List<WeightEntry> validChoices = new ArrayList<>();
-        List<Integer> selections = new ArrayList<>();
-
+        List<WeightEntry> choices = new ArrayList<>(weights.size());
         for (int i = 0; i < weights.size(); ++i) {
-            validChoices.add(new WeightEntry(i, weights.get(i)));
+            choices.add(new WeightEntry(i, Math.abs((long) weights.get(i))));
         }
-        while (remainingWeight > 0) {
-            /*
-             * Java complains that the weight is not effectively final, even
-             * though the lambda does not modify it. Annoying workaround.
-             */
-            final int weightBecauseLambdas = remainingWeight;
+        return selectEntriesUpToWeight(choices, maxWeight);
+    }
 
+    /**
+     * Select entries at random until no more fit in the remaining weight.
+     *
+     * @param choices The entries, with weights that are not negative. Modified.
+     * @param maxWeight The total weight allowed, which is positive.
+     * @return The indices of the selected entries, in the order they were selected.
+     */
+    private static List<Integer> selectEntriesUpToWeight(
+            List<WeightEntry> choices, final int maxWeight) {
+        // Something with no weight could be selected forever without using any up
+        choices.removeIf(entry -> entry.weight() == 0);
+        long remainingWeight = maxWeight;
+        List<Integer> selections = new ArrayList<>();
+        while (remainingWeight > 0) {
+            final long remaining = remainingWeight;
             // get rid of any values that are too expensive to select
-            validChoices.removeIf(entry -> entry.weight() > weightBecauseLambdas);
+            choices.removeIf(entry -> entry.weight() > remaining);
             // if we can't make any more valid choices, then bail
-            int size = validChoices.size();
+            int size = choices.size();
             if (size == 0) {
                 break;
             }
-            WeightEntry selection = validChoices.get(RandomGen.fastRandom.nextInt(size));
-            remainingWeight -= Math.abs(selection.weight());
+            WeightEntry selection = choices.get(ThreadLocalRandom.current().nextInt(size));
+            remainingWeight -= selection.weight();
             selections.add(selection.index());
         }
-
         return selections;
     }
 }

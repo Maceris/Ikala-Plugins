@@ -37,6 +37,7 @@ import org.joml.Quaterniond;
 import org.joml.Vector2f;
 import org.joml.Vector3d;
 import org.joml.Vector3f;
+import org.joml.Vector3fc;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -57,10 +58,10 @@ public class SceneView {
     static final String INPUT_WINDOW = "Workbench scene input";
 
     /** The sun's color. */
-    private static final Vector3f SUN_COLOR = new Vector3f(1, 0.97f, 0.9f);
+    private static final Vector3fc SUN_COLOR = new Vector3f(1, 0.97f, 0.9f);
 
     /** The sun's direction. */
-    private static final Vector3f SUN_DIRECTION = new Vector3f(0.4f, -0.8f, 0.45f);
+    private static final Vector3fc SUN_DIRECTION = new Vector3f(0.4f, -0.8f, 0.45f);
 
     /** The sun's intensity. */
     private static final float SUN_INTENSITY = 3;
@@ -324,7 +325,11 @@ public class SceneView {
         // The debug stage draws the selection's outline
         GraphicsManager.swapPipeline(RenderConfig.WORLD.withDebug(true));
         scene.getSceneLights()
-                .setDirLight(new DirectionalLight(SUN_COLOR, SUN_DIRECTION, SUN_INTENSITY));
+                .setDirLight(new DirectionalLight(
+                                // Copies, since the lighting panel edits the light's in place
+                                new Vector3f(SUN_COLOR),
+                                new Vector3f(SUN_DIRECTION),
+                                SUN_INTENSITY));
         scene.getSceneLights()
                 .setAmbientLight(new AmbientLight(new Vector3f(1, 1, 1), AMBIENT_INTENSITY));
         GraphicsManager.getWindowManager().addWindow(graphics, INPUT_WINDOW, new InputWindow());

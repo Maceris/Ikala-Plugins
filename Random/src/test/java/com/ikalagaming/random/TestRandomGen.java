@@ -289,4 +289,43 @@ class TestRandomGen {
         Assertions.assertNotNull(selections);
         Assertions.assertTrue(selections.isEmpty());
     }
+
+    /** Zero weights must not loop forever, and negative weights count by their size. */
+    @Test
+    void testSelectUpToWeightWithZeroAndNegativeWeights() {
+        Assertions.assertTimeoutPreemptively(
+                java.time.Duration.ofSeconds(5),
+                () -> {
+                    for (int i = 0; i < 1000; ++i) {
+                        int[] selections = RandomGen.selectUpToWeight(new int[] {0, 5}, 3);
+                        Assertions.assertEquals(0, selections.length);
+
+                        int total = 0;
+                        for (int index : RandomGen.selectUpToWeight(new int[] {0, -4, 3}, 10)) {
+                            Assertions.assertNotEquals(0, index);
+                            total += index == 1 ? 4 : 3;
+                        }
+                        Assertions.assertTrue(total <= 10);
+                        Assertions.assertTrue(total > 10 - 3);
+
+                        Assertions.assertEquals(
+                                0,
+                                RandomGen.selectUpToWeight(List.of(Integer.MIN_VALUE), 100)
+                                        .size());
+                    }
+                });
+    }
+
+    /** Weighted selections must always be valid indices, and never pick a zero weight. */
+    @Test
+    void testSelectFromWeightedListIndices() {
+        int[] selections = RandomGen.selectFromWeightedList(new double[] {0, 1, 0, 3, 0}, 10_000);
+        for (int index : selections) {
+            Assertions.assertTrue(index == 1 || index == 3, "Selected " + index);
+        }
+        selections = RandomGen.selectFromWeightedList(new double[] {0, 0, Double.NaN}, 1000);
+        for (int index : selections) {
+            Assertions.assertTrue(index >= 0 && index < 3, "Selected " + index);
+        }
+    }
 }

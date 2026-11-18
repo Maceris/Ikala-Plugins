@@ -19,7 +19,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Slf4j
 public class Server {
     private World loadedWorld;
-    @Getter private Registries registries;
+    /**
+     * The definitions loaded for this run. Replaced on each start; read by event handlers on the
+     * event thread.
+     */
+    @Getter private volatile Registries registries;
     private final AtomicBoolean running;
     private final List<ServerBoundRequestHandler> activeConnections;
 
@@ -29,10 +33,11 @@ public class Server {
     }
 
     public void start() {
-        if (running.compareAndExchange(false, true)) {
+        if (running.compareAndSet(false, true)) {
             log.info(
                     SafeResourceLoader.getString(
                             "SERVER_STARTING", FactoryServerPlugin.getResourceBundle()));
+            registries = new Registries();
             new LoadingTags().fire();
         } else {
             log.warn(
@@ -42,11 +47,11 @@ public class Server {
     }
 
     public void stop() {
-        new ServerStopping().fire();
-        if (running.compareAndExchange(true, false)) {
+        if (running.compareAndSet(true, false)) {
             log.info(
                     SafeResourceLoader.getString(
                             "SERVER_STOPPING", FactoryServerPlugin.getResourceBundle()));
+            new ServerStopping().fire();
         }
     }
 }
