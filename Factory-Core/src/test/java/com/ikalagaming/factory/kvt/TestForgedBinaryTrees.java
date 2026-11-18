@@ -113,7 +113,7 @@ class TestForgedBinaryTrees {
 
     @Test
     void nestedSizesMustFitTheirParent() throws IOException {
-        for (long size : new long[] {1_000, Long.MAX_VALUE, -1, 0, 7}) {
+        for (long size : new long[] {1000, Long.MAX_VALUE, -1, 0, 7}) {
             assertRefused(
                     root(
                             out -> {
@@ -162,7 +162,7 @@ class TestForgedBinaryTrees {
         assertTrue(read(nested(10)).isPresent(), "Ordinary nesting reads");
         assertRefused(nested(TreeBinarySerialization.MAX_DEPTH + 1));
         // Deep enough that reading without a limit would risk the stack
-        assertRefused(nested(2_000));
+        assertRefused(nested(2000));
     }
 
     @Test

@@ -214,7 +214,7 @@ public final class SceneImporter {
                 lights(
                         aiScene,
                         root,
-                        file.getFileName().toString().toLowerCase().endsWith(".fbx"),
+                        file.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".fbx"),
                         warnings);
         final long millis = (System.nanoTime() - start) / 1_000_000;
         return new ImportedScene(

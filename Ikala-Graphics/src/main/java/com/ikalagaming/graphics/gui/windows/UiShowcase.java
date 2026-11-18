@@ -25,6 +25,8 @@ import com.ikalagaming.graphics.ui.style.StyleKey;
 
 import lombok.NonNull;
 
+import java.util.Locale;
+
 /**
  * A surface that shows off every retained UI node type and layout option, for checking the layout
  * engine by eye and trying keyboard and gamepad navigation. Toggled from the graphics debug window.
@@ -192,7 +194,7 @@ public final class UiShowcase {
                     new Column(align.name())
                             .width(Sizing.grow())
                             .align(align)
-                            .add(new Button("button", align.name().toLowerCase())));
+                            .add(new Button("button", align.name().toLowerCase(Locale.ROOT))));
         }
         return row;
     }

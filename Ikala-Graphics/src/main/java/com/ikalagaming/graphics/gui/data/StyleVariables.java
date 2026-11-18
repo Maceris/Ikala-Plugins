@@ -557,117 +557,47 @@ public class StyleVariables {
         }
 
         switch (variable) {
-            case ALPHA:
-                alpha = value;
-                break;
-            case DISABLED_ALPHA:
-                disabledAlpha = value;
-                break;
-            case DOCKING_SEPARATOR_SIZE:
-                dockingSeparatorSize = value;
-                break;
-            case DRAG_DROP_TARGET_ROUNDING:
-                dragDropTargetRounding = value;
-                break;
-            case CHILD_BORDER_SIZE:
-                childBorderSize = value;
-                break;
-            case CHILD_ROUNDING:
-                childRounding = value;
-                break;
-            case FRAME_BORDER_SIZE:
-                frameBorderSize = value;
-                break;
-            case FRAME_ROUNDING:
-                frameRounding = value;
-                break;
-            case GRAB_MIN_SIZE:
-                grabMinSize = value;
-                break;
-            case GRAB_ROUNDING:
-                grabRounding = value;
-                break;
-            case IMAGE_BORDER_SIZE:
-                imageBorderSize = value;
-                break;
-            case IMAGE_ROUNDING:
-                imageRounding = value;
-                break;
-            case INDENT_SPACING:
-                indentSpacing = value;
-                break;
-            case LOG_SLIDER_DEADZONE:
-                logSliderDeadzone = value;
-                break;
-            case MENU_ITEM_ROUNDING:
-                menuItemRounding = value;
-                break;
-            case SELECTABLE_ROUNDING:
-                selectableRounding = value;
-                break;
-            case SEPARATOR_SIZE:
-                separatorSize = value;
-                break;
-            case POPUP_BORDER_SIZE:
-                popupBorderSize = value;
-                break;
-            case POPUP_ROUNDING:
-                popupRounding = value;
-                break;
-            case SCROLLBAR_PADDING:
-                scrollbarPadding = value;
-                break;
-            case SCROLLBAR_ROUNDING:
-                scrollbarRounding = value;
-                break;
-            case SCROLLBAR_SIZE:
-                scrollbarSize = value;
-                break;
-            case SEPARATOR_TEXT_BORDER_SIZE:
-                separatorTextBorderSize = value;
-                break;
-            case TABLE_ANGLED_HEADERS_ANGLE:
-                tableAngledHeadersAngle = value;
-                break;
-            case TAB_BAR_BORDER_SIZE:
-                tabBarBorderSize = value;
-                break;
-            case TAB_BAR_OVERLINE_SIZE:
-                tabBarOverlineSize = value;
-                break;
-            case TREE_LINES_ROUNDING:
-                treeLinesRounding = value;
-                break;
-            case TREE_LINES_SIZE:
-                treeLinesSize = value;
-                break;
-            case TAB_BORDER_SIZE:
-                tabBorderSize = value;
-                break;
-            case TAB_MIN_WIDTH_BASE:
-                tabMinWidthBase = value;
-                break;
-            case TAB_MIN_WIDTH_SHRINK:
-                tabMinWidthShrink = value;
-                break;
-            case TAB_ROUNDING:
-                tabRounding = value;
-                break;
-            case WINDOW_BORDER_HOVER_PADDING:
-                windowBorderHoverPadding = value;
-                break;
-            case WINDOW_BORDER_SIZE:
-                windowBorderSize = value;
-                break;
-            case WINDOW_ROUNDING:
-                windowRounding = value;
-                break;
-            default:
+            case ALPHA -> alpha = value;
+            case DISABLED_ALPHA -> disabledAlpha = value;
+            case DOCKING_SEPARATOR_SIZE -> dockingSeparatorSize = value;
+            case DRAG_DROP_TARGET_ROUNDING -> dragDropTargetRounding = value;
+            case CHILD_BORDER_SIZE -> childBorderSize = value;
+            case CHILD_ROUNDING -> childRounding = value;
+            case FRAME_BORDER_SIZE -> frameBorderSize = value;
+            case FRAME_ROUNDING -> frameRounding = value;
+            case GRAB_MIN_SIZE -> grabMinSize = value;
+            case GRAB_ROUNDING -> grabRounding = value;
+            case IMAGE_BORDER_SIZE -> imageBorderSize = value;
+            case IMAGE_ROUNDING -> imageRounding = value;
+            case INDENT_SPACING -> indentSpacing = value;
+            case LOG_SLIDER_DEADZONE -> logSliderDeadzone = value;
+            case MENU_ITEM_ROUNDING -> menuItemRounding = value;
+            case SELECTABLE_ROUNDING -> selectableRounding = value;
+            case SEPARATOR_SIZE -> separatorSize = value;
+            case POPUP_BORDER_SIZE -> popupBorderSize = value;
+            case POPUP_ROUNDING -> popupRounding = value;
+            case SCROLLBAR_PADDING -> scrollbarPadding = value;
+            case SCROLLBAR_ROUNDING -> scrollbarRounding = value;
+            case SCROLLBAR_SIZE -> scrollbarSize = value;
+            case SEPARATOR_TEXT_BORDER_SIZE -> separatorTextBorderSize = value;
+            case TABLE_ANGLED_HEADERS_ANGLE -> tableAngledHeadersAngle = value;
+            case TAB_BAR_BORDER_SIZE -> tabBarBorderSize = value;
+            case TAB_BAR_OVERLINE_SIZE -> tabBarOverlineSize = value;
+            case TREE_LINES_ROUNDING -> treeLinesRounding = value;
+            case TREE_LINES_SIZE -> treeLinesSize = value;
+            case TAB_BORDER_SIZE -> tabBorderSize = value;
+            case TAB_MIN_WIDTH_BASE -> tabMinWidthBase = value;
+            case TAB_MIN_WIDTH_SHRINK -> tabMinWidthShrink = value;
+            case TAB_ROUNDING -> tabRounding = value;
+            case WINDOW_BORDER_HOVER_PADDING -> windowBorderHoverPadding = value;
+            case WINDOW_BORDER_SIZE -> windowBorderSize = value;
+            case WINDOW_ROUNDING -> windowRounding = value;
+            default -> {
                 IkGuiInternal.reportError(
                         log,
                         "Trying to set 1 float value for unexpected style variable {}",
                         variable);
-                break;
+            }
         }
     }
 
@@ -697,30 +627,28 @@ public class StyleVariables {
         }
 
         switch (variable) {
-            case COLOR_BUTTON_POSITION:
+            case COLOR_BUTTON_POSITION -> {
                 try {
                     colorButtonPosition = ColorButtonPosition.fromInteger(value);
                 } catch (IllegalArgumentException ignored) {
                     IkGuiInternal.reportError(log, "Invalid color button position value {}", value);
                 }
-                break;
-            case WINDOW_EDGE_FADE_INVERT:
-                windowEdgeFadeInvert = value != 0;
-                break;
-            case WINDOW_MENU_BUTTON_POSITION:
+            }
+            case WINDOW_EDGE_FADE_INVERT -> windowEdgeFadeInvert = value != 0;
+            case WINDOW_MENU_BUTTON_POSITION -> {
                 try {
                     windowMenuButtonPosition = WindowMenuButtonPosition.fromInteger(value);
                 } catch (IllegalArgumentException ignored) {
                     IkGuiInternal.reportError(
                             log, "Invalid window menu button position value {}", value);
                 }
-                break;
-            default:
+            }
+            default -> {
                 IkGuiInternal.reportError(
                         log,
                         "Trying to set 1 int value for unexpected style variable {}",
                         variable);
-                break;
+            }
         }
     }
 
@@ -757,51 +685,25 @@ public class StyleVariables {
         }
 
         switch (variable) {
-            case BUTTON_TEXT_ALIGN:
-                buttonTextAlign.set(x, y);
-                break;
-            case CELL_PADDING:
-                cellPadding.set(x, y);
-                break;
-            case FRAME_PADDING:
-                framePadding.set(x, y);
-                break;
-            case ITEM_INNER_SPACING:
-                itemInnerSpacing.set(x, y);
-                break;
-            case ITEM_SPACING:
-                itemSpacing.set(x, y);
-                break;
-            case SELECTABLE_TEXT_ALIGN:
-                selectableTextAlign.set(x, y);
-                break;
-            case SEPARATOR_TEXT_ALIGN:
-                separatorTextAlign.set(x, y);
-                break;
-            case SEPARATOR_TEXT_PADDING:
-                separatorTextPadding.set(x, y);
-                break;
-            case TABLE_ANGLED_HEADERS_TEXT_ALIGN:
-                tableAngledHeadersTextAlign.set(x, y);
-                break;
-            case TOUCH_EXTRA_PADDING:
-                touchExtraPadding.set(x, y);
-                break;
-            case WINDOW_MIN_SIZE:
-                windowMinSize.set(x, y);
-                break;
-            case WINDOW_PADDING:
-                windowPadding.set(x, y);
-                break;
-            case WINDOW_TITLE_ALIGN:
-                windowTitleAlign.set(x, y);
-                break;
-            default:
+            case BUTTON_TEXT_ALIGN -> buttonTextAlign.set(x, y);
+            case CELL_PADDING -> cellPadding.set(x, y);
+            case FRAME_PADDING -> framePadding.set(x, y);
+            case ITEM_INNER_SPACING -> itemInnerSpacing.set(x, y);
+            case ITEM_SPACING -> itemSpacing.set(x, y);
+            case SELECTABLE_TEXT_ALIGN -> selectableTextAlign.set(x, y);
+            case SEPARATOR_TEXT_ALIGN -> separatorTextAlign.set(x, y);
+            case SEPARATOR_TEXT_PADDING -> separatorTextPadding.set(x, y);
+            case TABLE_ANGLED_HEADERS_TEXT_ALIGN -> tableAngledHeadersTextAlign.set(x, y);
+            case TOUCH_EXTRA_PADDING -> touchExtraPadding.set(x, y);
+            case WINDOW_MIN_SIZE -> windowMinSize.set(x, y);
+            case WINDOW_PADDING -> windowPadding.set(x, y);
+            case WINDOW_TITLE_ALIGN -> windowTitleAlign.set(x, y);
+            default -> {
                 IkGuiInternal.reportError(
                         log,
                         "Trying to set 2 float values for unexpected style variable {}",
                         variable);
-                break;
+            }
         }
     }
 
@@ -834,15 +736,13 @@ public class StyleVariables {
         }
 
         switch (variable) {
-            case WINDOW_EDGE_FADE:
-                windowEdgeFade.set(x, y, z, w);
-                break;
-            default:
+            case WINDOW_EDGE_FADE -> windowEdgeFade.set(x, y, z, w);
+            default -> {
                 IkGuiInternal.reportError(
                         log,
                         "Trying to set 4 float values for unexpected style variable {}",
                         variable);
-                break;
+            }
         }
     }
 }

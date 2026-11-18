@@ -43,6 +43,7 @@ import org.slf4j.helpers.MessageFormatter;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -761,7 +762,9 @@ class IkGuiImplDebugTools {
     static void debugLocateItemResolveWithLastItem() {
         // Debug break requested by the user
         if (context.debugBreakInLocateID) {
-            debugBreak("item 0x" + Integer.toHexString(context.debugLocateID).toUpperCase());
+            debugBreak(
+                    "item 0x"
+                            + Integer.toHexString(context.debugLocateID).toUpperCase(Locale.ROOT));
         }
 
         context.debugLocateID = 0;
@@ -804,7 +807,7 @@ class IkGuiImplDebugTools {
                             Color.rgba(255, 255, 0, 255));
         }
         if (context.debugItemPickerBreakID == id) {
-            debugBreak("picked item 0x" + Integer.toHexString(id).toUpperCase());
+            debugBreak("picked item 0x" + Integer.toHexString(id).toUpperCase(Locale.ROOT));
         }
     }
 

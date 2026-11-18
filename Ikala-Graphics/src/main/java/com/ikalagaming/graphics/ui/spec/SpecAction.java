@@ -104,14 +104,18 @@ sealed interface SpecAction {
             return Double.parseDouble(text);
         }
         switch (text) {
-            case "true":
+            case "true" -> {
                 return Boolean.TRUE;
-            case "false":
+            }
+            case "false" -> {
                 return Boolean.FALSE;
-            case "null":
+            }
+            case "null" -> {
                 return null;
-            default:
-                break;
+            }
+            default -> {
+                // Not a keyword, so check for a quoted string below
+            }
         }
         if (text.length() >= 2) {
             char first = text.charAt(0);

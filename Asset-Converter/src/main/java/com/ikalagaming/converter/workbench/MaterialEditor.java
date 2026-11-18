@@ -14,6 +14,7 @@ import org.joml.Vector3f;
 import org.joml.Vector4f;
 
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -275,10 +276,11 @@ public class MaterialEditor {
             IkGui.textDisabled("The base color texture stands in for the color");
         }
         final Material.Transparency[] modes = Material.Transparency.values();
-        if (IkGui.beginCombo("Transparency", material.getTransparency().name().toLowerCase())) {
+        if (IkGui.beginCombo(
+                "Transparency", material.getTransparency().name().toLowerCase(Locale.ROOT))) {
             for (Material.Transparency mode : modes) {
                 if (IkGui.selectable(
-                        mode.name().toLowerCase(), mode == material.getTransparency())) {
+                        mode.name().toLowerCase(Locale.ROOT), mode == material.getTransparency())) {
                     material.setTransparency(mode);
                 }
             }

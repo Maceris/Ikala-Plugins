@@ -70,10 +70,11 @@ class ArrayNode<T> implements KVT {
                     LONG_ARRAY,
                     NODE_ARRAY,
                     SHORT_ARRAY,
-                    STRING_ARRAY:
-                break;
-            case BOOLEAN, BYTE, DOUBLE, FLOAT, INTEGER, LONG, NODE, SHORT, STRING:
-            default:
+                    STRING_ARRAY -> {
+                // An array type, so it can be stored
+            }
+            default -> {
+                // BOOLEAN, BYTE, DOUBLE, FLOAT, INTEGER, LONG, NODE, SHORT, STRING are not arrays
                 log.warn(
                         SafeResourceLoader.getStringFormatted(
                                 "NODE_UNEXPECTED_TYPE",
@@ -81,6 +82,7 @@ class ArrayNode<T> implements KVT {
                                 this.getClass().getSimpleName(),
                                 type.name()));
                 throw new UnsupportedOperationException();
+            }
         }
         this.type = type;
         this.values = new ArrayList<>(values);

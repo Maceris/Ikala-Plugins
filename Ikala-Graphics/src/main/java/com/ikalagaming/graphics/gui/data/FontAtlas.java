@@ -968,44 +968,37 @@ public class FontAtlas {
      * @return The pixel.
      */
     static int atlasPixel(int pixelMode, @NonNull ByteBuffer bitmap, int rowStart, int x) {
-        switch (pixelMode) {
-            case FT_PIXEL_MODE_MONO:
-                {
-                    // Most significant bit first
-                    final int bits = bitmap.get(rowStart + x / 8) & 0xFF;
-                    return FontAtlas.coveragePixel(((bits >> (7 - x % 8)) & 0b1) == 1 ? 255 : 0);
-                }
-            case FT_PIXEL_MODE_GRAY2:
-                {
-                    final int bits = bitmap.get(rowStart + x / 4) & 0xFF;
-                    return FontAtlas.coveragePixel(((bits >> (6 - 2 * (x % 4))) & 0b11) * 255 / 3);
-                }
-            case FT_PIXEL_MODE_GRAY4:
-                {
-                    final int bits = bitmap.get(rowStart + x / 2) & 0xFF;
-                    return FontAtlas.coveragePixel(
-                            ((bits >> (4 - 4 * (x % 2))) & 0b1111) * 255 / 15);
-                }
-            case FT_PIXEL_MODE_GRAY:
+        return switch (pixelMode) {
+            case FT_PIXEL_MODE_MONO -> {
+                // Most significant bit first
+                final int bits = bitmap.get(rowStart + x / 8) & 0xFF;
+                yield FontAtlas.coveragePixel(((bits >> (7 - x % 8)) & 0b1) == 1 ? 255 : 0);
+            }
+            case FT_PIXEL_MODE_GRAY2 -> {
+                final int bits = bitmap.get(rowStart + x / 4) & 0xFF;
+                yield FontAtlas.coveragePixel(((bits >> (6 - 2 * (x % 4))) & 0b11) * 255 / 3);
+            }
+            case FT_PIXEL_MODE_GRAY4 -> {
+                final int bits = bitmap.get(rowStart + x / 2) & 0xFF;
+                yield FontAtlas.coveragePixel(((bits >> (4 - 4 * (x % 2))) & 0b1111) * 255 / 15);
+            }
                 // Bytes are signed in Java, so mask to get the coverage from 0 to 255
-                return FontAtlas.coveragePixel(bitmap.get(rowStart + x) & 0xFF);
-            case FT_PIXEL_MODE_LCD, FT_PIXEL_MODE_LCD_V:
+            case FT_PIXEL_MODE_GRAY -> FontAtlas.coveragePixel(bitmap.get(rowStart + x) & 0xFF);
                 // We never render subpixel glyphs, whose width counts each subpixel, so each
                 // subpixel's coverage is used as a pixel's
-                return FontAtlas.coveragePixel(bitmap.get(rowStart + x) & 0xFF);
-            case FT_PIXEL_MODE_BGRA:
-                {
-                    // Color glyphs, like emoji, keep their colors
-                    final int index = rowStart + x * 4;
-                    final int b = bitmap.get(index) & 0xFF;
-                    final int g = bitmap.get(index + 1) & 0xFF;
-                    final int r = bitmap.get(index + 2) & 0xFF;
-                    final int a = bitmap.get(index + 3) & 0xFF;
-                    return (r << 24) | (g << 16) | (b << 8) | a;
-                }
-            default:
-                return 0;
-        }
+            case FT_PIXEL_MODE_LCD, FT_PIXEL_MODE_LCD_V ->
+                    FontAtlas.coveragePixel(bitmap.get(rowStart + x) & 0xFF);
+            case FT_PIXEL_MODE_BGRA -> {
+                // Color glyphs, like emoji, keep their colors
+                final int index = rowStart + x * 4;
+                final int b = bitmap.get(index) & 0xFF;
+                final int g = bitmap.get(index + 1) & 0xFF;
+                final int r = bitmap.get(index + 2) & 0xFF;
+                final int a = bitmap.get(index + 3) & 0xFF;
+                yield (r << 24) | (g << 16) | (b << 8) | a;
+            }
+            default -> 0;
+        };
     }
 
     private void moveToFront(@NonNull CacheElement element) {

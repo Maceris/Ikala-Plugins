@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Stream;
 import javax.annotation.Nullable;
 
@@ -231,7 +232,7 @@ public class AssetInspector {
                                     entry.directory()
                                             || all
                                             || entry.name()
-                                                    .toLowerCase()
+                                                    .toLowerCase(Locale.ROOT)
                                                     .endsWith(AssetFormat.EXTENSION))
                     .sorted(
                             Comparator.comparing((DirectoryEntry entry) -> !entry.directory())

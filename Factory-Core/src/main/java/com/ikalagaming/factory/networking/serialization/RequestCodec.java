@@ -25,8 +25,8 @@ import lombok.extern.slf4j.Slf4j;
 public final class RequestCodec {
     /**
      * The largest frame, not counting its length field. Each connection may buffer up to this much
-     * while a frame arrives, so it bounds the memory a peer can make us hold. Data bigger than this,
-     * like world chunks, should be split across requests.
+     * while a frame arrives, so it bounds the memory a peer can make us hold. Data bigger than
+     * this, like world chunks, should be split across requests.
      */
     public static final int MAX_FRAME_BYTES = 4 << 20;
 
@@ -49,8 +49,8 @@ public final class RequestCodec {
     public static final String DECODE_ERRORS = "requestDecodeErrors";
 
     /**
-     * Closes the connection when a frame is malformed or too long. Later frames can't be trusted
-     * to line up after one, and a peer sending them is broken or hostile.
+     * Closes the connection when a frame is malformed or too long. Later frames can't be trusted to
+     * line up after one, and a peer sending them is broken or hostile.
      */
     static final class DecodeErrors extends ChannelInboundHandlerAdapter {
         @Override

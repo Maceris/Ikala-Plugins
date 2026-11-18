@@ -131,7 +131,7 @@ spotless {
 			include '**/*.java'
 			exclude '**/build/**', '**/build-*/**'
 		}
-		cleanthat().sourceCompatibility('17')
+		cleanthat().sourceCompatibility('21')
 			.addMutator('SafeAndConsensual')
 			.addMutator('SafeButNotConsensual')
 			.addMutator('SafeButControversial')

@@ -220,37 +220,37 @@ public class Color {
             final float t = in[V] * (1.0f - in[S] * (1.0f - f));
 
             switch (i) {
-                case 0:
+                case 0 -> {
                     out[R] = in[V];
                     out[G] = t;
                     out[B] = p;
-                    break;
-                case 1:
+                }
+                case 1 -> {
                     out[R] = q;
                     out[G] = in[V];
                     out[B] = p;
-                    break;
-                case 2:
+                }
+                case 2 -> {
                     out[R] = p;
                     out[G] = in[V];
                     out[B] = t;
-                    break;
-                case 3:
+                }
+                case 3 -> {
                     out[R] = p;
                     out[G] = q;
                     out[B] = in[V];
-                    break;
-                case 4:
+                }
+                case 4 -> {
                     out[R] = t;
                     out[G] = p;
                     out[B] = in[V];
-                    break;
-                case 5:
-                default:
+                }
+                default -> {
+                    // i is 5, or out of range
                     out[R] = in[V];
                     out[G] = p;
                     out[B] = q;
-                    break;
+                }
             }
         }
         return true;
@@ -285,37 +285,37 @@ public class Color {
             final float t = v * (1.0f - s * (1.0f - f));
 
             switch (i) {
-                case 0:
+                case 0 -> {
                     r = v;
                     g = t;
                     b = p;
-                    break;
-                case 1:
+                }
+                case 1 -> {
                     r = q;
                     g = v;
                     b = p;
-                    break;
-                case 2:
+                }
+                case 2 -> {
                     r = p;
                     g = v;
                     b = t;
-                    break;
-                case 3:
+                }
+                case 3 -> {
                     r = p;
                     g = q;
                     b = v;
-                    break;
-                case 4:
+                }
+                case 4 -> {
                     r = t;
                     g = p;
                     b = v;
-                    break;
-                case 5:
-                default:
+                }
+                default -> {
+                    // i is 5, or out of range
                     r = v;
                     g = p;
                     b = q;
-                    break;
+                }
             }
         }
         return floatToColor(r, g, b, a);

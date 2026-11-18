@@ -53,6 +53,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public class GraphicsDebug extends GuiWindow {
@@ -1176,7 +1177,7 @@ public class GraphicsDebug extends GuiWindow {
         lodPanel =
                 new LodPanel(
                         GraphicsManager.forPlugin(GraphicsPlugin.PLUGIN_NAME),
-                        recipe.name().toLowerCase() + " " + columns + "x" + columns,
+                        recipe.name().toLowerCase(Locale.ROOT) + " " + columns + "x" + columns,
                         () ->
                                 SyntheticSections.bake(
                                         recipe, LOD_SEED, columns, sources, sides, tops, bottoms),

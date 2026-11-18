@@ -5,6 +5,8 @@ import com.ikalagaming.graphics.gui.flags.KeyModFlags;
 
 import lombok.NonNull;
 
+import java.util.Locale;
+
 /**
  * A key chord is a key combined with zero or more modifiers, like Ctrl+S, packed into an int. This
  * takes the place of Dear ImGui's ImGuiKeyChord, which ORs ImGuiMod_XXX flags with a key.
@@ -189,7 +191,8 @@ public class KeyChord {
                     if (part.length() == 1) {
                         name.append(part);
                     } else {
-                        name.append(part.charAt(0)).append(part.substring(1).toLowerCase());
+                        name.append(part.charAt(0))
+                                .append(part.substring(1).toLowerCase(Locale.ROOT));
                     }
                 }
                 yield name.toString();

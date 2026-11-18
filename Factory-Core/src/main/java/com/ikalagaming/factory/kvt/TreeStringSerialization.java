@@ -174,50 +174,50 @@ public class TreeStringSerialization {
         NodeType type = NodeType.fromArrayLietter(typeIndicator);
 
         switch (type) {
-            case BOOLEAN, BYTE, DOUBLE, FLOAT, INTEGER, LONG, NODE, SHORT, STRING:
-                throw new IllegalArgumentException();
-            case BOOLEAN_ARRAY:
+            case BOOLEAN, BYTE, DOUBLE, FLOAT, INTEGER, LONG, NODE, SHORT, STRING ->
+                    throw new IllegalArgumentException();
+            case BOOLEAN_ARRAY -> {
                 root.addBooleanArray(
                         key,
                         values.stream()
                                 .map(ValueContext::getText)
                                 .map(Boolean::parseBoolean)
                                 .toList());
-                return;
-            case BYTE_ARRAY:
+            }
+            case BYTE_ARRAY -> {
                 root.addByteArray(
                         key,
                         values.stream().map(ValueContext::getText).map(Byte::parseByte).toList());
-                return;
-            case DOUBLE_ARRAY:
+            }
+            case DOUBLE_ARRAY -> {
                 root.addDoubleArray(
                         key,
                         values.stream()
                                 .map(ValueContext::getText)
                                 .map(Double::parseDouble)
                                 .toList());
-                return;
-            case FLOAT_ARRAY:
+            }
+            case FLOAT_ARRAY -> {
                 root.addFloatArray(
                         key,
                         values.stream().map(ValueContext::getText).map(Float::parseFloat).toList());
-                return;
-            case INTEGER_ARRAY:
+            }
+            case INTEGER_ARRAY -> {
                 root.addIntegerArray(
                         key,
                         values.stream().map(ValueContext::getText).map(Integer::parseInt).toList());
-                return;
-            case LONG_ARRAY:
+            }
+            case LONG_ARRAY -> {
                 root.addLongArray(
                         key,
                         values.stream().map(ValueContext::getText).map(Long::parseLong).toList());
-                return;
-            case SHORT_ARRAY:
+            }
+            case SHORT_ARRAY -> {
                 root.addShortArray(
                         key,
                         values.stream().map(ValueContext::getText).map(Short::parseShort).toList());
-                return;
-            case NODE_ARRAY:
+            }
+            case NODE_ARRAY -> {
                 root.addNodeArray(key);
                 List<Node> list = root.getNodeArray(key);
                 for (ValueContext entry : values) {
@@ -225,14 +225,15 @@ public class TreeStringSerialization {
                     list.add(node);
                     TreeStringSerialization.processNodeContext(node, entry.node());
                 }
-                return;
-            case STRING_ARRAY:
+            }
+            case STRING_ARRAY -> {
                 root.addStringArray(
                         key,
                         values.stream()
                                 .map(ValueContext::getText)
                                 .map(TreeStringSerialization::trimQuotes)
                                 .toList());
+            }
         }
     }
 

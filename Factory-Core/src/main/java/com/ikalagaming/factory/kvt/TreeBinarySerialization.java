@@ -191,41 +191,33 @@ public class TreeBinarySerialization {
             }
 
             switch (entry.getValue().getType()) {
-                case BOOLEAN:
-                    size += 1;
-                    break;
-                case BOOLEAN_ARRAY:
+                case BOOLEAN -> size += 1;
+                case BOOLEAN_ARRAY -> {
                     size += 4;
                     int byteCount = (int) Math.ceil(arrayCount / 8.0f);
                     size += byteCount;
-                    break;
-                case BYTE:
-                    size += 1;
-                    break;
-                case BYTE_ARRAY:
+                }
+                case BYTE -> size += 1;
+                case BYTE_ARRAY -> {
                     size += 4;
                     size += arrayCount;
-                    break;
-                case DOUBLE, LONG:
-                    size += 8;
-                    break;
-                case DOUBLE_ARRAY, LONG_ARRAY:
+                }
+                case DOUBLE, LONG -> size += 8;
+                case DOUBLE_ARRAY, LONG_ARRAY -> {
                     size += 4;
                     size += 8 * arrayCount;
-                    break;
-                case FLOAT, INTEGER:
-                    size += 4;
-                    break;
-                case FLOAT_ARRAY, INTEGER_ARRAY:
+                }
+                case FLOAT, INTEGER -> size += 4;
+                case FLOAT_ARRAY, INTEGER_ARRAY -> {
                     size += 4;
                     size += 4 * arrayCount;
-                    break;
-                case NODE:
+                }
+                case NODE -> {
                     size +=
                             TreeBinarySerialization.calculateTotalSize(
                                     (Node) entry.getValue(), sizes);
-                    break;
-                case NODE_ARRAY:
+                }
+                case NODE_ARRAY -> {
                     int arraySize = 8 + 4;
                     for (int i = 0; i < arrayCount; ++i) {
                         int childSize =
@@ -236,23 +228,21 @@ public class TreeBinarySerialization {
                     }
                     size += arraySize;
                     sizes.put(entry.getValue(), arraySize);
-                    break;
-                case SHORT:
-                    size += 2;
-                    break;
-                case SHORT_ARRAY:
+                }
+                case SHORT -> size += 2;
+                case SHORT_ARRAY -> {
                     size += 4;
                     size += 2 * arrayCount;
-                    break;
-                case STRING:
+                }
+                case STRING -> {
                     size += 4;
                     size +=
                             ((ValueNode<String>) entry.getValue())
                                     .getValue()
                                     .getBytes(StandardCharsets.UTF_8)
                                     .length;
-                    break;
-                case STRING_ARRAY:
+                }
+                case STRING_ARRAY -> {
                     int stringSize = 8 + 4;
                     List<String> strings = ((ArrayNode<String>) entry.getValue()).getValues();
                     for (int i = 0; i < arrayCount; ++i) {
@@ -263,7 +253,7 @@ public class TreeBinarySerialization {
                     }
                     size += stringSize;
                     sizes.put(entry.getValue(), stringSize);
-                    break;
+                }
             }
         }
         sizes.put(node, size);
@@ -567,7 +557,10 @@ public class TreeBinarySerialization {
         if (data.length < BYTES) {
             throw new IOException(
                     SafeResourceLoader.getStringFormatted(
-                            "NODE_OUT_OF_DATA", FactoryStrings.bundle(), "" + BYTES, "" + data.length));
+                            "NODE_OUT_OF_DATA",
+                            FactoryStrings.bundle(),
+                            "" + BYTES,
+                            "" + data.length));
         }
 
         long value = 0;
@@ -614,73 +607,67 @@ public class TreeBinarySerialization {
             String key = TreeBinarySerialization.readString(input, subCount);
 
             switch (NodeType.fromBinaryID(typeID)) {
-                case BOOLEAN:
+                case BOOLEAN -> {
                     result.addBoolean(key, TreeBinarySerialization.readByte(input, subCount) != 0);
-                    break;
-                case BOOLEAN_ARRAY:
+                }
+                case BOOLEAN_ARRAY -> {
                     result.addBooleanArray(
                             key, TreeBinarySerialization.readBooleanArray(input, subCount));
-                    break;
-                case BYTE:
-                    result.addByte(key, TreeBinarySerialization.readByte(input, subCount));
-                    break;
-                case BYTE_ARRAY:
+                }
+                case BYTE -> result.addByte(key, TreeBinarySerialization.readByte(input, subCount));
+                case BYTE_ARRAY -> {
                     result.addByteArray(
                             key, TreeBinarySerialization.readByteArray(input, subCount));
-                    break;
-                case DOUBLE:
+                }
+                case DOUBLE -> {
                     long temp = TreeBinarySerialization.readLong(input, subCount);
                     result.addDouble(key, Double.longBitsToDouble(temp));
-                    break;
-                case DOUBLE_ARRAY:
+                }
+                case DOUBLE_ARRAY -> {
                     result.addDoubleArray(
                             key, TreeBinarySerialization.readDoubleArray(input, subCount));
-                    break;
-                case FLOAT:
+                }
+                case FLOAT -> {
                     result.addFloat(
                             key,
                             Float.intBitsToFloat(
                                     TreeBinarySerialization.readInteger(input, subCount)));
-                    break;
-                case FLOAT_ARRAY:
+                }
+                case FLOAT_ARRAY -> {
                     result.addFloatArray(
                             key, TreeBinarySerialization.readFloatArray(input, subCount));
-                    break;
-                case INTEGER:
+                }
+                case INTEGER -> {
                     result.addInteger(key, TreeBinarySerialization.readInteger(input, subCount));
-                    break;
-                case INTEGER_ARRAY:
+                }
+                case INTEGER_ARRAY -> {
                     result.addIntegerArray(
                             key, TreeBinarySerialization.readIntegerArray(input, subCount));
-                    break;
-                case LONG:
-                    result.addLong(key, TreeBinarySerialization.readLong(input, subCount));
-                    break;
-                case LONG_ARRAY:
+                }
+                case LONG -> result.addLong(key, TreeBinarySerialization.readLong(input, subCount));
+                case LONG_ARRAY -> {
                     result.addLongArray(
                             key, TreeBinarySerialization.readLongArray(input, subCount));
-                    break;
-                case NODE:
-                    result.addNode(key, TreeBinarySerialization.readNode(input, subCount));
-                    break;
-                case NODE_ARRAY:
+                }
+                case NODE -> result.addNode(key, TreeBinarySerialization.readNode(input, subCount));
+                case NODE_ARRAY -> {
                     result.addNodeArray(
                             key, TreeBinarySerialization.readNodeArray(input, subCount));
-                    break;
-                case SHORT:
+                }
+                case SHORT -> {
                     result.addShort(key, TreeBinarySerialization.readShort(input, subCount));
-                    break;
-                case SHORT_ARRAY:
+                }
+                case SHORT_ARRAY -> {
                     result.addShortArray(
                             key, TreeBinarySerialization.readShortArray(input, subCount));
-                    break;
-                case STRING:
+                }
+                case STRING -> {
                     result.addString(key, TreeBinarySerialization.readString(input, subCount));
-                    break;
-                case STRING_ARRAY:
+                }
+                case STRING_ARRAY -> {
                     result.addStringArray(
                             key, TreeBinarySerialization.readStringArray(input, subCount));
-                    break;
+                }
             }
         }
 
@@ -855,39 +842,39 @@ public class TreeBinarySerialization {
             throws IOException {
 
         switch (node.getType()) {
-            case BOOLEAN_ARRAY:
+            case BOOLEAN_ARRAY -> {
                 TreeBinarySerialization.writeBooleanArray((List<Boolean>) node.getValues(), stream);
-                break;
-            case BYTE_ARRAY:
+            }
+            case BYTE_ARRAY -> {
                 TreeBinarySerialization.writeByteArray((List<Byte>) node.getValues(), stream);
-                break;
-            case DOUBLE_ARRAY:
+            }
+            case DOUBLE_ARRAY -> {
                 TreeBinarySerialization.writeDoubleArray((List<Double>) node.getValues(), stream);
-                break;
-            case FLOAT_ARRAY:
+            }
+            case FLOAT_ARRAY -> {
                 TreeBinarySerialization.writeFloatArray((List<Float>) node.getValues(), stream);
-                break;
-            case INTEGER_ARRAY:
+            }
+            case INTEGER_ARRAY -> {
                 TreeBinarySerialization.writeIntegerArray((List<Integer>) node.getValues(), stream);
-                break;
-            case LONG_ARRAY:
+            }
+            case LONG_ARRAY -> {
                 TreeBinarySerialization.writeLongArray((List<Long>) node.getValues(), stream);
-                break;
-            case NODE_ARRAY:
+            }
+            case NODE_ARRAY -> {
                 TreeBinarySerialization.writeNodeArray(
                         (List<Node>) node.getValues(), sizes.get(node), stream, sizes);
-                break;
-            case SHORT_ARRAY:
+            }
+            case SHORT_ARRAY -> {
                 TreeBinarySerialization.writeShortArray((List<Short>) node.getValues(), stream);
-                break;
-            case STRING_ARRAY:
+            }
+            case STRING_ARRAY -> {
                 TreeBinarySerialization.writeStringArray(
                         (List<String>) node.getValues(), sizes.get(node), stream);
-                break;
-            case BOOLEAN, BYTE, DOUBLE, FLOAT, INTEGER, LONG, NODE, SHORT, STRING:
-                // fallthrough
-            default:
+            }
+            default -> {
+                // BOOLEAN, BYTE, DOUBLE, FLOAT, INTEGER, LONG, NODE, SHORT, STRING are not arrays
                 TreeBinarySerialization.reportUnexpectedNode(node);
+            }
         }
     }
 
@@ -1205,47 +1192,27 @@ public class TreeBinarySerialization {
             final @NonNull ValueNode<T> node, OutputStream stream, Map<KVT, Integer> sizes)
             throws IOException {
         switch (node.getType()) {
-            case BOOLEAN:
+            case BOOLEAN -> {
                 TreeBinarySerialization.writeSingleBoolean((Boolean) node.getValue(), stream);
-                break;
-            case BYTE:
-                TreeBinarySerialization.writeByte((Byte) node.getValue(), stream);
-                break;
-            case DOUBLE:
+            }
+            case BYTE -> TreeBinarySerialization.writeByte((Byte) node.getValue(), stream);
+            case DOUBLE -> {
                 TreeBinarySerialization.writeLong(
                         Double.doubleToLongBits((Double) node.getValue()), stream);
-                break;
-            case FLOAT:
+            }
+            case FLOAT -> {
                 TreeBinarySerialization.writeInteger(
                         Float.floatToIntBits((Float) node.getValue()), stream);
-                break;
-            case INTEGER:
-                TreeBinarySerialization.writeInteger((Integer) node.getValue(), stream);
-                break;
-            case LONG:
-                TreeBinarySerialization.writeLong((Long) node.getValue(), stream);
-                break;
-            case NODE:
-                TreeBinarySerialization.writeNode((Node) node.getValue(), stream, sizes);
-                break;
-            case SHORT:
-                TreeBinarySerialization.writeShort((Short) node.getValue(), stream);
-                break;
-            case STRING:
-                TreeBinarySerialization.writeString((String) node.getValue(), stream);
-                break;
-            case BOOLEAN_ARRAY,
-                    BYTE_ARRAY,
-                    DOUBLE_ARRAY,
-                    FLOAT_ARRAY,
-                    INTEGER_ARRAY,
-                    LONG_ARRAY,
-                    NODE_ARRAY,
-                    SHORT_ARRAY,
-                    STRING_ARRAY:
-                // fallthrough
-            default:
+            }
+            case INTEGER -> TreeBinarySerialization.writeInteger((Integer) node.getValue(), stream);
+            case LONG -> TreeBinarySerialization.writeLong((Long) node.getValue(), stream);
+            case NODE -> TreeBinarySerialization.writeNode((Node) node.getValue(), stream, sizes);
+            case SHORT -> TreeBinarySerialization.writeShort((Short) node.getValue(), stream);
+            case STRING -> TreeBinarySerialization.writeString((String) node.getValue(), stream);
+            default -> {
+                // The *_ARRAY types are not single values
                 TreeBinarySerialization.reportUnexpectedNode(node);
+            }
         }
     }
 

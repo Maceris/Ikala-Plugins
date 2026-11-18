@@ -38,19 +38,11 @@ public class ValueNode<T> implements KVT {
      */
     public ValueNode(final @NonNull NodeType type, final @NonNull T value) {
         switch (type) {
-            case BOOLEAN, BYTE, DOUBLE, FLOAT, INTEGER, LONG, SHORT, STRING:
-                break;
-            case BOOLEAN_ARRAY,
-                    BYTE_ARRAY,
-                    DOUBLE_ARRAY,
-                    FLOAT_ARRAY,
-                    INTEGER_ARRAY,
-                    LONG_ARRAY,
-                    NODE,
-                    NODE_ARRAY,
-                    SHORT_ARRAY,
-                    STRING_ARRAY:
-            default:
+            case BOOLEAN, BYTE, DOUBLE, FLOAT, INTEGER, LONG, SHORT, STRING -> {
+                // A single value type, so it can be stored
+            }
+            default -> {
+                // NODE and the *_ARRAY types are not single values
                 log.warn(
                         SafeResourceLoader.getStringFormatted(
                                 "NODE_UNEXPECTED_TYPE",
@@ -58,6 +50,7 @@ public class ValueNode<T> implements KVT {
                                 this.getClass().getSimpleName(),
                                 type.name()));
                 throw new UnsupportedOperationException();
+            }
         }
         this.type = type;
         this.value = value;

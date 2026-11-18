@@ -1466,7 +1466,7 @@ public final class GateBenchmark {
                     GraphicsManager.getSettings().lodVolumes = Boolean.parseBoolean(lodVolumes);
                 }
                 start(
-                        SyntheticTerrain.Recipe.valueOf(recipe.trim().toUpperCase()),
+                        SyntheticTerrain.Recipe.valueOf(recipe.trim().toUpperCase(Locale.ROOT)),
                         Integer.getInteger(PROPERTY + ".radius", 12),
                         Integer.getInteger(PROPERTY + ".lights", 0),
                         keep,
@@ -1558,7 +1558,7 @@ public final class GateBenchmark {
                     scene.getDebugVisualizers()
                             .setLodColors(
                                     DebugVisualizers.LodColors.valueOf(
-                                            lodColors.trim().toUpperCase()));
+                                            lodColors.trim().toUpperCase(Locale.ROOT)));
                 }
                 // Off, lights without a shadow map shine through walls
                 final String rays = System.getProperty(PROPERTY + ".lightRays");

@@ -37,6 +37,7 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -480,7 +481,7 @@ public class Workbench {
      * @return The button.
      */
     private Button previewButton(PreviewShapes.Shape shape) {
-        return new Button("preview-" + shape.name().toLowerCase(), shape.label)
+        return new Button("preview-" + shape.name().toLowerCase(Locale.ROOT), shape.label)
                 .onClick(() -> openPreview(shape));
     }
 
@@ -504,11 +505,11 @@ public class Workbench {
             return;
         }
         if (what.startsWith(PREVIEW_PREFIX)) {
-            final String name = what.substring(PREVIEW_PREFIX.length()).toUpperCase();
+            final String name = what.substring(PREVIEW_PREFIX.length()).toUpperCase(Locale.ROOT);
             try {
                 openPreview(PreviewShapes.Shape.valueOf(name));
             } catch (IllegalArgumentException e) {
-                status.text("No preview shape called " + name.toLowerCase());
+                status.text("No preview shape called " + name.toLowerCase(Locale.ROOT));
             }
             return;
         }
@@ -522,7 +523,7 @@ public class Workbench {
      */
     private void openPreview(PreviewShapes.Shape shape) {
         final int request = requests.incrementAndGet();
-        status.text("Making a " + shape.label.toLowerCase() + "...");
+        status.text("Making a " + shape.label.toLowerCase(Locale.ROOT) + "...");
         loader.execute(
                 () -> {
                     final ScenePlacement placement =
@@ -576,7 +577,7 @@ public class Workbench {
         loader.execute(
                 () -> {
                     try {
-                        final String name = file.getFileName().toString().toLowerCase();
+                        final String name = file.getFileName().toString().toLowerCase(Locale.ROOT);
                         final TextureHandle texture =
                                 name.endsWith(".dds")
                                         ? graphics.textures().load(DdsFile.read(file), colorSpace)
