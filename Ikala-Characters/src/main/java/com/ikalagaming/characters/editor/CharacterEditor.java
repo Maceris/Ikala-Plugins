@@ -5,14 +5,12 @@ import com.ikalagaming.characters.data.DataFormat;
 import com.ikalagaming.characters.data.Id;
 import com.ikalagaming.characters.data.Problem;
 import com.ikalagaming.characters.data.Range;
-import com.ikalagaming.characters.definition.AnimStyle;
 import com.ikalagaming.characters.definition.BodyPlan;
 import com.ikalagaming.characters.definition.Decal;
 import com.ikalagaming.characters.definition.DecalUse;
 import com.ikalagaming.characters.definition.Design;
 import com.ikalagaming.characters.definition.Fx;
 import com.ikalagaming.characters.definition.FxUse;
-import com.ikalagaming.characters.definition.Item;
 import com.ikalagaming.characters.definition.Palette;
 import com.ikalagaming.characters.definition.Part;
 import com.ikalagaming.characters.definition.Rig;
@@ -20,14 +18,12 @@ import com.ikalagaming.characters.definition.Slider;
 import com.ikalagaming.characters.demo.CharacterPreview;
 import com.ikalagaming.characters.design.DesignCodec;
 import com.ikalagaming.characters.design.Equipment;
-import com.ikalagaming.characters.design.LookStack;
 import com.ikalagaming.characters.gltf.ImportedCharacter;
 import com.ikalagaming.characters.pose.Skeleton;
 import com.ikalagaming.characters.pose.WingMotion;
 import com.ikalagaming.characters.registry.CharacterRegistry;
 import com.ikalagaming.characters.registry.ContentSource;
 import com.ikalagaming.characters.view.FxEffects;
-import com.ikalagaming.characters.view.HeldItems;
 import com.ikalagaming.characters.view.PartAssembler;
 import com.ikalagaming.characters.view.PartCategories;
 import com.ikalagaming.characters.view.PartSlots;
@@ -118,24 +114,6 @@ public final class CharacterEditor {
 
     /** The slider panel's spec, in the plugin's jar. */
     static final String SLIDERS_SPEC = "/ui/character-editor/sliders.yml";
-
-    /** What grip socket types start with, like grip.1h. */
-    static final String GRIP_TYPE = "grip";
-
-    /** What the equipment dropdowns call an empty slot. */
-    static final String EMPTY_SLOT = "(empty)";
-
-    /** What the look-as dropdown calls an item's own look. */
-    static final String OWN_LOOK = "its own";
-
-    /** The state held items are in when drawn, by the test items' naming. */
-    static final String DRAWN = "drawn";
-
-    /** The state held items are in when sheathed. */
-    static final String SHEATHED = "sheathed";
-
-    /** What the style dropdown calls having no style. */
-    static final String PLAN_STYLE = "the plan's own";
 
     /** The clip bar's spec, in the plugin's jar. */
     static final String CLIPS_SPEC = "/ui/character-editor/clips.yml";
@@ -319,15 +297,6 @@ public final class CharacterEditor {
     /** The slider panel's title. */
     private final Observable<String> slidersTitle = Observable.of("");
 
-    /** The clip's name. */
-    private final Observable<String> clipName = Observable.of("");
-
-    /** Which clip of how many. */
-    private final Observable<String> clipPosition = Observable.of("");
-
-    /** The play button's text. */
-    private final Observable<String> playText = Observable.of("Pause");
-
     /** The open panels. */
     private final List<SpecInstance> panels = new ArrayList<>();
 
@@ -387,29 +356,20 @@ public final class CharacterEditor {
     /** Keeps the shown character in step with the look. */
     private final ShownSync sync;
 
+    /** The clip bar, the Motion tab and the Equipment tab. */
+    private final MotionControls controls;
+
     /** The Motion tab's wing choice that follows the motion, as scripts name it too. */
     static final String WINGS_AUTO = "auto";
 
     /** Draws the bones over the character. */
     private final BoneView boneView;
 
-    /** Whether the bones are drawn over the character. */
-    private boolean showBones;
-
-    /** Whether the chains' bones are named, while the bones are drawn. */
-    private boolean boneNames;
-
     /** The Align tab's wing mode. */
     private final WingPoser wingPoser;
 
     /** Whether the Align tab poses wings rather than lining up accessories. */
     private boolean posingWings;
-
-    /** The styles the animation was last built for. */
-    private List<Id> motionStyles = List.of();
-
-    /** Reads held items' meshes. */
-    private final HeldItems heldItems = new HeldItems();
 
     /** The palette channel the Colors tab shows, or null before one is picked. */
     private String colorChannel;
@@ -432,9 +392,6 @@ public final class CharacterEditor {
     /** The channels a newly chosen decal's colors take, until the user picks others. */
     private static final Map<String, String> DECAL_CHANNELS =
             Map.of(Decal.FIRST, Palette.ACCENT, Decal.SECOND, Palette.PRIMARY);
-
-    /** Whether the clip's time moves on. */
-    private boolean playing = true;
 
     /** Whether the left button went down over the stage rather than a panel. */
     private boolean pressedOnStage;
@@ -481,6 +438,17 @@ public final class CharacterEditor {
         this.settings = settings;
         stage = new CharacterStage(graphics);
         sync = new ShownSync(registry, motion);
+        controls =
+                new MotionControls(
+                        registry,
+                        motion,
+                        sync,
+                        this::changeLook,
+                        builds,
+                        task -> graphics.ui().post(task),
+                        this::standsStill,
+                        () -> bodyTab,
+                        () -> current.reference());
         content = new ContentPanel(graphics.ui(), registry);
         boneView = new BoneView(graphics.debug());
         aligner =
@@ -559,14 +527,14 @@ public final class CharacterEditor {
                                                                 SLIDER_CONTEXT)))
                         .handler(CLEAR, () -> changeLook(CharacterLook::clear))
                         .handler(RESET_SLIDERS, () -> changeLook(CharacterLook::resetSliders))
-                        .handler(PREVIOUS_CLIP, () -> stepClip(-1))
-                        .handler(NEXT_CLIP, () -> stepClip(1))
-                        .handler(TOGGLE_PLAY, this::togglePlay)
+                        .handler(PREVIOUS_CLIP, () -> controls.stepClip(session, -1))
+                        .handler(NEXT_CLIP, () -> controls.stepClip(session, 1))
+                        .handler(TOGGLE_PLAY, () -> controls.togglePlay(session))
                         .value(CHARACTER_NAME, characterName)
                         .value(SLIDERS_TITLE, slidersTitle)
-                        .value(CLIP_NAME, clipName)
-                        .value(CLIP_POSITION, clipPosition)
-                        .value(PLAY_TEXT, playText);
+                        .value(CLIP_NAME, controls.clipName())
+                        .value(CLIP_POSITION, controls.clipPosition())
+                        .value(PLAY_TEXT, controls.playText());
         for (String spec : List.of(PARTS_SPEC, SLIDERS_SPEC, CLIPS_SPEC, ACTIONS_SPEC)) {
             panels.add(
                     graphics.ui()
@@ -725,27 +693,8 @@ public final class CharacterEditor {
                 Math.min(session.openCategory, session.categories.categories().size() - 1);
         frameOpenCategory();
         ImportedCharacter.ClipData initial = CharacterPreview.pickClip(character, null);
-        playClip(initial == null ? -1 : character.clips().indexOf(initial));
-        buildMotion(design.variant());
-    }
-
-    /**
-     * Build the shown character's animation for its variant and the look's style.
-     *
-     * @param variant The variant.
-     */
-    private void buildMotion(String variant) {
-        motionStyles = styles();
-        motion.setStanding(standsStill());
-        motion.build(
-                registry.get(),
-                session.plan,
-                variant,
-                motionStyles,
-                current.reference(),
-                session.shown,
-                builds,
-                task -> graphics.ui().post(task));
+        controls.playClip(session, initial == null ? -1 : character.clips().indexOf(initial));
+        controls.buildMotion(session, design.variant());
     }
 
     /**
@@ -876,7 +825,7 @@ public final class CharacterEditor {
             bodyTab = body;
             frameOpenCategory();
             // The Body tab stands the character at rest, so the ruler reads its height true
-            playClip(session.clipIndex);
+            controls.playClip(session, session.clipIndex);
         }
         if (bodyTab || contentTab) {
             sync.showWorn(session, CharacterLook.NO_PREVIEW, 0);
@@ -1247,11 +1196,11 @@ public final class CharacterEditor {
                 IkGui.endTabItem();
             }
             if (IkGui.beginTabItem("Equipment")) {
-                drawEquipment();
+                controls.drawEquipment(session);
                 IkGui.endTabItem();
             }
             if (IkGui.beginTabItem("Motion")) {
-                drawMotion();
+                controls.drawMotion(session);
                 IkGui.endTabItem();
             }
             if (IkGui.beginTabItem("Align")) {
@@ -1278,9 +1227,9 @@ public final class CharacterEditor {
             return;
         }
         sync.showFx(session, fxEffects);
-        tickMotion();
-        if (showBones) {
-            boneView.draw(session.shown, sync.onChain(), sync.springChains(), boneNames);
+        controls.tickMotion(session);
+        if (controls.showBones()) {
+            boneView.draw(session.shown, sync.onChain(), sync.springChains(), controls.boneNames());
         }
         sync.showColors(session, previewChannel, previewCode);
         // The Colors tab sets it again each frame it is drawn
@@ -1806,50 +1755,6 @@ public final class CharacterEditor {
         return Objects.requireNonNullElse(slider.group(), "other");
     }
 
-    /**
-     * Play one of the character's clips, wrapping around the ends of the list.
-     *
-     * @param index The clip's position in the character's list.
-     */
-    private void playClip(int index) {
-        if (session == null) {
-            return;
-        }
-        motion.setStanding(standsStill());
-        if (motion.active()) {
-            return;
-        }
-        List<ImportedCharacter.ClipData> clips = session.shown.getCharacter().clips();
-        if (clips.isEmpty()) {
-            session.clipIndex = -1;
-            session.shown.play(null);
-            clipName.set("No clips");
-            clipPosition.set("");
-            return;
-        }
-        session.clipIndex = Math.floorMod(index, clips.size());
-        ImportedCharacter.ClipData clip = clips.get(session.clipIndex);
-        // The Body tab stands the character at rest, so the ruler reads its height true
-        session.shown.play(standsStill() ? null : clip);
-        session.shown.setPlaying(playing);
-        clipName.set(bodyTab ? clip.name() + " (plays on the Costume tab)" : clip.name());
-        clipPosition.set((session.clipIndex + 1) + " / " + clips.size());
-    }
-
-    /**
-     * Step through the actions, or the file's clips if the plan has no actions.
-     *
-     * @param step How far, like -1 for the one before.
-     */
-    private void stepClip(int step) {
-        if (motion.active()) {
-            motion.cycle(step);
-        } else if (session != null) {
-            // Nothing plays while nothing is shown
-            playClip(session.clipIndex + step);
-        }
-    }
-
     /** Draw the Align tab: lining up accessories, or posing wings when wings are worn. */
     private void drawAlign() {
         if (!sync.wornWings().isEmpty() && sync.wingMotion() != null) {
@@ -1867,315 +1772,6 @@ public final class CharacterEditor {
             wingPoser.draw(new WingPoser.Stage(session.shown, sync.wornWings(), sync.wingMotion()));
         } else {
             aligner.draw(sync.alignStage(session));
-        }
-    }
-
-    /** Draw the Motion tab: the style, then the movement, actions and effect states. */
-    private void drawMotion() {
-        List<AnimStyle> styles =
-                registry.get().all(AnimStyle.class).stream()
-                        .filter(style -> style.plan().equals(session.plan.id()))
-                        .toList();
-        Id chosen = session.look.style();
-        String preview = chosen == null ? PLAN_STYLE : PreparedDesign.label(chosen);
-        if (IkGui.beginCombo("Style##style", preview)) {
-            if (IkGui.selectable(PLAN_STYLE + "##own-style", chosen == null)) {
-                changeLook(changed -> changed.setStyle(null));
-            }
-            for (AnimStyle style : styles) {
-                if (IkGui.selectable(
-                        PreparedDesign.label(style.id()) + "##" + style.id(),
-                        style.id().equals(chosen))) {
-                    changeLook(changed -> changed.setStyle(style.id()));
-                }
-            }
-            IkGui.endCombo();
-        }
-        if (IkGui.checkbox("Swing chains##springs", sync.springsOn())) {
-            sync.setSpringsOn(!sync.springsOn());
-            sync.applySliders(session);
-        }
-        IkGui.sameLine();
-        if (IkGui.checkbox("Bones##bones", showBones)) {
-            showBones = !showBones;
-        }
-        if (showBones) {
-            IkGui.sameLine();
-            if (IkGui.checkbox("Names##bone-names", boneNames)) {
-                boneNames = !boneNames;
-            }
-            IkGui.textDisabled("Orange: chains; cyan: capsules; magenta: one-way capsules");
-        }
-        if (sync.wingMotion() != null) {
-            IkGui.textUnformatted("Wings");
-            IkGui.sameLine();
-            if (IkGui.radioButton(WINGS_AUTO + "##wings-auto", sync.wingState() == null)) {
-                setWingState(null);
-            }
-            for (WingMotion.State state : WingMotion.State.values()) {
-                IkGui.sameLine();
-                if (IkGui.radioButton(
-                        state.key() + "##wings-" + state.key(), state == sync.wingState())) {
-                    setWingState(state);
-                }
-            }
-        }
-        motion.draw(session.shownEffects, session.shownUses);
-    }
-
-    /**
-     * The styles the character moves in: its equipped items', in the plan's slot order, then the
-     * look's.
-     *
-     * @return The styles, the first winning.
-     */
-    private List<Id> styles() {
-        List<Id> styles = new ArrayList<>();
-        CharacterRegistry definitions = registry.get();
-        for (BodyPlan.EquipmentSlot slot : session.plan.equipment()) {
-            Equipment.Equipped equipped = session.equipment.slots().get(slot.id());
-            Item item = equipped == null ? null : definitions.get(Item.class, equipped.item());
-            Item.Look itemLook = item == null ? null : item.lookOn(session.plan.id());
-            if (itemLook != null && itemLook.style() != null) {
-                styles.add(itemLook.style());
-            }
-        }
-        if (session.look.style() != null) {
-            styles.add(session.look.style());
-        }
-        return styles;
-    }
-
-    /**
-     * Draw the Equipment tab: for each of the plan's slots that something held fits, the item in
-     * it, its state, a look shown in its place, and whether it is hidden. Worn items, which the
-     * look stack puts in layers, aren't offered here yet.
-     */
-    private void drawEquipment() {
-        CharacterRegistry definitions = registry.get();
-        List<Item> all = definitions.all(Item.class);
-        boolean any = false;
-        for (BodyPlan.EquipmentSlot slot : session.plan.equipment()) {
-            List<Item> fits =
-                    all.stream()
-                            .filter(
-                                    item ->
-                                            item.slots().contains(slot.id())
-                                                    && item.lookOn(session.plan.id()) != null
-                                                    && item.lookOn(session.plan.id()).held())
-                            .toList();
-            if (fits.isEmpty()) {
-                continue;
-            }
-            any = true;
-            IkGui.pushID(slot.id());
-            IkGui.separatorText(slot.id());
-            drawEquipped(slot.id(), session.equipment.slots().get(slot.id()), fits, definitions);
-            IkGui.popID();
-        }
-        if (!any) {
-            IkGui.textDisabled("No held items fit this plan");
-            return;
-        }
-        IkGui.spacing();
-        if (IkGui.button("Draw all")) {
-            setAllStates(DRAWN);
-        }
-        IkGui.sameLine();
-        if (IkGui.button("Sheathe all")) {
-            setAllStates(SHEATHED);
-        }
-    }
-
-    /**
-     * Draw one slot's rows.
-     *
-     * @param slot The slot.
-     * @param equipped What is in it, or null.
-     * @param fits The held items that fit it.
-     * @param definitions The loaded definitions.
-     */
-    private void drawEquipped(
-            String slot,
-            Equipment.Equipped equipped,
-            List<Item> fits,
-            CharacterRegistry definitions) {
-        String preview = equipped == null ? EMPTY_SLOT : PreparedDesign.label(equipped.item());
-        if (IkGui.beginCombo("Item##item", preview)) {
-            if (IkGui.selectable(EMPTY_SLOT + "##empty", equipped == null)) {
-                equip(slot, null);
-            }
-            for (Item item : fits) {
-                if (IkGui.selectable(
-                        PreparedDesign.label(item.id()) + "##" + item.id(),
-                        equipped != null && item.id().equals(equipped.item()))) {
-                    equip(slot, new Equipment.Equipped(item.id(), null, null, false, Map.of()));
-                }
-            }
-            IkGui.endCombo();
-        }
-        if (equipped == null) {
-            return;
-        }
-        Item shownItem = definitions.get(Item.class, equipped.shown());
-        Item.Look shownLook = shownItem == null ? null : shownItem.lookOn(session.plan.id());
-        if (shownLook != null) {
-            String state = equipped.state() == null ? shownLook.firstState() : equipped.state();
-            if (IkGui.beginCombo("State##state", state)) {
-                for (String option : shownLook.states().keySet()) {
-                    if (IkGui.selectable(option + "##" + option, option.equals(state))) {
-                        equip(slot, equipped.withState(option));
-                    }
-                }
-                IkGui.endCombo();
-            }
-        }
-        String lookAs =
-                equipped.lookAs() == null ? OWN_LOOK : PreparedDesign.label(equipped.lookAs());
-        if (IkGui.beginCombo("Look as##look-as", lookAs)) {
-            if (IkGui.selectable(OWN_LOOK + "##own", equipped.lookAs() == null)) {
-                equip(
-                        slot,
-                        new Equipment.Equipped(
-                                equipped.item(),
-                                equipped.state(),
-                                null,
-                                equipped.hidden(),
-                                equipped.dye()));
-            }
-            for (Item item : fits) {
-                if (item.id().equals(equipped.item())) {
-                    continue;
-                }
-                if (IkGui.selectable(
-                        PreparedDesign.label(item.id()) + "##look-" + item.id(),
-                        item.id().equals(equipped.lookAs()))) {
-                    equip(
-                            slot,
-                            new Equipment.Equipped(
-                                    equipped.item(),
-                                    equipped.state(),
-                                    item.id(),
-                                    equipped.hidden(),
-                                    equipped.dye()));
-                }
-            }
-            IkGui.endCombo();
-        }
-        if (IkGui.checkbox("Hidden##hidden", equipped.hidden())) {
-            equip(
-                    slot,
-                    new Equipment.Equipped(
-                            equipped.item(),
-                            equipped.state(),
-                            equipped.lookAs(),
-                            !equipped.hidden(),
-                            equipped.dye()));
-        }
-    }
-
-    /**
-     * Put an item in a slot and show the change.
-     *
-     * @param slot The slot.
-     * @param equipped The item, or null to empty the slot.
-     */
-    private void equip(String slot, Equipment.Equipped equipped) {
-        Map<String, Equipment.Equipped> slots = new LinkedHashMap<>(session.equipment.slots());
-        if (equipped == null) {
-            slots.remove(slot);
-        } else {
-            slots.put(slot, equipped);
-        }
-        session.equipment = new Equipment(slots);
-        applyEquipment();
-    }
-
-    /**
-     * Put every held item that has a state in it.
-     *
-     * @param state The state, like drawn.
-     */
-    private void setAllStates(String state) {
-        Map<String, Equipment.Equipped> slots = new LinkedHashMap<>();
-        session.equipment
-                .slots()
-                .forEach((slot, equipped) -> slots.put(slot, equipped.withState(state)));
-        session.equipment = new Equipment(slots);
-        applyEquipment();
-    }
-
-    /**
-     * Show the equipment on the character: its held meshes on their sockets and its items' effects.
-     * The styles follow on the next frame, as the animation is rebuilt for them.
-     */
-    private void applyEquipment() {
-        if (session == null) {
-            return;
-        }
-        CharacterRegistry definitions = registry.get();
-        Design design =
-                DesignSnapshot.of(
-                        session.look,
-                        session.plan,
-                        session.prepared,
-                        session.prepared.design().id(),
-                        session.look.variants().get(session.look.variant()).id(),
-                        true);
-        LookStack.Shown stack = LookStack.resolve(design, session.equipment, definitions);
-        List<Part> worn = new ArrayList<>();
-        for (Id partId : stack.worn().values()) {
-            Part part = definitions.get(Part.class, partId);
-            if (part != null) {
-                worn.add(part);
-            }
-        }
-        session.shown.setHeld(
-                heldItems.meshes(
-                        stack.held(),
-                        worn,
-                        session.plan,
-                        session.shown.getSkeleton(),
-                        definitions));
-        // A weapon in a hand readies the character to fight
-        boolean drawn =
-                stack.held().stream()
-                        .anyMatch(
-                                held ->
-                                        held.socket().type() != null
-                                                && held.socket().type().startsWith(GRIP_TYPE));
-        motion.setCombat(drawn);
-        motion.applyStates(session.shownEffects, session.shownUses);
-        session.itemFx = List.copyOf(stack.fx().subList(design.fx().size(), stack.fx().size()));
-    }
-
-    /** Rebuild the animation when the style changed, repeat actions, and fill the clip bar. */
-    private void tickMotion() {
-        if (session == null) {
-            return;
-        }
-        if (!motionStyles.equals(styles())) {
-            buildMotion(session.look.variants().get(session.look.variant()).id());
-        }
-        motion.tick();
-        if (motion.active()) {
-            String text = motion.barText();
-            if (!text.equals(clipName.get())) {
-                clipName.set(text);
-            }
-            String position = motion.positionText();
-            if (!position.equals(clipPosition.get())) {
-                clipPosition.set(position);
-            }
-        }
-    }
-
-    /** Pause or play the clip. */
-    private void togglePlay() {
-        playing = !playing;
-        playText.set(playing ? "Pause" : "Play");
-        if (session != null) {
-            session.shown.setPlaying(playing);
         }
     }
 
@@ -2363,8 +1959,7 @@ public final class CharacterEditor {
      * @param names Whether to name the chains' bones.
      */
     void showBones(boolean show, boolean names) {
-        showBones = show;
-        boneNames = names;
+        controls.setBones(show, names);
     }
 
     /**
@@ -2448,7 +2043,7 @@ public final class CharacterEditor {
             bodyTab = false;
         }
         if (session != null) {
-            playClip(session.clipIndex);
+            controls.playClip(session, session.clipIndex);
         }
     }
 
