@@ -59,7 +59,7 @@ final class EditorSession {
      */
     final Map<Integer, Vector3f> rested = new HashMap<>();
 
-    /** The decal last shown, see {@link CharacterEditor}'s showDecal. */
+    /** The decal last shown, see {@link ShownSync}'s showDecal. */
     DecalUse shownDecal;
 
     /** Whether the shown character has the look's decal, {@link #shownDecal}. */
@@ -85,7 +85,7 @@ final class EditorSession {
 
     /**
      * The colors the worn parts give palette channels, as of {@link #shownColorVersion}, see {@link
-     * CharacterEditor}'s findPartColors.
+     * ShownSync}'s findPartColors.
      */
     Map<String, Integer> partColors = Map.of();
 
