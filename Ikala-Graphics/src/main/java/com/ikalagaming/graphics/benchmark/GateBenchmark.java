@@ -59,13 +59,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -76,7 +74,6 @@ import java.util.SplittableRandom;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.Nullable;
 
@@ -215,6 +212,10 @@ public final class GateBenchmark {
 
     /** The context everything is made under. */
     private final GraphicsContext graphics;
+
+    /** The measured frames' timings. */
+    private final GateFrameRecorder recorder =
+            new GateFrameRecorder(() -> this.phase == Phase.MEASURING);
 
     /** The scene options set for the run, which come before the startup properties. */
     private final GateOptions options = new GateOptions();
@@ -500,12 +501,6 @@ public final class GateBenchmark {
 
     /** When measuring started, from {@link System#nanoTime()}. */
     private long measureStart;
-
-    /** Every measured frame's timings, by part, guarded by itself. */
-    private final Map<String, List<Double>> samples = new LinkedHashMap<>();
-
-    /** How many frames were measured. */
-    private final AtomicInteger frames = new AtomicInteger();
 
     /** What went wrong, if building failed. */
     @Nullable private volatile String failure;
@@ -1397,7 +1392,7 @@ public final class GateBenchmark {
                     phase = Phase.MEASURING;
                     measureStart = System.nanoTime();
                     shadowCacheAtStart = renderer().getState().sunShadows.stats();
-                    renderer().getState().frameTimings.setListener(this::record);
+                    renderer().getState().frameTimings.setListener(recorder::record);
                 }
             }
             case MEASURING -> {
@@ -2507,91 +2502,6 @@ public final class GateBenchmark {
         return new double[] {x, z};
     }
 
-    /**
-     * Keep one frame's timings. On the render thread, as they are read back.
-     *
-     * @param frame Each part's time, in milliseconds.
-     */
-    private void record(@NonNull Map<String, Double> frame) {
-        if (phase != Phase.MEASURING) {
-            return;
-        }
-        frames.incrementAndGet();
-        frame.forEach((name, ms) -> samples.computeIfAbsent(name, n -> new ArrayList<>()).add(ms));
-        // What the render thread allocated since the last frame, this bookkeeping included
-        final long allocated = THREADS.getCurrentThreadAllocatedBytes();
-        if (lastAllocated >= 0) {
-            samples.computeIfAbsent(RENDER_THREAD_KB, n -> new ArrayList<>())
-                    .add((allocated - lastAllocated) / BYTES_PER_KB);
-        }
-        lastAllocated = allocated;
-        logHitch(frame);
-    }
-
-    /** The row of the summary holding what the render thread allocated each frame, in KiB. */
-    public static final String RENDER_THREAD_KB = "Render thread KiB allocated";
-
-    /** Bytes in a KiB. */
-    private static final double BYTES_PER_KB = 1024;
-
-    /** Counts what each thread allocates. */
-    private static final com.sun.management.ThreadMXBean THREADS =
-            (com.sun.management.ThreadMXBean)
-                    java.lang.management.ManagementFactory.getThreadMXBean();
-
-    /** What the render thread had allocated by the last frame recorded, or -1 before the first. */
-    private long lastAllocated = -1;
-
-    /** How long a frame may take before it counts as a hitch, in milliseconds: a 60 Hz frame. */
-    public static final double HITCH_MS = 1000.0 / 60;
-
-    /** How many of a hitch's slowest GPU stages are logged. */
-    private static final int HITCH_STAGES = 3;
-
-    /** The parts of a frame's timings that aren't GPU stages. */
-    private static final Set<String> NOT_STAGES =
-            Set.of(
-                    FrameTimings.CPU,
-                    FrameTimings.FRAME_INTERVAL,
-                    FrameTimings.WAIT,
-                    FrameTimings.BETWEEN_FRAMES,
-                    FrameTimings.GPU_TOTAL);
-
-    /**
-     * Log a measured frame that took longer than {@link #HITCH_MS}, from start to start or on the
-     * CPU, with when it was read back, to the millisecond, for matching against a GC log or a
-     * profile, and its slowest GPU stages. The timings are read back a frame or two late.
-     *
-     * @param frame The frame's timings, in milliseconds.
-     */
-    private void logHitch(@NonNull Map<String, Double> frame) {
-        final double interval = frame.getOrDefault(FrameTimings.FRAME_INTERVAL, 0.0);
-        final double cpu = frame.getOrDefault(FrameTimings.CPU, 0.0);
-        if (interval <= HITCH_MS && cpu <= HITCH_MS) {
-            return;
-        }
-        final StringBuilder stages = new StringBuilder();
-        frame.entrySet().stream()
-                .filter(entry -> !NOT_STAGES.contains(entry.getKey()))
-                .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
-                .limit(HITCH_STAGES)
-                .forEach(
-                        entry ->
-                                stages.append(' ')
-                                        .append(entry.getKey())
-                                        .append(' ')
-                                        .append(String.format("%.2f", entry.getValue())));
-        log.info(
-                "Gate benchmark hitch at {}: interval {} ms, CPU {} ms, wait {} ms, GPU {} ms;"
-                        + " slowest:{}",
-                LocalTime.now(),
-                String.format("%.1f", interval),
-                String.format("%.1f", cpu),
-                String.format("%.1f", frame.getOrDefault(FrameTimings.WAIT, 0.0)),
-                String.format("%.1f", frame.getOrDefault(FrameTimings.GPU_TOTAL, 0.0)),
-                stages);
-    }
-
     /** The last whole second of measuring whose residency was logged. */
     private int residencyLogged = -1;
 
@@ -2989,22 +2899,10 @@ public final class GateBenchmark {
                     String.format(
                             "%.1f",
                             (end.texelsRedrawn() - start.texelsRedrawn()) / TEXELS_PER_MEGA),
-                    frames.get(),
+                    recorder.frames(),
                     walkSpeed);
         }
-        final List<FrameTimings.Timing> timings = new ArrayList<>();
-        final List<String> order = new ArrayList<>();
-        order.add(FrameTimings.GPU_TOTAL);
-        order.add(FrameTimings.CPU);
-        samples.keySet().stream().filter(name -> !order.contains(name)).forEach(order::add);
-        for (String name : order) {
-            final List<Double> values = samples.get(name);
-            if (values != null) {
-                timings.add(
-                        FrameTimings.summarize(
-                                name, values.stream().mapToDouble(Double::doubleValue).toArray()));
-            }
-        }
+        final List<FrameTimings.Timing> timings = recorder.timings();
         final FrameTimings.Timing gpu = timings.isEmpty() ? null : timings.get(0);
         final boolean passed =
                 gpu != null
@@ -3018,7 +2916,7 @@ public final class GateBenchmark {
                         load,
                         buildMilliseconds,
                         bakeMilliseconds,
-                        frames.get(),
+                        recorder.frames(),
                         timings,
                         passed,
                         GraphicsManager.getSceneWindow().getWidth(),
