@@ -10,6 +10,7 @@ import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.bake.BakeSource;
 import com.ikalagaming.graphics.benchmark.BlockMeshes;
 import com.ikalagaming.graphics.benchmark.GateBenchmark;
+import com.ikalagaming.graphics.benchmark.GateEffects;
 import com.ikalagaming.graphics.benchmark.GateReport;
 import com.ikalagaming.graphics.benchmark.GateScene;
 import com.ikalagaming.graphics.benchmark.GateViews;
@@ -187,7 +188,7 @@ public class GraphicsDebug extends GuiWindow {
     private List<GateViews.View> benchmarkViewsNamed = List.of();
 
     /** The weathers' and water bodies' names, for the combos. */
-    private static final String[] WEATHER_NAMES = GateBenchmark.WEATHERS.toArray(new String[0]);
+    private static final String[] WEATHER_NAMES = GateEffects.WEATHERS.toArray(new String[0]);
 
     private static final String[] WATER_BODY_NAMES =
             GateBenchmark.WATER_BODY_CHOICES.toArray(new String[0]);
@@ -1258,12 +1259,12 @@ public class GraphicsDebug extends GuiWindow {
                 run.views().goTo(views.get(Math.clamp(benchmarkView.get(), 0, views.size() - 1)));
             }
         }
-        benchmarkWeather.set(Math.max(0, GateBenchmark.WEATHERS.indexOf(run.getWeather())));
+        benchmarkWeather.set(Math.max(0, GateEffects.WEATHERS.indexOf(run.effects().getWeather())));
         if (IkGui.combo("Weather##benchmark", benchmarkWeather, WEATHER_NAMES)) {
-            run.setWeather(WEATHER_NAMES[benchmarkWeather.get()]);
+            run.effects().setWeather(WEATHER_NAMES[benchmarkWeather.get()]);
         }
-        if (IkGui.checkbox("Particle effects##benchmark", run.hasEffects())) {
-            run.setEffects(!run.hasEffects());
+        if (IkGui.checkbox("Particle effects##benchmark", run.effects().hasEffects())) {
+            run.effects().setEffects(!run.effects().hasEffects());
         }
         IkGui.setItemTooltip(
                 "A fountain, sparks, smoke puffs, thick smoke and a fire on the ground in front of"
