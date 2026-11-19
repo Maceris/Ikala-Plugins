@@ -14,6 +14,7 @@ import com.ikalagaming.graphics.benchmark.GateEffects;
 import com.ikalagaming.graphics.benchmark.GateReport;
 import com.ikalagaming.graphics.benchmark.GateScene;
 import com.ikalagaming.graphics.benchmark.GateViews;
+import com.ikalagaming.graphics.benchmark.GateWater;
 import com.ikalagaming.graphics.benchmark.SyntheticSections;
 import com.ikalagaming.graphics.benchmark.SyntheticTerrain;
 import com.ikalagaming.graphics.benchmark.WaterLoop;
@@ -191,12 +192,12 @@ public class GraphicsDebug extends GuiWindow {
     private static final String[] WEATHER_NAMES = GateEffects.WEATHERS.toArray(new String[0]);
 
     private static final String[] WATER_BODY_NAMES =
-            GateBenchmark.WATER_BODY_CHOICES.toArray(new String[0]);
+            GateWater.WATER_BODY_CHOICES.toArray(new String[0]);
 
     /**
      * The kept island's water settings while being changed: wind speed and degrees, the sea's
      * current's speed and degrees, the loop's speed, and its painted waves' height; see {@link
-     * GateBenchmark#getWater}.
+     * GateWater#getWater}.
      */
     private final float[][] waterSettings = {{0}, {0}, {0}, {0}, {0}, {0}};
 
@@ -1269,11 +1270,11 @@ public class GraphicsDebug extends GuiWindow {
         IkGui.setItemTooltip(
                 "A fountain, sparks, smoke puffs, thick smoke and a fire on the ground in front of"
                         + " the camera.");
-        final String body = run.getWaterBody();
+        final String body = run.water().getWaterBody();
         if (body != null) {
-            benchmarkWaterBody.set(Math.max(0, GateBenchmark.WATER_BODY_CHOICES.indexOf(body)));
+            benchmarkWaterBody.set(Math.max(0, GateWater.WATER_BODY_CHOICES.indexOf(body)));
             if (IkGui.combo("Water body##benchmark", benchmarkWaterBody, WATER_BODY_NAMES)) {
-                run.setWaterBody(WATER_BODY_NAMES[benchmarkWaterBody.get()]);
+                run.water().setWaterBody(WATER_BODY_NAMES[benchmarkWaterBody.get()]);
             }
             IkGui.setItemTooltip(
                     "What the sea or the lakes hold: clear ocean, a clear lake, a green lake's"
@@ -1288,7 +1289,7 @@ public class GraphicsDebug extends GuiWindow {
      * @param run The run.
      */
     private void drawBenchmarkWater(@NonNull GateBenchmark run) {
-        final float[] now = run.getWater();
+        final float[] now = run.water().getWater();
         if (now == null || !IkGui.treeNode("Water##benchmark")) {
             return;
         }
@@ -1306,7 +1307,7 @@ public class GraphicsDebug extends GuiWindow {
         changed |=
                 IkGui.sliderFloat(
                         "Current direction (deg)", waterSettings[3], 0, FULL_TURN_DEGREES);
-        if (run.hasWaterLoop()) {
+        if (run.water().hasWaterLoop()) {
             changed |= IkGui.sliderFloat("Loop flow (m/s)", waterSettings[4], -MAX_FLOW, MAX_FLOW);
             IkGui.setItemTooltip(
                     "How fast the path flows in its middle; it slows to nothing at its edges."
@@ -1317,19 +1318,20 @@ public class GraphicsDebug extends GuiWindow {
                             + " wind's own; 0 for none.");
         }
         if (changed) {
-            run.setWater(
-                    waterSettings[0][0],
-                    waterSettings[1][0],
-                    waterSettings[2][0],
-                    waterSettings[3][0],
-                    waterSettings[4][0],
-                    waterSettings[5][0]);
+            run.water()
+                    .setWater(
+                            waterSettings[0][0],
+                            waterSettings[1][0],
+                            waterSettings[2][0],
+                            waterSettings[3][0],
+                            waterSettings[4][0],
+                            waterSettings[5][0]);
         }
         if (IkGui.button("Splash")) {
-            run.splashTestWater();
+            run.water().splashTestWater();
         }
         IkGui.setItemTooltip(
-                run.hasWaterLoop()
+                run.water().hasWaterLoop()
                         ? "Drop a ring of ripples where the flowing path starts."
                         : "Drop a ring of ripples on the sea in front of the island.");
         IkGui.treePop();
