@@ -9,7 +9,6 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.LodHandle;
 import com.ikalagaming.graphics.RenderConfig;
-import com.ikalagaming.graphics.SectionHandle;
 import com.ikalagaming.graphics.ThreadStops;
 import com.ikalagaming.graphics.bake.BakeSource;
 import com.ikalagaming.graphics.graph.SunShadowCache;
@@ -18,7 +17,6 @@ import com.ikalagaming.graphics.lod.LodCache;
 import com.ikalagaming.graphics.lod.LodStore;
 import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
-import com.ikalagaming.graphics.scene.WaterTile;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.vulkan.FrameTimings;
@@ -28,7 +26,6 @@ import com.ikalagaming.graphics.vulkan.VulkanInstance;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector3d;
-import org.joml.Vector3dc;
 import org.joml.Vector3f;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
@@ -45,11 +42,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.Nullable;
 
@@ -189,6 +184,9 @@ public final class GateBenchmark {
 
     /** The run's sections, torches and meshes, and its live level of detail world. */
     private final GateWorld gateWorld;
+
+    /** Keeps the world composed around the camera, with the {@code .stream} option. */
+    private final GateStream stream;
 
     /** The run's digs, from the debug window, the startup property and the gate. */
     private final GateDigs digs;
@@ -338,30 +336,6 @@ public final class GateBenchmark {
     /** Whether the fog was drawn before the run. */
     private boolean previousFog;
 
-    /** The stream keeping the world composed around the camera, or null if it isn't streamed. */
-    @Nullable private WorldStream stream;
-
-    /** Changes the stream's worker makes to the run on the render thread, such as lake water. */
-    private final Queue<Runnable> streamTasks = new ConcurrentLinkedQueue<>();
-
-    /** Frames since the stream last checked which sections are drawn. Render thread. */
-    private int streamPollFrames;
-
-    /** When the stream was last logged, in nanoseconds, or 0. Render thread. */
-    private long streamLoggedAt;
-
-    /** The largest backlog the stream logged. Render thread. */
-    private int streamMostBacklog;
-
-    /** How many frames apart the stream checks which sections are drawn. */
-    private static final int STREAM_POLL_FRAMES = 4;
-
-    /** How often the stream is logged while measuring, in seconds. */
-    private static final double STREAM_LOG_SECONDS = 2;
-
-    /** How often the stream is logged once the run is done and kept, in seconds. */
-    private static final double STREAM_LOG_KEPT_SECONDS = 10;
-
     /** Values in each waypoint of the {@code .walkPath} option: x and z. */
     private static final int WALK_POINT_VALUES = 2;
 
@@ -393,6 +367,7 @@ public final class GateBenchmark {
         this.water = new GateWater(graphics, options, radius);
         this.gateWorld = new GateWorld(graphics, options, radius, lightCount);
         this.digs = new GateDigs(gateWorld, () -> terrain);
+        this.stream = new GateStream(graphics, gateWorld, water, radius);
     }
 
     /**
@@ -782,7 +757,7 @@ public final class GateBenchmark {
         if (!gateWorld.isReleased()) {
             water.step();
             effects.step();
-            stepStream(scene);
+            stream.step(scene, phase == Phase.MEASURING);
         }
         switch (phase) {
             case BAKING -> {
@@ -845,7 +820,10 @@ public final class GateBenchmark {
                                                 "%.1f MiB", cache.folderBytes() / BYTES_PER_MIB));
                     }
                     phase = Phase.SETTLING;
-                    startStream();
+                    final SyntheticTerrain world = terrain;
+                    if (options.flag("stream") && world != null) {
+                        stream.start(world);
+                    }
                 }
             }
             case SETTLING -> {
@@ -1406,7 +1384,7 @@ public final class GateBenchmark {
                 gateWorld.torchCount());
         logLevels();
         logMemory();
-        logStreamTotals();
+        stream.logTotals();
         final var points = renderer().getState().pointShadows;
         if (points != null && points.getCastingLights() > 0) {
             log.info(
@@ -1472,160 +1450,14 @@ public final class GateBenchmark {
         }
     }
 
-    /** What the stream changes in this run. */
-    private final class StreamTarget implements WorldStream.Target {
-        @Override
-        public boolean isComposed(LodStore.@NonNull SectionPos position) {
-            return gateWorld.isComposed(position);
-        }
-
-        @Override
-        public SectionHandle compose(
-                LodStore.@NonNull SectionPos position,
-                SyntheticTerrain.@NonNull Placements placements) {
-            return gateWorld.compose(position, placements);
-        }
-
-        @Override
-        public boolean remove(LodStore.@NonNull SectionPos position) {
-            return gateWorld.remove(position);
-        }
-
-        @Override
-        public void addLakeTile(int startX, int startZ) {
-            final SyntheticTerrain world = terrain;
-            final WaterTile tile =
-                    world == null ? null : GateWater.lakeWaterTile(world, startX, startZ);
-            if (tile != null) {
-                streamTasks.add(() -> water.placeLakeTile(tile));
-            }
-        }
-
-        @Override
-        public void removeLakeTile(int startX, int startZ) {
-            streamTasks.add(() -> water.removeLakeTile(startX, startZ));
-        }
-    }
-
-    /**
-     * Start streaming the world around the camera, if the run's {@code .stream} option asks, once
-     * the world first laid out is drawn.
-     */
-    private void startStream() {
-        final SyntheticTerrain world = terrain;
-        if (!options.flag("stream") || world == null || stream != null) {
-            return;
-        }
-        final LodStore.SectionPos start =
-                new LodStore.SectionPos(
-                        0,
-                        Math.floorDiv((int) Math.floor(world.cameraY()), SyntheticTerrain.SECTION),
-                        0);
-        stream =
-                new WorldStream(
-                        world,
-                        new StreamTarget(),
-                        radius,
-                        start,
-                        GateWater.OCEAN_CELLS,
-                        water.lakeTileKeys());
-        streamLoggedAt = System.nanoTime();
-        log.info("Gate benchmark streaming the world around the camera at radius {}", radius);
-    }
-
-    /**
-     * Keep the stream following the camera, apply its changes, and log how it keeps up. Render
-     * thread, every frame.
-     *
-     * @param scene The scene.
-     */
-    private void stepStream(@NonNull Scene scene) {
-        final WorldStream streaming = stream;
-        if (streaming == null) {
-            return;
-        }
-        Runnable task;
-        while ((task = streamTasks.poll()) != null) {
-            task.run();
-        }
-        final Vector3dc camera = scene.getCamera().getPosition();
-        streaming.follow(camera.x(), camera.y(), camera.z());
-        if (++streamPollFrames >= STREAM_POLL_FRAMES) {
-            streamPollFrames = 0;
-            streaming.poll(graphics.sections()::isResident, graphics.sections()::isValid);
-        }
-        final double every =
-                phase == Phase.MEASURING ? STREAM_LOG_SECONDS : STREAM_LOG_KEPT_SECONDS;
-        final long now = System.nanoTime();
-        if ((now - streamLoggedAt) / 1e9 < every) {
-            return;
-        }
-        streamLoggedAt = now;
-        final WorldStream.Stats stats = streaming.takeWindow();
-        streamMostBacklog = Math.max(streamMostBacklog, stats.backlog());
-        final var live = lodWorld() == null ? null : graphics.lods().liveStats(lodWorld());
-        final Runtime runtime = Runtime.getRuntime();
-        log.info(
-                "Gate benchmark streaming at x {}: {} composed, {} empty, {} removed; backlog {}"
-                        + " cells, {} sections waiting to be drawn; drawn after {} ms (median), {} (95th), {}"
-                        + " (most) for {} sections; LOD {} stale cells, {} batches waiting, {}"
-                        + " sections behind, {} taken out still shown; heap {} MiB",
-                String.format("%.0f", camera.x()),
-                stats.composed(),
-                stats.empty(),
-                stats.removed(),
-                stats.backlog(),
-                stats.pending(),
-                String.format("%.0f", WorldStream.percentile(stats.latencies(), MEDIAN)),
-                String.format("%.0f", WorldStream.percentile(stats.latencies(), PERCENTILE_95)),
-                String.format("%.0f", WorldStream.percentile(stats.latencies(), 1)),
-                stats.latencies().length,
-                live == null ? 0 : live.staleCells(),
-                live == null ? 0 : live.pendingBatches(),
-                renderer().getState().sections.getLodBehind(),
-                renderer().getState().sections.getLodRemovedWaiting(),
-                (runtime.totalMemory() - runtime.freeMemory()) / (long) BYTES_PER_MIB);
-    }
-
-    /** Log what the stream did over the whole run. Render thread. */
-    private void logStreamTotals() {
-        final WorldStream streaming = stream;
-        if (streaming == null) {
-            return;
-        }
-        final WorldStream.Stats stats = streaming.totals();
-        log.info(
-                "Gate benchmark streaming totals: {} sections composed, {} empty, {} removed; most"
-                        + " backlog {} cells; drawn after {} ms (median), {} (95th), {} (most) for {}"
-                        + " sections",
-                stats.composed(),
-                stats.empty(),
-                stats.removed(),
-                streamMostBacklog,
-                String.format("%.0f", WorldStream.percentile(stats.latencies(), MEDIAN)),
-                String.format("%.0f", WorldStream.percentile(stats.latencies(), PERCENTILE_95)),
-                String.format("%.0f", WorldStream.percentile(stats.latencies(), 1)),
-                stats.latencies().length);
-    }
-
-    /** The median, as a fraction. */
-    private static final double MEDIAN = 0.5;
-
-    /** The 95th percentile, as a fraction. */
-    private static final double PERCENTILE_95 = 0.95;
-
     /** Release every section and mesh the run made, once, and put the scene's lights back. */
     private void release() {
         if (gateWorld.isReleased()) {
             return;
         }
         gateWorld.markReleased();
-        if (stream != null) {
-            // Before the sections go, so the worker doesn't add more
-            stream.stop();
-            stream = null;
-        }
-        streamTasks.clear();
+        // Before the sections go, so the worker doesn't add more
+        stream.stop();
         final Scene scene = GraphicsManager.getScene();
         if (scene != null && previousSun != null) {
             scene.getSceneLights().setDirLight(previousSun);
