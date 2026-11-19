@@ -200,7 +200,7 @@ class GateReportTest {
     @Test
     void testPresets() {
         final StringBuilder out = new StringBuilder();
-        for (GateBenchmark.Preset preset : GateBenchmark.PRESETS) {
+        for (GatePresets.Preset preset : GatePresets.PRESETS) {
             out.append(preset.id())
                     .append(' ')
                     .append(preset.name())
@@ -213,7 +213,7 @@ class GateReportTest {
                     .append(' ')
                     .append(new TreeMap<>(preset.options()))
                     .append('\n');
-            for (GateBenchmark.View view : preset.views()) {
+            for (GateViews.View view : preset.views()) {
                 out.append("  ").append(view).append('\n');
             }
         }
@@ -235,6 +235,6 @@ class GateReportTest {
                         + "glass Glass GLASS 8 false {}\n"
                         + "jumble Jumble JUMBLE 16 true {}\n",
                 out.toString());
-        assertEquals(Map.of(), GateBenchmark.PRESETS.get(3).options());
+        assertEquals(Map.of(), GatePresets.PRESETS.get(3).options());
     }
 }

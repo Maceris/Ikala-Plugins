@@ -3,6 +3,7 @@ package com.ikalagaming.converter.gui.window;
 import com.ikalagaming.converter.ConverterPlugin;
 import com.ikalagaming.graphics.UI;
 import com.ikalagaming.graphics.benchmark.GateBenchmark;
+import com.ikalagaming.graphics.benchmark.GatePresets;
 import com.ikalagaming.graphics.ui.spec.Observable;
 import com.ikalagaming.graphics.ui.spec.ObservableList;
 import com.ikalagaming.graphics.ui.spec.SpecBindings;
@@ -66,7 +67,7 @@ public class BenchmarkMenu {
                         ui.loadSpec(SPEC),
                         new SpecBindings()
                                 .bundle(ConverterPlugin.getResourceBundle())
-                                .list(PRESETS, new ObservableList<>(GateBenchmark.PRESETS))
+                                .list(PRESETS, new ObservableList<>(GatePresets.PRESETS))
                                 .handler("run-benchmark", this::run)
                                 .handler("back", this::backToMenu));
     }
@@ -77,7 +78,7 @@ public class BenchmarkMenu {
      * @param event The click, its item the run.
      */
     private void run(@NonNull SpecEvent event) {
-        final GateBenchmark.Preset preset = (GateBenchmark.Preset) event.item();
+        final GatePresets.Preset preset = (GatePresets.Preset) event.item();
         close();
         log.info("Opening the {} benchmark", preset.name());
         GateBenchmark.start(preset);

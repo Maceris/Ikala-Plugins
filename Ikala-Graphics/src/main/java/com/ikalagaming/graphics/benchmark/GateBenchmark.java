@@ -35,7 +35,6 @@ import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.WaterBody;
 import com.ikalagaming.graphics.scene.WaterTile;
-import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.vulkan.FrameTimings;
@@ -63,7 +62,6 @@ import java.nio.file.StandardOpenOption;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -104,9 +102,6 @@ public final class GateBenchmark {
 
     /** The world's seed, fixed so every run measures the same world. */
     public static final long SEED = 20261010L;
-
-    /** The option that lights the scene with the physical sky. */
-    private static final String OPTION_PHYSICAL_SKY = "physicalSky";
 
     /** The name of the thread laying out the world. */
     private static final String BUILDER_NAME = "Gate benchmark builder";
@@ -220,6 +215,12 @@ public final class GateBenchmark {
 
     /** The context everything is made under. */
     private final GraphicsContext graphics;
+
+    /** The scene options set for the run, which come before the startup properties. */
+    private final GateOptions options = new GateOptions();
+
+    /** Places to look from, its preset's and those the run finds. */
+    private final GateViews views = new GateViews();
 
     /** Where the run is. */
     private volatile Phase phase = Phase.BUILDING;
@@ -548,9 +549,6 @@ public final class GateBenchmark {
     /** The test particle emitters the run placed, stopped when it ends. */
     private final List<EmitterHandle> testEmitters = new ArrayList<>();
 
-    /** Places to look from, its preset's and those the run finds, see {@link #getViews}. */
-    private final List<View> views = new ArrayList<>();
-
     /** The weather falling, see {@link #setWeather}: none, {@link #WEATHER_RAIN} or snow. */
     private String weather = WEATHER_NONE;
 
@@ -607,34 +605,8 @@ public final class GateBenchmark {
 
     private static final float LAKE_WIND_DEGREES = 30;
 
-    /** How far a view stands back from what it looks at, and how high above it, in meters. */
-    private static final double VIEW_BACK = 20;
-
-    private static final double VIEW_HEIGHT = 10;
-
-    /** How far above the ground under it a view stands at least, in meters. */
-    private static final double VIEW_CLEARANCE = 4;
-
-    /** How high above a lake its view is at least, how far back along z, and how far down. */
-    private static final double LAKE_VIEW_HEIGHT = 37;
-
-    private static final double LAKE_VIEW_BACK = 10;
-
-    private static final float LAKE_VIEW_PITCH = 1.2f;
-
     /** How far from the middle a lake to look at may be, along x and z, in meters. */
     private static final int LAKE_VIEW_REACH = 96;
-
-    /** How far above the measuring turn the overview looks from, and how far down, in radians. */
-    private static final double OVERVIEW_HEIGHT = 40;
-
-    private static final float OVERVIEW_PITCH = 0.6f;
-
-    /** How far it looks down, in radians. */
-    private static final float VIEW_PITCH = 0.35f;
-
-    /** How many tree cells out the hut nearest the world's middle is looked for. */
-    private static final int HUT_SEARCH = 4;
 
     /** How far in front of the camera effects are placed, in meters. */
     private static final double EFFECTS_AHEAD = 8;
@@ -671,12 +643,6 @@ public final class GateBenchmark {
 
     /** Values in each waypoint of the {@code .walkPath} option: x and z. */
     private static final int WALK_POINT_VALUES = 2;
-
-    /** Values in the {@code .turnAt} option: x, y and z. */
-    private static final int TURN_AT_VALUES = 3;
-
-    /** The scene options a preset set, which come before the startup properties. */
-    private final Map<String, String> options = new HashMap<>();
 
     /** The test water tiles the run placed, removed when it ends. */
     private final List<WaterHandle> testWater = new ArrayList<>();
@@ -792,140 +758,6 @@ public final class GateBenchmark {
     /** The water bodies the debug window offers, in order, see {@link #setWaterBody}. */
     public static final List<String> WATER_BODY_CHOICES =
             List.of(WATER_BODY_OCEAN, "lake", "green", "muddy");
-
-    /**
-     * A place to look from in a preset's world, which the debug window can jump to.
-     *
-     * @param name What menus show for it.
-     * @param x Where the camera is, along x.
-     * @param y Along y.
-     * @param z Along z.
-     * @param pitch How far it looks down, in radians.
-     * @param yaw How far it is turned about y, in radians.
-     */
-    public record View(
-            @NonNull String name, double x, double y, double z, float pitch, float yaw) {}
-
-    /**
-     * A ready-made run to pick from a menu: a world, its view distance, and the options its scene
-     * takes, as the startup properties name them without the {@code ikala.benchmark.} prefix, with
-     * places to look from. Weather, particle effects, fog, the water and the sky can all be changed
-     * from the debug window while its world is kept, so one preset covers each kind of landscape.
-     *
-     * @param id What it is called in code and scripts.
-     * @param name What menus show for it.
-     * @param description What it shows, a line for menus.
-     * @param recipe The world.
-     * @param radius The view distance, in sections.
-     * @param lod Whether to draw with level of detail.
-     * @param options The scene's options, like {@code weather} or {@code fog}.
-     * @param views Places to look from, the first taken when the world is ready; runs add more they
-     *     find, like a lake on the hills.
-     */
-    public record Preset(
-            @NonNull String id,
-            @NonNull String name,
-            @NonNull String description,
-            SyntheticTerrain.@NonNull Recipe recipe,
-            int radius,
-            boolean lod,
-            @NonNull Map<String, String> options,
-            @NonNull List<View> views) {}
-
-    /** The physical sky, with height fog and haze, as the landscapes start. */
-    private static final Map<String, String> HAZY =
-            Map.of(OPTION_PHYSICAL_SKY, "true", "fog", "0.01,0.05,20", "haze", "true");
-
-    /** {@link #HAZY}, with the world streamed around the camera. */
-    private static final Map<String, String> HAZY_STREAMED =
-            Map.of(
-                    OPTION_PHYSICAL_SKY,
-                    "true",
-                    "fog",
-                    "0.01,0.05,20",
-                    "haze",
-                    "true",
-                    "stream",
-                    "true");
-
-    /** The ready-made runs, in the order menus show them. */
-    public static final List<Preset> PRESETS =
-            List.of(
-                    new Preset(
-                            "island",
-                            "Island",
-                            "A hilly island in the sea: wind waves, a figure eight path offshore, a"
-                                    + " stepped fountain, a glass wall and smoke, and a glass dome"
-                                    + " on the sea floor",
-                            SyntheticTerrain.Recipe.ISLAND,
-                            8,
-                            false,
-                            Map.of(
-                                    "fountain",
-                                    "true",
-                                    "glassTest",
-                                    "true",
-                                    "wind",
-                                    "6,30",
-                                    "loop",
-                                    "infinity",
-                                    "loopSpeed",
-                                    "0"),
-                            List.of(
-                                    new View("Shore", 0, 6, 70, 0.15f, 0),
-                                    new View("Fountain", 0, 16, 16, 0.45f, 0),
-                                    new View("Glass and water", 0, 15, 20, 0.3f, 0),
-                                    new View("Figure eight", 0, 55, 130, 1.0f, 0),
-                                    new View("Under the sea", 0, -4, 72, -0.1f, 0))),
-                    new Preset(
-                            "hills",
-                            "Hills",
-                            "Rolling hills with trees, huts with glass, lakes and caves, under a"
-                                    + " hazy physical sky",
-                            SyntheticTerrain.Recipe.TERRAIN,
-                            12,
-                            false,
-                            HAZY,
-                            List.of()),
-                    new Preset(
-                            "hills-stream",
-                            "Hills, streaming",
-                            "The hills out to 512 m with level of detail, generated around the"
-                                    + " camera as it moves: fly anywhere",
-                            SyntheticTerrain.Recipe.TERRAIN,
-                            32,
-                            true,
-                            HAZY_STREAMED,
-                            List.of()),
-                    new Preset(
-                            "caves",
-                            "Caves",
-                            "Rock full of caves under a solid roof",
-                            SyntheticTerrain.Recipe.CAVES,
-                            8,
-                            false,
-                            Map.of(),
-                            List.of()),
-                    new Preset(
-                            "glass",
-                            "Glass",
-                            "Walls of clear and tinted glass, many layers deep: the worst case for"
-                                    + " transparency",
-                            SyntheticTerrain.Recipe.GLASS,
-                            8,
-                            false,
-                            Map.of(),
-                            List.of()),
-                    new Preset(
-                            "jumble",
-                            "Jumble",
-                            "Hills of mixed block shapes, drawn with level of detail: the worst"
-                                    + " case for culling and level of detail on real shapes",
-                            SyntheticTerrain.Recipe.JUMBLE,
-                            16,
-                            true,
-                            Map.of(),
-                            List.of()));
 
     /** How tall the test smoke column is, half of it, in meters. */
     private static final float SMOKE_HALF_HEIGHT = 20;
@@ -1057,7 +889,7 @@ public final class GateBenchmark {
      *
      * @param preset The run.
      */
-    public static void start(@NonNull Preset preset) {
+    public static void start(GatePresets.@NonNull Preset preset) {
         stop();
         removeWorld();
         current = new GateBenchmark(preset.recipe(), preset.radius(), 0, true, preset.lod(), false);
@@ -1067,71 +899,13 @@ public final class GateBenchmark {
     }
 
     /**
-     * How long the measuring turn takes, in seconds: {@link #TURN_SECONDS}, or the {@code .seconds}
-     * option's, so a walk can go farther through the world while it is measured.
-     *
-     * @return The seconds.
-     */
-    private double measureSeconds() {
-        final String value = option("seconds");
-        return value == null ? TURN_SECONDS : Math.max(1, Double.parseDouble(value.trim()));
-    }
-
-    /**
-     * One of the run's options: what its preset set, else the startup property of that name.
-     *
-     * @param key The option, the property's name after {@code ikala.benchmark.}.
-     * @return Its value, or null if neither sets it.
-     */
-    private String option(@NonNull String key) {
-        final String value = options.get(key);
-        return value != null ? value : System.getProperty(PROPERTY + "." + key);
-    }
-
-    /**
-     * One of the run's options, or a default.
-     *
-     * @param key The option.
-     * @param fallback What it is if nothing sets it.
-     * @return Its value.
-     */
-    private String option(@NonNull String key, @NonNull String fallback) {
-        final String value = option(key);
-        return value != null ? value : fallback;
-    }
-
-    /**
-     * Where the camera turns while measuring: over the world's middle, or where the {@code
-     * .turnAt=x,y,z} option says, as under the sea.
-     *
-     * @param world The world.
-     * @return The place, in the world.
-     */
-    private Vector3d turnPosition(@NonNull SyntheticTerrain world) {
-        final Vector3d middle = new Vector3d(0.5, world.cameraY(), 0.5);
-        final String value = option("turnAt");
-        if (value == null) {
-            return middle;
-        }
-        final String[] parts = value.split(",");
-        if (parts.length != TURN_AT_VALUES) {
-            log.warn("The benchmark's turnAt must be x,y,z, not {}", value);
-            return middle;
-        }
-        return new Vector3d(
-                Double.parseDouble(parts[0].trim()),
-                Double.parseDouble(parts[1].trim()),
-                Double.parseDouble(parts[2].trim()));
-    }
-
-    /**
      * The flowing path out at sea, from the {@code .loop=circle|infinity} option, see {@link
      * WaterLoop}.
      *
      * @return The loop, or null for none.
      */
     private @Nullable WaterLoop loopOption() {
-        final String value = option("loop");
+        final String value = options.get("loop");
         if (value == null || recipe != SyntheticTerrain.Recipe.ISLAND) {
             return null;
         }
@@ -1236,6 +1010,15 @@ public final class GateBenchmark {
     }
 
     /**
+     * The places to look from in the run's world, for the debug window.
+     *
+     * @return The views.
+     */
+    public GateViews views() {
+        return views;
+    }
+
+    /**
      * What the run found.
      *
      * @return The results, or null until it is done.
@@ -1270,7 +1053,7 @@ public final class GateBenchmark {
                                             1,
                                             (System.nanoTime() - measureStart)
                                                     / 1e9
-                                                    / measureSeconds()));
+                                                    / options.measureSeconds()));
             case CHECKING ->
                     String.format(
                             "Checking for cracks: %d of %d",
@@ -1301,40 +1084,9 @@ public final class GateBenchmark {
                 if (keep) {
                     GraphicsManager.getUiManager().setSurfacesHidden(true);
                 }
-                // Sections' cut out meshes cyan and volume bricks magenta
-                if (Boolean.getBoolean(PROPERTY + ".volumeSources")) {
-                    GraphicsManager.getScene().getDebugVisualizers().setVolumeSources(true);
-                }
-                // Another level of detail cache folder, such as an empty one to build every
-                // cell; before starting, which opens the cache
-                final String lodCache = System.getProperty(PROPERTY + ".lodCache");
-                if (lodCache != null) {
-                    GraphicsManager.getSettings().lodCacheDirectory = lodCache;
-                }
-                // A bigger level of detail cache for test runs, in MiB; players keep the default
-                final String lodCacheMb = System.getProperty(PROPERTY + ".lodCacheMb");
-                if (lodCacheMb != null) {
-                    GraphicsManager.getSettings().lodCacheMaxBytes =
-                            (long) (Long.parseLong(lodCacheMb.trim()) * BYTES_PER_MIB);
-                }
-                // Another GPU budget for level of detail, in MiB, to test cutting coarser for it
-                final String lodBudgetMb = System.getProperty(PROPERTY + ".lodBudgetMb");
-                if (lodBudgetMb != null) {
-                    GraphicsManager.getSettings().lodResidentBytes =
-                            (long) (Long.parseLong(lodBudgetMb.trim()) * BYTES_PER_MIB);
-                }
-                // Whether far level of detail blends its materials' looks, for comparisons
-                final String average = System.getProperty(PROPERTY + ".average");
-                if (average != null) {
-                    GraphicsManager.getSettings().lodAverageMaterials =
-                            Boolean.parseBoolean(average.trim());
-                }
-                // On, far parts finer than their group's resolution become coverage volumes; before
-                // starting, which makes the live world
-                final String lodVolumes = System.getProperty(PROPERTY + ".volumes");
-                if (lodVolumes != null) {
-                    GraphicsManager.getSettings().lodVolumes = Boolean.parseBoolean(lodVolumes);
-                }
+                // The renderer's settings and debug views; before starting, which opens the
+                // level of detail cache and makes the live world
+                GateOptions.applyStartupSettings(scene);
                 start(
                         SyntheticTerrain.Recipe.valueOf(recipe.trim().toUpperCase(Locale.ROOT)),
                         Integer.getInteger(PROPERTY + ".radius", 12),
@@ -1355,92 +1107,6 @@ public final class GateBenchmark {
                 final String editCracks = System.getProperty(PROPERTY + ".editCracks");
                 if (editCracks != null) {
                     current.editCracks = Boolean.parseBoolean(editCracks);
-                }
-                // Off, every cascade is drawn whole every frame, for comparing against the cache
-                final String sunCache = System.getProperty(PROPERTY + ".sunCache");
-                if (sunCache != null) {
-                    GraphicsManager.getSettings().sunShadowCache = Boolean.parseBoolean(sunCache);
-                }
-                // Off, far leaves whose meshes are off the GPU cast no sun shadow
-                final String coarseBricks = System.getProperty(PROPERTY + ".coarseBricks");
-                if (coarseBricks != null) {
-                    GraphicsManager.getSettings().coarseBricks = Boolean.parseBoolean(coarseBricks);
-                }
-                final String translucentShadows =
-                        System.getProperty(PROPERTY + ".translucentShadows");
-                if (translucentShadows != null) {
-                    GraphicsManager.getSettings().translucentShadows =
-                            Boolean.parseBoolean(translucentShadows);
-                }
-                final String volumeShadows = System.getProperty(PROPERTY + ".volumeShadows");
-                if (volumeShadows != null) {
-                    GraphicsManager.getSettings().volumeShadows =
-                            Boolean.parseBoolean(volumeShadows);
-                }
-                // Off, ambient light isn't dimmed under cover; the view shows sky light in gray
-                final String sky = System.getProperty(PROPERTY + ".sky");
-                if (sky != null) {
-                    GraphicsManager.getSettings().skyOcclusion = Boolean.parseBoolean(sky);
-                }
-                if (Boolean.getBoolean(PROPERTY + ".occupancyView")) {
-                    scene.getDebugVisualizers().setOccupancyView(true);
-                }
-                // Off, the occupancy volume isn't kept, so nothing reads it
-                final String occupancy = System.getProperty(PROPERTY + ".occupancy");
-                if (occupancy != null) {
-                    GraphicsManager.getSettings().occupancy = Boolean.parseBoolean(occupancy);
-                }
-                // Off, ambient light isn't dimmed by the occupancy volume; the view shows it in
-                // gray
-                final String environmentOcclusion =
-                        System.getProperty(PROPERTY + ".environmentOcclusion");
-                if (environmentOcclusion != null) {
-                    GraphicsManager.getSettings().environmentOcclusion =
-                            Boolean.parseBoolean(environmentOcclusion);
-                }
-                final String ao = System.getProperty(PROPERTY + ".ao");
-                if (ao != null) {
-                    GraphicsManager.getSettings().occupancyAo = Boolean.parseBoolean(ao);
-                }
-                if (Boolean.getBoolean(PROPERTY + ".aoView")) {
-                    scene.getDebugVisualizers().setOccupancyAoView(true);
-                }
-                if (Boolean.getBoolean(PROPERTY + ".rayView")) {
-                    scene.getDebugVisualizers().setOccupancyRayView(true);
-                }
-                // Off, no temporal anti-aliasing; the view shows each pixel's history
-                final String taa = System.getProperty(PROPERTY + ".taa");
-                if (taa != null) {
-                    GraphicsManager.getSettings().taa = Boolean.parseBoolean(taa);
-                }
-                if (Boolean.getBoolean(PROPERTY + ".taaView")) {
-                    scene.getDebugVisualizers().setTaaView(true);
-                }
-                // 0 draws every section's own cut out and translucent blocks, with no volumes
-                final String volumeDistance = System.getProperty(PROPERTY + ".volumeDistance");
-                if (volumeDistance != null) {
-                    GraphicsManager.getSettings().volumeDistance =
-                            Double.parseDouble(volumeDistance);
-                }
-                // Level of detail colored by CLUSTERS, GROUPS, LEVELS or CELLS
-                final String lodColors = System.getProperty(PROPERTY + ".lodColors");
-                if (lodColors != null) {
-                    scene.getDebugVisualizers()
-                            .setLodColors(
-                                    DebugVisualizers.LodColors.valueOf(
-                                            lodColors.trim().toUpperCase(Locale.ROOT)));
-                }
-                // Off, lights without a shadow map shine through walls
-                final String rays = System.getProperty(PROPERTY + ".lightRays");
-                if (rays != null) {
-                    GraphicsManager.getSettings().occupancyLightRays = Boolean.parseBoolean(rays);
-                }
-                GraphicsManager.getSettings().occupancyRaysPerPixel =
-                        Integer.getInteger(
-                                PROPERTY + ".raysPerPixel",
-                                GraphicsManager.getSettings().occupancyRaysPerPixel);
-                if (Boolean.getBoolean(PROPERTY + ".skyView")) {
-                    scene.getDebugVisualizers().setSkyOcclusionView(true);
                 }
                 current.propertyDigRate =
                         Double.parseDouble(
@@ -1482,7 +1148,7 @@ public final class GateBenchmark {
         scene.getMaterialCache().setDirty(true);
         if (lod) {
             lodWorld = graphics.lods().fromSections();
-            final String pixels = option("lodPx");
+            final String pixels = options.get("lodPx");
             if (pixels != null) {
                 graphics.lods().setThreshold(lodWorld, Double.parseDouble(pixels));
             }
@@ -1501,8 +1167,8 @@ public final class GateBenchmark {
         try {
             final long start = System.nanoTime();
             final SyntheticTerrain terrain = new SyntheticTerrain(recipe, SEED, sources);
-            terrain.setFountain(option("fountain") != null);
-            terrain.setGlassTest(option("glassTest") != null);
+            terrain.setFountain(options.get("fountain") != null);
+            terrain.setGlassTest(options.get("glassTest") != null);
             terrain.setWaterTiles(terrain.hasLakes());
             this.terrain = terrain;
             layOutLakes(terrain);
@@ -1531,7 +1197,7 @@ public final class GateBenchmark {
             }
             placeLights(terrain);
             load = layout.load();
-            cameraPosition = turnPosition(terrain);
+            cameraPosition = options.turnPosition(terrain);
             buildMilliseconds = (System.nanoTime() - start) / 1_000_000;
             log.info(
                     "Gate benchmark laid out {} sections with content of {} in the sphere in {} ms",
@@ -1606,7 +1272,7 @@ public final class GateBenchmark {
      * @param terrain The world.
      */
     private void placeLights(@NonNull SyntheticTerrain terrain) {
-        final String hutTorch = option("hutTorch");
+        final String hutTorch = options.get("hutTorch");
         if (hutTorch != null && !"false".equalsIgnoreCase(hutTorch)) {
             placeHutTorch(terrain, hutTorch);
         }
@@ -1736,9 +1402,9 @@ public final class GateBenchmark {
             }
             case MEASURING -> {
                 final double seconds = (System.nanoTime() - measureStart) / 1e9;
-                placeCamera(scene, seconds / measureSeconds(), seconds);
+                placeCamera(scene, seconds / options.measureSeconds(), seconds);
                 logResidency(seconds);
-                if (seconds >= measureSeconds()) {
+                if (seconds >= options.measureSeconds()) {
                     renderer().getState().frameTimings.setListener(null);
                     if (gate && lodWorld != null && crackSpots == 0) {
                         startEdits(System.nanoTime());
@@ -1761,7 +1427,7 @@ public final class GateBenchmark {
             }
             case EDITING -> stepEdits();
             case DONE -> {
-                placeView(scene);
+                views.placeOnce(scene, options.get("view"));
                 updateDigs();
             }
                 // A builder that failed stops the run itself, leaving what it made to release here;
@@ -1781,14 +1447,14 @@ public final class GateBenchmark {
      * @param scene The scene.
      */
     private void showWorld(@NonNull Scene scene) {
-        scene.getDebugVisualizers().setWireframe(Boolean.parseBoolean(option("wireframe")));
+        scene.getDebugVisualizers().setWireframe(options.flag("wireframe"));
         GraphicsManager.swapPipeline(RenderConfig.WORLD);
         previousSun = scene.getSceneLights().getDirLight();
         previousAmbient = scene.getSceneLights().getAmbientLight();
         previousViewDistance = scene.getViewDistance();
         scene.setViewDistance((double) radius * SyntheticTerrain.SECTION);
         // At night only the torches light the world, to look at their shadows
-        final boolean night = Boolean.parseBoolean(option("night"));
+        final boolean night = options.flag("night");
         scene.getSceneLights()
                 .setDirLight(
                         new DirectionalLight(SUN_COLOR, sunDirection(), night ? 0 : SUN_INTENSITY));
@@ -1799,11 +1465,11 @@ public final class GateBenchmark {
                                 night ? NIGHT_AMBIENT_INTENSITY : AMBIENT_INTENSITY));
         // The physical sky in place of the gray skybox, from the startup property
         previousPhysicalSky = scene.getPhysicalSky();
-        if (Boolean.parseBoolean(option(OPTION_PHYSICAL_SKY))) {
+        if (options.flag(GateOptions.PHYSICAL_SKY)) {
             scene.setPhysicalSky(new PhysicalSky());
         }
         previousAutoExposure = scene.isAutoExposure();
-        scene.setAutoExposure(Boolean.parseBoolean(option("autoExposure")));
+        scene.setAutoExposure(options.flag("autoExposure"));
         previousFog = scene.getFog().isActive();
         placeFog(scene.getFog());
         placeTestMedia();
@@ -1826,7 +1492,7 @@ public final class GateBenchmark {
         if (world == null || world.getRecipe() != SyntheticTerrain.Recipe.ISLAND) {
             return;
         }
-        final String name = option("waterBody", WATER_BODY_OCEAN);
+        final String name = options.get("waterBody", WATER_BODY_OCEAN);
         WaterBody body = WATER_BODY_NAMES.get(name.trim().toLowerCase(Locale.ROOT));
         if (body == null) {
             log.warn(
@@ -1835,7 +1501,7 @@ public final class GateBenchmark {
                     name);
             body = WaterBody.OCEAN;
         }
-        final String wind = option("wind");
+        final String wind = options.get("wind");
         if (wind != null) {
             final String[] parts = wind.split(",");
             final float speed = Float.parseFloat(parts[0].trim());
@@ -1853,7 +1519,7 @@ public final class GateBenchmark {
                         ? name.trim().toLowerCase(Locale.ROOT)
                         : WATER_BODY_CHOICES.getFirst();
         waterLoop = loopOption();
-        final String current = option("current");
+        final String current = options.get("current");
         if (current != null) {
             final String[] parts = current.split(",");
             currentSpeed = Float.parseFloat(parts[0].trim());
@@ -1863,8 +1529,9 @@ public final class GateBenchmark {
                             : 0;
         }
         loopSpeed =
-                Float.parseFloat(option("loopSpeed", Float.toString(DEFAULT_LOOP_SPEED)).trim());
-        loopWaves = Float.parseFloat(option("loopWaves", "0").trim());
+                Float.parseFloat(
+                        options.get("loopSpeed", Float.toString(DEFAULT_LOOP_SPEED)).trim());
+        loopWaves = Float.parseFloat(options.get("loopWaves", "0").trim());
         final int reach = radius * SyntheticTerrain.SECTION;
         final int tiles = (2 * reach + OCEAN_CELLS - 1) / OCEAN_CELLS;
         final int corners = OCEAN_CELLS + 1;
@@ -2321,96 +1988,6 @@ public final class GateBenchmark {
     }
 
     /**
-     * Add the places to look from the run finds: the world's middle, where the measuring turn is,
-     * if the preset gave none; a lake and the huts near the middle on the hills.
-     */
-    private void findViews() {
-        final SyntheticTerrain world = terrain;
-        if (world == null) {
-            return;
-        }
-        if (views.isEmpty()) {
-            views.add(
-                    new View(
-                            "Overview",
-                            0.5,
-                            world.cameraY() + OVERVIEW_HEIGHT,
-                            0.5 + OVERVIEW_HEIGHT,
-                            OVERVIEW_PITCH,
-                            0));
-            views.add(new View("Middle", 0.5, world.cameraY(), 0.5, PITCH, 0));
-        }
-        final int[] lake = lakeSpot;
-        if (lake != null) {
-            // From above, looking steeply down: the lakes lie in valleys under the trees
-            views.add(
-                    new View(
-                            "Over a lake",
-                            lake[0] + 0.5,
-                            Math.max(
-                                    SyntheticTerrain.LAKE_SURFACE + LAKE_VIEW_HEIGHT,
-                                    world.top(lake[0], lake[1]) + VIEW_HEIGHT),
-                            lake[1] + LAKE_VIEW_BACK,
-                            LAKE_VIEW_PITCH,
-                            0));
-        }
-        final int[] hut = world.hutNear(0, 0, HUT_SEARCH);
-        if (hut != null) {
-            views.add(lookingAt(world, "By the huts", hut[0], hut[1], hut[2]));
-        }
-        for (View view : views) {
-            log.info(
-                    "Gate benchmark view {}: {},{},{},{},{}",
-                    view.name(),
-                    view.x(),
-                    view.y(),
-                    view.z(),
-                    view.pitch(),
-                    view.yaw());
-        }
-    }
-
-    /**
-     * A view looking down at a point from back along +z and above it, clear of the ground there.
-     *
-     * @param world The world.
-     * @param name The view's name.
-     * @param x The point's x.
-     * @param y Its y.
-     * @param z Its z.
-     * @return The view.
-     */
-    private static View lookingAt(
-            @NonNull SyntheticTerrain world, @NonNull String name, int x, double y, int z) {
-        final int backZ = (int) (z + VIEW_BACK);
-        final double height = Math.max(y + VIEW_HEIGHT, world.top(x, backZ) + 1 + VIEW_CLEARANCE);
-        return new View(name, x + 0.5, height, backZ + 0.5, VIEW_PITCH, 0);
-    }
-
-    /**
-     * The places to look from: the preset's, then those the run found.
-     *
-     * @return The views.
-     */
-    public List<View> getViews() {
-        return Collections.unmodifiableList(views);
-    }
-
-    /**
-     * Put the camera at a place to look from. Render thread only.
-     *
-     * @param view Where.
-     */
-    public void goTo(@NonNull View view) {
-        final Scene scene = GraphicsManager.getScene();
-        if (scene == null) {
-            return;
-        }
-        scene.getCamera().setPosition(view.x(), view.y(), view.z());
-        scene.getCamera().setRotation(view.pitch(), view.yaw());
-    }
-
-    /**
      * What falls around the camera, see {@link #WEATHERS}.
      *
      * @return The weather.
@@ -2595,7 +2172,7 @@ public final class GateBenchmark {
      */
     private void rippleTestWater() {
         if (testRipples == null) {
-            final String value = option("ripples");
+            final String value = options.get("ripples");
             testRipples = new double[0];
             if (value != null) {
                 final String[] parts = value.split(",");
@@ -2636,21 +2213,14 @@ public final class GateBenchmark {
         placeFountain();
         placeLakes();
         placeGlassTestSmoke();
-        findViews();
-        final String value = option("water");
-        if (value == null) {
+        final SyntheticTerrain world = terrain;
+        if (world != null) {
+            views.find(world, lakeSpot);
+        }
+        final Vector3d corner = options.point("water");
+        if (corner == null) {
             return;
         }
-        final String[] parts = value.split(",");
-        if (parts.length != 3) {
-            log.warn("The benchmark's water must be x,y,z, not {}", value);
-            return;
-        }
-        final Vector3d corner =
-                new Vector3d(
-                        Double.parseDouble(parts[0].trim()),
-                        Double.parseDouble(parts[1].trim()),
-                        Double.parseDouble(parts[2].trim()));
         for (int row = 0; row < WATER_BODIES.length; ++row) {
             for (int column = 0; column < WATER_DEPTHS.length; ++column) {
                 final WaterHandle handle =
@@ -2683,40 +2253,19 @@ public final class GateBenchmark {
      * there, see {@link FxTest}.
      */
     private void placeTestParticles() {
-        final String fx = option("fxTest");
+        final Vector3d fx = options.point("fxTest");
         if (fx != null) {
-            final String[] parts = fx.split(",");
-            if (parts.length != 3) {
-                log.warn("The benchmark's fxTest must be x,y,z, not {}", fx);
-            } else {
-                fxTest =
-                        new FxTest(
-                                graphics.particles(),
-                                new Vector3d(
-                                        Double.parseDouble(parts[0].trim()),
-                                        Double.parseDouble(parts[1].trim()),
-                                        Double.parseDouble(parts[2].trim())));
-                testEmitters.addAll(fxTest.handles());
-            }
+            fxTest = new FxTest(graphics.particles(), fx);
+            testEmitters.addAll(fxTest.handles());
         }
-        final String startWeather = option("weather");
+        final String startWeather = options.get("weather");
         if (startWeather != null) {
             setWeather(startWeather);
         }
-        final String value = option("particles");
-        if (value == null) {
+        final Vector3d at = options.point("particles");
+        if (at == null) {
             return;
         }
-        final String[] parts = value.split(",");
-        if (parts.length != 3) {
-            log.warn("The benchmark's particles must be x,y,z, not {}", value);
-            return;
-        }
-        final Vector3d at =
-                new Vector3d(
-                        Double.parseDouble(parts[0].trim()),
-                        Double.parseDouble(parts[1].trim()),
-                        Double.parseDouble(parts[2].trim()));
         for (EmitterHandle handle : placeEffectSet(at)) {
             if (handle != null) {
                 testEmitters.add(handle);
@@ -2779,20 +2328,10 @@ public final class GateBenchmark {
      * for looking at smoke with the fog, the lights and transparency.
      */
     private void placeTestMedia() {
-        final String value = option("smoke");
-        if (value == null) {
+        final Vector3d at = options.point("smoke");
+        if (at == null) {
             return;
         }
-        final String[] parts = value.split(",");
-        if (parts.length != 3) {
-            log.warn("The benchmark's smoke must be x,y,z, not {}", value);
-            return;
-        }
-        final Vector3d at =
-                new Vector3d(
-                        Double.parseDouble(parts[0].trim()),
-                        Double.parseDouble(parts[1].trim()),
-                        Double.parseDouble(parts[2].trim()));
         final MediumVolume smoke =
                 MediumVolume.of(
                                 MediumVolume.Shape.CYLINDER,
@@ -2842,7 +2381,7 @@ public final class GateBenchmark {
      * @param fog The scene's fog.
      */
     private void placeFog(@NonNull Fog fog) {
-        final String value = option("fog");
+        final String value = options.get("fog");
         if (value == null) {
             return;
         }
@@ -2858,7 +2397,7 @@ public final class GateBenchmark {
         if (parts.length > FOG_ANISOTROPY_PART) {
             fog.setAnisotropy(Float.parseFloat(parts[FOG_ANISOTROPY_PART].trim()));
         }
-        fog.setHaze(Boolean.parseBoolean(option("haze")));
+        fog.setHaze(options.flag("haze"));
     }
 
     /**
@@ -2868,7 +2407,7 @@ public final class GateBenchmark {
      * @return The direction.
      */
     private Vector3f sunDirection() {
-        final String up = option("sunUp");
+        final String up = options.get("sunUp");
         if (up == null) {
             return new Vector3f(SUN_DIRECTION);
         }
@@ -3093,41 +2632,6 @@ public final class GateBenchmark {
                                     stats.budgetScale())
                             : "");
         }
-    }
-
-    /** Whether the camera was placed from the startup property's view. */
-    private boolean viewPlaced;
-
-    /** Values in a view: x, y, z, pitch and yaw. */
-    private static final int VIEW_VALUES = 5;
-
-    /**
-     * Once the run is done, put the camera where the startup property's view says, if it says:
-     * {@code x,y,z,pitch,yaw}, the angles in radians. For comparing frames from the same place.
-     *
-     * @param scene The scene.
-     */
-    private void placeView(@NonNull Scene scene) {
-        final String view = option("view");
-        if (viewPlaced || (view == null && views.isEmpty())) {
-            return;
-        }
-        viewPlaced = true;
-        if (view == null) {
-            goTo(views.getFirst());
-            return;
-        }
-        final String[] parts = view.split(",");
-        if (parts.length != VIEW_VALUES) {
-            log.warn("The benchmark view must be x,y,z,pitch,yaw, not {}", view);
-            return;
-        }
-        final double[] values = new double[VIEW_VALUES];
-        for (int i = 0; i < VIEW_VALUES; ++i) {
-            values[i] = Double.parseDouble(parts[i].trim());
-        }
-        scene.getCamera().setPosition(values[0], values[1], values[2]);
-        scene.getCamera().setRotation((float) values[3], (float) values[4]);
     }
 
     /**
@@ -3381,7 +2885,7 @@ public final class GateBenchmark {
             vmaBlocks = totals.total().statistics().blockBytes();
             vmaAllocations = totals.total().statistics().allocationBytes();
             // Every allocation, as VMA's JSON, for finding where the memory goes
-            final String dump = option("gpuMemoryDump");
+            final String dump = options.get("gpuMemoryDump");
             if (dump != null) {
                 final PointerBuffer text = stack.mallocPointer(1);
                 vmaBuildStatsString(state.vmaAllocator, text, true);
@@ -3770,7 +3274,7 @@ public final class GateBenchmark {
      */
     private void startStream() {
         final SyntheticTerrain world = terrain;
-        if (!Boolean.parseBoolean(option("stream")) || world == null || stream != null) {
+        if (!options.flag("stream") || world == null || stream != null) {
             return;
         }
         final LodStore.SectionPos start =

@@ -12,6 +12,7 @@ import com.ikalagaming.graphics.benchmark.BlockMeshes;
 import com.ikalagaming.graphics.benchmark.GateBenchmark;
 import com.ikalagaming.graphics.benchmark.GateReport;
 import com.ikalagaming.graphics.benchmark.GateScene;
+import com.ikalagaming.graphics.benchmark.GateViews;
 import com.ikalagaming.graphics.benchmark.SyntheticSections;
 import com.ikalagaming.graphics.benchmark.SyntheticTerrain;
 import com.ikalagaming.graphics.benchmark.WaterLoop;
@@ -183,7 +184,7 @@ public class GraphicsDebug extends GuiWindow {
     /** The kept run's views' names, made again only when its views change. */
     private String[] benchmarkViewNames = new String[0];
 
-    private List<GateBenchmark.View> benchmarkViewsNamed = List.of();
+    private List<GateViews.View> benchmarkViewsNamed = List.of();
 
     /** The weathers' and water bodies' names, for the combos. */
     private static final String[] WEATHER_NAMES = GateBenchmark.WEATHERS.toArray(new String[0]);
@@ -1240,7 +1241,7 @@ public class GraphicsDebug extends GuiWindow {
      * @param run The run.
      */
     private void drawBenchmarkScene(@NonNull GateBenchmark run) {
-        final List<GateBenchmark.View> views = run.getViews();
+        final List<GateViews.View> views = run.views().getViews();
         if (!views.equals(benchmarkViewsNamed)) {
             benchmarkViewsNamed = List.copyOf(views);
             benchmarkViewNames = new String[views.size()];
@@ -1250,11 +1251,11 @@ public class GraphicsDebug extends GuiWindow {
         }
         if (benchmarkViewNames.length > 0) {
             if (IkGui.combo("View##benchmark", benchmarkView, benchmarkViewNames)) {
-                run.goTo(views.get(Math.clamp(benchmarkView.get(), 0, views.size() - 1)));
+                run.views().goTo(views.get(Math.clamp(benchmarkView.get(), 0, views.size() - 1)));
             }
             IkGui.sameLine();
             if (IkGui.button("Go##benchmarkView")) {
-                run.goTo(views.get(Math.clamp(benchmarkView.get(), 0, views.size() - 1)));
+                run.views().goTo(views.get(Math.clamp(benchmarkView.get(), 0, views.size() - 1)));
             }
         }
         benchmarkWeather.set(Math.max(0, GateBenchmark.WEATHERS.indexOf(run.getWeather())));
