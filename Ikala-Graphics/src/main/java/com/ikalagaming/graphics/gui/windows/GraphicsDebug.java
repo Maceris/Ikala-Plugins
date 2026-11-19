@@ -1404,13 +1404,13 @@ public class GraphicsDebug extends GuiWindow {
                 GateBenchmark.removeWorld();
             }
             if (IkGui.button("Dig near camera")) {
-                run.dig(GraphicsManager.getScene());
+                run.digs().dig(GraphicsManager.getScene());
             }
             IkGui.sameLine();
             if (IkGui.checkbox("Dig 10 a second", benchmarkRapidDig)) {
-                run.setDigRate(benchmarkRapidDig.get() ? RAPID_DIGS_PER_SECOND : 0);
+                run.digs().setDigRate(benchmarkRapidDig.get() ? RAPID_DIGS_PER_SECOND : 0);
             }
-            final List<double[]> latencies = run.getDigLatencies();
+            final List<double[]> latencies = run.digs().getDigLatencies();
             if (!latencies.isEmpty()) {
                 final double[] last = latencies.get(latencies.size() - 1);
                 IkGui.text(
