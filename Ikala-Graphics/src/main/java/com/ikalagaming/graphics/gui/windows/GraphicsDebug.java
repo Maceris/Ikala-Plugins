@@ -10,6 +10,7 @@ import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.bake.BakeSource;
 import com.ikalagaming.graphics.benchmark.BlockMeshes;
 import com.ikalagaming.graphics.benchmark.GateBenchmark;
+import com.ikalagaming.graphics.benchmark.GateReport;
 import com.ikalagaming.graphics.benchmark.GateScene;
 import com.ikalagaming.graphics.benchmark.SyntheticSections;
 import com.ikalagaming.graphics.benchmark.SyntheticTerrain;
@@ -1338,7 +1339,7 @@ public class GraphicsDebug extends GuiWindow {
                 "Builds a made-up world out to a view distance, bakes it, then turns the camera once"
                         + " around measuring each frame. The gate passes if the GPU's 95th percentile"
                         + " frame is within "
-                        + GateBenchmark.GPU_BUDGET_MS
+                        + GateReport.GPU_BUDGET_MS
                         + " ms.");
         IkGui.combo("Recipe", benchmarkRecipe, RECIPE_NAMES);
         IkGui.sliderInt("Radius (sections)", benchmarkRadius, 6, 32);
@@ -1361,7 +1362,7 @@ public class GraphicsDebug extends GuiWindow {
         IkGui.checkbox("Gate checks", benchmarkGate);
         IkGui.setItemTooltip(
                 "After the turn, check the level of detail's cut for cracks at four headings, dig "
-                        + GateBenchmark.GATE_DIGS
+                        + GateReport.GATE_DIGS
                         + " blocks near the camera timing each edit, and report what the disk cache"
                         + " did while loading. Draws with level of detail.");
         final boolean island = benchmarkRecipe.get() == SyntheticTerrain.Recipe.ISLAND.ordinal();
@@ -1426,7 +1427,7 @@ public class GraphicsDebug extends GuiWindow {
         }
         drawBenchmarkWater(run);
         IkGui.text(run.status());
-        final GateBenchmark.Results results = run.getResults();
+        final GateReport.Results results = run.getResults();
         if (results == null) {
             return;
         }
@@ -1446,7 +1447,7 @@ public class GraphicsDebug extends GuiWindow {
                 String.format(
                         "%,d triangles, %,.0f per section; %,d frames measured",
                         load.triangles(), load.trianglesPerSection(), results.frames()));
-        for (String line : GateBenchmark.gateLines(results)) {
+        for (String line : GateReport.gateLines(results)) {
             IkGui.textWrapped(line);
         }
         drawTimingTable("benchmark", results.timings());

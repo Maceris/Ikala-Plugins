@@ -60,7 +60,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -87,7 +86,8 @@ import javax.annotation.Nullable;
  * The phase 2 gate: whether view distance 12 runs without LOD. It builds a {@link SyntheticTerrain}
  * world out to a radius, bakes every section with something in it, waits for it all to be on the
  * GPU, then turns the camera once around while recording how long each frame takes on the GPU and
- * CPU. The gate passes if the GPU's 95th percentile frame is within {@link #GPU_BUDGET_MS}.
+ * CPU. The gate passes if the GPU's 95th percentile frame is within {@link
+ * GateReport#GPU_BUDGET_MS}.
  *
  * <p>Run it from the Graphics Debug window, or at startup with {@code -Dikala.benchmark=TERRAIN}
  * (and {@code -Dikala.benchmark.radius=12}, and {@code -Dikala.benchmark.lights=1000} to scatter
@@ -113,9 +113,6 @@ public final class GateBenchmark {
 
     /** The {@code .waterBody} value for the ocean, the default. */
     private static final String WATER_BODY_OCEAN = "ocean";
-
-    /** The most the GPU may take per frame to pass, in milliseconds: half a 60 Hz frame. */
-    public static final double GPU_BUDGET_MS = 8;
 
     /**
      * How long the camera takes to turn once around, in seconds, unless the {@code .seconds}
@@ -172,134 +169,6 @@ public final class GateBenchmark {
         /** Stopped or failed. */
         STOPPED
     }
-
-    /**
-     * What a run found.
-     *
-     * @param recipe The world.
-     * @param radius The view distance, in sections.
-     * @param lights How many torches were scattered over the world.
-     * @param load How heavy the scene was.
-     * @param buildMilliseconds How long laying out and composing took.
-     * @param bakeMilliseconds How long until every section was resident, after composing.
-     * @param frames How many frames were measured.
-     * @param timings Each part of the frame: GPU total, CPU, then each stage.
-     * @param passed Whether the GPU's 95th percentile was within budget.
-     * @param width The width the scene was drawn at, in pixels.
-     * @param height The height the scene was drawn at, in pixels.
-     * @param gate What the level of detail gate found, or null if it wasn't checked.
-     */
-    public record Results(
-            SyntheticTerrain.@NonNull Recipe recipe,
-            int radius,
-            int lights,
-            GateScene.@NonNull LoadStats load,
-            long buildMilliseconds,
-            long bakeMilliseconds,
-            int frames,
-            @NonNull List<FrameTimings.Timing> timings,
-            boolean passed,
-            int width,
-            int height,
-            @Nullable Gate gate) {}
-
-    /**
-     * One crack check of the level of detail's cut, as the GPU picks it.
-     *
-     * @param where Where the camera was.
-     * @param cracks What the check found.
-     * @param missing Clusters picked whose meshes weren't on the GPU: holes.
-     * @param triangles The triangles the cut draws.
-     * @param hidden Sections drawing themselves instead, whose edges are excused.
-     */
-    public record Check(
-            @NonNull String where,
-            CrackCheck.@NonNull Tiled cracks,
-            int missing,
-            long triangles,
-            int hidden) {
-
-        /**
-         * Whether the cut had no cracks and no holes.
-         *
-         * @return True if it was clean.
-         */
-        public boolean isClean() {
-            return cracks.isClean() && missing == 0;
-        }
-    }
-
-    /**
-     * What the level of detail gate found, besides the GPU time.
-     *
-     * @param lodBytes Level of detail mesh bytes on the GPU once loaded.
-     * @param lodTotalBytes Level of detail mesh bytes kept on the CPU.
-     * @param cacheRead Cells read from the disk cache while loading.
-     * @param cacheBuilt Cells built while loading.
-     * @param checks The crack checks.
-     * @param edits Edits made.
-     * @param editsUnfinished Edits that weren't drawn or didn't reach the level of detail in time.
-     * @param worstDrawnMillis The longest an edit took to be drawn at full resolution.
-     * @param worstDrawnFrames The most frames an edit took to be drawn.
-     * @param lodMillisP95 How long edits took to reach the level of detail, 95th percentile.
-     */
-    public record Gate(
-            long lodBytes,
-            long lodTotalBytes,
-            long cacheRead,
-            long cacheBuilt,
-            @NonNull List<Check> checks,
-            int edits,
-            int editsUnfinished,
-            double worstDrawnMillis,
-            int worstDrawnFrames,
-            double lodMillisP95) {
-
-        /**
-         * Whether every check was clean.
-         *
-         * @return True if no cut had cracks or holes.
-         */
-        public boolean cracksPassed() {
-            return !checks.isEmpty() && checks.stream().allMatch(Check::isClean);
-        }
-
-        /**
-         * Whether every edit was drawn at full resolution in time.
-         *
-         * @return True if they were.
-         */
-        public boolean editsPassed() {
-            return edits == GATE_DIGS && editsUnfinished == 0 && worstDrawnMillis <= EDIT_BUDGET_MS;
-        }
-
-        /**
-         * Whether this was a reload from the cache: something was read.
-         *
-         * @return True if cells were read.
-         */
-        public boolean isReload() {
-            return cacheRead > 0;
-        }
-
-        /**
-         * Whether a reload built nothing.
-         *
-         * @return True if it read every cell.
-         */
-        public boolean reloadPassed() {
-            return isReload() && cacheBuilt == 0;
-        }
-    }
-
-    /** Edits the gate makes. */
-    public static final int GATE_DIGS = 20;
-
-    /** Edits a second the gate makes, as a quick player digs. */
-    public static final double GATE_DIG_RATE = 20;
-
-    /** The longest an edit may take to be drawn at full resolution, in milliseconds. */
-    public static final double EDIT_BUDGET_MS = 250;
 
     /**
      * Where the cut is checked for cracks: how far out, as a part of the view distance, and at what
@@ -441,7 +310,7 @@ public final class GateBenchmark {
     @Nullable private LodRenderer.Cut checkCut;
 
     /** The checks so far. */
-    private final List<Check> checks = new ArrayList<>();
+    private final List<GateReport.Check> checks = new ArrayList<>();
 
     /** When the gate's edits started, from {@link System#nanoTime()}. */
     private long editStart;
@@ -641,7 +510,7 @@ public final class GateBenchmark {
     @Nullable private volatile String failure;
 
     /** The results, once done. */
-    @Nullable private volatile Results results;
+    @Nullable private volatile GateReport.Results results;
 
     /** Whether to leave the world in place when the run finishes. */
     private final boolean keepWorld;
@@ -1371,7 +1240,7 @@ public final class GateBenchmark {
      *
      * @return The results, or null until it is done.
      */
-    @Nullable public Results getResults() {
+    @Nullable public GateReport.Results getResults() {
         return results;
     }
 
@@ -1407,7 +1276,8 @@ public final class GateBenchmark {
                             "Checking for cracks: %d of %d",
                             Math.min(checkIndex, crackSpots) + 1,
                             crackSpots + (editCracks ? 1 : 0));
-            case EDITING -> String.format("Editing: %d of %d edits made", digCount, GATE_DIGS);
+            case EDITING ->
+                    String.format("Editing: %d of %d edits made", digCount, GateReport.GATE_DIGS);
             case DONE -> "Done";
             case STOPPED -> failure == null ? "Stopped" : "Failed: " + failure;
         };
@@ -3327,10 +3197,11 @@ public final class GateBenchmark {
         final LodRenderer.Cut cut = checkCut;
         try {
             final CrackCheck.Tiled cracks = checking.join();
-            final Check check =
-                    new Check(where, cracks, cut.missing(), cut.triangles(), cut.hidden().size());
+            final GateReport.Check check =
+                    new GateReport.Check(
+                            where, cracks, cut.missing(), cut.triangles(), cut.hidden().size());
             checks.add(check);
-            log.info("Gate benchmark crack check {}", describe(check));
+            log.info("Gate benchmark crack check {}", GateReport.describe(check));
         } catch (CompletionException e) {
             log.error("Gate benchmark crack check {} failed", where, e);
         }
@@ -3353,8 +3224,8 @@ public final class GateBenchmark {
     private void startEdits(long now) {
         checkIndex = crackSpots;
         phase = Phase.EDITING;
-        digsLeft = GATE_DIGS;
-        propertyDigRate = GATE_DIG_RATE;
+        digsLeft = GateReport.GATE_DIGS;
+        propertyDigRate = GateReport.GATE_DIG_RATE;
         editStart = now;
     }
 
@@ -3422,7 +3293,7 @@ public final class GateBenchmark {
      *
      * @return The gate, or null if it wasn't checked.
      */
-    @Nullable private Gate gateResults() {
+    @Nullable private GateReport.Gate gateResults() {
         if (!gate) {
             return null;
         }
@@ -3444,7 +3315,7 @@ public final class GateBenchmark {
                                         0,
                                         lodMillis.length - 1)];
         final LodCache.Stats cache = cacheAtLoad;
-        return new Gate(
+        return new GateReport.Gate(
                 lodBytesAtLoad[0],
                 lodBytesAtLoad[1],
                 cache == null ? 0 : cache.hits(),
@@ -3458,114 +3329,17 @@ public final class GateBenchmark {
     }
 
     /**
-     * Describe a crack check in a line.
+     * How many torches the run placed.
      *
-     * @param check The check.
-     * @return The line.
+     * @return The count.
      */
-    private static String describe(@NonNull Check check) {
-        final CrackCheck.Tiled cracks = check.cracks();
-        final StringBuilder out =
-                new StringBuilder(
-                        String.format(
-                                "%s: %,d cracks, %,d overdrawn edges, %,d holes (%,d gaps within"
-                                        + " the error, %,d edges under volumes); %,d clusters and"
-                                        + " %,d triangles drawn, %,d edges checked, %,d too long to"
-                                        + " check, %,d on %,d sections drawing themselves",
-                                check.where(),
-                                cracks.openEdges(),
-                                cracks.overdrawnEdges(),
-                                check.missing(),
-                                cracks.nearEdges(),
-                                cracks.coveredEdges(),
-                                cracks.drawnClusters(),
-                                check.triangles(),
-                                cracks.checkedEdges(),
-                                cracks.longEdges(),
-                                cracks.excusedEdges(),
-                                check.hidden()));
-        for (double[] at : cracks.examples()) {
-            out.append(String.format("; at (%.2f, %.2f, %.2f)", at[0], at[1], at[2]));
+    private int placedTorches() {
+        sectionsLock.lock();
+        try {
+            return lights.size();
+        } finally {
+            sectionsLock.unlock();
         }
-        return out.toString();
-    }
-
-    /**
-     * The gate's verdicts, a line each, for the report and the debug window.
-     *
-     * @param results The results.
-     * @return The lines, empty if the gate wasn't checked.
-     */
-    public static List<String> gateLines(@NonNull Results results) {
-        final Gate gate = results.gate();
-        if (gate == null) {
-            return List.of();
-        }
-        final FrameTimings.Timing gpu =
-                results.timings().isEmpty() ? null : results.timings().get(0);
-        final List<String> lines = new ArrayList<>();
-        lines.add(
-                String.format(
-                        "GPU at the 95th percentile: %.2f of %.1f ms, %s",
-                        gpu == null ? Double.NaN : gpu.p95(),
-                        GPU_BUDGET_MS,
-                        verdict(results.passed())));
-        final long cracks = gate.checks().stream().mapToLong(c -> c.cracks().openEdges()).sum();
-        final long overdrawn =
-                gate.checks().stream().mapToLong(c -> c.cracks().overdrawnEdges()).sum();
-        final long holes = gate.checks().stream().mapToLong(Check::missing).sum();
-        lines.add(
-                gate.checks().isEmpty()
-                        ? "Cracks: not checked"
-                        : String.format(
-                                "Cracks: %,d cracks, %,d overdrawn edges and %,d holes in %d cuts,"
-                                        + " %s",
-                                cracks,
-                                overdrawn,
-                                holes,
-                                gate.checks().size(),
-                                verdict(gate.cracksPassed())));
-        lines.add(
-                String.format(
-                        "Edits: %d of %d at %.0f a second, worst drawn at full resolution after %.1f"
-                                + " ms (%d frames) of %.0f ms, in level of detail after %.0f ms at"
-                                + " the 95th percentile, %s",
-                        gate.edits() - gate.editsUnfinished(),
-                        GATE_DIGS,
-                        GATE_DIG_RATE,
-                        gate.worstDrawnMillis(),
-                        gate.worstDrawnFrames(),
-                        EDIT_BUDGET_MS,
-                        gate.lodMillisP95(),
-                        verdict(gate.editsPassed())));
-        lines.add(
-                gate.isReload()
-                        ? String.format(
-                                "Reload: %,d cells read from the cache and %,d built, ready after"
-                                        + " %.1f s, %s",
-                                gate.cacheRead(),
-                                gate.cacheBuilt(),
-                                results.bakeMilliseconds() / 1e3,
-                                verdict(gate.reloadPassed()))
-                        : String.format(
-                                "First build: %,d cells built, ready after %.1f s; run again to"
-                                        + " check the reload",
-                                gate.cacheBuilt(), results.bakeMilliseconds() / 1e3));
-        lines.add(
-                String.format(
-                        "Level of detail: %.1f of %.1f MiB on the GPU",
-                        gate.lodBytes() / BYTES_PER_MIB, gate.lodTotalBytes() / BYTES_PER_MIB));
-        return lines;
-    }
-
-    /**
-     * A verdict in a word.
-     *
-     * @param passed Whether it passed.
-     * @return The word.
-     */
-    private static String verdict(boolean passed) {
-        return passed ? "passed" : "FAILED";
     }
 
     /** Log the level of detail cut's clusters and triangles by level, if there is a world. */
@@ -3674,6 +3448,18 @@ public final class GateBenchmark {
         }
         final int[] checks = renderer().getState().sections.getCheckCounts();
         log.info("Gate benchmark section checks: {} last frame, {} queued", checks[0], checks[1]);
+        log.info(
+                "Gate benchmark placed {} water tiles ({} following the {} water body, {} lakes),"
+                        + " {} media, {} emitters, weather {}, {} views, {} torches",
+                testWater.size(),
+                placedWater.stream().filter(PlacedWater::followsBody).count(),
+                getWaterBody(),
+                lakeWater.size(),
+                testMedia.size(),
+                testEmitters.size(),
+                weather,
+                views.size(),
+                placedTorches());
         logLevels();
         logMemory();
         logStreamTotals();
@@ -3719,9 +3505,9 @@ public final class GateBenchmark {
         final boolean passed =
                 gpu != null
                         && FrameTimings.GPU_TOTAL.equals(gpu.name())
-                        && gpu.p95() <= GPU_BUDGET_MS;
+                        && gpu.p95() <= GateReport.GPU_BUDGET_MS;
         results =
-                new Results(
+                new GateReport.Results(
                         recipe,
                         radius,
                         lightCount,
@@ -3735,7 +3521,7 @@ public final class GateBenchmark {
                         GraphicsManager.getSceneWindow().getHeight(),
                         gateResults());
         phase = Phase.DONE;
-        final String report = report(results);
+        final String report = GateReport.report(results);
         log.info("Gate benchmark results:\n{}", report);
         try {
             Files.writeString(
@@ -3752,64 +3538,6 @@ public final class GateBenchmark {
         } else {
             release();
         }
-    }
-
-    /**
-     * Write results out as text.
-     *
-     * @param results The results.
-     * @return The report.
-     */
-    public static String report(@NonNull Results results) {
-        final StringBuilder out = new StringBuilder();
-        final GateScene.LoadStats load = results.load();
-        out.append(
-                String.format(
-                        "%s gate benchmark: %s at radius %d with %,d lights, seed %d, %d x %d, %s%n",
-                        LocalDateTime.now().withNano(0),
-                        results.recipe(),
-                        results.radius(),
-                        results.lights(),
-                        SEED,
-                        results.width(),
-                        results.height(),
-                        results.passed() ? "PASSED" : "FAILED"));
-        out.append(
-                String.format(
-                        "  Load: %,d sections in the sphere, %,d with content in %,d columns (%.2f per"
-                                + " column), %,d placements, %,d triangles (%,.0f per section)%n",
-                        load.sectionsInSphere(),
-                        load.contentSections(),
-                        load.columns(),
-                        load.sectionsPerColumn(),
-                        load.placements(),
-                        load.triangles(),
-                        load.trianglesPerSection()));
-        out.append(
-                String.format(
-                        "  Laid out and composed in %,d ms, baked and uploaded in %,d ms, %d frames"
-                                + " measured, budget %.1f ms of GPU at the 95th percentile%n",
-                        results.buildMilliseconds(),
-                        results.bakeMilliseconds(),
-                        results.frames(),
-                        GPU_BUDGET_MS));
-        out.append(String.format("  %-24s %9s %9s %9s%n", "Part (ms)", "Average", "95%", "Worst"));
-        for (FrameTimings.Timing timing : results.timings()) {
-            out.append(
-                    String.format(
-                            "  %-24s %9.3f %9.3f %9.3f%n",
-                            timing.name(), timing.average(), timing.p95(), timing.max()));
-        }
-        if (results.gate() != null) {
-            for (Check check : results.gate().checks()) {
-                out.append("  Crack check ").append(describe(check)).append(System.lineSeparator());
-            }
-            out.append("  Level of detail gate:").append(System.lineSeparator());
-            for (String line : gateLines(results)) {
-                out.append("    ").append(line).append(System.lineSeparator());
-            }
-        }
-        return out.toString();
     }
 
     /**
