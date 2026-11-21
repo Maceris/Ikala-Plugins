@@ -6,6 +6,7 @@ import com.ikalagaming.graphics.ui.Align;
 import com.ikalagaming.graphics.ui.Button;
 import com.ikalagaming.graphics.ui.Canvas;
 import com.ikalagaming.graphics.ui.Column;
+import com.ikalagaming.graphics.ui.Dropdown;
 import com.ikalagaming.graphics.ui.Flex;
 import com.ikalagaming.graphics.ui.Grid;
 import com.ikalagaming.graphics.ui.Justify;
@@ -37,6 +38,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 /**
  * The node types specs can use, by name. Graphics registers the built-in types; plugins add their
@@ -107,10 +109,71 @@ public final class NodeTypes {
                     input.onSubmit(p.valueHandler("onSubmit", input));
                     return input;
                 });
+        builtIn("dropdown", NodeTypes::dropdown);
         builtIn("grid", NodeTypes::grid);
         builtIn("virtual-grid", NodeTypes::virtualGrid);
         builtIn("canvas", NodeTypes::canvas);
         builtIn("graph-node", NodeTypes::graphNode);
+    }
+
+    /**
+     * Make a dropdown. {@code options} is a list of text, written out or bound with {@code {name}};
+     * {@code selected} is the chosen index, a number or a binding; and {@code onChange} names a
+     * handler that gets the index the player chose as its value.
+     *
+     * @param id The ID.
+     * @param properties Its properties.
+     * @return The dropdown.
+     */
+    private static Dropdown dropdown(String id, SpecProperties properties) {
+        Dropdown dropdown = new Dropdown(id);
+        String where = properties.path();
+        // Options first, so a selected index is checked against them
+        properties.value("options", value -> dropdown.options(options(value, where)));
+        properties.value("selected", value -> dropdown.selected(index(value)));
+        Consumer<String> handler = properties.valueHandler("onChange", dropdown);
+        if (handler != null) {
+            dropdown.onChange(index -> handler.accept(String.valueOf(index)));
+        }
+        return dropdown;
+    }
+
+    /**
+     * A dropdown's options from a property value.
+     *
+     * @param value A list, whose items become their text, or null for none.
+     * @param where Where the property is, for messages.
+     * @return The options' text.
+     * @throws SpecException If the value isn't a list.
+     */
+    private static List<String> options(Object value, String where) {
+        if (value == null) {
+            return List.of();
+        }
+        if (value instanceof List<?> list) {
+            return list.stream().map(String::valueOf).toList();
+        }
+        throw new SpecException(where + ".options: expected a list, not " + value);
+    }
+
+    /**
+     * A dropdown's chosen index from a property value.
+     *
+     * @param value A number, or text holding one.
+     * @return The index, or -1 for none or anything else.
+     */
+    private static int index(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value != null) {
+            try {
+                return Integer.parseInt(String.valueOf(value).strip());
+            } catch (NumberFormatException e) {
+                return -1;
+            }
+        }
+        return -1;
     }
 
     /**

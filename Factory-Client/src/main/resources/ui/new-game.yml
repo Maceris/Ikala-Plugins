@@ -1,0 +1,46 @@
+# The New Game screen: the save's name, its world type and an optional seed. The world type
+# dropdown lists the world types the data defines. The values, handlers and @ text come from
+# GameMenus.java and the plugin's strings.properties.
+surface:
+  id: factory/new-game
+  anchors: fill
+  layer: background
+
+content:
+  type: column
+  id: content
+  justify: center
+  align: center
+  gap: 16
+  children:
+    - { type: label, id: title, text: "@MENU_NEW_GAME_TITLE" }
+    - type: column
+      id: form
+      gap: 6
+      width: 420
+      children:
+        - { type: label, id: name-label, text: "@MENU_NEW_GAME_NAME" }
+        - { type: text-input, id: name, width: grow }
+        - { type: label, id: world-type-label, text: "@MENU_NEW_GAME_WORLD_TYPE" }
+        - type: dropdown
+          id: world-type
+          width: grow
+          options: "{worldTypes}"
+          selected: "{worldType.selected}"
+          onChange: choose-world-type
+        - { type: label, id: seed-label, text: "@MENU_NEW_GAME_SEED" }
+        - { type: text-input, id: seed, width: grow }
+        - { type: label, id: seed-hint, text: "@MENU_NEW_GAME_SEED_HINT", classes: [muted] }
+    - { type: label, id: error, text: "{newGame.error}", visible: "{newGame.hasError}" }
+    - type: row
+      id: buttons
+      gap: 12
+      children:
+        - { type: button, id: cancel, text: "@MENU_NEW_GAME_CANCEL", width: 160, height: 40, onClick: cancel }
+        - type: button
+          id: create
+          text: "@MENU_NEW_GAME_CREATE"
+          width: 160
+          height: 40
+          autofocus: true
+          onClick: create

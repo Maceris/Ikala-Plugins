@@ -8,8 +8,6 @@ import lombok.RequiredArgsConstructor;
 @Getter
 public enum DefaultWindows {
     DEBUG("Debug"),
-    MAIN_MENU("Main Menu"),
-    ROOT_WINDOW("Root Window"),
-    SINGLE_PLAYER("Single Player");
+    ROOT_WINDOW("Root Window");
     private final String name;
 }

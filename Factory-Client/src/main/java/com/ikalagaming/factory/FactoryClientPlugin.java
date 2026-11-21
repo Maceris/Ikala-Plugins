@@ -17,13 +17,15 @@ import com.ikalagaming.graphics.gui.windows.ScriptMonitor;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 import com.ikalagaming.plugins.config.ConfigManager;
+import com.ikalagaming.scripting.ScriptLaunch;
+import com.ikalagaming.scripting.ScriptManager;
 
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import java.nio.file.Path;
 import java.util.*;
-import java.util.stream.Stream;
 
 /**
  * Handles the client-side parts of Lotomation.
@@ -47,12 +49,21 @@ public class FactoryClientPlugin extends Plugin {
 
     @Getter private WindowManager guiManager;
 
+    /** The main menu, Single Player and New Game screens, outside editor mode. */
+    private GameMenus menus;
+
     /**
      * Opens the Worldgen Lab.
      *
      * @return The Lab's opener, while the plugin is enabled.
      */
     @Getter private static LabTool labTool;
+
+    /** The startup property naming a script to run once the menus are up, for checks. */
+    private static final String SCRIPT_PROPERTY = "ikala.test.script";
+
+    /** The startup property whose text the startup script gets as its global {@code args}. */
+    private static final String SCRIPT_ARGS_PROPERTY = "ikala.test.scriptArgs";
 
     /** The config key that turns on editor mode. */
     private static final String EDITOR_MODE_KEY = "editor-mode";
@@ -81,17 +92,35 @@ public class FactoryClientPlugin extends Plugin {
         }
         UserDataUtil.createUserDataFolder();
         guiManager = GraphicsManager.getWindowManager();
-        guiManager.addWindow(graphics, MAIN_MENU.getName(), new MainMenu(guiManager));
-        guiManager.addWindow(graphics, SINGLE_PLAYER.getName(), new SinglePlayer(guiManager));
         guiManager.addWindow(graphics, DEBUG.getName(), new Debug());
         guiManager.addWindow(graphics, IkGuiDemo.WINDOW_NAME, new IkGuiDemo());
         guiManager.addWindow(graphics, GraphicsDebug.WINDOW_NAME, new GraphicsDebug());
         guiManager.addWindow(graphics, IkScriptDebugger.WINDOW_NAME, new IkScriptDebugger());
         guiManager.addWindow(graphics, ScriptMonitor.WINDOW_NAME, new ScriptMonitor());
-        Stream.of(MAIN_MENU).map(DefaultWindows::getName).forEach(guiManager::show);
+        menus = new GameMenus(graphics, SinglePlayerGame::start);
+        menus.open();
+        startTestScript();
 
         guiManager.setToolbar(graphics, new DebugToolbar(guiManager));
         return true;
+    }
+
+    /**
+     * Start the script named by {@value #SCRIPT_PROPERTY}, if any, for checks and captures that
+     * drive the menus. In editor mode the editor runs it instead.
+     */
+    private void startTestScript() {
+        final String script = System.getProperty(SCRIPT_PROPERTY);
+        if (script != null
+                && ScriptManager.start(
+                                ScriptLaunch.file(Path.of(script))
+                                        .owner(getName())
+                                        .global(
+                                                "args",
+                                                System.getProperty(SCRIPT_ARGS_PROPERTY, "")))
+                        .isEmpty()) {
+            log.warn("Could not start the startup script {}", script);
+        }
     }
 
     @Override
@@ -105,6 +134,8 @@ public class FactoryClientPlugin extends Plugin {
             labTool.close();
             labTool = null;
         }
+        // Their surfaces are removed with the plugin's graphics
+        menus = null;
         return true;
     }
 

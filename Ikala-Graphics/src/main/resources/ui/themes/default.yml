@@ -78,6 +78,14 @@ types:
     padding: $padding.widget
     hovered: { background: $color.field-hovered }
     held: { background: $color.field-active }
+  dropdown:
+    background: $color.field
+    text: $color.text
+    rounding: $corner-radius
+    borderSize: 0
+    padding: $padding.widget
+    hovered: { background: $color.field-hovered }
+    held: { background: $color.field-active }
   selectable:
     text: $color.text
     selected: { background: $color.accent-selected }

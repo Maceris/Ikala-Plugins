@@ -1,0 +1,73 @@
+# The Single Player screen: every save in the Home's saves folder, most recently played first, each
+# with a Play button. The saves list, the handlers and the @ text come from GameMenus.java and the
+# plugin's strings.properties.
+surface:
+  id: factory/single-player
+  anchors: fill
+  layer: background
+
+templates:
+  save-row:
+    node:
+      type: row
+      id: "save"
+      gap: 12
+      align: center
+      width: grow
+      children:
+        - type: column
+          id: about
+          gap: 2
+          width: grow
+          children:
+            - { type: label, id: name, text: "{save.name}" }
+            - { type: label, id: details, text: "{save.details}", classes: [muted] }
+        - type: button
+          id: play
+          text: "@MENU_SINGLE_PLAYER_PLAY"
+          width: 120
+          height: 36
+          onClick: play-save
+
+content:
+  type: column
+  id: content
+  justify: center
+  align: center
+  gap: 16
+  children:
+    - { type: label, id: title, text: "@MENU_SINGLE_PLAYER_TITLE" }
+    - type: scroll
+      id: list
+      width: 720
+      height: 420
+      border: true
+      children:
+        - type: column
+          id: saves
+          gap: 10
+          padding: 10
+          width: grow
+          children:
+            - type: label
+              id: empty
+              text: "@MENU_SINGLE_PLAYER_NO_SAVES"
+              classes: [muted]
+              visible: "{noSaves}"
+            - type: column
+              id: rows
+              gap: 10
+              width: grow
+              repeat: { list: saves, as: save, template: save-row, key: "{save.folder}" }
+    - type: row
+      id: buttons
+      gap: 12
+      children:
+        - { type: button, id: back, text: "@MENU_COMMON_BACK", width: 160, height: 40, onClick: back }
+        - type: button
+          id: new-game
+          text: "@MENU_SINGLE_PLAYER_NEW_GAME"
+          width: 160
+          height: 40
+          autofocus: true
+          onClick: open-new-game

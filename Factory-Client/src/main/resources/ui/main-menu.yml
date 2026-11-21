@@ -1,0 +1,36 @@
+# The game's main menu. The handlers and @ text come from GameMenus.java and the plugin's
+# strings.properties.
+surface:
+  id: factory/main-menu
+  anchors: fill
+  layer: background
+
+templates:
+  menu-button:
+    params: [id, text, action, focus]
+    node:
+      type: button
+      id: "${id}"
+      text: "${text}"
+      width: 240
+      height: 40
+      autofocus: "${focus}"
+      onClick: "${action}"
+
+content:
+  type: column
+  id: content
+  justify: center
+  align: center
+  children:
+    - type: column
+      id: buttons
+      gap: 12
+      align: center
+      children:
+        - use: menu-button
+          with: { id: single-player, text: "@MENU_MAIN_MENU_SINGLE_PLAYER", action: open-single-player, focus: true }
+        - use: menu-button
+          with: { id: multiplayer, text: "@MENU_MAIN_MENU_MULTI_PLAYER", action: open-multiplayer, focus: false }
+        - use: menu-button
+          with: { id: options, text: "@MENU_MAIN_MENU_OPTIONS", action: open-options, focus: false }

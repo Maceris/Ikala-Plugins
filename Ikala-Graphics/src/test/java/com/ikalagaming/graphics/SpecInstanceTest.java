@@ -13,9 +13,11 @@ import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.Context;
 import com.ikalagaming.graphics.gui.enums.Key;
 import com.ikalagaming.graphics.gui.enums.MouseButton;
+import com.ikalagaming.graphics.gui.flags.ConfigFlags;
 import com.ikalagaming.graphics.gui.util.RectFloat;
 import com.ikalagaming.graphics.ui.Button;
 import com.ikalagaming.graphics.ui.Column;
+import com.ikalagaming.graphics.ui.Dropdown;
 import com.ikalagaming.graphics.ui.Label;
 import com.ikalagaming.graphics.ui.Length;
 import com.ikalagaming.graphics.ui.Node;
@@ -219,6 +221,64 @@ class SpecInstanceTest {
         frames(2);
 
         assertEquals(List.of("Ikala"), submitted);
+    }
+
+    @Test
+    void dropdownChoiceReachesTheHandler() {
+        List<String> chosen = new ArrayList<>();
+        Observable<List<String>> options = Observable.of(List.of("Red", "Green", "Blue"));
+        Observable<Integer> selected = Observable.of(0);
+        SpecInstance instance =
+                open(
+                        spec(
+                                """
+                                content:
+                                  type: column
+                                  id: root
+                                  children:
+                                    - { type: dropdown, id: color, options: "{options}", selected: "{selected}", onChange: picked }
+                                """),
+                        new SpecBindings()
+                                .value("options", options)
+                                .value("selected", selected)
+                                .handler("picked", event -> chosen.add(event.value())));
+        Dropdown dropdown = (Dropdown) instance.find("color");
+        assertEquals("Red", dropdown.getText());
+
+        // Open it, then move down one and choose with Enter
+        context.io.configFlags |= ConfigFlags.NAV_ENABLE_KEYBOARD;
+        click(dropdown);
+        context.io.addKeyEvent(Key.ARROW_DOWN, true);
+        frame();
+        context.io.addKeyEvent(Key.ARROW_DOWN, false);
+        frame();
+        context.io.addKeyEvent(Key.ENTER, true);
+        frame();
+        context.io.addKeyEvent(Key.ENTER, false);
+        frames(2);
+
+        assertEquals(List.of("1"), chosen);
+        assertEquals("Green", dropdown.getText());
+
+        selected.set(2);
+        frame();
+        assertEquals("Blue", dropdown.getText());
+
+        options.set(List.of("Only"));
+        frame();
+        assertEquals(-1, dropdown.getSelected(), "An index past the new options is cleared");
+    }
+
+    @Test
+    void dropdownTakesWrittenOptions() {
+        SpecInstance instance =
+                open(
+                        spec(
+                                "content: { type: dropdown, id: size, options: [Small, Large], selected: 1 }\n"),
+                        new SpecBindings());
+        Dropdown dropdown = (Dropdown) instance.find("");
+        assertEquals(List.of("Small", "Large"), dropdown.getOptions());
+        assertEquals("Large", dropdown.getText());
     }
 
     @Test
