@@ -460,8 +460,7 @@ java -Dikala.benchmark=TERRAIN -Dikala.benchmark.radius=12 -jar Ikala-Core-0.6.0
 
 **Results**
 
-Results are logged, shown in the Graphics Debug window, and added to `benchmark-results.txt` in the
-working directory. Each entry has:
+Results are logged and shown in the Graphics Debug window. Each report has:
 - the world, radius, light count, seed and resolution;
 - the load: sections in range, sections with content, placements and triangles;
 - the average, 95th percentile and worst time for the whole GPU frame, the CPU, and each render stage;

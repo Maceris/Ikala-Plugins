@@ -12,7 +12,7 @@ import javax.annotation.Nullable;
 
 /**
  * What a {@link GateBenchmark} run found, what it takes to pass, and the text it is reported as:
- * the report added to {@link GateBenchmark#RESULTS_FILE} and the gate's verdict lines.
+ * the report it logs and the gate's verdict lines.
  */
 public final class GateReport {
 

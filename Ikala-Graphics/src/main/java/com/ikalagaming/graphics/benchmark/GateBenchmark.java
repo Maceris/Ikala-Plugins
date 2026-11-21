@@ -29,10 +29,8 @@ import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.util.vma.VmaTotalStatistics;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -49,9 +47,9 @@ import javax.annotation.Nullable;
  * <p>Run it from the Graphics Debug window, or at startup with {@code -Dikala.benchmark=TERRAIN}
  * (and {@code -Dikala.benchmark.radius=12}, and {@code -Dikala.benchmark.lights=1000} to scatter
  * torches over it), which closes the app when done unless {@code -Dikala.benchmark.keep=true} keeps
- * the world to look around in. Results are logged, shown in Graphics Debug, and added to {@value
- * #RESULTS_FILE}. Everything it made is released when it finishes or is stopped, unless it was
- * asked to keep the world, which then stays to look around in until {@link #removeWorld()}.
+ * the world to look around in. Results are logged and shown in Graphics Debug. Everything it made
+ * is released when it finishes or is stopped, unless it was asked to keep the world, which then
+ * stays to look around in until {@link #removeWorld()}.
  *
  * <p>Driven from the render thread once per frame through {@link #update(Scene)}; starting and
  * stopping are safe from the render thread.
@@ -82,9 +80,6 @@ public final class GateBenchmark {
 
     /** How far below level the camera looks while turning, in radians. */
     public static final float PITCH = 0.35f;
-
-    /** Where results are added, in the working directory. */
-    public static final String RESULTS_FILE = "benchmark-results.txt";
 
     /** The property that starts a run at startup. */
     public static final String PROPERTY = "ikala.benchmark";
@@ -1080,16 +1075,6 @@ public final class GateBenchmark {
         phase = Phase.DONE;
         final String report = GateReport.report(results);
         log.info("Gate benchmark results:\n{}", report);
-        try {
-            Files.writeString(
-                    Path.of(RESULTS_FILE),
-                    report + System.lineSeparator(),
-                    StandardCharsets.UTF_8,
-                    StandardOpenOption.CREATE,
-                    StandardOpenOption.APPEND);
-        } catch (IOException e) {
-            log.warn("Couldn't write {}", RESULTS_FILE, e);
-        }
         if (keepWorld) {
             log.info("Gate benchmark keeping its world; the camera is free again");
         } else {
