@@ -1,9 +1,8 @@
 package com.ikalagaming.graphics;
 
 import com.ikalagaming.event.Listener;
+import com.ikalagaming.launcher.AppPaths;
 import com.ikalagaming.launcher.Launcher;
-import com.ikalagaming.launcher.PluginFolder;
-import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 import com.ikalagaming.plugins.PluginManager;
@@ -38,6 +37,9 @@ public class GraphicsPlugin extends Plugin {
 
     /** The config value naming the level of detail cache's folder. */
     private static final String LOD_CACHE_FOLDER = "lod-cache-folder";
+
+    /** The config key for where compiled shaders are cached. */
+    private static final String SHADER_CACHE_FOLDER = "shader-cache-folder";
 
     /** The config value of the level of detail cache's size cap, in mebibytes. */
     private static final String LOD_CACHE_MAX_MB = "lod-cache-max-mb";
@@ -116,8 +118,7 @@ public class GraphicsPlugin extends Plugin {
         settings.guiLayoutFile =
                 layoutFile == null || layoutFile.isBlank()
                         ? null
-                        : PluginFolder.getResource(PLUGIN_NAME, ResourceType.CONFIG, layoutFile)
-                                .getAbsolutePath();
+                        : AppPaths.resolve(AppPaths.settings(), layoutFile).toString();
 
         // After the config, so a headless run never saves the GUI layout or opens viewports
         settings.applyHeadless(System.getProperty(HEADLESS_PROPERTY));
@@ -147,6 +148,9 @@ public class GraphicsPlugin extends Plugin {
         final PluginConfig config = ConfigManager.loadConfig(GraphicsPlugin.PLUGIN_NAME);
         if (config.isPresent(LOD_CACHE_FOLDER)) {
             settings.lodCacheDirectory = config.getString(LOD_CACHE_FOLDER);
+        }
+        if (config.isPresent(SHADER_CACHE_FOLDER)) {
+            settings.shaderCacheDirectory = config.getString(SHADER_CACHE_FOLDER);
         }
         if (config.isPresent(LOD_CACHE_MAX_MB)) {
             settings.lodCacheMaxBytes = config.getLong(LOD_CACHE_MAX_MB) * BYTES_PER_MIB;

@@ -1,6 +1,7 @@
 package com.ikalagaming.factory.saves;
 
 import com.ikalagaming.factory.FactoryClientPlugin;
+import com.ikalagaming.launcher.AppPaths;
 import com.ikalagaming.util.FileUtils;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -8,6 +9,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 
@@ -20,9 +22,8 @@ public class SaveUtil {
      */
     public static final String NAME_FORMAT = "[0-9a-zA-Z][0-9a-zA-Z-._ ]*";
 
-    /** The full path to the folder where all the save folders will be stored. */
-    public static final String SAVES_FOLDER =
-            UserDataUtil.USER_DATA_FOLDER + File.separator + "saves";
+    /** The name of the folder in the application's Home where the save folders are stored. */
+    public static final String SAVES_FOLDER_NAME = "saves";
 
     /**
      * Create a folder for the save game if it does not already exist.
@@ -39,7 +40,7 @@ public class SaveUtil {
                             name));
             return false;
         }
-        return FileUtils.createFolder(SAVES_FOLDER, name.trim());
+        return FileUtils.createFolder(SaveUtil.savesFolder().toString(), name.trim());
     }
 
     /**
@@ -48,11 +49,20 @@ public class SaveUtil {
      * @return The list of save game names.
      */
     public static List<String> getSaves() {
-        return FileUtils.getFile(SAVES_FOLDER).map(File::listFiles).stream()
+        return FileUtils.getFile(SaveUtil.savesFolder().toString()).map(File::listFiles).stream()
                 .flatMap(Arrays::stream)
                 .filter(File::isDirectory)
                 .map(File::getName)
                 .toList();
+    }
+
+    /**
+     * The folder where all the save folders are stored.
+     *
+     * @return The saves folder, in the application's Home.
+     */
+    public static Path savesFolder() {
+        return AppPaths.home().resolve(SAVES_FOLDER_NAME);
     }
 
     /** Private constructor so this class is not instantiated. */

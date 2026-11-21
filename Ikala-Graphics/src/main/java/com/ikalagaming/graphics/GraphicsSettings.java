@@ -149,10 +149,17 @@ public class GraphicsSettings {
 
     /**
      * The folder built level of detail cells are cached in, so an area seen before loads without
-     * building; null or blank for no cache. Compiled shaders are cached in a {@code shaders} folder
-     * inside it. Set from the {@code lod-cache-folder} config value.
+     * building; null or blank for no cache. A relative path is in the application's cache folder.
+     * Set from the {@code lod-cache-folder} config value.
      */
-    public String lodCacheDirectory = "cache/lod";
+    public String lodCacheDirectory = "lod";
+
+    /**
+     * The folder compiled shaders are cached in, so they aren't compiled again on the next start;
+     * null or blank for no cache. A relative path is in the application's cache folder. Set from
+     * the {@code shader-cache-folder} config value.
+     */
+    public String shaderCacheDirectory = "shaders";
 
     /**
      * The most bytes the level of detail cache keeps, least recently used out. Set from the {@code

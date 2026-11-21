@@ -2,12 +2,15 @@
 icon-path: 'textures/game_icon.png'
 filters-folder: 'shaders/filters'
 # Where built level of detail cells are cached, so an area seen before loads without rebuilding;
-# empty for no cache. Compiled shaders are cached in a shaders folder inside it.
-lod-cache-folder: 'cache/lod'
+# empty for no cache. A relative path is in the application's cache folder.
+lod-cache-folder: 'lod'
+# Where compiled shaders are cached, so they aren't compiled again; empty for no cache. A relative
+# path is in the application's cache folder.
+shader-cache-folder: 'shaders'
 # The most the cache keeps, in mebibytes; the least recently used cells go first
 lod-cache-max-mb: 2048
 # Whether GUI windows can be dragged out of the main window into windows of their own
 gui-viewports: true
-# Where window positions, sizes and docking are saved between runs, in this config folder; empty
-# to not save them
+# Where window positions, sizes and docking are saved between runs; empty to not save them. A
+# relative path is in the settings folder in the application's Home.
 gui-layout-file: 'gui.ini'

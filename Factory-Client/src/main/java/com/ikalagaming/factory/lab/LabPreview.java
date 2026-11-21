@@ -179,7 +179,7 @@ final class LabPreview implements AutoCloseable {
      * Set up the preview; nothing is built until asked.
      *
      * @param graphics The plugin's graphics context.
-     * @param dataFolder The plugin's data folder; corpora are in {@code corpus/} there.
+     * @param dataFolder The Lab's folder in the Home; corpora are in {@code corpus/} there.
      */
     LabPreview(@NonNull GraphicsContext graphics, @NonNull Path dataFolder) {
         this.graphics = graphics;
@@ -768,7 +768,7 @@ final class LabPreview implements AutoCloseable {
      * Write the last build's chunks to a section corpus, with the data, seed and stage that made
      * them.
      *
-     * @param dataFolder The plugin's data folder; corpora go in {@code corpus/} there.
+     * @param dataFolder The Lab's folder in the Home; corpora go in {@code corpus/} there.
      * @return What happened.
      */
     String exportCorpus(@NonNull Path dataFolder) {

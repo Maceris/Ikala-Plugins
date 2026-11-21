@@ -87,7 +87,8 @@ already run this way.
   and a rebaked section keeps drawing its old bake until the new one is ready.
 - **Level of detail:** `lods().fromSections()` makes a live LOD world that the plugin's sections
   feed as they bake. Far away, a section's opaque regions are drawn from simplified clusters instead
-  of its own meshes. Built cells are cached on disk (see `lod-cache-folder`, `lod-cache-max-mb`).
+  of its own meshes. Built cells are cached on disk in the application's cache folder (see
+  `lod-cache-folder`, `lod-cache-max-mb`), and compiled shaders beside them (`shader-cache-folder`).
 - **Volume bricks:** past the volume distance (96 m), a section's cut out and see-through meshes,
   like leaves, glass and water, are drawn from a 16^3 voxel brick instead of meshes. Farther out,
   coarse bricks with 2 m or 4 m voxels each stand in for 8 or 64 sections, so foliage reaches the

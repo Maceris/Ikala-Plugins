@@ -3,7 +3,7 @@ package com.ikalagaming.factory.lab;
 import com.ikalagaming.factory.FactoryClientPlugin;
 import com.ikalagaming.factory.registry.DefinitionLoader;
 import com.ikalagaming.graphics.GraphicsContext;
-import com.ikalagaming.launcher.PluginFolder;
+import com.ikalagaming.launcher.AppPaths;
 import com.ikalagaming.plugins.config.ConfigManager;
 import com.ikalagaming.plugins.config.PluginConfig;
 
@@ -81,11 +81,7 @@ public final class LabTool implements AutoCloseable {
                     new WorldgenLab(
                             graphics,
                             configuredSettings(),
-                            PluginFolder.getResource(
-                                            FactoryClientPlugin.PLUGIN_NAME,
-                                            PluginFolder.ResourceType.DATA,
-                                            "")
-                                    .toPath());
+                            AppPaths.home().resolve(WorldgenLab.HOME_FOLDER));
             lab.open();
             return;
         }

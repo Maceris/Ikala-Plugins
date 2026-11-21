@@ -2,8 +2,8 @@ package com.ikalagaming.factory.saves;
 
 import com.ikalagaming.factory.FactoryPlugin;
 import com.ikalagaming.factory.auth.Crypto;
+import com.ikalagaming.launcher.AppPaths;
 import com.ikalagaming.util.SafeResourceLoader;
-import com.ikalagaming.util.SystemProperties;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -14,23 +14,34 @@ import java.security.KeyPair;
 @Slf4j
 public class UserDataUtil {
 
-    /** The full path to the folder where all the game data will be stored. */
-    public static final String USER_DATA_FOLDER =
-            SystemProperties.getHomeDir() + File.separator + ".lotomation";
+    /** The folder in the application's Home that holds this computer's identity. */
+    public static final String IDENTITY_FOLDER = "identity";
 
-    /** The full path to the file where we store private and public keys for authorization. */
-    private static final String KEYS_FILE = USER_DATA_FOLDER + File.separator + "auth_keys.pem";
+    /** The file in the identity folder that holds the keys for signing in to servers. */
+    public static final String KEYS_FILE_NAME = "identity.key";
 
-    /** Create the user data folder if it does not already exist. */
+    /** Create the identity folder in the Home if it does not already exist. */
     public static void createUserDataFolder() {
-        File folder = new File(USER_DATA_FOLDER);
-        if (!folder.exists() && (!folder.mkdir())) {
+        File folder = UserDataUtil.keysFile().getParentFile();
+        if (!folder.exists() && !folder.mkdirs()) {
             log.error(
                     SafeResourceLoader.getStringFormatted(
                             "DATA_FOLDER_CREATION_FAILED",
                             FactoryPlugin.getResourceBundle(),
-                            USER_DATA_FOLDER));
+                            folder.toString()));
         }
+    }
+
+    /**
+     * The file that holds the keys for signing in to servers.
+     *
+     * @return The keys file, in the identity folder in the application's Home.
+     */
+    private static File keysFile() {
+        return AppPaths.home()
+                .resolve(UserDataUtil.IDENTITY_FOLDER)
+                .resolve(UserDataUtil.KEYS_FILE_NAME)
+                .toFile();
     }
 
     /**
@@ -42,9 +53,9 @@ public class UserDataUtil {
         log.debug(
                 SafeResourceLoader.getString(
                         "KEY_FILE_GENERATING", FactoryPlugin.getResourceBundle()),
-                KEYS_FILE);
+                UserDataUtil.keysFile());
         KeyPair result = Crypto.generateKeyPair();
-        if (!Crypto.writeKeysToFile(result, new File(KEYS_FILE))) {
+        if (!Crypto.writeKeysToFile(result, UserDataUtil.keysFile())) {
             log.warn(
                     SafeResourceLoader.getString(
                             "KEY_FILE_CANT_CREATE", FactoryPlugin.getResourceBundle()));
@@ -58,7 +69,7 @@ public class UserDataUtil {
      * @return The key pair for this computer.
      */
     public static KeyPair getKeyPair() {
-        return Crypto.readKeysFromFile(new File(KEYS_FILE))
+        return Crypto.readKeysFromFile(UserDataUtil.keysFile())
                 .orElseGet(UserDataUtil::generateAndStoreKeyPair);
     }
 

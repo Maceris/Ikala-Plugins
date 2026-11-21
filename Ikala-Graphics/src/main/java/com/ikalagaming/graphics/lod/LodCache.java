@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.lod;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsSettings;
 import com.ikalagaming.graphics.asset.AssetFile;
+import com.ikalagaming.launcher.AppPaths;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -125,7 +126,7 @@ public final class LodCache {
         if (folder == null || folder.isBlank()) {
             return null;
         }
-        return new LodCache(Path.of(folder), settings.lodCacheMaxBytes);
+        return new LodCache(AppPaths.resolve(AppPaths.cache(), folder), settings.lodCacheMaxBytes);
     }
 
     /**

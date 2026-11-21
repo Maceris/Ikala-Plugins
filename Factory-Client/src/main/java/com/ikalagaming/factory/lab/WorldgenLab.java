@@ -127,7 +127,10 @@ public final class WorldgenLab implements AutoCloseable {
     /** The graphics context the Lab draws through. */
     private final GraphicsContext graphics;
 
-    /** Where bookmarks, exports and the corpus go. */
+    /** The Lab's folder in the application's Home, where bookmarks, exports and corpora go. */
+    public static final String HOME_FOLDER = "worldgen-lab";
+
+    /** Where bookmarks, exports and corpora go. */
     private final Path dataFolder;
 
     /** The data being looked at. */
@@ -240,7 +243,7 @@ public final class WorldgenLab implements AutoCloseable {
      *
      * @param graphics The graphics context to draw through.
      * @param settings What to load first.
-     * @param dataFolder Where bookmarks, exports and the corpus go.
+     * @param dataFolder Where bookmarks, exports and corpora go, in the application's Home.
      */
     public WorldgenLab(
             @NonNull GraphicsContext graphics,
@@ -260,7 +263,7 @@ public final class WorldgenLab implements AutoCloseable {
         renderer = new LabRenderer(graphics, drawn -> post(() -> onFrame(drawn)));
         nodeTree = new NodeTree(renderer, this::post, this::viewNode);
         preview = new LabPreview(graphics, dataFolder);
-        bookmarks = new Bookmarks(dataFolder.resolve("lab").resolve("bookmarks.kvt"));
+        bookmarks = new Bookmarks(dataFolder.resolve("bookmarks.kvt"));
         // Owned by the plugin, so they stop when it unloads even if the Lab is never closed
         final String owner = graphics.getOwner();
         loader = PluginThreads.singleThread(owner, "lab-load");
@@ -1212,7 +1215,7 @@ public final class WorldgenLab implements AutoCloseable {
                         + "-"
                         + System.currentTimeMillis()
                         + ".png";
-        final Path file = dataFolder.resolve("lab").resolve("exports").resolve(name);
+        final Path file = dataFolder.resolve("exports").resolve(name);
         try {
             Files.createDirectories(file.getParent());
             ImageIO.write(png, "png", file.toFile());

@@ -21,8 +21,11 @@ For your own plugin, you'll need to configure:
 - The root project name in `settings.gradle`
 - The plugin details in `src/main/resources/plugin.yml`
 - Dependency information in `build.gradle` and `gradle.properties`
-- Default settings in `src/main/resources/config.yml`, which is copied to the
-  plugin's config folder the first time it is loaded
+- Default settings in `src/main/resources/config.yml`. A `config.yml` shipped
+  in the plugin's `config` folder overrides them, and the user's changes are
+  saved to the Home, in `settings/plugins/<plugin>/`, beside a
+  `config.defaults.yml` that lists every default for users to look up. The
+  plugin's own folder is never written to.
 
 Additionally while the `plugin.yml` file is important for a plugin to be
 loaded, it's also where name and version information is pulled when generating

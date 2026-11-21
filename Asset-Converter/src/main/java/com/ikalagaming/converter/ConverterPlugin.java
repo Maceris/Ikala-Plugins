@@ -135,8 +135,7 @@ public class ConverterPlugin extends Plugin {
                 ConverterScripts.GLOBAL, getName(), owner -> HostClass.of(ConverterScripts.class));
         // This is the editor, so UI spec files are reloaded when they change
         GraphicsManager.getUiManager().setHotReload(true);
-        Observable<Integer> sampleCount =
-                Observable.of(AssetSamples.count(Path.of(AssetSamples.FOLDER)));
+        Observable<Integer> sampleCount = Observable.of(AssetSamples.count(AssetSamples.folder()));
         ui.addStyles(AssetInspectorWindow.styles());
         lodPrototype = new LodPrototype(graphics);
         ui.registerTool(LodPrototype.TOOL_ID, LodPrototype.LABEL, lodPrototype::open);

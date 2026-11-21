@@ -4,6 +4,7 @@ import com.ikalagaming.converter.ConverterPlugin;
 import com.ikalagaming.graphics.asset.AssetMetadata;
 import com.ikalagaming.graphics.asset.AssetWriter;
 import com.ikalagaming.graphics.asset.SectionTag;
+import com.ikalagaming.launcher.AppPaths;
 
 import lombok.NonNull;
 
@@ -32,8 +33,17 @@ public final class AssetSamples {
     /** A section from a made up future version of the format. */
     static final int FUTURE = SectionTag.of("FUTR");
 
-    /** The folder samples go in, under the working directory. */
+    /** The folder samples go in, in the application's reports folder. */
     public static final String FOLDER = "asset-samples";
+
+    /**
+     * Where the samples go.
+     *
+     * @return The samples folder, in the application's reports folder.
+     */
+    public static Path folder() {
+        return AppPaths.reports().resolve(FOLDER);
+    }
 
     /** The valid sample. */
     public static final String VALID = "valid.ika";

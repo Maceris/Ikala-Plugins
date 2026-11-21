@@ -26,6 +26,7 @@ import com.ikalagaming.graphics.vulkan.LodRenderer;
 import com.ikalagaming.graphics.vulkan.SkinnedRenderer;
 import com.ikalagaming.graphics.vulkan.TextureRegistry;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
+import com.ikalagaming.launcher.AppPaths;
 import com.ikalagaming.launcher.Launcher;
 import com.ikalagaming.launcher.events.Shutdown;
 import com.ikalagaming.plugins.Plugin;
@@ -283,6 +284,8 @@ public class GraphicsManager {
         IkIO ikIO = IkGui.getIO();
         // Window positions, sizes and docking are kept between runs
         ikIO.iniFilename = settings.guiLayoutFile;
+        // Logging the GUI to a file, from the metrics window, goes with the other logs
+        ikIO.logFilename = AppPaths.logs().resolve(ikIO.logFilename).toString();
         // Tab, arrow keys and gamepads move between items, so menus work without a mouse
         ikIO.configFlags |= ConfigFlags.NAV_ENABLE_KEYBOARD | ConfigFlags.NAV_ENABLE_GAMEPAD;
         // GUI windows can be docked into each other, as tabs or side by side

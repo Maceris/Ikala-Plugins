@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.vulkan;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.launcher.AppPaths;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -27,17 +28,14 @@ import java.util.zip.CRC32C;
  * file starts with a small header holding the SPIR-V's checksum, so a damaged file is a miss and is
  * compiled again rather than handed to the driver.
  *
- * <p>It lives in a {@value #FOLDER} folder inside the level of detail cache's folder. The LOD cache
- * only counts and evicts its own files at the top of that folder, so it never sees these. Nothing
- * is evicted here: modules are small, and an edit only leaves one stale file behind.
+ * <p>It has its own folder in the application's cache, apart from the level of detail cache, so
+ * clearing one leaves the other. Nothing is evicted here: modules are small, and an edit only
+ * leaves one stale file behind.
  *
  * <p>Safe from any thread.
  */
 @Slf4j
 final class ShaderCache {
-
-    /** The folder inside the level of detail cache's folder. */
-    static final String FOLDER = "shaders";
 
     /** The extension of a module's file. */
     static final String EXTENSION = ".spv";
@@ -82,16 +80,16 @@ final class ShaderCache {
     }
 
     /**
-     * The cache the graphics settings ask for, in the level of detail cache's folder.
+     * The cache the graphics settings ask for.
      *
      * @return The cache, or null if caching is off.
      */
     static ShaderCache fromSettings() {
-        final String folder = GraphicsManager.getSettings().lodCacheDirectory;
+        final String folder = GraphicsManager.getSettings().shaderCacheDirectory;
         if (folder == null || folder.isBlank()) {
             return null;
         }
-        return new ShaderCache(Path.of(folder, FOLDER));
+        return new ShaderCache(AppPaths.resolve(AppPaths.cache(), folder));
     }
 
     /**

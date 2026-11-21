@@ -239,7 +239,7 @@ public class AssetInspectorWindow {
 
     /** Write the samples and browse their folder. */
     private void samples() {
-        Path folder = Path.of(AssetSamples.FOLDER);
+        Path folder = AssetSamples.folder();
         try {
             AssetSamples.write(folder);
             sampleCount.set(AssetSamples.count(folder));
