@@ -172,9 +172,16 @@ public class WaterVolume {
         final boolean wandered =
                 Math.abs(cameraX - (cornerX + SIZE / 2)) > WANDER
                         || Math.abs(cameraZ - (cornerZ + SIZE / 2)) > WANDER;
-        if (now != version || !built || wandered) {
+        if (!built || wandered) {
             version = now;
             build(cameraX - SIZE / 2, cameraZ - SIZE / 2);
+        } else if (now != version) {
+            version = now;
+            // Streaming changes tiles far away all the time: build again only if the ones
+            // reaching the map changed. Tiles are records, replaced when they change
+            if (!sameTilesReach()) {
+                build(cameraX - SIZE / 2, cameraZ - SIZE / 2);
+            }
         }
         underWater = any && isUnderWater(tiles, camera);
         if (!any) {
@@ -215,6 +222,44 @@ public class WaterVolume {
         return buffers[frame].deviceAddress;
     }
 
+    /** The tiles that reached the map when it was built, in the registry's order. */
+    private final List<WaterTile> reaching = new ArrayList<>();
+
+    /**
+     * Whether a tile reaches the map where it is.
+     *
+     * @param tile The tile.
+     * @return True if any of it lies over the map.
+     */
+    private boolean reaches(@NonNull WaterTile tile) {
+        final double size = tile.cellSize();
+        final double originX = tile.origin().x();
+        final double originZ = tile.origin().z();
+        return !(originX > cornerX + SIZE
+                || originZ > cornerZ + SIZE
+                || originX + tile.cellsX() * size < cornerX
+                || originZ + tile.cellsZ() * size < cornerZ);
+    }
+
+    /**
+     * Whether the tiles reaching the map are the very ones it was built from, in the same order.
+     *
+     * @return True if building it again would give the same map.
+     */
+    private boolean sameTilesReach() {
+        int matched = 0;
+        for (WaterTile tile : tiles) {
+            if (!reaches(tile)) {
+                continue;
+            }
+            if (matched >= reaching.size() || reaching.get(matched) != tile) {
+                return false;
+            }
+            ++matched;
+        }
+        return matched == reaching.size();
+    }
+
     /**
      * Build the map with its corner at a world cell.
      *
@@ -228,16 +273,15 @@ public class WaterVolume {
         Arrays.fill(cells, 0);
         bodies.clear();
         any = false;
+        reaching.clear();
         for (WaterTile tile : tiles) {
             final double size = tile.cellSize();
-            final double originX = tile.origin().x();
-            final double originZ = tile.origin().z();
-            if (originX > cornerX + SIZE
-                    || originZ > cornerZ + SIZE
-                    || originX + tile.cellsX() * size < cornerX
-                    || originZ + tile.cellsZ() * size < cornerZ) {
+            if (!reaches(tile)) {
                 continue;
             }
+            reaching.add(tile);
+            final double originX = tile.origin().x();
+            final double originZ = tile.origin().z();
             int body = bodies.indexOf(tile.body());
             if (body < 0) {
                 if (bodies.size() < MAX_BODIES) {
