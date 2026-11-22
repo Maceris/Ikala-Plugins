@@ -6,6 +6,7 @@ import com.ikalagaming.graphics.vulkan.FrameTimings;
 import lombok.NonNull;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import javax.annotation.Nullable;
@@ -30,6 +31,13 @@ public final class GateReport {
 
     /** Bytes in a mebibyte. */
     private static final double BYTES_PER_MIB = 1024.0 * 1024.0;
+
+    /**
+     * How a report's date is written: always with seconds, which {@link LocalDateTime#toString()}
+     * leaves out when they are 0, so every report's date is as long.
+     */
+    private static final DateTimeFormatter DATE =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     /**
      * What a run found.
@@ -273,7 +281,7 @@ public final class GateReport {
         out.append(
                 String.format(
                         "%s gate benchmark: %s at radius %d with %,d lights, seed %d, %d x %d, %s%n",
-                        LocalDateTime.now().withNano(0),
+                        DATE.format(LocalDateTime.now()),
                         results.recipe(),
                         results.radius(),
                         results.lights(),
