@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.ikalagaming.factory.render.BlockMeshes;
 import com.ikalagaming.factory.world.Block;
 import com.ikalagaming.factory.world.Chunk;
 import com.ikalagaming.factory.world.ChunkPos;

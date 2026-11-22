@@ -210,7 +210,8 @@ public class Server {
                             worldFolder,
                             generator,
                             spawn,
-                            ServerWorld.defaultThreads());
+                            ServerWorld.defaultThreads(),
+                            info.time());
             world = opened;
             ticker =
                     Executors.newSingleThreadScheduledExecutor(
@@ -273,6 +274,11 @@ public class Server {
                 ticker = null;
             }
             if (world != null) {
+                try {
+                    Saves.writeTime(world.getSaveFolder(), world.getWorldFolder(), world.getTime());
+                } catch (IOException e) {
+                    log.warn("Could not save the time of {}", world.getSaveFolder(), e);
+                }
                 world.close();
                 world = null;
             }

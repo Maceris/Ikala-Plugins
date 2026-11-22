@@ -1,5 +1,7 @@
 package com.ikalagaming.factory.lab;
 
+import com.ikalagaming.factory.render.BlockMeshes;
+import com.ikalagaming.factory.render.ChunkSections;
 import com.ikalagaming.factory.world.Chunk;
 import com.ikalagaming.factory.world.ChunkPos;
 import com.ikalagaming.factory.world.World;
@@ -221,8 +223,8 @@ final class LabLod implements AutoCloseable {
         List<LodMesh> out = new ArrayList<>();
         for (Map.Entry<ChunkPos, Chunk> entry : chunks.entrySet()) {
             final ChunkPos pos = entry.getKey();
-            final LabPreview.Placed placed =
-                    LabPreview.place(chunks, meshes, pos, entry.getValue());
+            final ChunkSections.Placed placed =
+                    ChunkSections.place(chunks::get, meshes, pos, entry.getValue());
             if (placed == null) {
                 continue;
             }

@@ -9,6 +9,7 @@ import com.ikalagaming.factory.networking.base.Request;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkData;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkUnload;
 import com.ikalagaming.factory.networking.request.clientbound.Joined;
+import com.ikalagaming.factory.networking.request.clientbound.TimeUpdate;
 import com.ikalagaming.factory.world.Chunk;
 import com.ikalagaming.factory.world.ChunkPos;
 import com.ikalagaming.factory.world.World;
@@ -55,7 +56,8 @@ class TestServerWorld {
     void testChunksGenerateWithPlatform() throws Exception {
         WorldGenerator generator = emptyWorld();
         SpawnFinder.Spawn spawn = new SpawnFinder.Spawn(0, 64, 0, true);
-        try (ServerWorld world = new ServerWorld(Path.of("save"), "world", generator, spawn, 2)) {
+        try (ServerWorld world =
+                new ServerWorld(Path.of("save"), "world", generator, spawn, 2, 0)) {
             ChunkPos below = ChunkPos.containing(0, 63, 0);
             Chunk chunk = world.chunk(below).get(30, TimeUnit.SECONDS);
 
@@ -72,8 +74,10 @@ class TestServerWorld {
             assertFalse(world.loadedChunk(below).isPresent());
             assertFalse(world.unload(below));
 
+            long time = world.getTime();
             world.tick();
             assertEquals(1, world.getTicks());
+            assertEquals(time + 1, world.getTime());
         }
     }
 
@@ -122,7 +126,7 @@ class TestServerWorld {
     void testStreamsNearestFirstAndDropsBehind() throws Exception {
         SpawnFinder.Spawn spawn = new SpawnFinder.Spawn(0, 64, 0, false);
         try (ServerWorld world =
-                new ServerWorld(Path.of("save"), "world", emptyWorld(), spawn, 4)) {
+                new ServerWorld(Path.of("save"), "world", emptyWorld(), spawn, 4, 0)) {
             Recorder client = new Recorder();
             world.post(() -> world.join("Tester", client));
             int all =
@@ -134,7 +138,14 @@ class TestServerWorld {
             Joined joined = (Joined) client.sent.getFirst();
             assertEquals(0.5, joined.getX());
             assertEquals(64.0, joined.getY());
-            ChunkData first = (ChunkData) client.sent.get(1);
+            TimeUpdate time = (TimeUpdate) client.sent.get(1);
+            assertEquals(Server.TICKS_PER_SECOND, time.getTicksPerSecond());
+            ChunkData first =
+                    (ChunkData)
+                            client.sent.stream()
+                                    .filter(ChunkData.class::isInstance)
+                                    .findFirst()
+                                    .orElseThrow();
             // Chunks are asked for nearest first; threads finish in any order, so the first to
             // arrive is one of the nearest
             long dy = first.getY() - 4L;

@@ -6,6 +6,7 @@ import com.ikalagaming.factory.networking.request.clientbound.ChunkData;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkUnload;
 import com.ikalagaming.factory.networking.request.clientbound.ClientBoundRequestHandler;
 import com.ikalagaming.factory.networking.request.clientbound.Joined;
+import com.ikalagaming.factory.networking.request.clientbound.TimeUpdate;
 import com.ikalagaming.factory.networking.request.clientbound.UpdateTagRegistry;
 import com.ikalagaming.factory.networking.request.serverbound.Join;
 import com.ikalagaming.factory.networking.request.serverbound.PlayerMove;
@@ -33,6 +34,13 @@ public final class ClientSession implements ClientBoundRequestHandler {
      * @return The world.
      */
     @Getter private final ClientWorld world = new ClientWorld();
+
+    /**
+     * The world's clock, kept in step with the server.
+     *
+     * @return The clock.
+     */
+    @Getter private final ClientClock clock = new ClientClock();
 
     /** Runs work on the main thread. */
     private final Executor mainThread;
@@ -120,6 +128,11 @@ public final class ClientSession implements ClientBoundRequestHandler {
         } catch (RuntimeException e) {
             log.warn("The server sent chunk {} in a form this can't read", pos, e);
         }
+    }
+
+    @Override
+    public void handle(@NonNull TimeUpdate request) {
+        clock.set(request.getTicks(), request.getTicksPerSecond());
     }
 
     @Override

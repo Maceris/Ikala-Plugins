@@ -31,4 +31,11 @@ public interface ClientBoundRequestHandler extends RequestHandler {
      * @param request The request.
      */
     void handle(@NonNull ChunkUnload request);
+
+    /**
+     * The world's clock.
+     *
+     * @param request The request.
+     */
+    void handle(@NonNull TimeUpdate request);
 }

@@ -6,6 +6,7 @@ import com.ikalagaming.factory.networking.base.RequestDirection;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkData;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkUnload;
 import com.ikalagaming.factory.networking.request.clientbound.Joined;
+import com.ikalagaming.factory.networking.request.clientbound.TimeUpdate;
 import com.ikalagaming.factory.networking.request.clientbound.UpdateTagRegistry;
 import com.ikalagaming.factory.networking.request.serverbound.Join;
 import com.ikalagaming.factory.networking.request.serverbound.PlayerMove;
@@ -119,6 +120,7 @@ public class RequestRegistry {
         registerClientBound(Joined.class);
         registerClientBound(ChunkData.class);
         registerClientBound(ChunkUnload.class);
+        registerClientBound(TimeUpdate.class);
         registerServerBound(Join.class);
         registerServerBound(PlayerMove.class);
     }

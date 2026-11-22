@@ -3,20 +3,20 @@ package com.ikalagaming.factory;
 import com.ikalagaming.factory.client.ClientSession;
 import com.ikalagaming.factory.networking.base.Connection;
 import com.ikalagaming.factory.networking.request.clientbound.Joined;
+import com.ikalagaming.factory.render.SkyLight;
+import com.ikalagaming.factory.render.WorldRenderer;
 import com.ikalagaming.factory.save.SaveSummary;
 import com.ikalagaming.factory.saves.SaveUtil;
+import com.ikalagaming.factory.world.WorldTime;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.scene.Camera;
-import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.launcher.Launcher;
-import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector3d;
-import org.joml.Vector3f;
 
 import java.util.UUID;
 
@@ -45,6 +45,12 @@ public final class SinglePlayerGame {
 
     /** The session of the game being played, or null. Main thread only. */
     private static ClientSession session;
+
+    /** Draws the chunks the server sends, or null. */
+    private static WorldRenderer renderer;
+
+    /** Lights the world by its clock, or null. */
+    private static SkyLight sky;
 
     /** The main loop stage that sends the player's position, or null. */
     private static UUID moveStage;
@@ -106,6 +112,14 @@ public final class SinglePlayerGame {
             session.close();
             session = null;
         }
+        if (renderer != null) {
+            renderer.close();
+            renderer = null;
+        }
+        if (sky != null) {
+            sky.restore();
+            sky = null;
+        }
     }
 
     /**
@@ -121,6 +135,8 @@ public final class SinglePlayerGame {
     private static void join() {
         final ClientSession joining =
                 new ClientSession(GraphicsManager::runOnMainThread, SinglePlayerGame::onJoined);
+        renderer = new WorldRenderer(GraphicsManager.forPlugin(FactoryClientPlugin.PLUGIN_NAME));
+        joining.getWorld().addListener(renderer);
         final Connection connection = LocalServer.connect(joining);
         session = joining;
         joining.join(connection, PLAYER_NAME);
@@ -156,6 +172,9 @@ public final class SinglePlayerGame {
         if (playing == null || !playing.isJoined()) {
             return 0;
         }
+        if (sky != null && playing.getClock().isKnown()) {
+            sky.update(playing.getClock().now());
+        }
         final long now = System.currentTimeMillis();
         if (now - lastSentMillis < MOVE_INTERVAL_MILLIS) {
             return 0;
@@ -176,28 +195,20 @@ public final class SinglePlayerGame {
         if (chunks != lastReported && now - lastReportMillis >= REPORT_INTERVAL_MILLIS) {
             lastReported = chunks;
             lastReportMillis = now;
-            log.info("The client has {} chunks", chunks);
+            log.info(
+                    "The client has {} chunks, {} with sections; it is {} o'clock",
+                    chunks,
+                    renderer == null ? 0 : renderer.sectionCount(),
+                    String.format("%.2f", WorldTime.hour(playing.getClock().now())));
         }
         return 0;
     }
 
-    /** Light the scene and switch to drawing the world. */
+    /** Light the scene by the world's clock and switch to drawing the world. */
     private static void setUpScene() {
-        GraphicsManager.getScene()
-                .getSceneLights()
-                .setAmbientLight(new AmbientLight(new Vector3f(1.0f, 1.0f, 1.0f), 0.6f));
+        sky = new SkyLight(GraphicsManager.getScene());
+        sky.update(WorldTime.START_TICKS);
         GraphicsManager.swapPipeline(RenderConfig.WORLD);
-        var texturePath =
-                PluginFolder.getResource(
-                                FactoryClientPlugin.PLUGIN_NAME,
-                                PluginFolder.ResourceType.DATA,
-                                "textures/skybox.png")
-                        .getAbsolutePath();
-        GraphicsManager.getScene()
-                .setSkyboxTexture(
-                        GraphicsManager.forPlugin(FactoryClientPlugin.PLUGIN_NAME)
-                                .textures()
-                                .load(texturePath));
     }
 
     /** Private constructor so this class is not instantiated. */

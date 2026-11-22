@@ -5,10 +5,12 @@ import com.ikalagaming.factory.networking.base.Connection;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkData;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkUnload;
 import com.ikalagaming.factory.networking.request.clientbound.Joined;
+import com.ikalagaming.factory.networking.request.clientbound.TimeUpdate;
 import com.ikalagaming.factory.world.Block;
 import com.ikalagaming.factory.world.Chunk;
 import com.ikalagaming.factory.world.ChunkCodec;
 import com.ikalagaming.factory.world.ChunkPos;
+import com.ikalagaming.factory.world.WorldTime;
 import com.ikalagaming.factory.world.gen.SpawnFinder;
 import com.ikalagaming.factory.world.gen.SpawnPlatform;
 import com.ikalagaming.factory.world.gen.WorldGenerator;
@@ -71,6 +73,9 @@ public final class ServerWorld implements AutoCloseable {
     /** How long a chunk no player needs stays loaded, in ticks. */
     static final long IDLE_TICKS = 30L * Server.TICKS_PER_SECOND;
 
+    /** How often players are sent the time, in ticks. */
+    static final long TIME_EVERY_TICKS = 5L * Server.TICKS_PER_SECOND;
+
     /** How often idle chunks are dropped, in ticks. */
     static final long UNLOAD_EVERY_TICKS = Server.TICKS_PER_SECOND;
 
@@ -111,6 +116,9 @@ public final class ServerWorld implements AutoCloseable {
     /** Ticks run so far. */
     private final AtomicLong ticks = new AtomicLong();
 
+    /** The world's clock, in ticks; see {@link WorldTime}. */
+    private final AtomicLong time;
+
     /** Work for the tick thread, from requests and finished chunks. */
     private final Queue<Runnable> tasks = new ConcurrentLinkedQueue<>();
 
@@ -128,13 +136,16 @@ public final class ServerWorld implements AutoCloseable {
      * @param generator Makes the world's chunks.
      * @param spawn Where new players start.
      * @param threads How many threads generate chunks.
+     * @param time The world's clock, in ticks.
      */
     public ServerWorld(
             @NonNull Path saveFolder,
             @NonNull String worldFolder,
             @NonNull WorldGenerator generator,
             @NonNull SpawnFinder.Spawn spawn,
-            int threads) {
+            int threads,
+            long time) {
+        this.time = new AtomicLong(time);
         this.saveFolder = saveFolder;
         this.worldFolder = worldFolder;
         this.generator = generator;
@@ -217,6 +228,15 @@ public final class ServerWorld implements AutoCloseable {
     }
 
     /**
+     * The world's clock.
+     *
+     * @return The time, in ticks; see {@link WorldTime}.
+     */
+    public long getTime() {
+        return time.get();
+    }
+
+    /**
      * How many ticks have run.
      *
      * @return The tick count.
@@ -261,6 +281,7 @@ public final class ServerWorld implements AutoCloseable {
                         0,
                         VIEW_RADIUS,
                         VERTICAL_RADIUS));
+        connection.send(new TimeUpdate(time.get(), Server.TICKS_PER_SECOND));
         log.info("{} joined at {}, {}, {}", name, player.getX(), player.getY(), player.getZ());
         return player;
     }
@@ -277,6 +298,7 @@ public final class ServerWorld implements AutoCloseable {
     /** Run one tick. Called {@value Server#TICKS_PER_SECOND} times a second by the server. */
     void tick() {
         final long now = ticks.incrementAndGet();
+        final long clock = time.incrementAndGet();
         Runnable task = tasks.poll();
         while (task != null) {
             try {
@@ -288,6 +310,11 @@ public final class ServerWorld implements AutoCloseable {
         }
         for (ServerPlayer player : players.values()) {
             stream(player);
+        }
+        if (now % TIME_EVERY_TICKS == 0) {
+            for (ServerPlayer player : players.values()) {
+                player.getConnection().send(new TimeUpdate(clock, Server.TICKS_PER_SECOND));
+            }
         }
         if (now % UNLOAD_EVERY_TICKS == 0) {
             unloadIdle(now);

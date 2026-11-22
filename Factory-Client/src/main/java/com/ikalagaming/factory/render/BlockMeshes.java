@@ -1,4 +1,4 @@
-package com.ikalagaming.factory.lab;
+package com.ikalagaming.factory.render;
 
 import com.ikalagaming.factory.world.gen.debug.Colormaps;
 import com.ikalagaming.graphics.GraphicsContext;
@@ -17,7 +17,7 @@ import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Which bakeable mesh each block is drawn with in the 3D preview.
+ * Which bakeable mesh each block is drawn with, in the game and the Worldgen Lab's 3D preview.
  *
  * <p>Block definitions don't name a mesh yet. When they do, with a mesh exported from the asset
  * editor, {@link #meshFor} loads that mesh instead, and nothing else in the preview changes. Until
@@ -27,7 +27,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *
  * <p>Render thread only, except {@link #removeMaterials}.
  */
-final class BlockMeshes implements AutoCloseable {
+public final class BlockMeshes implements AutoCloseable {
 
     /** The unit box's minimum corner. */
     private static final Vector3f BOX_MIN = new Vector3f(0, 0, 0);
@@ -63,7 +63,7 @@ final class BlockMeshes implements AutoCloseable {
      * @param source Its faces, for working out which neighbors hide them.
      * @param material Its material, which is in the scene's material cache.
      */
-    record Entry(
+    public record Entry(
             @NonNull MeshHandle mesh, @NonNull BakeSource source, @NonNull Material material) {}
 
     /** The plugin's graphics context. */
@@ -94,7 +94,7 @@ final class BlockMeshes implements AutoCloseable {
      *
      * @param graphics The plugin's graphics context.
      */
-    BlockMeshes(@NonNull GraphicsContext graphics) {
+    public BlockMeshes(@NonNull GraphicsContext graphics) {
         this.graphics = graphics;
     }
 
@@ -105,7 +105,8 @@ final class BlockMeshes implements AutoCloseable {
      * @param fluids The names of blocks that are fluids.
      * @return A snapshot of the meshes for those blocks, by name.
      */
-    Map<String, Entry> meshesFor(@NonNull Collection<String> blocks, @NonNull Set<String> fluids) {
+    public Map<String, Entry> meshesFor(
+            @NonNull Collection<String> blocks, @NonNull Set<String> fluids) {
         Map<String, Entry> snapshot = new HashMap<>();
         boolean added = false;
         for (String block : blocks) {
@@ -181,7 +182,7 @@ final class BlockMeshes implements AutoCloseable {
     /**
      * Remove every material from the scene. Safe from any thread, since the material cache locks.
      */
-    void removeMaterials() {
+    public void removeMaterials() {
         final Scene scene = GraphicsManager.getScene();
         if (scene != null) {
             materials.forEach(scene.getMaterialCache()::removeMaterial);

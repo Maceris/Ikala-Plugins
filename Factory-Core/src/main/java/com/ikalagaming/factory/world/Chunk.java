@@ -137,6 +137,16 @@ public class Chunk {
     }
 
     /**
+     * The blocks the chunk's palette holds: every block in the chunk, and possibly some it no
+     * longer has.
+     *
+     * @return A copy of the palette.
+     */
+    public List<Block> paletteBlocks() {
+        return List.copyOf(palette);
+    }
+
+    /**
      * Whether every block in the chunk is the same.
      *
      * @return True if the chunk is all one block.

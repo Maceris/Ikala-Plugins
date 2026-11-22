@@ -3,6 +3,7 @@ package com.ikalagaming.factory.save;
 import com.ikalagaming.factory.kvt.Node;
 import com.ikalagaming.factory.kvt.NodeType;
 import com.ikalagaming.factory.kvt.TreeBinarySerialization;
+import com.ikalagaming.factory.world.WorldTime;
 import com.ikalagaming.factory.world.gen.SpawnFinder;
 import com.ikalagaming.factory.world.gen.WorldgenHash;
 
@@ -63,6 +64,7 @@ public final class Saves {
     static final String KEY_WORLD_TYPE = "worldType";
     static final String KEY_SEED = "seed";
     static final String KEY_SPAWN = "spawn";
+    static final String KEY_TIME = "time";
     static final String KEY_SPAWN_PLATFORM = "spawnPlatform";
 
     /**
@@ -72,12 +74,14 @@ public final class Saves {
      * @param worldType Its world type, or blank if it can't be read.
      * @param seed Its seed.
      * @param spawn Where new players start, or null if it hasn't been found yet.
+     * @param time The world's clock, in ticks (see {@link WorldTime}).
      */
     public record WorldInfo(
             @NonNull String folder,
             @NonNull String worldType,
             long seed,
-            SpawnFinder.Spawn spawn) {}
+            SpawnFinder.Spawn spawn,
+            long time) {}
 
     /** Folder names Windows reserves, which can't be used whatever the extension. */
     private static final Set<String> RESERVED_NAMES =
@@ -122,6 +126,7 @@ public final class Saves {
         worldNode.add(KEY_VERSION, FORMAT_VERSION);
         worldNode.add(KEY_WORLD_TYPE, game.worldType());
         worldNode.add(KEY_SEED, seed);
+        worldNode.add(KEY_TIME, WorldTime.START_TICKS);
         Saves.write(
                 worldNode, saveFolder.resolve(WORLDS_FOLDER).resolve(world).resolve(WORLD_FILE));
 
@@ -455,7 +460,8 @@ public final class Saves {
                         world,
                         Saves.string(node.get(), KEY_WORLD_TYPE, ""),
                         Saves.number(node.get(), KEY_SEED, 0L),
-                        spawn));
+                        spawn,
+                        Saves.number(node.get(), KEY_TIME, WorldTime.START_TICKS)));
     }
 
     /**
@@ -474,6 +480,23 @@ public final class Saves {
                 Saves.readNode(file).orElseThrow(() -> new IOException("Can't read " + file));
         node.add(KEY_SPAWN, NodeType.INTEGER_ARRAY, List.of(spawn.x(), spawn.y(), spawn.z()));
         node.add(KEY_SPAWN_PLATFORM, spawn.platform());
+        Saves.write(node, file);
+    }
+
+    /**
+     * Record a world's clock.
+     *
+     * @param saveFolder The save's folder.
+     * @param world The world's folder name.
+     * @param ticks The time, in ticks.
+     * @throws IOException If the world's file is missing or can't be written.
+     */
+    public static void writeTime(@NonNull Path saveFolder, @NonNull String world, long ticks)
+            throws IOException {
+        final Path file = saveFolder.resolve(WORLDS_FOLDER).resolve(world).resolve(WORLD_FILE);
+        final Node node =
+                Saves.readNode(file).orElseThrow(() -> new IOException("Can't read " + file));
+        node.add(KEY_TIME, ticks);
         Saves.write(node, file);
     }
 
