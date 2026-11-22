@@ -150,6 +150,18 @@ public final class ShadowInvalidation {
     }
 
     /**
+     * Note a box where only a surface's level of detail changed, to another within its error, as
+     * {@link #addSwap} does for a sphere: for many clusters close together at once, as one box
+     * around them all.
+     *
+     * @param min The box's minimum corner, in the world.
+     * @param max The box's maximum corner, in the world.
+     */
+    public void addSwapBox(double @NonNull [] min, double @NonNull [] max) {
+        put(min[0], min[1], min[2], max[0], max[1], max[2], Change.SWAP);
+    }
+
+    /**
      * Note a changed sphere.
      *
      * @param origin What the sphere's center is measured from, in the world.

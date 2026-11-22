@@ -320,13 +320,10 @@ public class PointShadows {
             if (map == null) {
                 continue;
             }
-            double squared = 0;
-            final double[] center = {map.center.x, map.center.y, map.center.z};
-            for (int axis = 0; axis < 3; ++axis) {
-                final double d =
-                        Math.max(0, Math.max(min[axis] - center[axis], center[axis] - max[axis]));
-                squared += d * d;
-            }
+            final double dx = Math.max(0, Math.max(min[0] - map.center.x, map.center.x - max[0]));
+            final double dy = Math.max(0, Math.max(min[1] - map.center.y, map.center.y - max[1]));
+            final double dz = Math.max(0, Math.max(min[2] - map.center.z, map.center.z - max[2]));
+            final double squared = dx * dx + dy * dy + dz * dz;
             if (squared <= (double) map.range * map.range) {
                 map.dirty = ALL_FACES;
             }

@@ -685,6 +685,12 @@ public class LodRenderer {
      */
     private static final long REGISTER_NANOS_PER_FRAME = 2_000_000L;
 
+    /**
+     * The most time spent releasing evicted clusters' meshes in a frame, in each world. The units
+     * are hidden at once; their meshes go over the next frames.
+     */
+    private static final long EVICT_NANOS_PER_FRAME = 1_000_000L;
+
     /** A material not looked up yet this frame. */
     private static final byte MATERIAL_UNKNOWN = 0;
 
@@ -842,6 +848,12 @@ public class LodRenderer {
 
         /** Units whose meshes a worker is making. Render thread. */
         final Set<Integer> fetchingUnits = new HashSet<>();
+
+        /**
+         * Clusters of evicted units whose meshes are still to be released, a few milliseconds'
+         * worth a frame: evicting thousands at once took 50 ms of one frame. Render thread.
+         */
+        final ArrayDeque<Member> evicting = new ArrayDeque<>();
 
         /** Meshes workers have made, for the render thread to register. */
         final Queue<Fetched> fetched = new ConcurrentLinkedQueue<>();
@@ -2388,6 +2400,8 @@ public class LodRenderer {
             world.settled = true;
             return;
         }
+        // Room the last evictions free, before registering more
+        releaseEvicted(world);
         final long now = System.nanoTime();
         if (now - world.lastResidency >= RESIDENCY_INTERVAL_NANOS) {
             world.lastResidency = now;
@@ -2596,20 +2610,60 @@ public class LodRenderer {
         if (setUnitBit(world.unitSlotOf[unit], false)) {
             invalidateSwap(world, world.unitByIndex.get(unit).members);
         }
-        for (Member member : world.unitByIndex.get(unit).members) {
-            final Piece piece = member.piece();
-            final MeshHandle mesh = piece.meshes[member.index()];
-            if (mesh != null) {
-                piece.meshes[member.index()] = null;
-                release(mesh);
-                writeEntry(world, piece, member.index());
-            }
-            if (baked(world, piece.clusters[member.index()]) != null) {
-                bakes.unload(world.id, piece.clusters[member.index()].info().id());
-            }
-        }
+        world.evicting.addAll(world.unitByIndex.get(unit).members);
         world.evictions += 1;
         world.full = false;
+    }
+
+    /**
+     * Release evicted clusters' meshes, within this frame's time for it. A cluster whose piece was
+     * replaced since, or whose unit was loaded again, is left as it is. Render thread.
+     *
+     * @param world The world.
+     */
+    private void releaseEvicted(@NonNull World world) {
+        if (world.evicting.isEmpty()) {
+            return;
+        }
+        final long until = System.nanoTime() + EVICT_NANOS_PER_FRAME;
+        Member member;
+        int done = 0;
+        while ((member = world.evicting.poll()) != null) {
+            final Piece piece = member.piece();
+            final int index = member.index();
+            if (world.pieces.get(piece.key) == piece && !loadedAgain(world, piece, index)) {
+                final MeshHandle mesh = piece.meshes[index];
+                if (mesh != null) {
+                    piece.meshes[index] = null;
+                    release(mesh);
+                    writeEntry(world, piece, index);
+                    world.full = false;
+                }
+                if (baked(world, piece.clusters[index]) != null) {
+                    bakes.unload(world.id, piece.clusters[index].info().id());
+                }
+            }
+            // The clock is read every few clusters, as reading it costs about as much as one
+            if (++done % 16 == 0 && System.nanoTime() >= until) {
+                break;
+            }
+        }
+    }
+
+    /**
+     * Whether an evicted cluster's unit is loaded again, so its mesh stays.
+     *
+     * @param world The world.
+     * @param piece The cluster's piece.
+     * @param index The cluster's index in it.
+     * @return True if its unit is loaded.
+     */
+    private static boolean loadedAgain(@NonNull World world, @NonNull Piece piece, int index) {
+        final UnitState unit = world.unitStates.get(ownUnitKey(piece.clusters[index]));
+        return unit != null
+                && world.residency != null
+                && unit.index < world.residency.size()
+                && world.residency.isLoaded(unit.index);
     }
 
     /**
@@ -2673,10 +2727,31 @@ public class LodRenderer {
      * @param members The unit's clusters.
      */
     private void invalidateSwap(@NonNull World world, @NonNull Collection<Member> members) {
+        // One box around the unit's clusters, which lie together: a burst of units shown at once
+        // otherwise sends tens of thousands of boxes, and the caches taking swaps only grow one
+        // area or test their reach against them
+        final double[] min = swapMin;
+        final double[] max = swapMax;
+        Arrays.fill(min, Double.MAX_VALUE);
+        Arrays.fill(max, -Double.MAX_VALUE);
         for (Member member : members) {
-            shadows.addSwap(world.origin, member.piece().clusters[member.index()].info().tight());
+            final double[] sphere = member.piece().clusters[member.index()].info().tight();
+            final double radius = sphere[AXES];
+            for (int axis = 0; axis < AXES; ++axis) {
+                min[axis] = Math.min(min[axis], world.origin[axis] + sphere[axis] - radius);
+                max[axis] = Math.max(max[axis], world.origin[axis] + sphere[axis] + radius);
+            }
+        }
+        if (min[0] <= max[0]) {
+            shadows.addSwapBox(min, max);
         }
     }
+
+    /** The box {@link #invalidateSwap} gathers a unit into; render thread. */
+    private final double[] swapMin = new double[AXES];
+
+    /** The box's maximum corner. */
+    private final double[] swapMax = new double[AXES];
 
     /**
      * Report the pieces of cells that became stale or stopped being, for cached shadow maps.
