@@ -271,4 +271,50 @@ class SectionBakerTest {
             assertEquals(expected, mesh.material(t), "Triangle " + t);
         }
     }
+
+    /**
+     * A surface column bakes a flat top and side faces down to its bottom where its neighbors have
+     * no surface, down to a lower neighbor's top, and none against a neighbor as high; all opaque,
+     * at the column's material, the top's height in the game's steps.
+     */
+    @Test
+    void testSurfaces() {
+        final short[] tops = new short[SurfaceColumns.COLUMNS];
+        java.util.Arrays.fill(tops, SurfaceColumns.NONE);
+        final short[] depths = new short[SurfaceColumns.COLUMNS];
+        final int[] materials = new int[SurfaceColumns.COLUMNS];
+        java.util.Arrays.fill(materials, 9);
+        // A column at (4, 4): 4 steps of 16 deep on a block's top at y = 2
+        final int column = SurfaceColumns.index(4, 4);
+        tops[column] = 2 * 16 + 4;
+        depths[column] = 4;
+        // Its +x neighbor 2 steps lower; its +z neighbor as high
+        tops[SurfaceColumns.index(5, 4)] = 2 * 16 + 2;
+        depths[SurfaceColumns.index(5, 4)] = 2;
+        tops[SurfaceColumns.index(4, 5)] = 2 * 16 + 4;
+        depths[SurfaceColumns.index(4, 5)] = 4;
+        final SectionBaker.Result result =
+                SectionBaker.bakeByFace(
+                        new BakeSource[0],
+                        new int[0],
+                        new int[0],
+                        new byte[0],
+                        new byte[0],
+                        new short[0],
+                        new SurfaceColumns(16, tops, depths, materials),
+                        java.util.Set.of(Material.Transparency.OPAQUE));
+        final SectionBaker.Bucket bucket = result.get(Material.Transparency.OPAQUE);
+        assertNotNull(bucket);
+        // Three tops; (4, 4) has sides to -x, -z and a short one to +x; (5, 4) has four sides
+        // but none to -x, where (4, 4) stands higher; (4, 5) has sides but none to -z
+        assertEquals(3 * 2 + (3 + 3 + 3) * 2, bucket.triangleCount());
+        final short top = (short) Math.round(2.25f * BakedVertex.STEPS_PER_UNIT);
+        boolean seen = false;
+        for (int v = 0; v < bucket.vertexCount(); ++v) {
+            final int at = v * BakedVertex.SIZE;
+            seen |= bucket.vertices().getShort(at + BakedVertex.POSITION_OFFSET + 2) == top;
+            assertEquals(9, bucket.vertices().getShort(at + BakedVertex.MATERIAL_OFFSET));
+        }
+        assertTrue(seen, "a top at 2.25 m");
+    }
 }

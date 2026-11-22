@@ -7,6 +7,7 @@ import com.ikalagaming.graphics.LodHandle;
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.SectionHandle;
 import com.ikalagaming.graphics.Sections;
+import com.ikalagaming.graphics.SurfaceLayer;
 import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.bake.BakeSource;
 import com.ikalagaming.graphics.bake.SectionBaker;
@@ -106,6 +107,12 @@ final class GateWorld {
     /** The run's options. */
     private final GateOptions options;
 
+    /** The snow the {@code .surface} option lays on the world, or null for none. */
+    private final @Nullable GateSurfaces surfaces;
+
+    /** The world sections are composed from, for their surfaces, once composing starts. */
+    private volatile SyntheticTerrain surfaceWorld;
+
     /** The view distance, in sections. */
     private final int radius;
 
@@ -162,6 +169,7 @@ final class GateWorld {
         this.options = options;
         this.radius = radius;
         this.torches = torches;
+        surfaces = GateSurfaces.fromOptions(options);
     }
 
     /**
@@ -216,6 +224,7 @@ final class GateWorld {
         if (testMesh != null) {
             testCells = testCells(terrain);
         }
+        surfaceWorld = terrain;
         final Set<LodStore.SectionPos> composed = new HashSet<>();
         for (GateScene.Section section : layout.sections()) {
             if (!building.getAsBoolean()) {
@@ -372,15 +381,27 @@ final class GateWorld {
             LodStore.@NonNull SectionPos position, @NonNull Composed placed) {
         final int size = SyntheticTerrain.SECTION;
         final int count = placed.count();
-        return graphics.sections()
-                .compose(
-                        new Vector3d(position.x() * size, position.y() * size, position.z() * size))
-                .placements(
-                        placed.meshes(),
-                        placed.packedPositions(),
-                        new byte[count],
-                        placed.faceMasks(),
-                        new short[count]);
+        final Sections.Request request =
+                graphics.sections()
+                        .compose(
+                                new Vector3d(
+                                        position.x() * size,
+                                        position.y() * size,
+                                        position.z() * size))
+                        .placements(
+                                placed.meshes(),
+                                placed.packedPositions(),
+                                new byte[count],
+                                placed.faceMasks(),
+                                new short[count]);
+        final SyntheticTerrain world = surfaceWorld;
+        if (surfaces != null && world != null) {
+            final SurfaceLayer layer = surfaces.layer(world, position);
+            if (layer != null) {
+                request.surfaces(layer);
+            }
+        }
+        return request;
     }
 
     /**

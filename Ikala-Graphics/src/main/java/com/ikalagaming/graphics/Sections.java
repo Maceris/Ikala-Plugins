@@ -5,6 +5,7 @@ import com.ikalagaming.graphics.bake.CubeRotations;
 import com.ikalagaming.graphics.bake.Face;
 import com.ikalagaming.graphics.bake.Faces;
 import com.ikalagaming.graphics.bake.SectionBaker;
+import com.ikalagaming.graphics.bake.SurfaceColumns;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.vulkan.SectionManager;
@@ -65,6 +66,36 @@ public final class Sections {
 
         /** The resolved bake, once placements are given. */
         private SectionManager.Request request;
+
+        /** The soft surface layer, its materials resolved, or null for none. */
+        private SurfaceColumns surfaces;
+
+        /**
+         * Give the section a soft surface layer, see {@link SurfaceLayer}. Its arrays are copied
+         * before this returns.
+         *
+         * @param layer The layer.
+         * @return This request.
+         */
+        public Request surfaces(@NonNull SurfaceLayer layer) {
+            final MaterialCache materials = GraphicsManager.getScene().getMaterialCache();
+            final int[] palette = new int[layer.materials().length];
+            for (int i = 0; i < palette.length; ++i) {
+                palette[i] = materials.getMaterialIndex(layer.materials()[i]);
+            }
+            final int[] indices = new int[SurfaceLayer.COLUMNS];
+            for (int i = 0; i < indices.length; ++i) {
+                indices[i] =
+                        layer.tops()[i] == SurfaceLayer.NONE ? 0 : palette[layer.materialIds()[i]];
+            }
+            surfaces =
+                    new SurfaceColumns(
+                            layer.stepsPerMeter(),
+                            layer.tops().clone(),
+                            layer.depths().clone(),
+                            indices);
+            return this;
+        }
 
         /**
          * Start a request.
@@ -161,7 +192,7 @@ public final class Sections {
             if (request == null) {
                 throw new IllegalStateException("A section needs its placements before baking");
             }
-            return request;
+            return surfaces == null ? request : request.withSurfaces(surfaces);
         }
     }
 

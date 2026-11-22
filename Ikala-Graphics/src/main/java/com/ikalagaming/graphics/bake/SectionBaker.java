@@ -343,6 +343,43 @@ public final class SectionBaker {
             byte @NonNull [] faceMasks,
             short @NonNull [] userData,
             @NonNull Set<Material.Transparency> kinds) {
+        return bakeByFace(
+                sources,
+                faceMaterials,
+                packedPositions,
+                rotations,
+                faceMasks,
+                userData,
+                null,
+                kinds);
+    }
+
+    /**
+     * Bake only some of a section's buckets, with its soft surface layer, if it has one, see {@link
+     * #bakeByFace(BakeSource[], int[], int[], byte[], byte[], short[], Set)}. The layer's flat tops
+     * and the side faces where it ends go in the opaque bucket, see {@link #addSurfaces}.
+     *
+     * @param sources The mesh each placement puts down.
+     * @param faceMaterials {@link #FACE_KINDS} material indices per placement.
+     * @param packedPositions The cell each placement fills, from {@link #pack(int, int, int)}.
+     * @param rotations Each placement's rotation, one of {@link CubeRotations}.
+     * @param faceMasks The faces of each placement its neighbors hide, after rotation.
+     * @param userData What each placement writes into its vertices for shaders.
+     * @param surfaces The section's surface layer, or null for none.
+     * @param kinds The buckets to bake.
+     * @return The baked meshes, only of those kinds.
+     * @throws IllegalArgumentException If the arrays differ in length, a rotation is out of range,
+     *     or a vertex lands too far from the origin.
+     */
+    public static Result bakeByFace(
+            @NonNull BakeSource @NonNull [] sources,
+            int @NonNull [] faceMaterials,
+            int @NonNull [] packedPositions,
+            byte @NonNull [] rotations,
+            byte @NonNull [] faceMasks,
+            short @NonNull [] userData,
+            @Nullable SurfaceColumns surfaces,
+            @NonNull Set<Material.Transparency> kinds) {
         final int count = sources.length;
         if (faceMaterials.length != count * FACE_KINDS
                 || packedPositions.length != count
@@ -444,11 +481,193 @@ public final class SectionBaker {
             }
         }
 
+        if (surfaces != null && kinds.contains(Material.Transparency.OPAQUE)) {
+            final int bucket = Material.Transparency.OPAQUE.ordinal();
+            if (builders[bucket] == null) {
+                final Builder[] kept = BUILDERS.get();
+                if (kept[bucket] == null) {
+                    kept[bucket] = new Builder();
+                }
+                builders[bucket] = kept[bucket].reset();
+            }
+            addSurfaces(surfaces, builders[bucket]);
+        }
         final Bucket[] buckets = new Bucket[builders.length];
         for (int i = 0; i < builders.length; ++i) {
             buckets[i] = builders[i] == null ? null : builders[i].build();
         }
         return new Result(buckets);
+    }
+
+    /** The four ways a side face can point, x then z. */
+    private static final int[][] SIDES = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+
+    /**
+     * Add a surface layer's flat tops, and its side faces where a column's surface stands above its
+     * neighbor's, or the neighbor has none, down to the neighbor's top or this one's bottom,
+     * whichever is higher. The ring of neighbors' columns only decides the sides, so sides across a
+     * section border come out of either section alike. Textured as the blocks are: on a top u
+     * follows x and v follows z; on a side u runs left to right seen from outside and v down from
+     * the top of the cell.
+     *
+     * @param surfaces The layer.
+     * @param builder The opaque bucket.
+     */
+    private static void addSurfaces(@NonNull SurfaceColumns surfaces, @NonNull Builder builder) {
+        final float steps = surfaces.stepsPerMeter();
+        final float[][] corners = new float[4][3];
+        final float[][] uvs = new float[4][2];
+        final float[] up = {0, 1, 0};
+        final float[] alongX = {1, 0, 0};
+        for (int z = 0; z < SurfaceColumns.SECTION; ++z) {
+            for (int x = 0; x < SurfaceColumns.SECTION; ++x) {
+                final int column = SurfaceColumns.index(x, z);
+                final short topSteps = surfaces.tops()[column];
+                if (topSteps == SurfaceColumns.NONE) {
+                    continue;
+                }
+                final int material = surfaces.materials()[column];
+                final float top = topSteps / steps;
+                final float bottom = (topSteps - surfaces.depths()[column]) / steps;
+                // Counter-clockwise seen from above
+                set(corners[0], x, top, z);
+                set(corners[1], x, top, z + 1);
+                set(corners[2], x + 1, top, z + 1);
+                set(corners[3], x + 1, top, z);
+                uvs[0][0] = 0;
+                uvs[0][1] = 0;
+                uvs[1][0] = 0;
+                uvs[1][1] = 1;
+                uvs[2][0] = 1;
+                uvs[2][1] = 1;
+                uvs[3][0] = 1;
+                uvs[3][1] = 0;
+                quad(builder, corners, uvs, up, alongX, material);
+                for (int[] side : SIDES) {
+                    final short theirs =
+                            surfaces.tops()[SurfaceColumns.index(x + side[0], z + side[1])];
+                    if (theirs != SurfaceColumns.NONE && theirs >= topSteps) {
+                        continue;
+                    }
+                    final float low =
+                            theirs == SurfaceColumns.NONE
+                                    ? bottom
+                                    : Math.max(bottom, theirs / steps);
+                    if (low >= top) {
+                        continue;
+                    }
+                    addSide(builder, x, z, side, low, top, material, corners, uvs);
+                }
+            }
+        }
+    }
+
+    /**
+     * Add one side face of a surface column.
+     *
+     * @param builder The opaque bucket.
+     * @param x The column along x.
+     * @param z The column along z.
+     * @param side The way it points, x and z.
+     * @param low Its bottom, in meters above the section's origin.
+     * @param high Its top.
+     * @param material Its material index.
+     * @param corners Scratch, four corners.
+     * @param uvs Scratch, four texture coordinates.
+     */
+    private static void addSide(
+            @NonNull Builder builder,
+            int x,
+            int z,
+            int @NonNull [] side,
+            float low,
+            float high,
+            int material,
+            float[][] corners,
+            float[][] uvs) {
+        final float[] normal = {side[0], 0, side[1]};
+        // Right, seen from outside: (-normal) x up
+        final float[] right = {side[1], 0, -side[0]};
+        final float centerX = x + 0.5f + side[0] * 0.5f;
+        final float centerZ = z + 0.5f + side[1] * 0.5f;
+        final float leftX = centerX - right[0] * 0.5f;
+        final float leftZ = centerZ - right[2] * 0.5f;
+        final float rightX = centerX + right[0] * 0.5f;
+        final float rightZ = centerZ + right[2] * 0.5f;
+        set(corners[0], leftX, low, leftZ);
+        set(corners[1], rightX, low, rightZ);
+        set(corners[2], rightX, high, rightZ);
+        set(corners[3], leftX, high, leftZ);
+        // v runs down from the top of the cell the face's top is in
+        final float cellTop = (float) Math.floor(high - 1e-4f) + 1;
+        uvs[0][0] = 0;
+        uvs[0][1] = cellTop - low;
+        uvs[1][0] = 1;
+        uvs[1][1] = cellTop - low;
+        uvs[2][0] = 1;
+        uvs[2][1] = cellTop - high;
+        uvs[3][0] = 0;
+        uvs[3][1] = cellTop - high;
+        quad(builder, corners, uvs, normal, right, material);
+    }
+
+    /**
+     * Add a quad, counter-clockwise seen from the side it faces, as two triangles, its bitangent
+     * the texture's v, down a side and along +z on a top: the negative of the normal times the
+     * tangent.
+     *
+     * @param builder The bucket.
+     * @param corners The four corners, in meters from the section's origin.
+     * @param uvs Their texture coordinates.
+     * @param normal The normal.
+     * @param tangent The tangent, the way u grows.
+     * @param material The material index.
+     */
+    private static void quad(
+            @NonNull Builder builder,
+            float[][] corners,
+            float[][] uvs,
+            float @NonNull [] normal,
+            float @NonNull [] tangent,
+            int material) {
+        final int first = builder.vertexCount;
+        for (int i = 0; i < 4; ++i) {
+            final int at = builder.nextVertex();
+            BakedVertex.put(
+                    builder.vertices,
+                    at,
+                    corners[i],
+                    0,
+                    (short) 0,
+                    normal,
+                    tangent,
+                    0,
+                    true,
+                    uvs[i],
+                    0,
+                    material);
+            builder.bound(at);
+        }
+        builder.index(first);
+        builder.index(first + 1);
+        builder.index(first + 2);
+        builder.index(first);
+        builder.index(first + 2);
+        builder.index(first + 3);
+    }
+
+    /**
+     * Set a point.
+     *
+     * @param out The point.
+     * @param x Its x.
+     * @param y Its y.
+     * @param z Its z.
+     */
+    private static void set(float @NonNull [] out, float x, float y, float z) {
+        out[0] = x;
+        out[1] = y;
+        out[2] = z;
     }
 
     /**

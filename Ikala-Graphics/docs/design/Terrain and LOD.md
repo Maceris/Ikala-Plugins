@@ -61,6 +61,20 @@ If composing ever becomes the bottleneck, the next step is a generic grid helper
 palette-to-mesh table) that also culls neighbors. Rotations, multi-block structures and connected textures still
 belong to the game.
 
+### Soft surfaces bake with their section
+
+A section's `SurfaceLayer` (snow, sand, ash) is a height field over its columns, baked into the section's opaque
+mesh as flat tops and short side faces, so far levels of detail, shadows and the occupancy volume see the
+undisturbed height without anything new. Pressed prints are only drawn near the player, see the design doc.
+
+- **The game hands in a ring of its neighbors' tops** (18 x 18 entries), as it works out face masks, so side faces
+  along a section border need no grid in graphics; it rebakes a neighbor when a border column changes.
+- **A surface belongs to the section of the block under it,** its top free to stand past the section's top. Owned
+  by the section holding its cell, snow on a section's top layer of blocks needed the empty section above, which a
+  game (and the gate) never composes.
+- Thin surfaces on leaves erode in far levels of detail (the forest's snow thins with distance); on open ground it
+  holds to the horizon.
+
 ### Edits are drawn in the frame they're made
 
 An edit rebakes its section (and a neighbor if on a boundary). A section bakes in about 0.4 ms, so a rebake near the

@@ -9,6 +9,7 @@ import com.ikalagaming.graphics.ThreadStops;
 import com.ikalagaming.graphics.bake.BakeSource;
 import com.ikalagaming.graphics.bake.BakedVertex;
 import com.ikalagaming.graphics.bake.SectionBaker;
+import com.ikalagaming.graphics.bake.SurfaceColumns;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
@@ -64,6 +65,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 import java.util.function.IntPredicate;
+import javax.annotation.Nullable;
 
 /**
  * Bakes sections on worker threads and keeps each one in the scene: its baked meshes, one per
@@ -103,6 +105,7 @@ public class SectionManager {
      * @param rotations Each placement's rotation.
      * @param faceMasks The faces each placement's neighbors hide.
      * @param userData Each placement's user data.
+     * @param surfaces The section's soft surface layer, or null for none.
      */
     public record Request(
             @NonNull Vector3dc origin,
@@ -111,7 +114,79 @@ public class SectionManager {
             int @NonNull [] packedPositions,
             byte @NonNull [] rotations,
             byte @NonNull [] faceMasks,
-            short @NonNull [] userData) {}
+            short @NonNull [] userData,
+            @Nullable SurfaceColumns surfaces) {
+
+        /**
+         * A request without a surface layer.
+         *
+         * @param origin The section's world position.
+         * @param sources The mesh each placement puts down.
+         * @param faceMaterials The material indices per placement.
+         * @param packedPositions Each placement's cell.
+         * @param rotations Each placement's rotation.
+         * @param faceMasks The faces each placement's neighbors hide.
+         * @param userData Each placement's user data.
+         */
+        public Request(
+                @NonNull Vector3dc origin,
+                @NonNull BakeSource @NonNull [] sources,
+                int @NonNull [] faceMaterials,
+                int @NonNull [] packedPositions,
+                byte @NonNull [] rotations,
+                byte @NonNull [] faceMasks,
+                short @NonNull [] userData) {
+            this(
+                    origin,
+                    sources,
+                    faceMaterials,
+                    packedPositions,
+                    rotations,
+                    faceMasks,
+                    userData,
+                    null);
+        }
+
+        /**
+         * The same request with a surface layer.
+         *
+         * @param layer The layer.
+         * @return The request.
+         */
+        public Request withSurfaces(@NonNull SurfaceColumns layer) {
+            return new Request(
+                    origin,
+                    sources,
+                    faceMaterials,
+                    packedPositions,
+                    rotations,
+                    faceMasks,
+                    userData,
+                    layer);
+        }
+
+        /**
+         * Bake some of the section's buckets, its surface layer with them.
+         *
+         * @param kinds The buckets to bake.
+         * @return The baked meshes.
+         */
+        public SectionBaker.Result bake(@NonNull Set<Material.Transparency> kinds) {
+            return SectionBaker.bakeByFace(
+                    sources,
+                    faceMaterials,
+                    packedPositions,
+                    rotations,
+                    faceMasks,
+                    userData,
+                    surfaces,
+                    kinds);
+        }
+    }
+
+    /** Every bucket a section bakes into. */
+    private static final Set<Material.Transparency> EVERY_KIND =
+            Set.copyOf(EnumSet.allOf(Material.Transparency.class));
 
     /**
      * A bake that finished, waiting for the render thread.
@@ -739,14 +814,7 @@ public class SectionManager {
             LiveLod feeds,
             LodStore.SectionPos position) {
         try {
-            SectionBaker.Result result =
-                    SectionBaker.bakeByFace(
-                            request.sources(),
-                            request.faceMaterials(),
-                            request.packedPositions(),
-                            request.rotations(),
-                            request.faceMasks(),
-                            request.userData());
+            SectionBaker.Result result = request.bake(EVERY_KIND);
             if (feeds != null) {
                 final SectionBaker.Bucket opaque = result.get(Material.Transparency.OPAQUE);
                 final Vector3dc origin = request.origin();
@@ -2291,20 +2359,7 @@ public class SectionManager {
         final Set<Material.Transparency> only = Set.copyOf(kinds);
         try {
             workers.execute(
-                    () ->
-                            restored.add(
-                                    new Restored(
-                                            id,
-                                            generation,
-                                            kinds,
-                                            SectionBaker.bakeByFace(
-                                                    request.sources(),
-                                                    request.faceMaterials(),
-                                                    request.packedPositions(),
-                                                    request.rotations(),
-                                                    request.faceMasks(),
-                                                    request.userData(),
-                                                    only))));
+                    () -> restored.add(new Restored(id, generation, kinds, request.bake(only))));
         } catch (RejectedExecutionException e) {
             section.restoring = false;
         }
@@ -2455,15 +2510,7 @@ public class SectionManager {
                                 new Rebricked(
                                         id,
                                         generation,
-                                        voxelize(
-                                                SectionBaker.bakeByFace(
-                                                        request.sources(),
-                                                        request.faceMaterials(),
-                                                        request.packedPositions(),
-                                                        request.rotations(),
-                                                        request.faceMasks(),
-                                                        request.userData()),
-                                                table),
+                                        voxelize(request.bake(EVERY_KIND), table),
                                         table.version()));
                     });
         } catch (RejectedExecutionException e) {

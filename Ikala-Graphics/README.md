@@ -88,6 +88,11 @@ already run this way.
 - **Sections:** a plugin hands over flat arrays of placements, positions, rotations and the faces
   their neighbors hide (worked out with `Faces`), to be baked into a HLOD. Bakes run on workers,
   and a rebaked section keeps drawing its old bake until the new one is ready.
+- **Soft surfaces:** a section can carry a `SurfaceLayer`, a height field over its columns for
+  snow, sand or ash: each column's top and depth in the game's height steps and a material, plus a
+  ring of the neighbors' tops. It bakes into the section as flat tops with short side faces where
+  a surface stands above its neighbor, so far levels of detail show it too. A surface belongs to
+  the section of the block under it, so its top may stand past the section's top.
 - **Level of detail:** `lods().fromSections()` makes a live LOD world that the plugin's sections
   feed as they bake. Far away, a section's opaque regions are drawn from simplified clusters instead
   of its own meshes. Built cells are cached on disk in the application's cache folder (see
@@ -465,6 +470,7 @@ These are Java system properties, given before `-jar`:
 | `-Dikala.benchmark.swell=<m>,<s>[,<deg>[,<deg>]]` | none | A swell on the sea: height, period, the way it travels and its spread (11 degrees). |
 | `-Dikala.benchmark.mixedWater=ocean\|green\|muddy` | none | Every other tile of the `ISLAND` sea holds this water instead, a checkerboard, to see waters blend where they meet. |
 | `-Dikala.benchmark.mixedWind=<m/s>[,<degrees>[,<fetch>]]` | none | Every other tile of the `ISLAND` sea in this wind instead, a checkerboard, to see winds meet. |
+| `-Dikala.benchmark.surface=<meters>` | none | Snow that deep on every full block with an empty cell above, the highest in each section's columns, as a soft surface layer. |
 | `-Dikala.benchmark.seaReach=<meters>` | the view distance | How far the `ISLAND` sea reaches from the middle, past the land's view distance. |
 | `-Dikala.benchmark.coastWater=ocean\|green\|muddy` | none | The `ISLAND` sea's tiles touching the island, and those around them, hold this water. |
 | `-Dikala.benchmark.shot=<file.png>` | none | Saves the frame measuring starts on, without the window in front. |
