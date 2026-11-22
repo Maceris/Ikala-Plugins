@@ -133,9 +133,12 @@ void main()
     ivec2 last = ivec2(screenSize) - 1;
     vec3 current = texelFetch(bindlessTextures[nonuniformEXT(colorIndex)], pixel, 0).rgb;
 
-    // The colors around the pixel, and the depth nearest the camera among them
+    // The colors around the pixel, and the depth nearest the camera among them. A color that isn't
+    // a finite number is left out: one in the box made its neighbors' boxes NaN too, so a single bad
+    // pixel from the lighting spread to a few black ones
     vec3 moment1 = vec3(0.0);
     vec3 moment2 = vec3(0.0);
+    float finite = 0.0;
     float centerDepth = texelFetch(bindlessTextures[nonuniformEXT(depthIndex)], pixel, 0).x;
     float nearestDepth = centerDepth;
     ivec2 nearest = pixel;
@@ -144,9 +147,13 @@ void main()
     for (int y = -1; y <= 1; ++y) {
         for (int x = -1; x <= 1; ++x) {
             ivec2 at = clamp(pixel + ivec2(x, y), ivec2(0), last);
-            vec3 color = toYCoCg(texelFetch(bindlessTextures[nonuniformEXT(colorIndex)], at, 0).rgb);
-            moment1 += color;
-            moment2 += color * color;
+            vec3 raw = texelFetch(bindlessTextures[nonuniformEXT(colorIndex)], at, 0).rgb;
+            if (!any(isnan(raw)) && !any(isinf(raw))) {
+                vec3 color = toYCoCg(raw);
+                moment1 += color;
+                moment2 += color * color;
+                finite += 1.0;
+            }
             float depth = texelFetch(bindlessTextures[nonuniformEXT(depthIndex)], at, 0).x;
             if (depth < nearestDepth) {
                 nearestDepth = depth;
@@ -155,8 +162,12 @@ void main()
             slope = max(slope, abs(linearDepth(depth) - centerDistance));
         }
     }
-    vec3 mean = moment1 / 9.0;
-    vec3 deviation = sqrt(max(moment2 / 9.0 - mean * mean, vec3(0.0)));
+    vec3 mean = moment1 / max(finite, 1.0);
+    vec3 deviation = sqrt(max(moment2 / max(finite, 1.0) - mean * mean, vec3(0.0)));
+    // A pixel that isn't a finite number takes its neighbors' mean
+    if (any(isnan(current)) || any(isinf(current))) {
+        current = fromYCoCg(mean);
+    }
 
     // Translucent surfaces over the pixel, which history can't follow; volume bricks, which it can,
     // are left out of this channel
