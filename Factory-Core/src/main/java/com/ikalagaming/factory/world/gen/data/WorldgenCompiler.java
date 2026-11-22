@@ -69,6 +69,24 @@ public final class WorldgenCompiler implements FieldReader.Problems {
     /** The files being compiled, innermost last, to find reference cycles. */
     private final Deque<String> compiling = new ArrayDeque<>();
 
+    /** The field naming an object's type. */
+    private static final String KEY_TYPE = "type";
+
+    /** The only feature type built so far: one block in its own cell. */
+    public static final String FEATURE_BLOCK = "block";
+
+    /** The only layer built so far: single blocks. */
+    public static final String LAYER_SMALL = "small";
+
+    /** The placement where every floor cell rolls a chance. */
+    public static final String PLACEMENT_EACH_FLOOR = "each_floor";
+
+    /** The placement step that tests a block rule condition. */
+    public static final String PLACEMENT_CONDITION = "condition";
+
+    /** What starts a tag in a list of IDs. */
+    public static final String TAG_PREFIX = "#";
+
     /** Where each density node came from, as {@code label#path}, for tracing. */
     private final Map<DensityNode, String> origins = new IdentityHashMap<>();
 
@@ -151,6 +169,8 @@ public final class WorldgenCompiler implements FieldReader.Problems {
                     case BIOME -> biome(file.id(), null);
                     case BLOCK_RULES -> blockRules(file.id(), null);
                     case FLUIDS -> fluidsFile(file.id(), null);
+                    case FEATURE -> feature(file.id(), null);
+                    case PLACED_FEATURE -> placedFeature(file.id(), null);
                     case WORLD_TYPE -> worldType(file.id(), null);
                 }
             }
@@ -560,7 +580,7 @@ public final class WorldgenCompiler implements FieldReader.Problems {
                 id,
                 from,
                 root -> {
-                    // visual and tags are read by later steps
+                    // visual is read by a later step
                     root.warnUnknownFields(
                             Set.of("climate", "weight", "block_rules", "visual", "tags"));
                     final FieldReader climateField = root.get("climate");
@@ -583,7 +603,11 @@ public final class WorldgenCompiler implements FieldReader.Problems {
                     if (root.has("block_rules")) {
                         rules = blockRulesValue(root.get("block_rules")).orElse(null);
                     }
-                    return new Biome(id, climate, weight, rules);
+                    final Set<String> tags = new TreeSet<>();
+                    if (root.has("tags")) {
+                        tags.addAll(root.get("tags").strings());
+                    }
+                    return new Biome(id, climate, weight, rules, tags);
                 });
     }
 
@@ -893,6 +917,20 @@ public final class WorldgenCompiler implements FieldReader.Problems {
         if (fallback.isEmpty()) {
             return null;
         }
+
+        // Placed features say which biomes they go in, so this world type takes every one that
+        // names any of its biomes
+        final Set<String> biomeIds = new HashSet<>();
+        biomes.forEach(biome -> biomeIds.add(biome.id()));
+        biomeIds.add(fallback.get().id());
+        final List<PlacedFeature> features = new ArrayList<>();
+        for (WorldgenData.DataFile file : data.all(Kind.PLACED_FEATURE)) {
+            placedFeature(file.id(), null)
+                    .filter(placed -> !Collections.disjoint(placed.biomes(), biomeIds))
+                    .ifPresent(features::add);
+        }
+        features.sort(
+                Comparator.comparingInt(PlacedFeature::priority).thenComparing(PlacedFeature::id));
         return new WorldType(
                 id,
                 density,
@@ -905,7 +943,192 @@ public final class WorldgenCompiler implements FieldReader.Problems {
                 fallback.get(),
                 fluids,
                 List.copyOf(climates),
-                root.has("spawn") ? spawnRule(root.get("spawn")) : SpawnRule.DEFAULT);
+                root.has("spawn") ? spawnRule(root.get("spawn")) : SpawnRule.DEFAULT,
+                List.copyOf(features));
+    }
+
+    /**
+     * A feature file.
+     *
+     * @param id The ID.
+     * @param from The referencing field, or null.
+     * @return The feature, if the file is good.
+     */
+    public Optional<Feature> feature(@NonNull String id, FieldReader from) {
+        return compileFile(Kind.FEATURE, id, from, this::buildFeature);
+    }
+
+    /**
+     * Read a feature value: a file's ID, or an inline {@code {type:...}} object.
+     *
+     * @param reader The value.
+     * @return The feature, or empty after an error.
+     */
+    public Optional<Feature> featureValue(@NonNull FieldReader reader) {
+        if (reader.isString()) {
+            return feature(reader.string(), reader);
+        }
+        if (reader.isNode()) {
+            return Optional.ofNullable(buildFeature(reader));
+        }
+        reader.error(reader.exists() ? "WORLDGEN_EXPECTED_FEATURE" : "WORLDGEN_MISSING_FIELD");
+        return Optional.empty();
+    }
+
+    /**
+     * Build a feature.
+     *
+     * @param reader The feature object.
+     * @return The feature, or null after an error.
+     */
+    private Feature buildFeature(@NonNull FieldReader reader) {
+        final FieldReader typeField = reader.get(KEY_TYPE);
+        final String type = typeField.string();
+        if (!FEATURE_BLOCK.equals(type)) {
+            if (!type.isEmpty()) {
+                typeField.error("WORLDGEN_UNKNOWN_TYPE", type, FEATURE_BLOCK);
+            }
+            return null;
+        }
+        reader.warnUnknownFields(Set.of(KEY_TYPE, "blocks"));
+        final List<Block> blocks = new ArrayList<>();
+        final List<Double> weights = new ArrayList<>();
+        for (FieldReader entry : reader.get("blocks").list()) {
+            entry.warnUnknownFields(Set.of("block", "weight"));
+            final Block block = block(entry.get("block"));
+            final FieldReader weightField = entry.get("weight");
+            final double weight = weightField.number(1);
+            if (weight <= 0) {
+                weightField.error("WORLDGEN_NOT_POSITIVE");
+                continue;
+            }
+            blocks.add(block);
+            weights.add(weight);
+        }
+        if (blocks.isEmpty()) {
+            reader.get("blocks").error("WORLDGEN_EMPTY_LIST");
+            return null;
+        }
+        return new Feature.SingleBlock(
+                blocks, weights.stream().mapToDouble(Double::doubleValue).toArray());
+    }
+
+    /**
+     * A placed feature file.
+     *
+     * @param id The ID.
+     * @param from The referencing field, or null.
+     * @return The placed feature, if the file is good.
+     */
+    public Optional<PlacedFeature> placedFeature(@NonNull String id, FieldReader from) {
+        return compileFile(Kind.PLACED_FEATURE, id, from, root -> buildPlacedFeature(id, root));
+    }
+
+    /**
+     * Build a placed feature. Only the small layer is built: a single block feature placed with
+     * {@code each_floor}, and conditions.
+     *
+     * @param id The ID.
+     * @param root The file.
+     * @return The placed feature, or null after an error.
+     */
+    private PlacedFeature buildPlacedFeature(@NonNull String id, @NonNull FieldReader root) {
+        root.warnUnknownFields(Set.of("feature", "biomes", "layer", "priority", "placement"));
+        final Optional<Feature> feature = featureValue(root.get("feature"));
+        final Set<String> biomes = biomeSet(root.get("biomes"));
+        final FieldReader layerField = root.get("layer");
+        final String layer = layerField.string(LAYER_SMALL);
+        if (!LAYER_SMALL.equals(layer)) {
+            layerField.error("WORLDGEN_LAYER_NOT_BUILT", layer, LAYER_SMALL);
+        }
+        final int priority = root.get("priority").integer(0);
+        double chance = -1;
+        final List<BlockRules.Condition> conditions = new ArrayList<>();
+        for (FieldReader step : root.get("placement").list()) {
+            final FieldReader typeField = step.get(KEY_TYPE);
+            final String type = typeField.string();
+            switch (type) {
+                case PLACEMENT_EACH_FLOOR -> {
+                    step.warnUnknownFields(Set.of(KEY_TYPE, "chance"));
+                    if (chance >= 0) {
+                        step.error("WORLDGEN_PLACEMENT_TWICE", type);
+                    }
+                    final FieldReader chanceField = step.get("chance");
+                    chance = chanceField.number(1);
+                    if (!(chance >= 0 && chance <= 1)) {
+                        chanceField.error("WORLDGEN_BAD_CHANCE");
+                        chance = 0;
+                    }
+                }
+                case PLACEMENT_CONDITION -> {
+                    step.warnUnknownFields(Set.of(KEY_TYPE, "if"));
+                    conditions.add(condition(step.get("if")));
+                }
+                default -> {
+                    if (!type.isEmpty()) {
+                        typeField.error(
+                                "WORLDGEN_UNKNOWN_TYPE",
+                                type,
+                                PLACEMENT_EACH_FLOOR + ", " + PLACEMENT_CONDITION);
+                    }
+                }
+            }
+        }
+        if (chance < 0) {
+            root.get("placement").error("WORLDGEN_NEEDS_EACH_FLOOR");
+            return null;
+        }
+        if (feature.isEmpty()) {
+            return null;
+        }
+        if (!(feature.get() instanceof Feature.SingleBlock)) {
+            root.get("feature").error("WORLDGEN_EACH_FLOOR_SINGLE_BLOCK");
+            return null;
+        }
+        return new PlacedFeature(
+                id,
+                feature.get(),
+                biomes,
+                priority,
+                chance,
+                conditions,
+                WorldgenHash.seed(seed, Kind.PLACED_FEATURE.getFolder() + "/" + id));
+    }
+
+    /**
+     * Read which biomes something goes in: one ID or tag, or a list of them. A tag, written {@code
+     * #mod:name}, means every biome whose {@code tags} list it.
+     *
+     * @param reader The field.
+     * @return The biome IDs.
+     */
+    public Set<String> biomeSet(@NonNull FieldReader reader) {
+        final List<FieldReader> entries = reader.isList() ? reader.list() : List.of(reader);
+        final Set<String> out = new TreeSet<>();
+        for (FieldReader entry : entries) {
+            final String name = entry.string();
+            if (name.isEmpty()) {
+                continue;
+            }
+            if (!name.startsWith(TAG_PREFIX)) {
+                checkBiomeExists(entry, name);
+                out.add(name);
+                continue;
+            }
+            final String tag = name.substring(TAG_PREFIX.length());
+            boolean any = false;
+            for (WorldgenData.DataFile file : data.all(Kind.BIOME)) {
+                final Optional<Biome> biome = biome(file.id(), null);
+                if (biome.isPresent() && biome.get().tags().contains(tag)) {
+                    out.add(file.id());
+                    any = true;
+                }
+            }
+            if (!any) {
+                entry.warn("WORLDGEN_EMPTY_TAG", tag);
+            }
+        }
+        return out;
     }
 
     /**

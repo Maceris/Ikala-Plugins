@@ -122,7 +122,9 @@ public final class WorldgenLab implements AutoCloseable {
     private static final String[] COLORMAPS = {"diverging", "sequential"};
 
     /** The stages the controls offer for blocks, in combo order. */
-    private static final Stage[] STAGES = {Stage.TERRAIN, Stage.FLUIDS, Stage.BLOCK_RULES};
+    private static final Stage[] STAGES = {
+        Stage.TERRAIN, Stage.FLUIDS, Stage.BLOCK_RULES, Stage.FEATURES
+    };
 
     /** The graphics context the Lab draws through. */
     private final GraphicsContext graphics;
@@ -931,7 +933,7 @@ public final class WorldgenLab implements AutoCloseable {
                                 ranked.get(1).contains() ? "fits" : "outside",
                                 ranked.get(1).distance()));
             }
-            final var block = SliceImages.blockAt(debug, world, Stage.BLOCK_RULES, new HashMap<>());
+            final var block = SliceImages.blockAt(debug, world, Stage.FEATURES, new HashMap<>());
             lines.add("Block: " + block.getName());
             final BlockRules.Match match = debug.getGenerator().explain(x, y, z);
             lines.add(match == null ? "  (no block rule)" : "  " + match);

@@ -1,0 +1,1 @@
+{feature:"feat:tuft", biomes:[T;"test:plains"], placement:[N;{type:"each_floor", chance:1.0}, {type:"condition", if:{type:"below", blocks:[T;"test:grass"]}}]}

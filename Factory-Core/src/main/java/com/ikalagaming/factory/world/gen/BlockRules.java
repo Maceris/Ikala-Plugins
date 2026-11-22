@@ -30,6 +30,8 @@ public record BlockRules(@NonNull String id, @NonNull List<Rule> rules) {
      * @param airBelow The same, going down.
      * @param biome The biome's ID.
      * @param fluidAdjacent Whether a face touches fluid.
+     * @param below The block under the position, for features placed on a floor; null while
+     *     choosing blocks by block rules, since it isn't chosen yet.
      * @param cache The chunk's evaluation cache.
      */
     public record Context(
@@ -40,6 +42,7 @@ public record BlockRules(@NonNull String id, @NonNull List<Rule> rules) {
             int airBelow,
             @NonNull String biome,
             boolean fluidAdjacent,
+            Block below,
             EvalCache cache) {}
 
     /** How far {@code air_above} and {@code air_below} look; this means "this far or more". */
@@ -178,6 +181,19 @@ public record BlockRules(@NonNull String id, @NonNull List<Rule> rules) {
         @Override
         public boolean test(@NonNull Context context) {
             return context.fluidAdjacent() == adjacent;
+        }
+    }
+
+    /**
+     * The block under the position is one of some blocks. Only features know it; in block rules
+     * this never passes.
+     *
+     * @param names The block names.
+     */
+    public record Below(@NonNull Set<String> names) implements Condition {
+        @Override
+        public boolean test(@NonNull Context context) {
+            return context.below() != null && names.contains(context.below().getName());
         }
     }
 

@@ -24,6 +24,10 @@ public enum Kind {
     BLOCK_RULES("block_rules"),
     /** How open space fills with fluid. */
     FLUIDS("fluids"),
+    /** What placed features build. */
+    FEATURE("feature"),
+    /** Features, and where and how often they go. */
+    PLACED_FEATURE("placed_feature"),
     /** What ties a world together. */
     WORLD_TYPE("world_type");
 

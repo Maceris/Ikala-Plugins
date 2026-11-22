@@ -638,6 +638,16 @@ public final class WorldgenTypes {
                     return new BlockRules.DensityRange(density, min, max);
                 });
         CONDITION.register(
+                "below",
+                (r, c) -> {
+                    r.warnUnknownFields(fields("blocks"));
+                    Set<String> names = new TreeSet<>();
+                    for (FieldReader blockField : r.get("blocks").list()) {
+                        names.add(c.block(blockField).getName());
+                    }
+                    return new BlockRules.Below(Set.copyOf(names));
+                });
+        CONDITION.register(
                 "fluid",
                 (r, c) -> {
                     r.warnUnknownFields(fields("adjacent"));

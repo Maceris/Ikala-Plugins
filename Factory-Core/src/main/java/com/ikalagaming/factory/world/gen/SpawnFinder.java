@@ -274,7 +274,8 @@ public final class SpawnFinder {
         Chunk chunk = chunks.get(pos);
         if (chunk == null) {
             columns.add(((long) pos.x() << 32) | (pos.z() & 0xFFFF_FFFFL));
-            chunk = generator.generate(pos);
+            // The ground as block rules leave it: grass tufts and the like aren't floors
+            chunk = generator.generate(pos, Stage.BLOCK_RULES);
             chunks.put(pos, chunk);
         }
         final int mask = World.CHUNK_SIZE - 1;

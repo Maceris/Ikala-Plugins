@@ -1,0 +1,1 @@
+{feature:{type:"block", blocks:[N;{block:"test:flower", weight:3}, {block:"test:tuft", weight:1}]}, biomes:[T;"test:desert"], priority:1, placement:[N;{type:"each_floor", chance:0.3}, {type:"condition", if:{type:"below", blocks:[T;"test:sand"]}}]}

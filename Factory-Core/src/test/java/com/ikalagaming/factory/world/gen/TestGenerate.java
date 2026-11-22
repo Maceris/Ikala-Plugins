@@ -203,6 +203,6 @@ class TestGenerate {
         WorldGenerator generator = WorldgenFixtures.generator(WorldgenFixtures.SEED);
         assertThrows(
                 IllegalArgumentException.class,
-                () -> generator.generate(new ChunkPos(0, 0, 0), Stage.FEATURES));
+                () -> generator.generate(new ChunkPos(0, 0, 0), Stage.DECORATION));
     }
 }

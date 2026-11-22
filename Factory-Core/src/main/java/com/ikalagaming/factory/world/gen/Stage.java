@@ -4,7 +4,7 @@ package com.ikalagaming.factory.world.gen;
  * The stages of generating a chunk, in order. Each only adds to what the stages before it made, so
  * a chunk can be generated up to any stage to see what that stage does. Stages up to {@link
  * #BLOCK_RULES} are pure functions that can be evaluated anywhere; the later ones pull in nearby
- * starts and aren't built yet.
+ * starts. Structures and the final pass aren't built yet.
  */
 public enum Stage {
     /** The parameters biomes are chosen by. Nothing visible in the chunk. */
@@ -17,11 +17,11 @@ public enum Stage {
     FLUIDS,
     /** Each solid block chosen by its biome's block rules. */
     BLOCK_RULES,
-    /** Large placed things. Not built yet. */
+    /** Networks and structures. Not built yet, so generating through it skips it. */
     STRUCTURES,
-    /** Small placed things. Not built yet. */
+    /** Placed features. Only single blocks on floors are built so far. */
     FEATURES,
-    /** Final touches. Not built yet. */
+    /** The final pass, such as snow and ice. Not built yet. */
     DECORATION;
 
     /**
@@ -30,7 +30,7 @@ public enum Stage {
      * @return True for the stages that are built.
      */
     public boolean isBuilt() {
-        return ordinal() <= BLOCK_RULES.ordinal();
+        return this != STRUCTURES && this != DECORATION;
     }
 
     /**

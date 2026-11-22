@@ -251,7 +251,7 @@ public final class WorldgenTool {
          * @return The {@code --stage}, or every built stage.
          */
         Stage stage() {
-            return Stage.valueOf(get("stage", Stage.BLOCK_RULES.name()).toUpperCase(Locale.ROOT));
+            return Stage.valueOf(get("stage", Stage.FEATURES.name()).toUpperCase(Locale.ROOT));
         }
     }
 

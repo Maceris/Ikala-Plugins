@@ -47,6 +47,15 @@ public final class WorldGenerator {
     /** Where in a biome cell its parameters are sampled: the middle. */
     private static final double CELL_CENTER = Chunk.BIOME_CELL_SIZE / 2.0;
 
+    /** Bits dropped to turn a hash into a fraction with a double's precision. */
+    private static final int UNIT_SHIFT = 11;
+
+    /** One over 2^53. */
+    private static final double UNIT_SCALE = 0x1.0p-53;
+
+    /** Mixed into a feature's roll to pick its block, so the pick doesn't follow the chance. */
+    private static final long PICK_SALT = 0x5DEE_CE66_D1CE_4E5BL;
+
     /** Counters for instrumentation. */
     public static final class Stats {
         /** Chunks generated. */
@@ -126,7 +135,7 @@ public final class WorldGenerator {
      * @return The chunk.
      */
     public Chunk generate(@NonNull ChunkPos pos) {
-        return generate(pos, Stage.BLOCK_RULES);
+        return generate(pos, Stage.FEATURES);
     }
 
     /**
@@ -154,6 +163,9 @@ public final class WorldGenerator {
         final Block[] fluid =
                 until.includes(Stage.FLUIDS) ? fluids(pos, solid, cache) : new Block[0];
         fill(chunk, pos, solid, fluid, until.includes(Stage.BLOCK_RULES), cache);
+        if (until.includes(Stage.FEATURES) && !worldType.features().isEmpty()) {
+            placeFeatures(chunk, pos, solid, fluid, cache);
+        }
         return chunk;
     }
 
@@ -171,19 +183,165 @@ public final class WorldGenerator {
                     final long x = pos.blockX() + (long) cx * Chunk.BIOME_CELL_SIZE;
                     final long y = pos.blockY() + (long) cy * Chunk.BIOME_CELL_SIZE;
                     final long z = pos.blockZ() + (long) cz * Chunk.BIOME_CELL_SIZE;
-                    final double[] values =
-                            biomes.parameters(
-                                    x + CELL_CENTER, y + CELL_CENTER, z + CELL_CENTER, cache);
-                    final Biome biome =
-                            biomes.choose(
-                                    values,
-                                    Math.floorDiv(x, Chunk.BIOME_CELL_SIZE),
-                                    Math.floorDiv(y, Chunk.BIOME_CELL_SIZE),
-                                    Math.floorDiv(z, Chunk.BIOME_CELL_SIZE));
-                    chunk.setBiomeCell(cx, cy, cz, biome.id());
+                    chunk.setBiomeCell(cx, cy, cz, biomeAt(x, y, z, cache).id());
                 }
             }
         }
+    }
+
+    /**
+     * The biome of the cell a position is in, as generating its chunk chooses it.
+     *
+     * @param x The x.
+     * @param y The y.
+     * @param z The z.
+     * @param cache The chunk's cache.
+     * @return The biome.
+     */
+    private Biome biomeAt(long x, long y, long z, EvalCache cache) {
+        final long cellX = Math.floorDiv(x, Chunk.BIOME_CELL_SIZE);
+        final long cellY = Math.floorDiv(y, Chunk.BIOME_CELL_SIZE);
+        final long cellZ = Math.floorDiv(z, Chunk.BIOME_CELL_SIZE);
+        final double[] values =
+                biomes.parameters(
+                        cellX * Chunk.BIOME_CELL_SIZE + CELL_CENTER,
+                        cellY * Chunk.BIOME_CELL_SIZE + CELL_CENTER,
+                        cellZ * Chunk.BIOME_CELL_SIZE + CELL_CENTER,
+                        cache);
+        return biomes.choose(values, cellX, cellY, cellZ);
+    }
+
+    /**
+     * Place the small features: every open position with solid ground under it rolls once for each
+     * placed feature that goes in its biome, in order, and takes the first that lands and passes
+     * its conditions. Everything is worked out from the terrain and block rules, so the chunk below
+     * never needs to exist.
+     *
+     * @param chunk The chunk, its blocks chosen.
+     * @param pos Where it is.
+     * @param solid The solid flags.
+     * @param fluid The fluid at each position, or empty.
+     * @param cache The chunk's cache.
+     */
+    private void placeFeatures(
+            @NonNull Chunk chunk,
+            @NonNull ChunkPos pos,
+            boolean @NonNull [] solid,
+            Block @NonNull [] fluid,
+            EvalCache cache) {
+        for (int y = 0; y < World.CHUNK_SIZE; ++y) {
+            for (int z = 0; z < World.CHUNK_SIZE; ++z) {
+                for (int x = 0; x < World.CHUNK_SIZE; ++x) {
+                    final int rx = x + MARGIN_XZ;
+                    final int ry = y + MARGIN_Y;
+                    final int rz = z + MARGIN_XZ;
+                    final int index = regionIndex(rx, ry, rz);
+                    if (solid[index]
+                            || (fluid.length > 0 && fluid[index] != null)
+                            || !solid[regionIndex(rx, ry - 1, rz)]) {
+                        continue;
+                    }
+                    placeOn(chunk, pos, x, y, z, solid, fluid, cache);
+                }
+            }
+        }
+    }
+
+    /**
+     * Roll the features for one floor position, and place the first that lands.
+     *
+     * @param chunk The chunk.
+     * @param pos Where it is.
+     * @param x The position's x within the chunk.
+     * @param y The position's y within the chunk.
+     * @param z The position's z within the chunk.
+     * @param solid The solid flags.
+     * @param fluid The fluid at each position, or empty.
+     * @param cache The chunk's cache.
+     */
+    private void placeOn(
+            @NonNull Chunk chunk,
+            @NonNull ChunkPos pos,
+            int x,
+            int y,
+            int z,
+            boolean @NonNull [] solid,
+            Block @NonNull [] fluid,
+            EvalCache cache) {
+        final String biome = chunk.getBiome(x, y, z);
+        final long wx = pos.blockX() + x;
+        final long wy = pos.blockY() + y;
+        final long wz = pos.blockZ() + z;
+        final long position = WorldgenHash.combine(wx, WorldgenHash.combine(wy, wz));
+        BlockRules.Context context = null;
+        for (PlacedFeature placed : worldType.features()) {
+            if (!placed.biomes().contains(biome)) {
+                continue;
+            }
+            final long roll = WorldgenHash.combine(placed.salt(), position);
+            if (unit(roll) >= placed.chance()) {
+                continue;
+            }
+            if (context == null) {
+                // Exposure describes solid positions, so an open one has none
+                context =
+                        new BlockRules.Context(
+                                wx,
+                                wy,
+                                wz,
+                                0,
+                                0,
+                                biome,
+                                touchesFluid(fluid, x + MARGIN_XZ, y + MARGIN_Y, z + MARGIN_XZ),
+                                y > 0
+                                        ? chunk.getBlock(x, y - 1, z)
+                                        : ruleBlock(pos, x, y - 1, z, solid, fluid, cache),
+                                cache);
+            }
+            if (!placed.passes(context)) {
+                continue;
+            }
+            if (placed.feature() instanceof Feature.SingleBlock single) {
+                chunk.setBlock(x, y, z, single.pick(unit(WorldgenHash.mix64(roll ^ PICK_SALT))));
+                return;
+            }
+        }
+    }
+
+    /**
+     * The block a solid position gets from the terrain and block rules, as its own chunk chooses
+     * it. For positions just below the chunk, whose biome isn't in this chunk.
+     *
+     * @param pos The chunk.
+     * @param x The position's x within the chunk.
+     * @param y The position's y within the chunk, which may be -1.
+     * @param z The position's z within the chunk.
+     * @param solid The solid flags.
+     * @param fluid The fluid at each position, or empty.
+     * @param cache The chunk's cache.
+     * @return The block.
+     */
+    private Block ruleBlock(
+            @NonNull ChunkPos pos,
+            int x,
+            int y,
+            int z,
+            boolean @NonNull [] solid,
+            Block @NonNull [] fluid,
+            EvalCache cache) {
+        final Biome biome = biomeAt(pos.blockX() + x, pos.blockY() + y, pos.blockZ() + z, cache);
+        final BlockRules.Match match = match(biome.id(), pos, x, y, z, solid, fluid, cache);
+        return match == null ? worldType.defaultBlock() : match.block();
+    }
+
+    /**
+     * A roll as a number from 0 up to 1.
+     *
+     * @param hash The roll.
+     * @return Its top 53 bits as a fraction.
+     */
+    private static double unit(long hash) {
+        return (hash >>> UNIT_SHIFT) * UNIT_SCALE;
     }
 
     /**
@@ -465,7 +623,7 @@ public final class WorldGenerator {
                     Block block = worldType.defaultBlock();
                     if (rules) {
                         final BlockRules.Match match =
-                                match(chunk, pos, x, y, z, solid, fluid, cache);
+                                match(chunk.getBiome(x, y, z), pos, x, y, z, solid, fluid, cache);
                         if (match != null) {
                             block = match.block();
                         }
@@ -479,8 +637,8 @@ public final class WorldGenerator {
     /**
      * The block rule that chooses a solid block, if any.
      *
-     * @param chunk The chunk, with its biomes chosen.
-     * @param pos Where it is.
+     * @param biomeId The position's biome.
+     * @param pos The chunk.
      * @param x The block's x within the chunk.
      * @param y The block's y within the chunk.
      * @param z The block's z within the chunk.
@@ -490,7 +648,7 @@ public final class WorldGenerator {
      * @return The match, or null if the biome has no rules or none match.
      */
     private BlockRules.Match match(
-            @NonNull Chunk chunk,
+            @NonNull String biomeId,
             @NonNull ChunkPos pos,
             int x,
             int y,
@@ -498,7 +656,6 @@ public final class WorldGenerator {
             boolean @NonNull [] solid,
             Block @NonNull [] fluid,
             EvalCache cache) {
-        final String biomeId = chunk.getBiome(x, y, z);
         final Biome biome = biomesById.get(biomeId);
         if (biome == null || biome.blockRules() == null) {
             return null;
@@ -515,6 +672,7 @@ public final class WorldGenerator {
                         distanceToOpen(solid, rx, ry, rz, -1),
                         biomeId,
                         touchesFluid(fluid, rx, ry, rz),
+                        null,
                         cache);
         return biome.blockRules().explain(context);
     }
@@ -539,7 +697,15 @@ public final class WorldGenerator {
         if (!solid[regionIndex(lx + MARGIN_XZ, ly + MARGIN_Y, lz + MARGIN_XZ)]) {
             return null;
         }
-        return match(chunk, pos, lx, ly, lz, solid, fluids(pos, solid, cache), cache);
+        return match(
+                chunk.getBiome(lx, ly, lz),
+                pos,
+                lx,
+                ly,
+                lz,
+                solid,
+                fluids(pos, solid, cache),
+                cache);
     }
 
     /**
