@@ -3,6 +3,7 @@ package com.ikalagaming.factory;
 import com.ikalagaming.event.Listener;
 import com.ikalagaming.factory.server.Server;
 import com.ikalagaming.factory.server.ServerListener;
+import com.ikalagaming.launcher.AppPaths;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 
@@ -47,6 +48,23 @@ public class FactoryServerPlugin extends Plugin {
     @Override
     public String getName() {
         return FactoryServerPlugin.PLUGIN_NAME;
+    }
+
+    /**
+     * Host the instance's save, if the game was started with one ({@code bin/runServer}), as a
+     * dedicated server that opens its port.
+     *
+     * @return True.
+     */
+    @Override
+    public boolean onEnable() {
+        AppPaths.instance()
+                .ifPresent(
+                        instance -> {
+                            log.info("Hosting {} as a dedicated server", instance);
+                            server.open(instance);
+                        });
+        return true;
     }
 
     @Override

@@ -329,6 +329,19 @@ public final class ServerWorld implements AutoCloseable {
     }
 
     /**
+     * Remove a player whose client left, and everything simulated for them. Tick thread only.
+     *
+     * @param player The player.
+     */
+    void leave(@NonNull ServerPlayer player) {
+        if (players.remove(player.getId()) == null) {
+            return;
+        }
+        sim.destroy(player.getEntity());
+        log.info("{} left", player.getName());
+    }
+
+    /**
      * The players in the world. Tick thread only.
      *
      * @return The players.

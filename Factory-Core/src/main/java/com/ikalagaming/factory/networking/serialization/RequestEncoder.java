@@ -44,7 +44,7 @@ public class RequestEncoder extends MessageToByteEncoder<Request> {
      * @throws EncoderException If it isn't registered, can't be serialized, or is too big for a
      *     frame.
      */
-    static void encode(
+    public static void encode(
             @NonNull Request request, @NonNull RequestDirection direction, @NonNull ByteBuf out) {
         final int id = RequestRegistry.getID(direction, request.getClass());
         if (id == -1) {

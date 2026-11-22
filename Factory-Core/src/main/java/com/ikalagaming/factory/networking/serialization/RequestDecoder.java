@@ -55,7 +55,8 @@ public class RequestDecoder extends MessageToMessageDecoder<ByteBuf> {
      * @param direction The direction the request travels.
      * @return The request, or empty if the frame isn't a valid request (which is logged).
      */
-    static Optional<Request> decode(@NonNull ByteBuf frame, @NonNull RequestDirection direction) {
+    public static Optional<Request> decode(
+            @NonNull ByteBuf frame, @NonNull RequestDirection direction) {
         if (frame.readableBytes() < Integer.BYTES) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(

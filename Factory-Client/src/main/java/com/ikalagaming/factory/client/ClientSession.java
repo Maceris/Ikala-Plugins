@@ -200,9 +200,21 @@ public final class ClientSession implements ClientBoundRequestHandler {
         world.remove(new ChunkPos(request.getX(), request.getY(), request.getZ()));
     }
 
+    /**
+     * The connection to the server.
+     *
+     * @return The connection, or null before joining or after leaving.
+     */
+    public Connection getConnection() {
+        return toServer;
+    }
+
     /** Drop everything, as when leaving the world. */
     public void close() {
         world.clear();
+        if (toServer != null) {
+            toServer.disconnect();
+        }
         toServer = null;
         playerId = null;
         prediction = null;

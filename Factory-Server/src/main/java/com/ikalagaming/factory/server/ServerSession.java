@@ -51,6 +51,17 @@ final class ServerSession implements ServerBoundRequestHandler {
         world.post(() -> request.handleUsing(this));
     }
 
+    /** The client left: its player leaves the world, on the tick thread. */
+    void leave() {
+        world.post(
+                () -> {
+                    if (player != null) {
+                        world.leave(player);
+                        player = null;
+                    }
+                });
+    }
+
     @Override
     public void handle(@NonNull Join request) {
         if (player != null) {

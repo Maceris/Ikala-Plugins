@@ -6,9 +6,13 @@ import com.ikalagaming.factory.networking.SimulatedLink;
 import com.ikalagaming.factory.networking.base.Connection;
 import com.ikalagaming.factory.networking.base.RequestHandler;
 import com.ikalagaming.factory.networking.request.serverbound.ServerBoundRequestHandler;
+import com.ikalagaming.factory.networking.udp.PacketEndpoint;
+import com.ikalagaming.factory.networking.udp.UdpConnection;
+import com.ikalagaming.factory.networking.udp.UdpServer;
 import com.ikalagaming.factory.registry.DefinitionLoader;
 import com.ikalagaming.factory.registry.Registries;
 import com.ikalagaming.factory.registry.events.LoadingTags;
+import com.ikalagaming.factory.save.Hosting;
 import com.ikalagaming.factory.save.SaveSummary;
 import com.ikalagaming.factory.save.Saves;
 import com.ikalagaming.factory.server.events.ServerStopping;
@@ -19,6 +23,7 @@ import com.ikalagaming.factory.world.gen.WorldGenerator;
 import com.ikalagaming.factory.world.gen.WorldType;
 import com.ikalagaming.factory.world.gen.data.WorldgenCompiler;
 import com.ikalagaming.factory.world.gen.data.WorldgenData;
+import com.ikalagaming.launcher.AppPaths;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.Getter;
@@ -26,6 +31,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -88,6 +94,12 @@ public class Server {
 
     /** Runs the open world's frames and ticks. */
     private ServerLoop loop;
+
+    /** The system property that makes the server listen on a port, even in single player. */
+    public static final String PORT_PROPERTY = "ikala.server.port";
+
+    /** Players connected over the network, or null when not listening. */
+    private UdpServer udp;
 
     /** The thread {@link #loop} runs on. */
     private Thread loopThread;
@@ -233,6 +245,7 @@ public class Server {
             loopThread.setDaemon(true);
             loopThread.start();
             log.info("Opened {} ({}, seed {})", save.name(), info.worldType(), info.seed());
+            listenIfHosted(saveFolder, opened);
             return opened;
         } finally {
             worldLock.unlock();
@@ -273,6 +286,83 @@ public class Server {
         links.add(toServer);
         session.setConnection(toClient);
         return toServer;
+    }
+
+    /**
+     * Open the save's port if it is hosted: when its {@value Saves#SERVER_FILE} says so, when this
+     * is a dedicated server for it (the save is the instance), or when {@value #PORT_PROPERTY} is
+     * set. Players then connect over UDP. Called with the world lock held.
+     *
+     * @param saveFolder The save.
+     * @param opened Its open world.
+     */
+    private void listenIfHosted(@NonNull Path saveFolder, @NonNull ServerWorld opened) {
+        Hosting hosting = Saves.readHosting(saveFolder);
+        final Path save = saveFolder.toAbsolutePath().normalize();
+        final boolean dedicated =
+                AppPaths.instance()
+                        .map(instance -> instance.toAbsolutePath().normalize().equals(save))
+                        .orElse(false);
+        if (dedicated) {
+            hosting = hosting.listening();
+        }
+        final Integer port = Integer.getInteger(PORT_PROPERTY);
+        if (port != null) {
+            hosting = hosting.withPort(port);
+        }
+        if (hosting.listen() == Hosting.Listen.OFF) {
+            return;
+        }
+        final InetSocketAddress bind =
+                hosting.bind().isEmpty()
+                        ? new InetSocketAddress(hosting.port())
+                        : new InetSocketAddress(hosting.bind(), hosting.port());
+        try {
+            udp =
+                    new UdpServer(
+                            bind,
+                            connection -> accept(opened, connection),
+                            Server::remoteClosed,
+                            PacketEndpoint.Settings.DEFAULT,
+                            UdpServer.packetLossFromProperties());
+        } catch (IllegalStateException e) {
+            log.warn("Could not open {} to other players on {}", saveFolder, bind, e);
+        }
+    }
+
+    /**
+     * Make the session for a player connecting over the network.
+     *
+     * @param opened The world.
+     * @param connection The connection.
+     * @return The session, which handles the requests the player sends.
+     */
+    private static RequestHandler accept(
+            @NonNull ServerWorld opened, @NonNull UdpConnection connection) {
+        final ServerSession session = new ServerSession(opened);
+        session.setConnection(connection);
+        return session;
+    }
+
+    /**
+     * A network player's connection closed: they leave the world.
+     *
+     * @param connection The connection.
+     */
+    private static void remoteClosed(@NonNull UdpConnection connection) {
+        if (connection.getLocal() instanceof ServerSession session) {
+            session.leave();
+        }
+    }
+
+    /**
+     * The port the server listens on.
+     *
+     * @return The port, or -1 when not listening.
+     */
+    public int getListeningPort() {
+        final UdpServer listening = udp;
+        return listening == null ? -1 : listening.getPort();
     }
 
     /**
@@ -323,6 +413,10 @@ public class Server {
                 link.disconnect();
             }
             links.clear();
+            if (udp != null) {
+                udp.close();
+                udp = null;
+            }
             if (world != null) {
                 try {
                     Saves.writeTime(world.getSaveFolder(), world.getWorldFolder(), world.getTime());

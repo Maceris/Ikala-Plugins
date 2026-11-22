@@ -13,6 +13,9 @@ import com.ikalagaming.factory.client.FrameClock;
 import com.ikalagaming.factory.client.Prediction;
 import com.ikalagaming.factory.networking.base.Connection;
 import com.ikalagaming.factory.networking.request.clientbound.Joined;
+import com.ikalagaming.factory.networking.udp.PacketEndpoint;
+import com.ikalagaming.factory.networking.udp.UdpClient;
+import com.ikalagaming.factory.networking.udp.UdpServer;
 import com.ikalagaming.factory.render.SkyLight;
 import com.ikalagaming.factory.render.WorldRenderer;
 import com.ikalagaming.factory.save.SaveSummary;
@@ -34,6 +37,7 @@ import com.ikalagaming.util.SafeResourceLoader;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import java.net.InetSocketAddress;
 import java.util.UUID;
 
 /**
@@ -47,6 +51,9 @@ public final class SinglePlayerGame {
 
     /** How high the eye is above the feet, in blocks. */
     public static final double EYE_HEIGHT = 1.62;
+
+    /** The system property naming a server to join at start, as host:port. */
+    public static final String CONNECT_PROPERTY = "ikala.connect";
 
     /** The name single player joins as, until accounts exist. */
     private static final String PLAYER_NAME = "Player";
@@ -153,14 +160,70 @@ public final class SinglePlayerGame {
 
     /** Connect to the local server and join. Main thread only. */
     private static void join() {
+        final ClientSession joining = begin();
+        final Connection connection = LocalServer.connect(joining);
+        joining.join(connection, PLAYER_NAME);
+    }
+
+    /**
+     * Join a server over the network. Until there is a menu for it, {@value #CONNECT_PROPERTY} does
+     * this at start. Main thread only.
+     *
+     * @param address The server's address.
+     */
+    public static void joinServer(@NonNull InetSocketAddress address) {
+        log.info("Joining {}", address);
+        stop();
+        setUpScene();
+        final ClientSession joining = begin();
+        UdpClient.connect(
+                        address,
+                        joining,
+                        connection -> GraphicsManager.runOnMainThread(() -> lost(joining)),
+                        PacketEndpoint.Settings.DEFAULT,
+                        UdpServer.packetLossFromProperties())
+                .whenComplete(
+                        (connection, error) ->
+                                GraphicsManager.runOnMainThread(
+                                        () -> {
+                                            if (error != null) {
+                                                log.warn("Could not join {}", address, error);
+                                                lost(joining);
+                                            } else if (session != joining) {
+                                                connection.disconnect();
+                                            } else {
+                                                joining.join(connection, PLAYER_NAME);
+                                            }
+                                        }));
+    }
+
+    /**
+     * Start a session: the client's world, its renderer, and the stage that plays. Main thread
+     * only.
+     *
+     * @return The session, not yet connected.
+     */
+    private static ClientSession begin() {
         final ClientSession joining =
                 new ClientSession(GraphicsManager::runOnMainThread, SinglePlayerGame::onJoined);
         renderer = new WorldRenderer(GraphicsManager.forPlugin(FactoryClientPlugin.PLUGIN_NAME));
         joining.getWorld().addListener(renderer);
-        final Connection connection = LocalServer.connect(joining);
         session = joining;
-        joining.join(connection, PLAYER_NAME);
         playStage = Launcher.addMainThreadStage(SinglePlayerGame::play);
+        return joining;
+    }
+
+    /**
+     * A session's connection is gone: stop playing, if it is still the one being played. Main
+     * thread only.
+     *
+     * @param ended The session.
+     */
+    private static void lost(@NonNull ClientSession ended) {
+        if (session == ended) {
+            log.warn("The connection to the server is gone");
+            stop();
+        }
     }
 
     /**

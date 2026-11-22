@@ -43,6 +43,18 @@ public final class Saves {
     /** The file in a world's folder that describes the world. */
     public static final String WORLD_FILE = "world.kvt";
 
+    /** The file in a save folder with its hosting settings. */
+    public static final String SERVER_FILE = "server.kvt";
+
+    /** The {@value #SERVER_FILE} key for who can connect: off, lan or public. */
+    static final String LISTEN_KEY = "listen";
+
+    /** The {@value #SERVER_FILE} key for the address to listen on. */
+    static final String BIND_KEY = "bind";
+
+    /** The {@value #SERVER_FILE} key for the port to listen on. */
+    static final String PORT_KEY = "port";
+
     /** The version of the save and world files this writes. */
     public static final int FORMAT_VERSION = 1;
 
@@ -430,6 +442,31 @@ public final class Saves {
             return list.stream().map(String::valueOf).toList();
         }
         return List.of();
+    }
+
+    /**
+     * Read a save's hosting settings from its {@value #SERVER_FILE}. A save without one, or with
+     * settings missing, is single player on the default port.
+     *
+     * @param saveFolder The save's folder.
+     * @return The settings.
+     */
+    public static Hosting readHosting(@NonNull Path saveFolder) {
+        final Optional<Node> node = Saves.readNode(saveFolder.resolve(SERVER_FILE));
+        if (node.isEmpty()) {
+            return Hosting.SINGLE_PLAYER;
+        }
+        final long port = Saves.number(node.get(), PORT_KEY, Hosting.DEFAULT_PORT);
+        try {
+            return new Hosting(
+                    Hosting.Listen.named(
+                            Saves.string(node.get(), LISTEN_KEY, null), Hosting.Listen.OFF),
+                    Saves.string(node.get(), BIND_KEY, ""),
+                    (int) port);
+        } catch (IllegalArgumentException e) {
+            log.warn("{} in {} has a bad port: {}", SERVER_FILE, saveFolder, port);
+            return Hosting.SINGLE_PLAYER;
+        }
     }
 
     /**

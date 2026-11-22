@@ -6,6 +6,7 @@ import com.ikalagaming.factory.SinglePlayerGame;
 import com.ikalagaming.factory.client.ClientSession;
 import com.ikalagaming.factory.client.FrameClock;
 import com.ikalagaming.factory.client.Prediction;
+import com.ikalagaming.factory.networking.udp.UdpConnection;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.component.GuiWindow;
 import com.ikalagaming.graphics.gui.enums.Condition;
@@ -17,7 +18,8 @@ import lombok.NonNull;
 
 /**
  * How the command frames are doing against the server: the round trip, how far ahead the client
- * runs, the server's input buffer, time dilation, and the misses, mispredicts and resyncs so far.
+ * runs, the server's input buffer, time dilation, and the misses, mispredicts and resyncs so far;
+ * over UDP, also packets sent and lost and reliable resends.
  */
 public class NetworkStats extends GuiWindow {
 
@@ -65,6 +67,15 @@ public class NetworkStats extends GuiWindow {
                             prediction.getServerMisses(),
                             prediction.getMispredicts(),
                             clock.getResyncs()));
+            if (session.getConnection() instanceof UdpConnection udp) {
+                IkGui.text(
+                        String.format(
+                                "UDP: %d packets sent, %d lost, %d resends; round trip %.1f ms",
+                                udp.packetsSent(),
+                                udp.packetsLost(),
+                                udp.resends(),
+                                udp.roundTripMillis()));
+            }
         }
         IkGui.end();
     }

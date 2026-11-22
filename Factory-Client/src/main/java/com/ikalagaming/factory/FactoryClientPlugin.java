@@ -7,6 +7,7 @@ import com.ikalagaming.factory.gui.*;
 import com.ikalagaming.factory.gui.window.*;
 import com.ikalagaming.factory.lab.LabTool;
 import com.ikalagaming.factory.lab.WorldgenLab;
+import com.ikalagaming.factory.save.Hosting;
 import com.ikalagaming.factory.saves.UserDataUtil;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.gui.WindowManager;
@@ -24,6 +25,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.util.*;
 
@@ -101,9 +103,39 @@ public class FactoryClientPlugin extends Plugin {
         menus = new GameMenus(graphics, SinglePlayerGame::start);
         menus.open();
         startTestScript();
+        joinServerAtStart();
 
         guiManager.setToolbar(graphics, new DebugToolbar(guiManager));
         return true;
+    }
+
+    /**
+     * Join the server named by {@value SinglePlayerGame#CONNECT_PROPERTY}, as host or host:port, if
+     * set, until the menus can do it.
+     */
+    private void joinServerAtStart() {
+        final String target = System.getProperty(SinglePlayerGame.CONNECT_PROPERTY);
+        if (target == null || target.isBlank()) {
+            return;
+        }
+        final int colon = target.lastIndexOf(':');
+        final String host = colon < 0 ? target : target.substring(0, colon);
+        int port = Hosting.DEFAULT_PORT;
+        if (colon >= 0) {
+            try {
+                port = Integer.parseInt(target.substring(colon + 1));
+            } catch (NumberFormatException e) {
+                log.warn("Can't join {}: the port isn't a number", target);
+                return;
+            }
+        }
+        final InetSocketAddress address = new InetSocketAddress(host, port);
+        GraphicsManager.runOnMainThread(
+                () -> {
+                    // The menus would keep the keyboard
+                    menus.hideAll();
+                    SinglePlayerGame.joinServer(address);
+                });
     }
 
     /**
