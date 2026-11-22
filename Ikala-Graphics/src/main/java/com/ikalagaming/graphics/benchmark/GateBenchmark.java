@@ -725,6 +725,7 @@ public final class GateBenchmark {
                     measureStart = System.nanoTime();
                     shadowCacheAtStart = renderer().getState().sunShadows.stats();
                     renderer().getState().frameTimings.setListener(recorder::record);
+                    saveShot();
                 }
             }
             case MEASURING -> {
@@ -989,6 +990,30 @@ public final class GateBenchmark {
                 // Still checking or editing
             }
         }
+    }
+
+    /**
+     * Save the frame measuring starts on to the PNG the {@code .shot} option names, if it names
+     * one, for looking at a run without the window in front.
+     */
+    private void saveShot() {
+        final String shot = options.get("shot");
+        if (shot == null) {
+            return;
+        }
+        renderer()
+                .saveFrame(Path.of(shot.trim()))
+                .whenComplete(
+                        (path, failure) -> {
+                            if (failure != null) {
+                                log.warn(
+                                        "Gate benchmark couldn't save its shot to {}",
+                                        shot,
+                                        failure);
+                            } else {
+                                log.info("Gate benchmark saved its shot to {}", path);
+                            }
+                        });
     }
 
     /** Work out the results, report them, and release everything. */

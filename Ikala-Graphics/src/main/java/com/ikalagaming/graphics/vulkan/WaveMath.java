@@ -127,14 +127,39 @@ public final class WaveMath {
     /** The directions the surface sums over, evenly around. */
     public static final int DIRECTIONS = 16;
 
-    /** How many waves each profile sums. */
-    public static final int WAVES = 128;
+    /** How many waves the short profiles sum. */
+    public static final int SHORT_WAVES = 128;
 
-    /** How many samples a profile holds over its length. */
+    /**
+     * How many waves the long profiles sum: every harmonic of {@link #LONG_PROFILE_LENGTH} from
+     * half its length down to just longer than the short profiles' longest wave, 640 m to 85 m. A
+     * rough sea's peak is 125 to 200 m long, and a swell's longer still.
+     */
+    public static final int LONG_WAVES = 14;
+
+    /**
+     * How many waves a climate has room for, the long ones first, which also spaces the directions'
+     * phases, see {@link #directionPhase}.
+     */
+    public static final int WAVES = LONG_WAVES + SHORT_WAVES;
+
+    /** How many samples a short profile holds over its length. */
     public static final int PROFILE_SAMPLES = 4096;
 
-    /** A profile's length, in meters: at least twice the longest wave it holds. */
+    /** A short profile's length, in meters: at least twice the longest wave it holds. */
     public static final double PROFILE_LENGTH = 160;
+
+    /**
+     * A long profile's length, in meters: a whole number of short profiles, so where the camera
+     * stands along a direction, kept to this, serves both.
+     */
+    public static final double LONG_PROFILE_LENGTH = 1280;
+
+    /**
+     * How many samples a long profile holds over its length, 0.625 m apart: its shortest waves are
+     * over 80 m in deep water and about 30 m in the shallowest.
+     */
+    public static final int LONG_PROFILE_SAMPLES = 2048;
 
     /** The shortest wave a profile holds, in meters, past which it can't sample them. */
     public static final double SHORTEST_WAVE = 2 * PROFILE_LENGTH / PROFILE_SAMPLES;
@@ -189,9 +214,27 @@ public final class WaveMath {
      * @param phases Each wave's phase at time 0, radians.
      * @param frequencies Each wave's angular frequency, radians a second: in deep water it follows
      *     from the wavenumber, and in shallow water the wavenumber follows from it.
+     * @param longWaves How many of the waves, the first ones, the long profile holds, at whole
+     *     harmonics of {@link #LONG_PROFILE_LENGTH}; the rest are the short profiles', at whole
+     *     harmonics of {@link #PROFILE_LENGTH}.
      */
     public record Waves(
-            double[] wavenumbers, double[] amplitudes, double[] phases, double[] frequencies) {
+            double[] wavenumbers,
+            double[] amplitudes,
+            double[] phases,
+            double[] frequencies,
+            int longWaves) {
+
+        /**
+         * Waves in deep water, their frequencies from their wavenumbers, all in the short profiles.
+         *
+         * @param wavenumbers Each wave's wavenumber.
+         * @param amplitudes Each wave's amplitude.
+         * @param phases Each wave's phase at time 0.
+         */
+        public Waves(double[] wavenumbers, double[] amplitudes, double[] phases) {
+            this(wavenumbers, amplitudes, phases, 0);
+        }
 
         /**
          * Waves in deep water, their frequencies from their wavenumbers.
@@ -199,9 +242,31 @@ public final class WaveMath {
          * @param wavenumbers Each wave's wavenumber.
          * @param amplitudes Each wave's amplitude.
          * @param phases Each wave's phase at time 0.
+         * @param longWaves How many of them, the first ones, the long profile holds.
          */
-        public Waves(double[] wavenumbers, double[] amplitudes, double[] phases) {
-            this(wavenumbers, amplitudes, phases, deepFrequencies(wavenumbers));
+        public Waves(double[] wavenumbers, double[] amplitudes, double[] phases, int longWaves) {
+            this(wavenumbers, amplitudes, phases, deepFrequencies(wavenumbers), longWaves);
+        }
+
+        /**
+         * Where a wave is among a climate's {@link #WAVES}: the long ones first, the short ones
+         * after all {@link #LONG_WAVES} places, so a climate without long waves leaves those empty.
+         *
+         * @param index The wave's index.
+         * @return Its place.
+         */
+        public int slot(int index) {
+            return index < longWaves ? index : LONG_WAVES + index - longWaves;
+        }
+
+        /**
+         * Whether a wave is in the long profile.
+         *
+         * @param index The wave's index.
+         * @return True if it is one of the long waves.
+         */
+        public boolean isLong(int index) {
+            return index < longWaves;
         }
 
         /**
@@ -319,16 +384,18 @@ public final class WaveMath {
         if (!Double.isFinite(depth)) {
             return deep;
         }
-        final double fundamental = TURN / PROFILE_LENGTH;
         final int count = deep.wavenumbers().length;
         final double[] wavenumbers = new double[count];
         final double[] amplitudes = new double[count];
         for (int i = 0; i < count; ++i) {
+            final double fundamental =
+                    TURN / (deep.isLong(i) ? LONG_PROFILE_LENGTH : PROFILE_LENGTH);
             final double k = wavenumberAt(deep.frequencies()[i], depth);
             wavenumbers[i] = Math.max(1, Math.rint(k / fundamental)) * fundamental;
             amplitudes[i] = deep.amplitudes()[i] * shoaling(deep.wavenumbers()[i], depth);
         }
-        return new Waves(wavenumbers, amplitudes, deep.phases(), deep.frequencies());
+        return new Waves(
+                wavenumbers, amplitudes, deep.phases(), deep.frequencies(), deep.longWaves());
     }
 
     /**
@@ -471,47 +538,61 @@ public final class WaveMath {
     }
 
     /**
-     * Sample a sea into waves for a profile: wavenumbers spread evenly in their log from the
-     * longest wave the profile holds, half its length, to the shortest, rounded to whole harmonics
-     * so the profile tiles, each with the amplitude sqrt(2 S(k) dk) of the band it stands for.
+     * Sample a sea into waves for the profiles. The long profile takes every harmonic of its length
+     * from half that length down, {@link #LONG_WAVES} of them, each standing for the band of half a
+     * harmonic either side. The short profiles take wavenumbers spread evenly in their log from the
+     * longest wave they hold, half their length, to the shortest, rounded to whole harmonics so the
+     * profiles tile; their first band starts where the long waves' last ends. Each wave has the
+     * amplitude sqrt(2 S(k) dk) of the band it stands for.
      *
      * @param windSpeed The wind's speed, in meters a second.
      * @param fetch The fetch, in meters; infinite for the open sea.
      * @param seed What picks the phases.
-     * @return The waves, as many as distinct harmonics, up to {@link #WAVES}.
+     * @return The waves, the long ones first, as many as distinct harmonics, up to {@link #WAVES}.
      */
     public static Waves sample(double windSpeed, double fetch, long seed) {
         final double fundamental = TURN / PROFILE_LENGTH;
+        final double longFundamental = TURN / LONG_PROFILE_LENGTH;
         final double lowest = LONGEST_HARMONIC;
         final double highest = PROFILE_LENGTH / SHORTEST_WAVE;
-        final double[] harmonics = new double[WAVES];
+        final double[] harmonics = new double[SHORT_WAVES];
         int count = 0;
-        for (int i = 0; i < WAVES; ++i) {
+        for (int i = 0; i < SHORT_WAVES; ++i) {
             final double n =
-                    Math.rint(lowest * Math.pow(highest / lowest, i / (double) (WAVES - 1)));
+                    Math.rint(lowest * Math.pow(highest / lowest, i / (double) (SHORT_WAVES - 1)));
             if (count == 0 || n > harmonics[count - 1]) {
                 harmonics[count++] = n;
             }
         }
-        final double[] wavenumbers = new double[count];
-        final double[] amplitudes = new double[count];
-        final double[] phases = new double[count];
+        final double[] wavenumbers = new double[LONG_WAVES + count];
+        final double[] amplitudes = new double[LONG_WAVES + count];
+        final double[] phases = new double[LONG_WAVES + count];
+        for (int i = 0; i < LONG_WAVES; ++i) {
+            final double k = (LONGEST_HARMONIC + i) * longFundamental;
+            wavenumbers[i] = k;
+            amplitudes[i] =
+                    Math.sqrt(2 * wavenumberSpectrum(k, windSpeed, fetch) * longFundamental);
+            phases[i] = TURN * unitHash(seed, SHORT_WAVES + i);
+        }
+        // Where the long waves' last band ends, in harmonics of the short profiles
+        final double longEnd =
+                (LONGEST_HARMONIC + LONG_WAVES - 0.5) * PROFILE_LENGTH / LONG_PROFILE_LENGTH;
         for (int i = 0; i < count; ++i) {
             // The band from halfway to the harmonic below to halfway to the one above
-            final double low = i == 0 ? harmonics[i] - 0.5 : (harmonics[i - 1] + harmonics[i]) / 2;
+            final double low = i == 0 ? longEnd : (harmonics[i - 1] + harmonics[i]) / 2;
             final double high =
                     i == count - 1 ? harmonics[i] + 0.5 : (harmonics[i] + harmonics[i + 1]) / 2;
             final double k = harmonics[i] * fundamental;
-            wavenumbers[i] = k;
-            amplitudes[i] =
+            wavenumbers[LONG_WAVES + i] = k;
+            amplitudes[LONG_WAVES + i] =
                     Math.sqrt(
                             2
                                     * wavenumberSpectrum(k, windSpeed, fetch)
                                     * (high - low)
                                     * fundamental);
-            phases[i] = TURN * unitHash(seed, i);
+            phases[LONG_WAVES + i] = TURN * unitHash(seed, i);
         }
-        return new Waves(wavenumbers, amplitudes, phases);
+        return new Waves(wavenumbers, amplitudes, phases, LONG_WAVES);
     }
 
     /**
@@ -643,7 +724,8 @@ public final class WaveMath {
 
     /**
      * A direction's profile's height at a distance along it: the sum of its layer's waves at a
-     * time, each turned by the direction's own phase for it.
+     * time, each turned by the direction's own phase for its slot, the long profile's and the short
+     * ones' together, as the surface adds them.
      *
      * @param waves The waves.
      * @param direction Which direction, 0 to {@link #DIRECTIONS}.
@@ -663,7 +745,7 @@ public final class WaveMath {
                                 * Math.cos(
                                         k * distance
                                                 + phaseAt(waves, i, time)
-                                                + directionPhase(direction, i));
+                                                + directionPhase(direction, waves.slot(i)));
             }
         }
         return sum;

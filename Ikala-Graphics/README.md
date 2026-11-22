@@ -451,6 +451,7 @@ These are Java system properties, given before `-jar`:
 | `-Dikala.benchmark.fountain=true` | `false` | Adds stepped stone pools to the `ISLAND` recipe's island, water falling off every side of each into the next. |
 | `-Dikala.benchmark.glassTest=true` | `false` | Adds a glass wall to the `ISLAND` recipe's island in front of the fountain, a column of smoke behind it and a glass dome on the sea floor, for glass, smoke and water seen through one another. |
 | `-Dikala.benchmark.turnAt=<x>,<y>,<z>` | over the middle | Where the camera turns while measuring, as under the sea. |
+| `-Dikala.benchmark.shot=<file.png>` | none | Saves the frame measuring starts on, without the window in front. |
 | `-Dikala.benchmark.view=<x>,<y>,<z>,<pitch>,<yaw>` | not set | Places the camera there once the world is loaded, its pitch and yaw in radians. |
 | `-Dikala.benchmark.ripples=<x>,<z>,<radius>,<strength>,<seconds>` | not set | Disturbs the water at x, z every so many seconds, its ripples starting that high in meters over that radius, to watch them spread and reflect off shores. |
 | `-Dikala.benchmark.water=<x>,<y>,<z>` | not set | Places test water tiles with a corner there, on the ground at y: a 3 by 3 grid of 6 m tiles 12 m apart (between the `HUTS` recipe's huts at 9,1,9), clear ocean, green and muddy water along z, 0.5, 2 and 6 m deep along x. |

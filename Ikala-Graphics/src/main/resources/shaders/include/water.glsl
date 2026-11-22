@@ -22,10 +22,16 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Wa
 };
 
 // Wind waves, see WaveMath: the directions the surface sums, the samples and length of each
-// profile, its layers, and the shortest wave each layer holds, in meters
+// short profile, its layers, and the shortest wave each layer holds, in meters
 const int WAVE_DIRECTIONS = 16;
 const int WAVE_PROFILE_SAMPLES = 4096;
 const float WAVE_PROFILE_LENGTH = 160.0;
+// The long profiles, one a climate's depth and direction, which hold the waves longer than the
+// short profiles can, in every layer: their samples and length, a whole number of short profiles,
+// and how many waves they sum, which come first among a climate's, see WaveMath.LONG_WAVES
+const int WAVE_LONG_SAMPLES = 2048;
+const float WAVE_LONG_LENGTH = 1280.0;
+const int WAVE_LONG_WAVES = 14;
 const int WAVE_LAYERS = 4;
 const float WAVE_LAYER_CUTOFFS[WAVE_LAYERS] = float[](0.0, 0.25, 1.0, 4.0);
 // The layer vertices are displaced by, whose waves a grid of a meter samples well enough
@@ -69,10 +75,15 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Wa
     WaveClimate climates[];
 };
 
-// Each climate's profiles, depth after depth, in each direction after direction, and in each layer
-// after layer, each WAVE_PROFILE_SAMPLES of four half floats: height, slope, how far the choppy
-// waves move the surface along the profile, and the sum the Jacobian is made of, see
-// water_waves.comp
+// The most climates drawn at once, the winds' and the ripples', WaterRender.MAX_CLIMATES + 1: the
+// long profiles have room for that many before the short ones start
+const int WAVE_MAX_CLIMATES = 5;
+const int WAVE_LONG_REGION = WAVE_MAX_CLIMATES * WAVE_DEPTHS * WAVE_DIRECTIONS * WAVE_LONG_SAMPLES;
+
+// The long profiles first, each climate's depth after depth, in each direction after direction,
+// WAVE_LONG_SAMPLES each; then the short ones, the same and in each layer after layer,
+// WAVE_PROFILE_SAMPLES each. A sample is four half floats: height, slope, how far the choppy waves
+// move the surface along the profile, and the sum the Jacobian is made of, see water_waves.comp
 layout(buffer_reference, std430, buffer_reference_align = 8) readonly buffer WaveProfileList {
     uvec2 profiles[];
 };
@@ -82,18 +93,36 @@ vec4 waveProfileSample(uvec2 packed) {
     return vec4(unpackHalf2x16(packed.x), unpackHalf2x16(packed.y));
 }
 
-// A profile's height, slope, along-profile displacement and Jacobian sum at a distance along it,
-// between its two nearest samples, wrapping
-vec4 waveProfile(WaveProfileList list, int climate, int level, int direction, int layer,
-        float distance) {
-    float at = distance / WAVE_PROFILE_LENGTH * float(WAVE_PROFILE_SAMPLES);
+// Where a climate's short profile starts in the list
+int waveShortBase(int climate, int level, int direction, int layer) {
+    return WAVE_LONG_REGION + (((climate * WAVE_DEPTHS + level) * WAVE_DIRECTIONS + direction)
+        * WAVE_LAYERS + layer) * WAVE_PROFILE_SAMPLES;
+}
+
+// Where a climate's long profile starts in the list
+int waveLongBase(int climate, int level, int direction) {
+    return ((climate * WAVE_DEPTHS + level) * WAVE_DIRECTIONS + direction) * WAVE_LONG_SAMPLES;
+}
+
+// One profile's sums at a distance along it, between its two nearest samples, wrapping; its
+// samples a power of two
+vec4 waveProfileAt(WaveProfileList list, int base, int samples, float length, float distance) {
+    float at = distance / length * float(samples);
     float lower = floor(at);
-    int i0 = int(lower) & (WAVE_PROFILE_SAMPLES - 1);
-    int i1 = (i0 + 1) & (WAVE_PROFILE_SAMPLES - 1);
-    int base = (((climate * WAVE_DEPTHS + level) * WAVE_DIRECTIONS + direction) * WAVE_LAYERS
-        + layer) * WAVE_PROFILE_SAMPLES;
+    int i0 = int(lower) & (samples - 1);
+    int i1 = (i0 + 1) & (samples - 1);
     return mix(waveProfileSample(list.profiles[base + i0]),
         waveProfileSample(list.profiles[base + i1]), at - lower);
+}
+
+// A direction's height, slope, along-profile displacement and Jacobian sum at a distance along it,
+// in a layer: its short profile's and its long one's, whose waves every layer keeps
+vec4 waveProfile(WaveProfileList list, int climate, int level, int direction, int layer,
+        float distance) {
+    return waveProfileAt(list, waveShortBase(climate, level, direction, layer),
+            WAVE_PROFILE_SAMPLES, WAVE_PROFILE_LENGTH, distance)
+        + waveProfileAt(list, waveLongBase(climate, level, direction), WAVE_LONG_SAMPLES,
+            WAVE_LONG_LENGTH, distance);
 }
 
 // Which depth's profiles suit water of a depth, as a fraction between two of them

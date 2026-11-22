@@ -27,6 +27,11 @@ rivers then come from real concentrations.
 
 - **Wind spectrum:** JONSWAP, becoming Pierson-Moskowitz for a fully developed sea; 128 waves at whole harmonics of
   a 160 m profile, cos^2 spreading over 16 directions. Tiles sharing a wind share a climate (at most 4).
+- **Long waves get their own profile:** a 1280 m profile per direction (2048 samples) holds every harmonic from
+  640 m down to 85 m, and every layer adds it. A rough sea's peak is 125 to 200 m long, so with only the 160 m
+  profile a 14 m/s sea drew 2.65 m significant height against 4.2 m. Making the one profile longer would have
+  needed 4 times the samples for the same shortest wave. Where the camera stands along a direction is kept to
+  1280 m, a whole number of short profiles, so it serves both.
 - **Each direction has its own profile.** Sharing one, shifted, made straight crest lines in a lattice and swells
   2.5 times too tall.
 - **Band-limited layers** (all, 0.25, 1 and 4 m): vertices ride the 4 m layer, and normals use the layer a pixel's

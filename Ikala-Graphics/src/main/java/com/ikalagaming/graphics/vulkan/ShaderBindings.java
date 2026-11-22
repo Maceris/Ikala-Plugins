@@ -649,8 +649,11 @@ public class ShaderBindings {
         /** How many waves each climate has. */
         public static final int WAVES_COUNT_OFFSET = 3 * Long.BYTES;
 
+        /** Nonzero to fill the long profiles rather than the short ones. */
+        public static final int WAVES_LONG_OFFSET = WAVES_COUNT_OFFSET + Integer.BYTES;
+
         /** The size of the waves pass's push constants. */
-        public static final int WAVES_CONSTANTS_SIZE = WAVES_COUNT_OFFSET + Integer.BYTES;
+        public static final int WAVES_CONSTANTS_SIZE = WAVES_LONG_OFFSET + Integer.BYTES;
 
         /** The size of one wave sample: its wavenumber, amplitude, phase and wavelength. */
         public static final int WAVE_SAMPLE_SIZE = 4 * Float.BYTES;

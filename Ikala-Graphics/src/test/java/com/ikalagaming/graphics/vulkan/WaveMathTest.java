@@ -62,8 +62,7 @@ class WaveMathTest {
         final WaveMath.Waves atOne = WaveMath.atDepth(deep, 1);
         for (int i = 0; i < deep.wavenumbers().length; ++i) {
             assertTrue(atOne.wavenumbers()[i] >= deep.wavenumbers()[i] - 1e-9);
-            final double harmonic =
-                    atOne.wavenumbers()[i] * WaveMath.PROFILE_LENGTH / (2 * Math.PI);
+            final double harmonic = atOne.wavenumbers()[i] * profileLength(deep, i) / (2 * Math.PI);
             assertEquals(Math.rint(harmonic), harmonic, 1e-9);
             // Turning in step with the deep water's
             assertEquals(deep.frequencies()[i], atOne.frequencies()[i]);
@@ -84,6 +83,17 @@ class WaveMathTest {
         final WaveMath.Waves ripples =
                 new WaveMath.Waves(wavenumbers, amplitudes, new double[RIPPLE_WAVES]);
         assertArrayEquals(new int[] {0, 0, 0}, levelsUsed(ripples));
+    }
+
+    /**
+     * The length of the profile a wave is in, which it is a whole harmonic of.
+     *
+     * @param waves The waves.
+     * @param index Which wave.
+     * @return The long profiles' length or the short ones'.
+     */
+    private static double profileLength(WaveMath.Waves waves, int index) {
+        return waves.isLong(index) ? WaveMath.LONG_PROFILE_LENGTH : WaveMath.PROFILE_LENGTH;
     }
 
     /** Ripple-like waves in the levels test. */
@@ -160,6 +170,46 @@ class WaveMathTest {
         assertEquals(0.22 * WIND * WIND / 9.81, expected, 0.15 * expected);
     }
 
+    /**
+     * A rough sea's long waves, 125 to 200 m at its peak, are all there: at 12 to 15 m/s the waves
+     * add up to Pierson-Moskowitz's height to within a few percent. With only the short profiles,
+     * up to 80 m, 14 m/s drew 2.65 m against 4.2 m.
+     */
+    @Test
+    void testRoughSeaHeight() {
+        for (double wind : new double[] {12, 14, 15}) {
+            final double peak = WaveMath.peakFrequency(wind, OPEN);
+            final double expected = 4 * Math.sqrt(0.0081 * 9.81 * 9.81 / (5 * Math.pow(peak, 4)));
+            final double height = WaveMath.significantHeight(WaveMath.sample(wind, OPEN, 1));
+            assertEquals(expected, height, 0.04 * expected, "at " + wind + " m/s");
+        }
+    }
+
+    /**
+     * The long waves come first, every harmonic of the long profiles from half their length, and
+     * the short profiles' bands start where theirs end: no wave length is counted twice.
+     */
+    @Test
+    void testLongWaves() {
+        final WaveMath.Waves waves = WaveMath.sample(14, OPEN, 4);
+        assertEquals(WaveMath.LONG_WAVES, waves.longWaves());
+        assertTrue(waves.wavenumbers().length <= WaveMath.WAVES);
+        for (int i = 0; i < WaveMath.LONG_WAVES; ++i) {
+            assertEquals(
+                    WaveMath.LONG_PROFILE_LENGTH / (2 + i),
+                    2 * Math.PI / waves.wavenumbers()[i],
+                    1e-9);
+            assertEquals(i, waves.slot(i));
+        }
+        final double longest = 2 * Math.PI / waves.wavenumbers()[WaveMath.LONG_WAVES];
+        assertEquals(WaveMath.PROFILE_LENGTH / 2, longest, 1e-9);
+        assertTrue(longest < 2 * Math.PI / waves.wavenumbers()[WaveMath.LONG_WAVES - 1]);
+        // A climate without long waves keeps their places empty
+        final WaveMath.Waves ripples = WaveletMath.ripples(3);
+        assertEquals(WaveMath.LONG_WAVES, ripples.slot(0));
+        assertTrue(ripples.slot(ripples.wavenumbers().length - 1) < WaveMath.WAVES);
+    }
+
     /** Over a short fetch the sea is still growing: smaller, shorter waves. */
     @Test
     void testFetch() {
@@ -178,14 +228,15 @@ class WaveMathTest {
     @Test
     void testProfile() {
         final WaveMath.Waves waves = WaveMath.sample(WIND, OPEN, 7);
-        for (double k : waves.wavenumbers()) {
-            final double harmonic = k * WaveMath.PROFILE_LENGTH / (2 * Math.PI);
+        for (int i = 0; i < waves.wavenumbers().length; ++i) {
+            final double harmonic =
+                    waves.wavenumbers()[i] * profileLength(waves, i) / (2 * Math.PI);
             assertEquals(Math.rint(harmonic), harmonic, 1e-9);
         }
         for (double d : new double[] {0, 3.7, 91}) {
             assertEquals(
                     WaveMath.profile(waves, 3, 0, d, 12.5),
-                    WaveMath.profile(waves, 3, 0, d + WaveMath.PROFILE_LENGTH, 12.5),
+                    WaveMath.profile(waves, 3, 0, d + WaveMath.LONG_PROFILE_LENGTH, 12.5),
                     1e-9);
         }
         assertEquals(0, WaveMath.missingSlopeVariance(waves, 0));

@@ -66,6 +66,17 @@ public class WaterRender implements RenderStage {
     /** The most wave climates drawn at once; tiles in further winds are drawn still. */
     public static final int MAX_CLIMATES = 4;
 
+    /**
+     * The long profiles' room, ahead of the short ones: one for each depth and direction of each
+     * climate, the winds' and the ripples', see {@code WAVE_LONG_REGION} in {@code water.glsl}.
+     */
+    private static final long LONG_PROFILES_BYTES =
+            (long) (MAX_CLIMATES + 1)
+                    * WaveMath.DEPTHS
+                    * WaveMath.DIRECTIONS
+                    * WaveMath.LONG_PROFILE_SAMPLES
+                    * ShaderBindings.Water.PROFILE_SAMPLE_SIZE;
+
     /** Nanoseconds in a second. */
     private static final double NANOS_PER_SECOND = 1e9;
 
@@ -134,7 +145,8 @@ public class WaterRender implements RenderStage {
                 @NonNull WaveMath.Waves waves, double[] amplitudes, long seed, double windSpeed) {
             final double[] offsets = new double[WaveMath.DIRECTIONS];
             for (int b = 0; b < offsets.length; ++b) {
-                offsets[b] = WaveMath.PROFILE_LENGTH * WaveMath.unitHash(seed + WaveMath.WAVES, b);
+                offsets[b] =
+                        WaveMath.LONG_PROFILE_LENGTH * WaveMath.unitHash(seed + WaveMath.WAVES, b);
             }
             final double[] missing = new double[WaveMath.LAYERS];
             for (int layer = 0; layer < missing.length; ++layer) {
@@ -1034,19 +1046,23 @@ public class WaterRender implements RenderStage {
                 ensure(
                         state,
                         profileBuffers[frame],
-                        (long) count
-                                * WaveMath.DEPTHS
-                                * WaveMath.DIRECTIONS
-                                * WaveMath.LAYERS
-                                * WaveMath.PROFILE_SAMPLES
-                                * ShaderBindings.Water.PROFILE_SAMPLE_SIZE,
+                        LONG_PROFILES_BYTES
+                                + (long) count
+                                        * WaveMath.DEPTHS
+                                        * WaveMath.DIRECTIONS
+                                        * WaveMath.LAYERS
+                                        * WaveMath.PROFILE_SAMPLES
+                                        * ShaderBindings.Water.PROFILE_SAMPLE_SIZE,
                         true);
         final long climateAddress = climateBuffers[frame].allocationInfo.pMappedData();
         final long sampleAddress = sampleBuffers[frame].allocationInfo.pMappedData();
         MemoryUtil.memSet(
                 sampleAddress,
                 0,
-                (long) count * WaveMath.WAVES * ShaderBindings.Water.WAVE_SAMPLE_SIZE);
+                (long) count
+                        * WaveMath.DEPTHS
+                        * WaveMath.WAVES
+                        * ShaderBindings.Water.WAVE_SAMPLE_SIZE);
         for (int c = 0; c < climates.size(); ++c) {
             final Climate climate = climates.get(c);
             final long at = climateAddress + (long) c * ShaderBindings.Water.CLIMATE_SIZE;
@@ -1056,10 +1072,11 @@ public class WaterRender implements RenderStage {
                         camera.x() * Math.cos(angle)
                                 + camera.z() * Math.sin(angle)
                                 + climate.offsets()[b];
+                // Kept to the long profiles' length, a whole number of the short ones'
                 final double wrapped =
                         along
-                                - WaveMath.PROFILE_LENGTH
-                                        * Math.floor(along / WaveMath.PROFILE_LENGTH);
+                                - WaveMath.LONG_PROFILE_LENGTH
+                                        * Math.floor(along / WaveMath.LONG_PROFILE_LENGTH);
                 MemoryUtil.memPutFloat(
                         at + ShaderBindings.Water.CLIMATE_AMPLITUDES + (long) b * Float.BYTES,
                         (float) climate.amplitudes()[b]);
@@ -1101,7 +1118,8 @@ public class WaterRender implements RenderStage {
                 for (int i = 0; i < waves.wavenumbers().length; ++i) {
                     final long sample =
                             sampleAddress
-                                    + (((long) c * WaveMath.DEPTHS + level) * WaveMath.WAVES + i)
+                                    + (((long) c * WaveMath.DEPTHS + level) * WaveMath.WAVES
+                                                    + waves.slot(i))
                                             * ShaderBindings.Water.WAVE_SAMPLE_SIZE;
                     final double k = waves.wavenumbers()[i];
                     MemoryUtil.memPutFloat(sample, (float) k);
@@ -1135,6 +1153,15 @@ public class WaterRender implements RenderStage {
         constants.putLong(
                 ShaderBindings.Water.WAVES_CLIMATES_OFFSET, climateBuffers[frame].deviceAddress);
         constants.putInt(ShaderBindings.Water.WAVES_COUNT_OFFSET, WaveMath.WAVES);
+        // The long profiles, then the short ones
+        constants.putInt(ShaderBindings.Water.WAVES_LONG_OFFSET, 1);
+        vkCmdPushConstants(commandBuffer, wavesLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
+        vkCmdDispatch(
+                commandBuffer,
+                WaveMath.LONG_PROFILE_SAMPLES / WaveMath.WORKGROUP_SIZE,
+                climates.size() * WaveMath.DEPTHS * WaveMath.DIRECTIONS,
+                1);
+        constants.putInt(ShaderBindings.Water.WAVES_LONG_OFFSET, 0);
         vkCmdPushConstants(commandBuffer, wavesLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
         vkCmdDispatch(
                 commandBuffer,
