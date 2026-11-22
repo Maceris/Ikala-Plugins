@@ -483,6 +483,7 @@ These are Java system properties, given before `-jar`:
 | `-Dikala.benchmark.seaReach=<meters>` | the view distance | How far the `ISLAND` sea reaches from the middle, past the land's view distance. |
 | `-Dikala.benchmark.coastWater=ocean\|green\|muddy` | none | The `ISLAND` sea's tiles touching the island, and those around them, hold this water. |
 | `-Dikala.benchmark.shot=<file.png>` | none | Saves the frame measuring starts on, without the window in front. |
+| `-Dikala.benchmark.shotEnd=<file.png>` | none | Saves the first frame after measuring stops, the camera where the turn left it. |
 | `-Dikala.benchmark.view=<x>,<y>,<z>,<pitch>,<yaw>` | not set | Places the camera there once the world is loaded, its pitch and yaw in radians. |
 | `-Dikala.benchmark.ripples=<x>,<z>,<radius>,<strength>,<seconds>` | not set | Disturbs the water at x, z every so many seconds, its ripples starting that high in meters over that radius, to watch them spread and reflect off shores. |
 | `-Dikala.benchmark.water=<x>,<y>,<z>` | not set | Places test water tiles with a corner there, on the ground at y: a 3 by 3 grid of 6 m tiles 12 m apart (between the `HUTS` recipe's huts at 9,1,9), clear ocean, green and muddy water along z, 0.5, 2 and 6 m deep along x. |

@@ -34,6 +34,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.Nullable;
 
@@ -595,7 +596,10 @@ public final class GateBenchmark {
         if (current != null) {
             current.step(scene);
             final Phase phase = current.getPhase();
-            if (unattended && (phase == Phase.DONE || phase == Phase.STOPPED)) {
+            // A shot still waiting for its frame keeps the window open
+            if (unattended
+                    && (phase == Phase.DONE || phase == Phase.STOPPED)
+                    && !current.shotPending()) {
                 unattended = false;
                 log.info("Gate benchmark finished, closing");
                 GraphicsManager.getMainWindow().requestClose();
@@ -1002,27 +1006,46 @@ public final class GateBenchmark {
      * one, for looking at a run without the window in front.
      */
     private void saveShot() {
-        final String shot = options.get("shot");
+        saveShot("shot");
+    }
+
+    /** The last shot asked for, until it is written, or null. */
+    private CompletableFuture<Path> pendingShot;
+
+    /**
+     * Whether a shot is still waiting for its frame.
+     *
+     * @return True if one is.
+     */
+    private boolean shotPending() {
+        return pendingShot != null && !pendingShot.isDone();
+    }
+
+    /**
+     * Save the next frame drawn to the PNG an option names, if it names one.
+     *
+     * @param option The option: {@code shot} for the frame measuring starts on, {@code shotEnd} for
+     *     the first once it stops, the camera still where the turn left it.
+     */
+    private void saveShot(@NonNull String option) {
+        final String shot = options.get(option);
         if (shot == null) {
             return;
         }
-        renderer()
-                .saveFrame(Path.of(shot.trim()))
-                .whenComplete(
-                        (path, failure) -> {
-                            if (failure != null) {
-                                log.warn(
-                                        "Gate benchmark couldn't save its shot to {}",
-                                        shot,
-                                        failure);
-                            } else {
-                                log.info("Gate benchmark saved its shot to {}", path);
-                            }
-                        });
+        pendingShot = renderer().saveFrame(Path.of(shot.trim()));
+        pendingShot.whenComplete(
+                (path, failure) -> {
+                    if (failure != null) {
+                        log.warn("Gate benchmark couldn't save its shot to {}", shot, failure);
+                    } else {
+                        log.info("Gate benchmark saved its shot to {}", path);
+                    }
+                });
     }
 
     /** Work out the results, report them, and release everything. */
     private void finish() {
+        saveShot("shotEnd");
         final String deformShot = options.get("deformShot");
         if (deformShot != null && renderer().getState().deformation != null) {
             renderer()
