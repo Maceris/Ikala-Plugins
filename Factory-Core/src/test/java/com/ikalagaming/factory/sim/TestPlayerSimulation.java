@@ -19,7 +19,7 @@ import java.util.SplittableRandom;
 /** Tests for the player simulation and the messages that carry it. */
 class TestPlayerSimulation {
 
-    /** Standing at the origin, flying. */
+    /** At the origin, flying. */
     private static final Movement ORIGIN = Movement.at(MoveMode.FLYING, 0, 0, 0);
 
     /**
@@ -58,6 +58,11 @@ class TestPlayerSimulation {
         final Schedule schedule = PlayerSimulation.schedule();
         final long player = world.create();
         world.set(PlayerSimulation.MOVEMENT, player, ORIGIN);
+        // Bumpy ground, so walking falls, climbs, lands and hits things
+        world.set(
+                PlayerSimulation.BLOCKS,
+                player,
+                (x, y, z) -> y < Math.floorMod(x * 7 + z * 3, 4) - 2);
         final List<Snapshot> out = new ArrayList<>();
         for (PlayerInput input : inputs) {
             world.set(PlayerSimulation.INPUT, player, input);
@@ -73,25 +78,25 @@ class TestPlayerSimulation {
     @Test
     void testDirections() {
         final long speed = PlayerSimulation.FLY_SPEED;
-        Movement after = PlayerSimulation.step(ORIGIN, new PlayerInput(PlayerInput.FORWARD, 0, 0));
+        Movement after = PlayerSimulation.fly(ORIGIN, new PlayerInput(PlayerInput.FORWARD, 0, 0));
         assertEquals(0, after.x());
         assertEquals(-speed, after.z());
-        after = PlayerSimulation.step(ORIGIN, new PlayerInput(PlayerInput.RIGHT, 0, 0));
+        after = PlayerSimulation.fly(ORIGIN, new PlayerInput(PlayerInput.RIGHT, 0, 0));
         assertEquals(speed, after.x());
         assertEquals(0, after.z());
         after =
-                PlayerSimulation.step(
+                PlayerSimulation.fly(
                         ORIGIN, new PlayerInput(PlayerInput.FORWARD, Angle.QUARTER, 0));
         assertEquals(speed, after.x());
         assertEquals(0, after.z());
-        after = PlayerSimulation.step(ORIGIN, new PlayerInput(PlayerInput.UP, 0, 0));
+        after = PlayerSimulation.fly(ORIGIN, new PlayerInput(PlayerInput.UP, 0, 0));
         assertEquals(speed, after.y());
         after =
-                PlayerSimulation.step(
+                PlayerSimulation.fly(
                         ORIGIN, new PlayerInput(PlayerInput.UP | PlayerInput.DOWN, 0, 0));
         assertEquals(0, after.y());
         after =
-                PlayerSimulation.step(
+                PlayerSimulation.fly(
                         ORIGIN, new PlayerInput(PlayerInput.BACK | PlayerInput.SPRINT, 0, 0));
         assertEquals(PlayerSimulation.FLY_SPRINT_SPEED, after.z());
     }
@@ -102,7 +107,7 @@ class TestPlayerSimulation {
         final long speed = PlayerSimulation.FLY_SPEED;
         for (int yaw = 0; yaw < Angle.TURN; yaw += 997) {
             final Movement after =
-                    PlayerSimulation.step(
+                    PlayerSimulation.fly(
                             ORIGIN,
                             new PlayerInput(PlayerInput.FORWARD | PlayerInput.LEFT, yaw, 0));
             final long length = Fixed.length(after.x(), 0, after.z());

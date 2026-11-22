@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.ikalagaming.factory.networking.request.clientbound.PlayerState;
 import com.ikalagaming.factory.networking.request.serverbound.PlayerInputs;
 import com.ikalagaming.factory.sim.Angle;
+import com.ikalagaming.factory.sim.BlockView;
 import com.ikalagaming.factory.sim.Fixed;
 import com.ikalagaming.factory.sim.Frames;
 import com.ikalagaming.factory.sim.MoveMode;
@@ -38,7 +39,10 @@ class TestNetcode {
     private static final long SECOND = 1000 * MS;
 
     /** Where the player starts. */
-    private static final Movement START = Movement.at(MoveMode.FLYING, 0, Fixed.ofMeters(64), 0);
+    private static final Movement START = Movement.at(MoveMode.WALKING, 0, Fixed.ofMeters(64), 0);
+
+    /** Solid ground below y = 64, so the player walks, falls and lands. */
+    private static final BlockView FLOOR = (x, y, z) -> y < 64;
 
     /** How far ahead the server keeps inputs. */
     private static final int MAX_AHEAD = 32;
@@ -185,7 +189,7 @@ class TestNetcode {
             } else if (started) {
                 ++misses;
             }
-            movement = PlayerSimulation.step(movement, last);
+            movement = PlayerSimulation.step(movement, last, FLOOR);
             results.put(next, movement);
             final int buffered = inputs.subMap(next + 1, next + MAX_AHEAD + 1).size();
             final PlayerState state = PlayerState.of(next, movement, buffered, misses);
@@ -275,7 +279,7 @@ class TestNetcode {
         events.at(
                 network.delayMs() * MS + network.jitterMs() * MS,
                 () -> {
-                    prediction[0] = new Prediction(joinFrame, START);
+                    prediction[0] = new Prediction(joinFrame, START, FLOOR);
                     clock.start(events.now);
                 });
         // The client draws frames every 7 to 10 ms, except while stalled

@@ -4,6 +4,7 @@ import com.ikalagaming.ecs.Schedule;
 import com.ikalagaming.ecs.Snapshot;
 import com.ikalagaming.ecs.World;
 import com.ikalagaming.factory.networking.request.serverbound.PlayerInputs;
+import com.ikalagaming.factory.sim.BlockView;
 import com.ikalagaming.factory.sim.Movement;
 import com.ikalagaming.factory.sim.PlayerInput;
 import com.ikalagaming.factory.sim.PlayerSimulation;
@@ -85,15 +86,22 @@ public final class Prediction {
      *
      * @param serverFrame The frame the server runs next, from its answer to joining.
      * @param start The player's movement as the server put it.
+     * @param blocks The blocks the player moves through: the chunks received, with the rest solid.
      */
-    public Prediction(long serverFrame, @NonNull Movement start) {
-        frame = serverFrame + LEAD - 1;
-        acknowledged = frame;
+    public Prediction(long serverFrame, @NonNull Movement start, @NonNull BlockView blocks) {
+        frame = serverFrame - 1;
         player = world.create();
         world.set(PlayerSimulation.MOVEMENT, player, start);
         world.set(PlayerSimulation.INPUT, player, PlayerInput.NONE);
+        world.set(PlayerSimulation.BLOCKS, player, blocks);
         inputs[slot(frame)] = PlayerInput.NONE;
         results[slot(frame)] = world.snapshot();
+        // The server runs the frames before this client's first input with no input, which isn't
+        // standing still once there is gravity, so predict them the same way
+        for (int i = 0; i < LEAD; ++i) {
+            step(PlayerInput.NONE);
+        }
+        acknowledged = frame;
     }
 
     /**

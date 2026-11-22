@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.ikalagaming.factory.networking.request.serverbound.PlayerInputs;
 import com.ikalagaming.factory.sim.Angle;
+import com.ikalagaming.factory.sim.BlockView;
 import com.ikalagaming.factory.sim.Fixed;
 import com.ikalagaming.factory.sim.MoveMode;
 import com.ikalagaming.factory.sim.Movement;
@@ -28,7 +29,10 @@ class TestPrediction {
 
     /** Where the player starts. */
     private static final Movement START =
-            Movement.at(MoveMode.FLYING, Fixed.ofMeters(5), Fixed.ofMeters(70), 0);
+            Movement.at(MoveMode.WALKING, Fixed.ofMeters(5), Fixed.ofMeters(70), 0);
+
+    /** Solid ground below y = 60, so the player walks, falls and lands. */
+    private static final BlockView FLOOR = (x, y, z) -> y < 60;
 
     /** The frame the server runs next when the player joins. */
     private static final long JOIN_FRAME = 1000;
@@ -74,7 +78,7 @@ class TestPrediction {
             if (input != null) {
                 last = input;
             }
-            movement = PlayerSimulation.step(movement, last);
+            movement = PlayerSimulation.step(movement, last, FLOOR);
             results.put(next, movement);
             ++next;
         }
@@ -141,7 +145,7 @@ class TestPrediction {
     /** With every input arriving in time, the prediction always matches the server. */
     @Test
     void testInStep() {
-        final Prediction prediction = new Prediction(JOIN_FRAME, START);
+        final Prediction prediction = new Prediction(JOIN_FRAME, START, FLOOR);
         final FakeServer server = new FakeServer();
         play(prediction, server, inputs(200), -1, 0, 0);
         assertEquals(0, prediction.getMispredicts());
@@ -155,7 +159,7 @@ class TestPrediction {
      */
     @Test
     void testLossCovered() {
-        final Prediction prediction = new Prediction(JOIN_FRAME, START);
+        final Prediction prediction = new Prediction(JOIN_FRAME, START, FLOOR);
         final FakeServer server = new FakeServer();
         // The client leads by a few frames, so one lost message is made up by the next
         play(prediction, server, inputs(200), JOIN_FRAME + 50, 1, 0);
@@ -168,7 +172,7 @@ class TestPrediction {
      */
     @Test
     void testMispredictConverges() {
-        final Prediction prediction = new Prediction(JOIN_FRAME, START);
+        final Prediction prediction = new Prediction(JOIN_FRAME, START, FLOOR);
         final FakeServer server = new FakeServer();
         // A long gap of lost messages, longer than the client's lead
         play(prediction, server, inputs(300), JOIN_FRAME + 80, 20, 0);
@@ -180,7 +184,7 @@ class TestPrediction {
     /** States older than one already handled change nothing. */
     @Test
     void testOldStatesIgnored() {
-        final Prediction prediction = new Prediction(JOIN_FRAME, START);
+        final Prediction prediction = new Prediction(JOIN_FRAME, START, FLOOR);
         for (PlayerInput input : inputs(20)) {
             prediction.step(input);
         }
@@ -199,7 +203,7 @@ class TestPrediction {
     /** A client that falls behind the server takes the server's state and frame. */
     @Test
     void testBehindServer() {
-        final Prediction prediction = new Prediction(JOIN_FRAME, START);
+        final Prediction prediction = new Prediction(JOIN_FRAME, START, FLOOR);
         final Movement far = Movement.at(MoveMode.FLYING, Fixed.ofMeters(100), 0, 0);
         assertTrue(prediction.onServerState(prediction.getFrame() + 10, far, 0, 0));
         assertEquals(far, prediction.movement(prediction.getFrame()));

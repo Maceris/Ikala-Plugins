@@ -32,8 +32,14 @@ public record PlayerInput(int buttons, int yaw, int pitch) {
     /** Move faster. */
     public static final int SPRINT = 1 << 6;
 
+    /**
+     * Fly instead of walking. The client holds this for as long as the player has flight toggled
+     * on, so a lost input can't drop them out of the air.
+     */
+    public static final int FLY = 1 << 7;
+
     /** Every button there is. */
-    public static final int ALL_BUTTONS = (1 << 7) - 1;
+    public static final int ALL_BUTTONS = (1 << 8) - 1;
 
     /** Nothing held, looking straight ahead along yaw 0. */
     public static final PlayerInput NONE = new PlayerInput(0, 0, 0);

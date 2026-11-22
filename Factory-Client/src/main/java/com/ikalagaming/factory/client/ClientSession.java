@@ -14,6 +14,7 @@ import com.ikalagaming.factory.networking.request.serverbound.PlayerInputs;
 import com.ikalagaming.factory.sim.Fixed;
 import com.ikalagaming.factory.sim.MoveMode;
 import com.ikalagaming.factory.sim.Movement;
+import com.ikalagaming.factory.world.ChunkBlockView;
 import com.ikalagaming.factory.world.ChunkCodec;
 import com.ikalagaming.factory.world.ChunkPos;
 
@@ -136,10 +137,13 @@ public final class ClientSession implements ClientBoundRequestHandler {
                 new Prediction(
                         request.getFrame(),
                         Movement.at(
-                                MoveMode.FLYING,
+                                MoveMode.WALKING,
                                 Math.round(request.getX() * Fixed.ONE),
                                 Math.round(request.getY() * Fixed.ONE),
-                                Math.round(request.getZ() * Fixed.ONE)));
+                                Math.round(request.getZ() * Fixed.ONE)),
+                        new ChunkBlockView(
+                                pos -> world.chunk(pos).orElse(null),
+                                BlockCollisions.solidByName()));
         frameClock = new FrameClock();
         frameClock.start(System.nanoTime());
         onJoined.accept(request);

@@ -3,6 +3,7 @@ package com.ikalagaming.factory.registry;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.ikalagaming.factory.world.Collision;
 import com.ikalagaming.factory.world.gen.WorldgenFixtures;
 
 import org.junit.jupiter.api.Test;
@@ -32,9 +33,10 @@ class TestDefinitionLoader {
         Files.writeString(folder.resolve(DefinitionLoader.MATERIALS_FILE), "{}\n");
         Files.writeString(
                 folder.resolve(DefinitionLoader.BLOCKS_FILE),
-                "mod_name,identifier,material,tags,register_item\n"
-                        + "test,stone,,\"solid, rock\",TRUE\n"
-                        + "test,water,,liquid,FALSE\n");
+                "mod_name,identifier,material,tags,register_item,collision\n"
+                        + "test,stone,,\"solid, rock\",TRUE,full\n"
+                        + "test,water,,liquid,FALSE,none\n"
+                        + "test,odd,,,FALSE,wobbly\n");
         Files.writeString(
                 folder.resolve(DefinitionLoader.ITEMS_FILE),
                 "mod_name,identifier,material,tags\ntest,gear,,\n");
@@ -48,6 +50,16 @@ class TestDefinitionLoader {
         assertEquals(
                 List.of("liquid"),
                 registries.getBlockRegistry().find("test:water").orElseThrow().tags());
+        assertEquals(
+                Collision.FULL,
+                registries.getBlockRegistry().find("test:stone").orElseThrow().collision());
+        assertEquals(
+                Collision.NONE,
+                registries.getBlockRegistry().find("test:water").orElseThrow().collision());
+        // A collision this doesn't know is full, so nothing unknown can be walked through
+        assertEquals(
+                Collision.FULL,
+                registries.getBlockRegistry().find("test:odd").orElseThrow().collision());
         // Stone registers its item, water doesn't, and gear is an item of its own
         assertTrue(registries.getItemRegistry().containsKey("test:stone"));
         assertTrue(!registries.getItemRegistry().containsKey("test:water"));

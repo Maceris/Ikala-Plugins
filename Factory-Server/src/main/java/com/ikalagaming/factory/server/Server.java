@@ -18,6 +18,7 @@ import com.ikalagaming.factory.save.Saves;
 import com.ikalagaming.factory.server.events.ServerStopping;
 import com.ikalagaming.factory.world.Block;
 import com.ikalagaming.factory.world.BlockDefinition;
+import com.ikalagaming.factory.world.ChunkBlockView;
 import com.ikalagaming.factory.world.gen.SpawnFinder;
 import com.ikalagaming.factory.world.gen.WorldGenerator;
 import com.ikalagaming.factory.world.gen.WorldType;
@@ -233,7 +234,8 @@ public class Server {
                             generator,
                             spawn,
                             ServerWorld.defaultThreads(),
-                            info.time());
+                            info.time(),
+                            ChunkBlockView.solidByName(loadedRegistries.getBlockRegistry()));
             world = opened;
             loop =
                     new ServerLoop(

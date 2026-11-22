@@ -17,6 +17,7 @@ import com.ikalagaming.factory.sim.PlayerInput;
 import com.ikalagaming.factory.sim.PlayerSimulation;
 import com.ikalagaming.factory.world.Block;
 import com.ikalagaming.factory.world.Chunk;
+import com.ikalagaming.factory.world.ChunkBlockView;
 import com.ikalagaming.factory.world.ChunkCodec;
 import com.ikalagaming.factory.world.ChunkPos;
 import com.ikalagaming.factory.world.WorldTime;
@@ -116,6 +117,9 @@ public final class ServerWorld implements AutoCloseable {
      */
     @Getter private final SpawnFinder.Spawn spawn;
 
+    /** Whether each block, by name, stops movement. */
+    private final Map<String, Boolean> solidByName;
+
     /** Chunks loaded or being generated. */
     private final Map<ChunkPos, CompletableFuture<Chunk>> chunks = new ConcurrentHashMap<>();
 
@@ -165,6 +169,37 @@ public final class ServerWorld implements AutoCloseable {
             @NonNull SpawnFinder.Spawn spawn,
             int threads,
             long time) {
+        this(
+                saveFolder,
+                worldFolder,
+                generator,
+                spawn,
+                threads,
+                time,
+                Map.of(com.ikalagaming.factory.world.World.AIR_NAME, false));
+    }
+
+    /**
+     * Open a world.
+     *
+     * @param saveFolder The save the world is in.
+     * @param worldFolder The world's folder name inside the save.
+     * @param generator Makes the world's chunks.
+     * @param spawn Where new players start.
+     * @param threads How many threads generate chunks.
+     * @param time The world's clock, in ticks.
+     * @param solidByName Whether each block, by name, stops movement, from {@link
+     *     ChunkBlockView#solidByName}. Blocks it doesn't name are solid.
+     */
+    public ServerWorld(
+            @NonNull Path saveFolder,
+            @NonNull String worldFolder,
+            @NonNull WorldGenerator generator,
+            @NonNull SpawnFinder.Spawn spawn,
+            int threads,
+            long time,
+            @NonNull Map<String, Boolean> solidByName) {
+        this.solidByName = solidByName;
         this.time = new AtomicLong(time);
         this.saveFolder = saveFolder;
         this.worldFolder = worldFolder;
@@ -306,11 +341,15 @@ public final class ServerWorld implements AutoCloseable {
                 PlayerSimulation.MOVEMENT,
                 entity,
                 Movement.at(
-                        MoveMode.FLYING,
+                        MoveMode.WALKING,
                         Fixed.ofMeters(spawn.x()) + Fixed.ONE / 2,
                         Fixed.ofMeters(spawn.y()),
                         Fixed.ofMeters(spawn.z()) + Fixed.ONE / 2));
         sim.set(PlayerSimulation.INPUT, entity, PlayerInput.NONE);
+        sim.set(
+                PlayerSimulation.BLOCKS,
+                entity,
+                new ChunkBlockView(pos -> sentChunk(player, pos), solidByName));
         players.put(player.getId(), player);
         connection.send(
                 new Joined(
@@ -326,6 +365,24 @@ public final class ServerWorld implements AutoCloseable {
         connection.send(new TimeUpdate(time.get(), Server.TICKS_PER_SECOND));
         log.info("{} joined at {}, {}, {}", name, player.getX(), player.getY(), player.getZ());
         return player;
+    }
+
+    /**
+     * A chunk as a player's movement sees it: only once it has been sent to them, so that the
+     * server and their client agree that the chunks beyond are solid. Tick thread only.
+     *
+     * @param player The player.
+     * @param pos The chunk.
+     * @return The chunk, or null if the player hasn't been sent it.
+     */
+    private Chunk sentChunk(@NonNull ServerPlayer player, @NonNull ChunkPos pos) {
+        if (!player.sent.contains(pos)) {
+            return null;
+        }
+        final CompletableFuture<Chunk> chunk = chunks.get(pos);
+        return chunk == null || !chunk.isDone() || chunk.isCompletedExceptionally()
+                ? null
+                : chunk.getNow(null);
     }
 
     /**

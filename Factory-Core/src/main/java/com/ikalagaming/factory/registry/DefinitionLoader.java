@@ -4,6 +4,7 @@ import com.ikalagaming.factory.FactoryPlugin;
 import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.factory.item.ItemDefinition;
 import com.ikalagaming.factory.world.BlockDefinition;
+import com.ikalagaming.factory.world.Collision;
 import com.ikalagaming.launcher.PluginFolder;
 
 import com.opencsv.CSVReaderHeaderAware;
@@ -45,7 +46,7 @@ public class DefinitionLoader {
 
     /** The headers that we expect in the blocks csv file. */
     private static final String[] BLOCK_HEADERS = {
-        "mod_name", "identifier", "material", "tags", "register_item"
+        "mod_name", "identifier", "material", "tags", "register_item", "collision"
     };
 
     /** The headers that we expect in the items csv file. */
@@ -142,7 +143,20 @@ public class DefinitionLoader {
                 boolean registerItem = Boolean.parseBoolean(results[4]);
 
                 var combinedName = RegistryConstants.combineName(modName, identifier);
-                var definition = new BlockDefinition(modName, identifier, material, tags);
+                final String collisionName = results[5];
+                final Collision collision =
+                        Collision.named(collisionName)
+                                .orElseGet(
+                                        () -> {
+                                            log.warn(
+                                                    "Block {} has unknown collision '{}'; it will"
+                                                            + " be full",
+                                                    combinedName,
+                                                    collisionName);
+                                            return Collision.FULL;
+                                        });
+                var definition =
+                        new BlockDefinition(modName, identifier, material, tags, collision);
                 blockRegistry.register(combinedName, definition);
 
                 if (registerItem) {

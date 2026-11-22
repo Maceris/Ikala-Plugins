@@ -2,6 +2,7 @@ package com.ikalagaming.factory;
 
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_A;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_D;
+import static org.lwjgl.glfw.GLFW.GLFW_KEY_F;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT_CONTROL;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT_SHIFT;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_S;
@@ -74,6 +75,12 @@ public final class SinglePlayerGame {
     /** The session of the game being played, or null. Main thread only. */
     private static ClientSession session;
 
+    /** Whether the player has flight toggled on, with F. Main thread only. */
+    private static boolean flying;
+
+    /** Whether F was down when the last input was sampled, so a press toggles flight once. */
+    private static boolean flyKeyWasDown;
+
     /** Draws the chunks the server sends, or null. */
     private static WorldRenderer renderer;
 
@@ -129,6 +136,8 @@ public final class SinglePlayerGame {
 
     /** Leave the game being played, if any. Main thread only. */
     public static void stop() {
+        flying = false;
+        flyKeyWasDown = false;
         if (playStage != null) {
             Launcher.removeMainThreadStage(playStage);
             playStage = null;
@@ -299,7 +308,13 @@ public final class SinglePlayerGame {
             buttons |= window.isKeyPressed(GLFW_KEY_SPACE) ? PlayerInput.UP : 0;
             buttons |= window.isKeyPressed(GLFW_KEY_LEFT_SHIFT) ? PlayerInput.DOWN : 0;
             buttons |= window.isKeyPressed(GLFW_KEY_LEFT_CONTROL) ? PlayerInput.SPRINT : 0;
+            final boolean flyKey = window.isKeyPressed(GLFW_KEY_F);
+            if (flyKey && !flyKeyWasDown) {
+                flying = !flying;
+            }
+            flyKeyWasDown = flyKey;
         }
+        buttons |= flying ? PlayerInput.FLY : 0;
         final Camera camera = GraphicsManager.getScene().getCamera();
         final int yaw = Angle.wrap(Math.round(camera.getRotation().y / TURN_RADIANS * Angle.TURN));
         final int pitch =
