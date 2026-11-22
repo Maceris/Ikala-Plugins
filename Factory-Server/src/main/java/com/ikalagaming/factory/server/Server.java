@@ -30,17 +30,16 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * The game server: loads the definitions, opens a save's world, and ticks it {@value
- * #TICKS_PER_SECOND} times a second. Single player runs one in the same process. See the Starting a
- * Game design doc.
+ * The game server: loads the definitions, opens a save's world, and runs it: command frames every
+ * 16 ms and world ticks {@value #TICKS_PER_SECOND} times a second, on one thread (see {@link
+ * ServerLoop}). Single player runs one in the same process. See the Starting a Game and Command
+ * Frames design docs.
  */
 @Slf4j
 public class Server {
@@ -79,8 +78,14 @@ public class Server {
      */
     @Getter private volatile ServerWorld world;
 
-    /** Runs the world's ticks. */
-    private ScheduledExecutorService ticker;
+    /** How long closing a world waits for the frame or tick it is on to finish. */
+    private static final long LOOP_STOP_MILLIS = 2000;
+
+    /** Runs the open world's frames and ticks. */
+    private ServerLoop loop;
+
+    /** The thread {@link #loop} runs on. */
+    private Thread loopThread;
 
     public Server() {
         running = new AtomicBoolean(false);
@@ -213,18 +218,15 @@ public class Server {
                             ServerWorld.defaultThreads(),
                             info.time());
             world = opened;
-            ticker =
-                    Executors.newSingleThreadScheduledExecutor(
-                            task -> {
-                                Thread thread = new Thread(task, "Server tick");
-                                thread.setDaemon(true);
-                                return thread;
-                            });
-            ticker.scheduleAtFixedRate(
-                    () -> tickSafely(opened),
-                    0,
-                    TimeUnit.SECONDS.toNanos(1) / TICKS_PER_SECOND,
-                    TimeUnit.NANOSECONDS);
+            loop =
+                    new ServerLoop(
+                            () -> frameSafely(opened),
+                            () -> tickSafely(opened),
+                            System.nanoTime(),
+                            Boolean.getBoolean(ServerLoop.PRECISE_PROPERTY));
+            loopThread = new Thread(loop, "Server tick");
+            loopThread.setDaemon(true);
+            loopThread.start();
             log.info("Opened {} ({}, seed {})", save.name(), info.worldType(), info.seed());
             return opened;
         } finally {
@@ -253,7 +255,20 @@ public class Server {
     }
 
     /**
-     * Run a tick, keeping the tick loop alive if it throws.
+     * Run a command frame, keeping the loop alive if it throws.
+     *
+     * @param opened The world to step.
+     */
+    private static void frameSafely(@NonNull ServerWorld opened) {
+        try {
+            opened.frame();
+        } catch (RuntimeException e) {
+            log.warn("A server frame failed", e);
+        }
+    }
+
+    /**
+     * Run a tick, keeping the loop alive if it throws.
      *
      * @param opened The world to tick.
      */
@@ -269,9 +284,19 @@ public class Server {
     private void closeWorld() {
         worldLock.lock();
         try {
-            if (ticker != null) {
-                ticker.shutdownNow();
-                ticker = null;
+            if (loop != null) {
+                loop.stop();
+                try {
+                    loopThread.join(LOOP_STOP_MILLIS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                if (loopThread.isAlive()) {
+                    log.warn("The server loop didn't stop in {} ms", LOOP_STOP_MILLIS);
+                    loopThread.interrupt();
+                }
+                loop = null;
+                loopThread = null;
             }
             if (world != null) {
                 try {

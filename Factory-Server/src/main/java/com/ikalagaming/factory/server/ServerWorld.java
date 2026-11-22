@@ -6,6 +6,7 @@ import com.ikalagaming.factory.networking.request.clientbound.ChunkData;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkUnload;
 import com.ikalagaming.factory.networking.request.clientbound.Joined;
 import com.ikalagaming.factory.networking.request.clientbound.TimeUpdate;
+import com.ikalagaming.factory.sim.Frames;
 import com.ikalagaming.factory.world.Block;
 import com.ikalagaming.factory.world.Chunk;
 import com.ikalagaming.factory.world.ChunkCodec;
@@ -116,10 +117,15 @@ public final class ServerWorld implements AutoCloseable {
     /** Ticks run so far. */
     private final AtomicLong ticks = new AtomicLong();
 
+    /** Command frames run so far; the next frame's number. */
+    private final AtomicLong frames = new AtomicLong();
+
     /** The world's clock, in ticks; see {@link WorldTime}. */
     private final AtomicLong time;
 
-    /** Work for the tick thread, from requests and finished chunks. */
+    /**
+     * Work for the tick thread, from requests and finished chunks, run before each frame and tick.
+     */
     private final Queue<Runnable> tasks = new ConcurrentLinkedQueue<>();
 
     /** Players in the world, by id. Tick thread only. */
@@ -246,7 +252,17 @@ public final class ServerWorld implements AutoCloseable {
     }
 
     /**
-     * Run something on the tick thread, at the start of the next tick. Safe from any thread.
+     * How many command frames have run.
+     *
+     * @return The frame count, which is also the number of the next frame.
+     */
+    public long getFrames() {
+        return frames.get();
+    }
+
+    /**
+     * Run something on the tick thread, before the next frame or tick, whichever comes first. Safe
+     * from any thread.
      *
      * @param task The work.
      */
@@ -295,10 +311,8 @@ public final class ServerWorld implements AutoCloseable {
         return players.values();
     }
 
-    /** Run one tick. Called {@value Server#TICKS_PER_SECOND} times a second by the server. */
-    void tick() {
-        final long now = ticks.incrementAndGet();
-        final long clock = time.incrementAndGet();
+    /** Run the work posted to the tick thread. */
+    private void runTasks() {
         Runnable task = tasks.poll();
         while (task != null) {
             try {
@@ -308,6 +322,22 @@ public final class ServerWorld implements AutoCloseable {
             }
             task = tasks.poll();
         }
+    }
+
+    /**
+     * Run one command frame. Called every {@value Frames#FRAME_MILLIS} ms by the server, on the
+     * same thread as {@link #tick()}.
+     */
+    void frame() {
+        runTasks();
+        frames.incrementAndGet();
+    }
+
+    /** Run one tick. Called {@value Server#TICKS_PER_SECOND} times a second by the server. */
+    void tick() {
+        final long now = ticks.incrementAndGet();
+        final long clock = time.incrementAndGet();
+        runTasks();
         for (ServerPlayer player : players.values()) {
             stream(player);
         }
