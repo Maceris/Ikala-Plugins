@@ -2,6 +2,9 @@ package com.ikalagaming.converter;
 
 import com.ikalagaming.converter.gui.window.MainMenu;
 import com.ikalagaming.converter.inspector.AssetInspectorWindow;
+import com.ikalagaming.converter.scene.ImportedScene;
+import com.ikalagaming.converter.scene.MeshExport;
+import com.ikalagaming.converter.scene.SceneImporter;
 import com.ikalagaming.converter.workbench.Workbench;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
@@ -11,7 +14,9 @@ import com.ikalagaming.plugins.PluginManager;
 
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.IOException;
 import java.lang.management.ManagementFactory;
+import java.nio.file.Path;
 import java.util.function.Consumer;
 
 /**
@@ -65,6 +70,32 @@ public final class ConverterScripts {
      */
     public static void log(String message) {
         log.info("Script: {}", message);
+    }
+
+    /**
+     * Export a model file's meshes as one mesh in an asset container, as the workbench's export
+     * section does for the whole scene, without opening it. For re-exporting a game's models in one
+     * go.
+     *
+     * @param source The model file, such as an OBJ or glTF file.
+     * @param target The container to write.
+     * @param bottomCenter Whether the file's origin is the middle of the model's bottom, as in
+     *     Blockbench and Minecraft models, to be moved to the corner of the block's cell.
+     * @return What was written, or why it couldn't be, which is also logged.
+     */
+    public static String exportMesh(String source, String target, boolean bottomCenter) {
+        try {
+            final ImportedScene scene = SceneImporter.read(Path.of(source), message -> {});
+            final Path file = Path.of(target);
+            final String done =
+                    MeshExport.describe(
+                            MeshExport.export(scene, scene.root(), bottomCenter, file), file);
+            log.info("{} from {}", done, source);
+            return done;
+        } catch (IOException | RuntimeException e) {
+            log.warn("Couldn't export {} to {}", source, target, e);
+            return "Couldn't export: " + e.getMessage();
+        }
     }
 
     /** Bytes in a kibibyte. */

@@ -155,3 +155,13 @@ spotless {
 		formatAnnotations()
 	}
 }
+
+// Writes the first block textures, drawn in code, as PNGs to repaint by hand:
+// ./gradlew :Factory-Client:starterTextures --args="<data folder>". Only missing files are written:
+// delete a texture to start it again; existing ones are kept. Relative paths are from this project's folder.
+tasks.register('starterTextures', JavaExec) {
+	description = 'Writes the starter block textures as 16x16 PNGs'
+	group = 'application'
+	classpath = sourceSets.main.runtimeClasspath + configurations.compileClasspath
+	mainClass = 'com.ikalagaming.factory.render.looks.StarterTextures'
+}

@@ -1,11 +1,13 @@
 package com.ikalagaming.factory.render;
 
+import com.ikalagaming.factory.render.looks.BlockLook;
+import com.ikalagaming.factory.render.looks.BlockLooks;
 import com.ikalagaming.factory.world.gen.debug.Colormaps;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MeshHandle;
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.bake.BakeSource;
-import com.ikalagaming.graphics.benchmark.SyntheticTerrain;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.scene.Scene;
@@ -13,17 +15,17 @@ import com.ikalagaming.graphics.scene.Scene;
 import lombok.NonNull;
 import org.joml.Vector3f;
 
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Which bakeable mesh each block is drawn with, in the game and the Worldgen Lab's 3D preview.
  *
- * <p>Block definitions don't name a mesh yet. When they do, with a mesh exported from the asset
- * editor, {@link #meshFor} loads that mesh instead, and nothing else in the preview changes. Until
- * then, a block whose name (after its namespace) matches one of the graphics test blocks, such as
- * stone, dirt, grass or water, is drawn as that textured block, and any other is a unit cube in its
- * slice view color, so 2D and 3D agree. Fluids are translucent.
+ * <p>A block with a look file (see {@link BlockLooks}) is drawn as its look says: its model file's
+ * mesh with its textures and surface values. Any other is a unit cube in its slice view color, so
+ * 2D and 3D agree and new blocks are never invisible; fluids among those are translucent. Fluids,
+ * and blocks whose model file is missing, are drawn as a cube made in code.
  *
  * <p>Render thread only, except {@link #removeMaterials}.
  */
@@ -40,6 +42,9 @@ public final class BlockMeshes implements AutoCloseable {
 
     /** How rough placeholder blocks are. */
     private static final float ROUGHNESS = 0.85f;
+
+    /** The gray of faces whose texture is missing. */
+    private static final float MISSING_GRAY = 0.8f;
 
     /** How rough fluids are: smooth, for a highlight. */
     private static final float FLUID_ROUGHNESS = 0.1f;
@@ -75,19 +80,8 @@ public final class BlockMeshes implements AutoCloseable {
     /** Materials added to the scene, to remove again. */
     private final List<Material> materials = new CopyOnWriteArrayList<>();
 
-    /** The graphics test blocks a block name can match, by the name after its namespace. */
-    private static final Map<String, Byte> TEST_BLOCKS =
-            Map.of(
-                    "stone", SyntheticTerrain.STONE,
-                    "dirt", SyntheticTerrain.DIRT,
-                    "grass", SyntheticTerrain.GRASS,
-                    "water", SyntheticTerrain.WATER,
-                    "planks", SyntheticTerrain.PLANKS,
-                    "leaves", SyntheticTerrain.LEAVES,
-                    "glass", SyntheticTerrain.GLASS);
-
-    /** The textured test blocks, made the first time a name matches one. */
-    private com.ikalagaming.graphics.benchmark.BlockMeshes.Textured textured;
+    /** Blocks' looks and their textures. */
+    private final BlockLooks looks;
 
     /**
      * Set up the lookup.
@@ -95,7 +89,18 @@ public final class BlockMeshes implements AutoCloseable {
      * @param graphics The plugin's graphics context.
      */
     public BlockMeshes(@NonNull GraphicsContext graphics) {
+        this(graphics, BlockLooks.defaultRoots());
+    }
+
+    /**
+     * Set up the lookup, with looks from chosen folders.
+     *
+     * @param graphics The plugin's graphics context.
+     * @param lookRoots The folders to find looks in, in order; see {@link BlockLooks}.
+     */
+    public BlockMeshes(@NonNull GraphicsContext graphics, @NonNull List<Path> lookRoots) {
         this.graphics = graphics;
+        looks = new BlockLooks(graphics, lookRoots);
     }
 
     /**
@@ -133,28 +138,105 @@ public final class BlockMeshes implements AutoCloseable {
      */
     private Entry meshFor(@NonNull String block, boolean fluid) {
         final Scene scene = GraphicsManager.getScene();
-        final Byte test = TEST_BLOCKS.get(block.substring(block.indexOf(':') + 1));
+        final BlockLook look = looks.look(block).orElse(null);
+        final Material material =
+                look == null ? placeholderMaterial(block, fluid) : lookMaterial(look);
+        final MeshData shape = look == null || look.isFluid() ? null : looks.model(look.model());
         final MeshData mesh;
-        if (test != null) {
-            if (textured == null) {
-                textured =
-                        com.ikalagaming.graphics.benchmark.BlockMeshes.textured(
-                                graphics.textures());
-                textured.materials().forEach(scene.getMaterialCache()::addMaterial);
-                materials.addAll(textured.materials());
-            }
-            mesh = textured.meshes()[test];
-        } else {
+        if (shape == null) {
             mesh =
                     com.ikalagaming.graphics.benchmark.BlockMeshes.box(
                             new float[] {BOX_MIN.x, BOX_MIN.y, BOX_MIN.z},
                             new float[] {BOX_MAX.x, BOX_MAX.y, BOX_MAX.z},
-                            placeholderMaterial(block, fluid));
-            scene.getMaterialCache().addMaterial(mesh.getMaterial());
-            materials.add(mesh.getMaterial());
+                            material);
+        } else {
+            // Blocks share a model's arrays, each with its own material
+            mesh =
+                    new MeshData(
+                            shape.getAabbMin(),
+                            shape.getAabbMax(),
+                            shape.getVertexCount(),
+                            shape.getVertexData(),
+                            shape.getIndices(),
+                            0,
+                            new byte[0]);
+            mesh.setMaterial(material);
+        }
+        for (Material each : faceMaterials(material)) {
+            scene.getMaterialCache().addMaterial(each);
+            materials.add(each);
         }
         final MeshHandle handle = graphics.meshes().registerBakeable(mesh, BOX_MIN, BOX_MAX);
-        return new Entry(handle, graphics.meshes().faceInfo(handle), mesh.getMaterial());
+        return new Entry(handle, graphics.meshes().faceInfo(handle), material);
+    }
+
+    /**
+     * A material and its top and bottom variants, if it has them.
+     *
+     * @param material The material.
+     * @return Each, once.
+     */
+    private static List<Material> faceMaterials(@NonNull Material material) {
+        final List<Material> out = new ArrayList<>();
+        out.add(material);
+        if (material.getTop() != null) {
+            out.add(material.getTop());
+        }
+        if (material.getBottom() != null) {
+            out.add(material.getBottom());
+        }
+        return out;
+    }
+
+    /**
+     * The material for a look: its sides', with top and bottom variants where their textures
+     * differ.
+     *
+     * @param look The look.
+     * @return The material.
+     */
+    private Material lookMaterial(@NonNull BlockLook look) {
+        final Material side = surface(look, look.side());
+        if (!Objects.equals(look.top(), look.side())) {
+            side.setTop(surface(look, look.top()));
+        }
+        if (!Objects.equals(look.bottom(), look.side())) {
+            side.setBottom(surface(look, look.bottom()));
+        }
+        return side;
+    }
+
+    /**
+     * One face's material for a look.
+     *
+     * @param look The look, for its surface values.
+     * @param texture The face's texture name, or null for none.
+     * @return The material: white under its texture, or a plain light gray without one, or if the
+     *     texture is missing.
+     */
+    private Material surface(@NonNull BlockLook look, String texture) {
+        final Material material = new Material();
+        final TextureHandle handle = texture == null ? null : looks.texture(texture);
+        if (handle != null) {
+            material.setTexture(handle);
+            material.getBaseColor().set(Material.DEFAULT_COLOR);
+        } else {
+            material.getBaseColor().set(MISSING_GRAY, MISSING_GRAY, MISSING_GRAY, 1);
+        }
+        material.setRoughness(look.roughness());
+        material.setMetallic(look.metallic());
+        if (look.emission() > 0) {
+            // Glows in its own color: the texture's, if it has one
+            material.setEmissiveMap(handle);
+            material.getEmissive().set(look.emission());
+        }
+        material.setTransparency(
+                switch (look.transparency()) {
+                    case OPAQUE -> Material.Transparency.OPAQUE;
+                    case CUTOUT -> Material.Transparency.CUTOUT;
+                    case TRANSLUCENT -> Material.Transparency.TRANSLUCENT;
+                });
+        return material;
     }
 
     /**
@@ -196,11 +278,8 @@ public final class BlockMeshes implements AutoCloseable {
     public void close() {
         if (!graphics.isClosed()) {
             entries.values().forEach(entry -> graphics.meshes().release(entry.mesh()));
-            if (textured != null) {
-                textured.textures().forEach(graphics.textures()::release);
-            }
         }
-        textured = null;
+        looks.close();
         entries.clear();
         removeMaterials();
     }

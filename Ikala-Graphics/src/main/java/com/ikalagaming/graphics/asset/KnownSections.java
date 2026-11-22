@@ -16,7 +16,12 @@ import java.util.Set;
 public final class KnownSections {
     /** The sections graphics reads. New section types are added here as they are defined. */
     private static final KnownSections GRAPHICS =
-            new KnownSections(Map.of(SectionTag.META, Set.of(AssetMetadata.VERSION)));
+            new KnownSections(
+                    Map.of(
+                            SectionTag.META,
+                            Set.of(AssetMetadata.VERSION),
+                            MeshSection.TAG,
+                            Set.of(MeshSection.VERSION)));
 
     /** Supported versions of each known tag. */
     private final Map<Integer, Set<Integer>> versions;

@@ -69,23 +69,53 @@ public final class BlockTextures {
      *     alpha bytes each.
      */
     public static byte[] pixels(@NonNull Tile tile) {
-        final byte[] out = new byte[SIZE * SIZE * CHANNELS];
+        return enlarge(art(tile), ART, SCALE);
+    }
+
+    /**
+     * A tile's art at its own size, one byte per channel, as a game would save it to paint over.
+     *
+     * @param tile The tile.
+     * @return {@value #ART} by {@value #ART} pixels, rows from the top, red, green, blue and alpha
+     *     bytes each.
+     */
+    public static byte[] art(@NonNull Tile tile) {
+        final byte[] out = new byte[ART * ART * CHANNELS];
         final double[] color = new double[CHANNELS];
         for (int y = 0; y < ART; ++y) {
             for (int x = 0; x < ART; ++x) {
                 art(tile, x, y, color);
-                for (int dy = 0; dy < SCALE; ++dy) {
-                    for (int dx = 0; dx < SCALE; ++dx) {
-                        final int at = ((y * SCALE + dy) * SIZE + x * SCALE + dx) * CHANNELS;
-                        for (int c = 0; c < CHANNELS; ++c) {
-                            out[at + c] =
-                                    (byte) Math.round(Math.clamp(color[c], 0, 1) * CHANNEL_MAX);
-                        }
-                    }
+                final int at = (y * ART + x) * CHANNELS;
+                for (int c = 0; c < CHANNELS; ++c) {
+                    out[at + c] = (byte) Math.round(Math.clamp(color[c], 0, 1) * CHANNEL_MAX);
                 }
             }
         }
         return out;
+    }
+
+    /**
+     * Enlarge square pixel art by repeating each pixel, so linear filtering keeps it sharp.
+     *
+     * @param art The art, rows from the top, {@value #CHANNELS} bytes per pixel.
+     * @param size Pixels along each side of the art.
+     * @param scale How many pixels each art pixel becomes along each side.
+     * @return The enlarged art, in the same layout.
+     */
+    public static byte[] enlarge(byte @NonNull [] art, int size, int scale) {
+        final int out = size * scale;
+        final byte[] pixels = new byte[out * out * CHANNELS];
+        for (int y = 0; y < out; ++y) {
+            for (int x = 0; x < out; ++x) {
+                System.arraycopy(
+                        art,
+                        ((y / scale) * size + x / scale) * CHANNELS,
+                        pixels,
+                        (y * out + x) * CHANNELS,
+                        CHANNELS);
+            }
+        }
+        return pixels;
     }
 
     /**

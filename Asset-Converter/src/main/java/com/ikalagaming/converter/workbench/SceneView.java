@@ -96,6 +96,9 @@ public class SceneView {
     /** Builds and shows level of detail of the scene. */
     private final LodSection lod;
 
+    /** The mesh export section. */
+    private final ExportSection export;
+
     /** Watches particles on the particle stage. */
     @Getter private final ParticleViewer particles;
 
@@ -212,6 +215,7 @@ public class SceneView {
         this.graphics = graphics;
         this.materials = materials;
         lod = new LodSection(graphics);
+        export = new ExportSection(graphics);
         particles = new ParticleViewer(graphics);
     }
 
@@ -611,6 +615,9 @@ public class SceneView {
         }
         if (IkGui.collapsingHeader("Level of detail###lod", TreeNodeFlags.DEFAULT_OPEN)) {
             lod.draw(shown, selected);
+        }
+        if (IkGui.collapsingHeader("Export###export")) {
+            export.draw(shown, selected);
         }
     }
 
