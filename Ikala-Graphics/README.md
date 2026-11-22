@@ -149,7 +149,8 @@ already run this way.
   dissolved organic matter and sediment, which set its color and clarity. Game water of blocks,
   levels and slopes is just heights. `add()` returns a `WaterHandle` to `update()` or `remove()`
   it; a plugin's tiles are removed when it unloads. A tile can flow (`withFlows`, a speed along x
-  and z at each corner), and a `WaterBody` carries its wind (`withWind(speed, direction, fetch)`).
+  and z at each corner), and a `WaterBody` carries its wind (`withWind(speed, direction, fetch)`)
+  and a swell from storms far away (`withSwell(new Swell(height, period, direction, spread))`).
   `disturb(position, radius, strength)` starts ripples, as a stone dropped in does, and
   `paintWaves(position, radius, direction, strength)` sets the wind's waves over a patch by hand for
   a frame, so painting along a path every frame sends waves along it.
@@ -326,6 +327,9 @@ What the renderer does and the work it builds on.
   longer; normals come from the profile layer whose shortest waves a pixel can still show, and the
   slopes of the waves left out become roughness (Bruneton, Neyret and Holzschuch 2010), so far water
   doesn't shimmer. Each tile's fetch is limited by its own size, so a pool gets a pool's waves.
+  Waves from 85 to 640 m long have their own 1280 m profiles, so a gale's sea reaches its full
+  height. A swell is a narrow JONSWAP spectrum of 8 to 20 s periods spread a few degrees about its
+  way, in profiles of its own; the wave grid leaves it alone.
   `WaveMath` has the math in Java, with tests.
 - Choppy crests: the vertices also move sideways with the waves (Tessendorf 2001), and the normals
   follow through the inverse Jacobian. Whitecaps cover the share Monahan's measurements give for
@@ -451,6 +455,7 @@ These are Java system properties, given before `-jar`:
 | `-Dikala.benchmark.fountain=true` | `false` | Adds stepped stone pools to the `ISLAND` recipe's island, water falling off every side of each into the next. |
 | `-Dikala.benchmark.glassTest=true` | `false` | Adds a glass wall to the `ISLAND` recipe's island in front of the fountain, a column of smoke behind it and a glass dome on the sea floor, for glass, smoke and water seen through one another. |
 | `-Dikala.benchmark.turnAt=<x>,<y>,<z>` | over the middle | Where the camera turns while measuring, as under the sea. |
+| `-Dikala.benchmark.swell=<m>,<s>[,<deg>[,<deg>]]` | none | A swell on the sea: height, period, the way it travels and its spread (11 degrees). |
 | `-Dikala.benchmark.shot=<file.png>` | none | Saves the frame measuring starts on, without the window in front. |
 | `-Dikala.benchmark.view=<x>,<y>,<z>,<pitch>,<yaw>` | not set | Places the camera there once the world is loaded, its pitch and yaw in radians. |
 | `-Dikala.benchmark.ripples=<x>,<z>,<radius>,<strength>,<seconds>` | not set | Disturbs the water at x, z every so many seconds, its ripples starting that high in meters over that radius, to watch them spread and reflect off shores. |

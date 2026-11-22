@@ -7,6 +7,7 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.ThreadStops;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.scene.WaterBody;
 import com.ikalagaming.graphics.scene.WaterRegistry;
 import com.ikalagaming.graphics.scene.WaterTile;
 import com.ikalagaming.graphics.vulkan.Commands;
@@ -66,12 +67,20 @@ public class WaterRender implements RenderStage {
     /** The most wave climates drawn at once; tiles in further winds are drawn still. */
     public static final int MAX_CLIMATES = 4;
 
+    /** The profiles' pass that fills the long profiles, see {@code water_waves.comp}. */
+    private static final int WAVES_LONG_PASS = 1;
+
+    /** The profiles' pass that fills the swells' profiles. */
+    private static final int WAVES_SWELL_PASS = 2;
+
     /**
-     * The long profiles' room, ahead of the short ones: one for each depth and direction of each
-     * climate, the winds' and the ripples', see {@code WAVE_LONG_REGION} in {@code water.glsl}.
+     * The long profiles' room, then the swells' as much again, ahead of the short ones: one for
+     * each depth and direction of each climate, the winds' and the ripples', see {@code
+     * WAVE_LONG_REGION} in {@code water.glsl}.
      */
     private static final long LONG_PROFILES_BYTES =
-            (long) (MAX_CLIMATES + 1)
+            2L
+                    * (MAX_CLIMATES + 1)
                     * WaveMath.DEPTHS
                     * WaveMath.DIRECTIONS
                     * WaveMath.LONG_PROFILE_SAMPLES
@@ -87,13 +96,14 @@ public class WaterRender implements RenderStage {
     private static final long WAVE_SEED = 0x5EA5_1DE5L;
 
     /**
-     * A wind the tiles' waves come from.
+     * A wind the tiles' waves come from, and the swell with it.
      *
      * @param speed Its speed, in meters a second.
      * @param direction The way it blows, in radians.
      * @param fetch How far it has blown over the water, in meters.
+     * @param swell The swell, or {@link WaterBody.Swell#NONE}.
      */
-    private record Wind(float speed, float direction, float fetch) {}
+    private record Wind(float speed, float direction, float fetch, WaterBody.Swell swell) {}
 
     /**
      * A wave climate: a wind's waves, its directions' amplitudes and random offsets along their
@@ -104,8 +114,12 @@ public class WaterRender implements RenderStage {
      * @param offsets Each direction's random offset, in meters.
      * @param missingVariance Each layer's left out slope variance.
      * @param atDepths The waves at each of {@link WaveMath#DEPTH_LEVELS}, deep water's first.
-     * @param levels Which depth's profiles each depth reads, see {@link WaveMath#levelsUsed}.
+     * @param levels Which depth's profiles each depth reads, see {@link WaveMath#levelsUsed}: the
+     *     wind's or the swell's, whichever needs its own.
      * @param foamJacobian Where its waves break into foam, see {@link WaveMath#foamJacobian}.
+     * @param swellAmplitudes Each direction's share of the swell, see {@link
+     *     WaveMath#swellAmplitudes}.
+     * @param swellAtDepths The swell's waves at each depth, none for no swell.
      */
     private record Climate(
             WaveMath.Waves waves,
@@ -114,25 +128,30 @@ public class WaterRender implements RenderStage {
             double[] missingVariance,
             WaveMath.Waves[] atDepths,
             int[] levels,
-            double foamJacobian) {
+            double foamJacobian,
+            double[] swellAmplitudes,
+            WaveMath.Waves[] swellAtDepths) {
 
         /**
-         * Work a wind's climate out.
+         * Work a wind's climate out, with its swell.
          *
          * @param wind The wind.
          * @param seed What picks its phases and offsets.
          * @return The climate.
          */
         static Climate of(@NonNull Wind wind, long seed) {
+            final WaterBody.Swell swell = wind.swell();
             return of(
                     WaveMath.sample(wind.speed(), wind.fetch(), seed),
                     WaveMath.directionAmplitudes(wind.direction()),
                     seed,
-                    wind.speed());
+                    wind.speed(),
+                    WaveMath.sampleSwell(swell.height(), swell.period(), seed),
+                    WaveMath.swellAmplitudes(swell.direction(), swell.spread()));
         }
 
         /**
-         * Work a climate out from its waves.
+         * Work a climate without swell out from its waves.
          *
          * @param waves The waves.
          * @param amplitudes Each direction's amplitude.
@@ -143,6 +162,34 @@ public class WaterRender implements RenderStage {
          */
         static Climate of(
                 @NonNull WaveMath.Waves waves, double[] amplitudes, long seed, double windSpeed) {
+            return of(
+                    waves,
+                    amplitudes,
+                    seed,
+                    windSpeed,
+                    WaveMath.sampleSwell(0, 0, seed),
+                    new double[WaveMath.DIRECTIONS]);
+        }
+
+        /**
+         * Work a climate out from its waves and its swell's.
+         *
+         * @param waves The waves.
+         * @param amplitudes Each direction's amplitude.
+         * @param seed What picks its directions' offsets.
+         * @param windSpeed The wind that raised them, in meters a second, for their whitecaps; 0
+         *     for none.
+         * @param swell The swell's waves, none for no swell.
+         * @param swellAmplitudes Each direction's share of the swell.
+         * @return The climate.
+         */
+        static Climate of(
+                @NonNull WaveMath.Waves waves,
+                double[] amplitudes,
+                long seed,
+                double windSpeed,
+                @NonNull WaveMath.Waves swell,
+                double[] swellAmplitudes) {
             final double[] offsets = new double[WaveMath.DIRECTIONS];
             for (int b = 0; b < offsets.length; ++b) {
                 offsets[b] =
@@ -153,8 +200,15 @@ public class WaterRender implements RenderStage {
                 missing[layer] = WaveMath.missingSlopeVariance(waves, layer);
             }
             final WaveMath.Waves[] atDepths = new WaveMath.Waves[WaveMath.DEPTHS];
+            final WaveMath.Waves[] swellAtDepths = new WaveMath.Waves[WaveMath.DEPTHS];
             for (int level = 0; level < atDepths.length; ++level) {
                 atDepths[level] = WaveMath.atDepth(waves, WaveMath.DEPTH_LEVELS[level]);
+                swellAtDepths[level] = WaveMath.atDepth(swell, WaveMath.DEPTH_LEVELS[level]);
+            }
+            final int[] levels = WaveMath.levelsUsed(atDepths);
+            final int[] swellLevels = WaveMath.levelsUsed(swellAtDepths);
+            for (int level = 0; level < levels.length; ++level) {
+                levels[level] = Math.max(levels[level], swellLevels[level]);
             }
             return new Climate(
                     waves,
@@ -162,8 +216,10 @@ public class WaterRender implements RenderStage {
                     offsets,
                     missing,
                     atDepths,
-                    WaveMath.levelsUsed(atDepths),
-                    WaveMath.foamJacobian(waves, windSpeed));
+                    levels,
+                    WaveMath.foamJacobian(waves, windSpeed),
+                    swellAmplitudes,
+                    swellAtDepths);
         }
     }
 
@@ -232,6 +288,21 @@ public class WaterRender implements RenderStage {
 
     /** The gate's pipeline: the surface's depth alone, VK_NULL_HANDLE until set up. */
     private long gatePipeline = VK_NULL_HANDLE;
+
+    /**
+     * The surface's and the gate's pipelines with the swell's code compiled in, for when a climate
+     * has a swell, VK_NULL_HANDLE until set up: compiled in but unused, it cost the surface about
+     * 5%.
+     */
+    private long swellPipeline = VK_NULL_HANDLE;
+
+    private long swellGatePipeline = VK_NULL_HANDLE;
+
+    /** Whether any of the climates drawn has a swell. */
+    private boolean swellDrawn;
+
+    /** The specialization constant that compiles the swell's code in, see {@code water.glsl}. */
+    private static final int SWELL_CONSTANT_ID = 0;
 
     /** The frame number {@link #prepare} last got ready, and what it worked out for it. */
     private long preparedFrame = -1;
@@ -386,8 +457,10 @@ public class WaterRender implements RenderStage {
                             null,
                             longOutput));
             pipelineLayout = longOutput.get(0);
-            pipeline = createPipeline(state, stack, false);
-            gatePipeline = createPipeline(state, stack, true);
+            pipeline = createPipeline(state, stack, false, false);
+            gatePipeline = createPipeline(state, stack, true, false);
+            swellPipeline = createPipeline(state, stack, false, true);
+            swellGatePipeline = createPipeline(state, stack, true, true);
 
             VkPushConstantRange.Buffer wavesRanges = VkPushConstantRange.calloc(1, stack);
             wavesRanges
@@ -444,6 +517,10 @@ public class WaterRender implements RenderStage {
         pipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(state.device.logical, gatePipeline, null);
         gatePipeline = VK_NULL_HANDLE;
+        vkDestroyPipeline(state.device.logical, swellPipeline, null);
+        swellPipeline = VK_NULL_HANDLE;
+        vkDestroyPipeline(state.device.logical, swellGatePipeline, null);
+        swellGatePipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(state.device.logical, pipelineLayout, null);
         pipelineLayout = VK_NULL_HANDLE;
         grid.cleanup(state);
@@ -499,7 +576,8 @@ public class WaterRender implements RenderStage {
                             .pColorAttachments(colorAttachments)
                             .pDepthAttachment(depthAttachment));
             TranslucentRender.setViewport(commandBuffer, width, height, stack);
-            bindSurface(commandBuffer, state, frameData, pipeline, stack);
+            bindSurface(
+                    commandBuffer, state, frameData, swellDrawn ? swellPipeline : pipeline, stack);
             // The surfaces: from above, water only ever has its own water under it
             vkCmdDrawIndexed(commandBuffer, surfaceIndexCounts[frame], 1, 0, 0, 0);
             vkCmdEndRendering(commandBuffer);
@@ -517,7 +595,12 @@ public class WaterRender implements RenderStage {
                                 .pColorAttachments(colorAttachments)
                                 .pDepthAttachment(depthAttachment));
                 TranslucentRender.setViewport(commandBuffer, width, height, stack);
-                bindSurface(commandBuffer, state, frameData, pipeline, stack);
+                bindSurface(
+                        commandBuffer,
+                        state,
+                        frameData,
+                        swellDrawn ? swellPipeline : pipeline,
+                        stack);
                 vkCmdDrawIndexed(commandBuffer, sides, 1, surfaceIndexCounts[frame], 0, 0);
                 vkCmdEndRendering(commandBuffer);
             }
@@ -797,7 +880,12 @@ public class WaterRender implements RenderStage {
                             .pDepthAttachment(depthAttachment));
             if (water) {
                 TranslucentRender.setViewport(commandBuffer, width, height, stack);
-                bindSurface(commandBuffer, state, frameData, gatePipeline, stack);
+                bindSurface(
+                        commandBuffer,
+                        state,
+                        frameData,
+                        swellDrawn ? swellGatePipeline : gatePipeline,
+                        stack);
                 vkCmdDrawIndexed(commandBuffer, indexCounts[state.frameIndex], 1, 0, 0, 0);
             }
             vkCmdEndRendering(commandBuffer);
@@ -971,7 +1059,7 @@ public class WaterRender implements RenderStage {
         final List<Integer> each = new ArrayList<>(list.size());
         boolean overflowed = false;
         for (WaterTile tile : list) {
-            if (tile.body().windSpeed() <= 0) {
+            if (!tile.body().hasWaves()) {
                 each.add(-1);
                 continue;
             }
@@ -979,7 +1067,8 @@ public class WaterRender implements RenderStage {
                     new Wind(
                             tile.body().windSpeed(),
                             tile.body().windDirection(),
-                            tile.body().fetch());
+                            tile.body().fetch(),
+                            tile.body().swell());
             int index = found.indexOf(wind);
             if (index < 0 && found.size() < MAX_CLIMATES) {
                 found.add(wind);
@@ -1012,6 +1101,10 @@ public class WaterRender implements RenderStage {
                 climates.add(Climate.of(winds.get(i), WAVE_SEED + i * (long) WaveMath.WAVES));
             }
             climates.add(ripples);
+            swellDrawn = false;
+            for (Climate climate : climates) {
+                swellDrawn |= climate.swellAtDepths()[0].wavenumbers().length > 0;
+            }
         }
     }
 
@@ -1083,6 +1176,9 @@ public class WaterRender implements RenderStage {
                 MemoryUtil.memPutFloat(
                         at + ShaderBindings.Water.CLIMATE_OFFSETS + (long) b * Float.BYTES,
                         (float) wrapped);
+                MemoryUtil.memPutFloat(
+                        at + ShaderBindings.Water.CLIMATE_SWELL + (long) b * Float.BYTES,
+                        (float) climate.swellAmplitudes()[b]);
             }
             for (int layer = 0; layer < WaveMath.LAYERS; ++layer) {
                 MemoryUtil.memPutFloat(
@@ -1107,6 +1203,9 @@ public class WaterRender implements RenderStage {
                     (float)
                             WaveMath.jacobianVariance(
                                     climate.waves(), WaveMath.LAYER_CUTOFFS[WaveMath.LAYERS - 1]));
+            MemoryUtil.memPutInt(
+                    at + ShaderBindings.Water.CLIMATE_HAS_SWELL,
+                    climate.swellAtDepths()[0].wavenumbers().length > 0 ? 1 : 0);
             for (int level = 0; level < WaveMath.DEPTHS; ++level) {
                 MemoryUtil.memPutInt(
                         at + ShaderBindings.Water.CLIMATE_LEVELS + (long) level * Integer.BYTES,
@@ -1114,22 +1213,42 @@ public class WaterRender implements RenderStage {
                 if (climate.levels()[level] != level) {
                     continue;
                 }
+                final long depthClimate =
+                        sampleAddress
+                                + ((long) c * WaveMath.DEPTHS + level)
+                                        * WaveMath.WAVES
+                                        * ShaderBindings.Water.WAVE_SAMPLE_SIZE;
                 final WaveMath.Waves waves = climate.atDepths()[level];
                 for (int i = 0; i < waves.wavenumbers().length; ++i) {
-                    final long sample =
-                            sampleAddress
-                                    + (((long) c * WaveMath.DEPTHS + level) * WaveMath.WAVES
-                                                    + waves.slot(i))
-                                            * ShaderBindings.Water.WAVE_SAMPLE_SIZE;
-                    final double k = waves.wavenumbers()[i];
-                    MemoryUtil.memPutFloat(sample, (float) k);
-                    MemoryUtil.memPutFloat(sample + Float.BYTES, (float) waves.amplitudes()[i]);
-                    MemoryUtil.memPutFloat(
-                            sample + 2 * Float.BYTES, (float) WaveMath.phaseAt(waves, i, seconds));
-                    MemoryUtil.memPutFloat(sample + 3 * Float.BYTES, (float) (2 * Math.PI / k));
+                    writeWave(depthClimate, waves.slot(i), waves, i, seconds);
+                }
+                final WaveMath.Waves swell = climate.swellAtDepths()[level];
+                for (int i = 0; i < swell.wavenumbers().length; ++i) {
+                    writeWave(depthClimate, WaveMath.SWELL_SLOT + i, swell, i, seconds);
                 }
             }
         }
+    }
+
+    /**
+     * Write one wave's sample for the profiles' pass: its wavenumber, amplitude, phase now and
+     * wavelength.
+     *
+     * @param depthClimate Where a climate's depth's samples start.
+     * @param slot Its place among them.
+     * @param waves Its waves.
+     * @param index Which of them.
+     * @param seconds The waves' time.
+     */
+    private static void writeWave(
+            long depthClimate, int slot, @NonNull WaveMath.Waves waves, int index, double seconds) {
+        final long sample = depthClimate + (long) slot * ShaderBindings.Water.WAVE_SAMPLE_SIZE;
+        final double k = waves.wavenumbers()[index];
+        MemoryUtil.memPutFloat(sample, (float) k);
+        MemoryUtil.memPutFloat(sample + Float.BYTES, (float) waves.amplitudes()[index]);
+        MemoryUtil.memPutFloat(
+                sample + 2 * Float.BYTES, (float) WaveMath.phaseAt(waves, index, seconds));
+        MemoryUtil.memPutFloat(sample + 3 * Float.BYTES, (float) (2 * Math.PI / k));
     }
 
     /**
@@ -1153,14 +1272,18 @@ public class WaterRender implements RenderStage {
         constants.putLong(
                 ShaderBindings.Water.WAVES_CLIMATES_OFFSET, climateBuffers[frame].deviceAddress);
         constants.putInt(ShaderBindings.Water.WAVES_COUNT_OFFSET, WaveMath.WAVES);
-        // The long profiles, then the short ones
-        constants.putInt(ShaderBindings.Water.WAVES_LONG_OFFSET, 1);
-        vkCmdPushConstants(commandBuffer, wavesLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
-        vkCmdDispatch(
-                commandBuffer,
-                WaveMath.LONG_PROFILE_SAMPLES / WaveMath.WORKGROUP_SIZE,
-                climates.size() * WaveMath.DEPTHS * WaveMath.DIRECTIONS,
-                1);
+        // The long profiles, the swells' if any climate has one, then the short ones
+        final int lastPass = swellDrawn ? WAVES_SWELL_PASS : WAVES_LONG_PASS;
+        for (int pass = WAVES_LONG_PASS; pass <= lastPass; ++pass) {
+            constants.putInt(ShaderBindings.Water.WAVES_LONG_OFFSET, pass);
+            vkCmdPushConstants(
+                    commandBuffer, wavesLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
+            vkCmdDispatch(
+                    commandBuffer,
+                    WaveMath.LONG_PROFILE_SAMPLES / WaveMath.WORKGROUP_SIZE,
+                    climates.size() * WaveMath.DEPTHS * WaveMath.DIRECTIONS,
+                    1);
+        }
         constants.putInt(ShaderBindings.Water.WAVES_LONG_OFFSET, 0);
         vkCmdPushConstants(commandBuffer, wavesLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
         vkCmdDispatch(
@@ -1407,10 +1530,14 @@ public class WaterRender implements RenderStage {
      * @param state The Vulkan state.
      * @param stack The stack to allocate on.
      * @param depthOnly Whether for the gate: the vertex shader alone, writing only depth.
+     * @param swell Whether to compile the swell's code in.
      * @return The VkPipeline.
      */
     private long createPipeline(
-            @NonNull VulkanState state, @NonNull MemoryStack stack, boolean depthOnly) {
+            @NonNull VulkanState state,
+            @NonNull MemoryStack stack,
+            boolean depthOnly,
+            boolean swell) {
         int count = 0;
         for (int i = 0; i < shader.shaderModules.length; ++i) {
             if (!depthOnly || shader.shaderStages.get(i).stage() == VK_SHADER_STAGE_VERTEX_BIT) {
@@ -1424,6 +1551,15 @@ public class WaterRender implements RenderStage {
             if (!depthOnly || shader.shaderStages.get(i).stage() == VK_SHADER_STAGE_VERTEX_BIT) {
                 stages.get(added++).set(shader.shaderStages.get(i));
             }
+        }
+        VkSpecializationMapEntry.Buffer entries = VkSpecializationMapEntry.calloc(1, stack);
+        entries.get(0).constantID(SWELL_CONSTANT_ID).offset(0).size(Integer.BYTES);
+        VkSpecializationInfo specialization =
+                VkSpecializationInfo.calloc(stack)
+                        .pMapEntries(entries)
+                        .pData(stack.malloc(Integer.BYTES).putInt(0, swell ? 1 : 0));
+        for (int i = 0; i < count; ++i) {
+            stages.get(i).pSpecializationInfo(specialization);
         }
         VkVertexInputBindingDescription.Buffer bindings =
                 VkVertexInputBindingDescription.calloc(1, stack);

@@ -616,6 +616,13 @@ public class ShaderBindings {
         public static final int CLIMATE_LEVELS = CLIMATE_MISSING_VARIANCE + 4 * Float.BYTES;
 
         /**
+         * Where in it whether it has a swell is, nonzero if so, the levels' last: the surface skips
+         * the swell's reads without one.
+         */
+        public static final int CLIMATE_HAS_SWELL =
+                CLIMATE_LEVELS + WaveMath.DEPTHS * Integer.BYTES;
+
+        /**
          * Where in it the amplitude of its strongest direction is, the first of a vec4: the wave
          * grid keeps the wind's waves as shares of it.
          */
@@ -631,8 +638,11 @@ public class ShaderBindings {
          */
         public static final int CLIMATE_JACOBIAN_VARIANCE = CLIMATE_FOAM_JACOBIAN + Float.BYTES;
 
+        /** Where in it each direction's swell amplitude is, after the peak's vec4. */
+        public static final int CLIMATE_SWELL = CLIMATE_PEAK + 4 * Float.BYTES;
+
         /** The size of one wave climate. */
-        public static final int CLIMATE_SIZE = CLIMATE_PEAK + 4 * Float.BYTES;
+        public static final int CLIMATE_SIZE = CLIMATE_SWELL + WaveMath.DIRECTIONS * Float.BYTES;
 
         /**
          * The waves pass: the samples' address, the profiles', the climates', and how many waves a
@@ -649,7 +659,7 @@ public class ShaderBindings {
         /** How many waves each climate has. */
         public static final int WAVES_COUNT_OFFSET = 3 * Long.BYTES;
 
-        /** Nonzero to fill the long profiles rather than the short ones. */
+        /** Which profiles to fill: 0 the short ones, 1 the long ones, 2 the swell's. */
         public static final int WAVES_LONG_OFFSET = WAVES_COUNT_OFFSET + Integer.BYTES;
 
         /** The size of the waves pass's push constants. */

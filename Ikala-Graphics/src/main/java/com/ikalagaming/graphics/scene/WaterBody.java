@@ -24,6 +24,8 @@ import com.ikalagaming.graphics.vulkan.WaterMath;
  * @param windDirection The way the wind blows, in radians from +x toward +z.
  * @param fetch How far the wind has blown over the water, in meters, which limits how big its waves
  *     grow: a pond's or a lake's width, or infinite for the open sea.
+ * @param swell Long waves from storms far away, which the local wind didn't raise; {@link
+ *     Swell#NONE} for none.
  */
 public record WaterBody(
         float chlorophyll,
@@ -31,7 +33,62 @@ public record WaterBody(
         float sediment,
         float windSpeed,
         float windDirection,
-        float fetch) {
+        float fetch,
+        Swell swell) {
+
+    /**
+     * Swell: waves raised by a storm far away that have outrun it, long, regular and coming from
+     * one way, whatever the local wind does. A sea state is regional and changes slowly, so bodies
+     * in one region share it.
+     *
+     * @param height Its significant height, in meters: 0 for none, 1 to 2 for a typical ocean
+     *     swell, 4 or more after a big storm.
+     * @param period Its peak period, in seconds: 8 to 20, longer for storms farther away; 12 is
+     *     typical. Periods outside that are drawn as 8 or 20.
+     * @param direction The way it travels, in radians from +x toward +z.
+     * @param spread How widely its directions spread around that, the standard deviation in
+     *     radians: about 0.2 (11 degrees) for a far storm's swell, 0.4 for a nearer one's.
+     */
+    public record Swell(float height, float period, float direction, float spread) {
+
+        /** No swell. */
+        public static final Swell NONE = new Swell(0, 12, 0, 0.2f);
+
+        /**
+         * Check the swell's values are numbers, its height not negative and its period and spread
+         * positive.
+         *
+         * @throws IllegalArgumentException If one isn't.
+         */
+        public Swell {
+            if (height < 0
+                    || period <= 0
+                    || spread <= 0
+                    || !Float.isFinite(height)
+                    || !Float.isFinite(period)
+                    || !Float.isFinite(direction)
+                    || !Float.isFinite(spread)) {
+                throw new IllegalArgumentException(
+                        "A swell must have a height, a period, a direction and a spread: "
+                                + height
+                                + " m, "
+                                + period
+                                + " s, toward "
+                                + direction
+                                + ", spread "
+                                + spread);
+            }
+        }
+
+        /**
+         * Whether there is any swell.
+         *
+         * @return True if it has height.
+         */
+        public boolean any() {
+            return height > 0;
+        }
+    }
 
     /** Clear open ocean, deep blue, in a moderate breeze. */
     public static final WaterBody OCEAN =
@@ -51,7 +108,7 @@ public record WaterBody(
      * @param sediment The sediment concentration, in grams a cubic meter.
      */
     public WaterBody(float chlorophyll, float cdom, float sediment) {
-        this(chlorophyll, cdom, sediment, 0, 0, Float.POSITIVE_INFINITY);
+        this(chlorophyll, cdom, sediment, 0, 0, Float.POSITIVE_INFINITY, Swell.NONE);
     }
 
     /**
@@ -60,6 +117,9 @@ public record WaterBody(
      * @throws IllegalArgumentException If one isn't.
      */
     public WaterBody {
+        if (swell == null) {
+            throw new IllegalArgumentException("A water body's swell must not be null");
+        }
         if (windSpeed < 0 || fetch <= 0 || !Float.isFinite(windDirection)) {
             throw new IllegalArgumentException(
                     "Wind must have a speed, a fetch and a direction: "
@@ -104,6 +164,25 @@ public record WaterBody(
      * @return A changed copy.
      */
     public WaterBody withWind(float speed, float direction, float over) {
-        return new WaterBody(chlorophyll, cdom, sediment, speed, direction, over);
+        return new WaterBody(chlorophyll, cdom, sediment, speed, direction, over, swell);
+    }
+
+    /**
+     * The same water with another swell.
+     *
+     * @param with The swell, or {@link Swell#NONE}.
+     * @return A changed copy.
+     */
+    public WaterBody withSwell(Swell with) {
+        return new WaterBody(chlorophyll, cdom, sediment, windSpeed, windDirection, fetch, with);
+    }
+
+    /**
+     * Whether the water has waves: a wind or a swell.
+     *
+     * @return True if it does.
+     */
+    public boolean hasWaves() {
+        return windSpeed > 0 || swell.any();
     }
 }

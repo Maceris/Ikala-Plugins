@@ -32,6 +32,17 @@ rivers then come from real concentrations.
   profile a 14 m/s sea drew 2.65 m significant height against 4.2 m. Making the one profile longer would have
   needed 4 times the samples for the same shortest wave. Where the camera stands along a direction is kept to
   1280 m, a whole number of short profiles, so it serves both.
+- **Swell is a second spectrum, not a stronger wind:** a raised wind only makes steeper chop. A `WaterBody.Swell`
+  (height, period, direction, spread) is sampled at the long profiles' harmonics with a narrow JONSWAP (gamma 7),
+  scaled to its height exactly, and spread as a wrapped normal, nearly all in one or two directions. It gets its
+  own profiles, because its direction shares differ from the wind's: folding it into the wind's profiles would
+  divide by the wind's share, which is zero upwind. Periods are kept to 8 to 20 s, what the long profiles hold.
+- **The wave grid leaves swell alone:** the grid's wind band holds shares of the wind's strongest direction, and
+  swell from another way has no share there. Swell near shores is calmed only by the edge calm, and it doesn't
+  reflect. A body may have swell and no wind.
+- **Swell code is compiled out when no climate has one** (a specialization constant, and the swell profiles' pass
+  is skipped): compiled in but unused, it cost the surface 5% (1.28 to 1.35 ms on the island gate), from the
+  unrolled 16-direction loops growing, not from the work.
 - **Each direction has its own profile.** Sharing one, shifted, made straight crest lines in a lattice and swells
   2.5 times too tall.
 - **Band-limited layers** (all, 0.25, 1 and 4 m): vertices ride the 4 m layer, and normals use the layer a pixel's

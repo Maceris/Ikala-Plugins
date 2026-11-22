@@ -137,11 +137,31 @@ public final class WaveMath {
      */
     public static final int LONG_WAVES = 14;
 
+    /** How many waves a swell sums, at the same harmonics as the long waves. */
+    public static final int SWELL_WAVES = LONG_WAVES;
+
+    /** Where a climate's swell waves start among its {@link #WAVES}: after its wind's. */
+    public static final int SWELL_SLOT = LONG_WAVES + SHORT_WAVES;
+
     /**
-     * How many waves a climate has room for, the long ones first, which also spaces the directions'
-     * phases, see {@link #directionPhase}.
+     * How many waves a climate has room for: the wind's long ones, its short ones, then the
+     * swell's, which also spaces the directions' phases, see {@link #directionPhase}.
      */
-    public static final int WAVES = LONG_WAVES + SHORT_WAVES;
+    public static final int WAVES = SWELL_SLOT + SWELL_WAVES;
+
+    /**
+     * A swell's peak enhancement: a narrow spectrum, as a swell's is once its short waves have died
+     * away on the way (JONSWAP's 3.3 is a sea still growing; swells measure 3 to 10).
+     */
+    public static final double SWELL_GAMMA = 7;
+
+    /**
+     * The shortest and longest peak periods a swell is drawn with, in seconds: the long profiles
+     * hold waves of 85 to 640 m, about 7.4 to 20 s.
+     */
+    public static final double SWELL_MIN_PERIOD = 8;
+
+    public static final double SWELL_MAX_PERIOD = 20;
 
     /** How many samples a short profile holds over its length. */
     public static final int PROFILE_SAMPLES = 4096;
@@ -593,6 +613,77 @@ public final class WaveMath {
             phases[LONG_WAVES + i] = TURN * unitHash(seed, i);
         }
         return new Waves(wavenumbers, amplitudes, phases, LONG_WAVES);
+    }
+
+    /**
+     * Sample a swell into waves for the long profiles: every harmonic the long waves use, with
+     * amplitudes from a JONSWAP spectrum peaked at the swell's period, {@link #SWELL_GAMMA} sharp,
+     * scaled so the waves add up to the swell's significant height.
+     *
+     * @param height The swell's significant height, in meters.
+     * @param period Its peak period, in seconds, kept to {@link #SWELL_MIN_PERIOD} to {@link
+     *     #SWELL_MAX_PERIOD}.
+     * @param seed What picks the phases.
+     * @return The waves, {@link #SWELL_WAVES} of them, all long; none if it has no height.
+     */
+    public static Waves sampleSwell(double height, double period, long seed) {
+        if (height <= 0) {
+            return new Waves(new double[0], new double[0], new double[0], 0);
+        }
+        final double peak = TURN / Math.clamp(period, SWELL_MIN_PERIOD, SWELL_MAX_PERIOD);
+        final double fundamental = TURN / LONG_PROFILE_LENGTH;
+        final double[] wavenumbers = new double[SWELL_WAVES];
+        final double[] amplitudes = new double[SWELL_WAVES];
+        final double[] phases = new double[SWELL_WAVES];
+        double variance = 0;
+        for (int i = 0; i < SWELL_WAVES; ++i) {
+            final double k = (LONGEST_HARMONIC + i) * fundamental;
+            final double w = frequency(k);
+            final double ratio = peak / w;
+            final double sigma = w <= peak ? SIGMA_BELOW : SIGMA_ABOVE;
+            final double offset = (w - peak) / (sigma * peak);
+            final double shape =
+                    Math.pow(w, -5)
+                            * Math.exp(-PEAK_SHAPE * ratio * ratio * ratio * ratio)
+                            * Math.pow(SWELL_GAMMA, Math.exp(-0.5 * offset * offset));
+            // S(w) dw/dk dk, up to a factor the height sets
+            final double energy = shape * GRAVITY / (2 * w) * fundamental;
+            wavenumbers[i] = k;
+            amplitudes[i] = Math.sqrt(2 * energy);
+            variance += energy;
+            phases[i] = TURN * unitHash(seed, WAVES + i);
+        }
+        // 4 sqrt(variance) = height
+        final double scale = height / (4 * Math.sqrt(variance));
+        for (int i = 0; i < SWELL_WAVES; ++i) {
+            amplitudes[i] *= scale;
+        }
+        return new Waves(wavenumbers, amplitudes, phases, SWELL_WAVES);
+    }
+
+    /**
+     * Each of the surface's directions' share of a swell, as amplitudes: a wrapped normal around
+     * its way, so the directions' energies sum to 1. A narrow swell is nearly all in one or two
+     * directions, long-crested, as swells are.
+     *
+     * @param direction The way the swell travels, radians, from +x toward +z.
+     * @param spread The standard deviation of its directions, radians.
+     * @return The amplitudes, direction b at angle 2 pi b / {@link #DIRECTIONS}.
+     */
+    public static double[] swellAmplitudes(double direction, double spread) {
+        final double[] weights = new double[DIRECTIONS];
+        double sum = 0;
+        for (int b = 0; b < DIRECTIONS; ++b) {
+            final double angle = TURN * b / DIRECTIONS - direction;
+            final double apart = angle - TURN * Math.rint(angle / TURN);
+            final double weight = Math.exp(-0.5 * apart * apart / (spread * spread));
+            weights[b] = weight;
+            sum += weight;
+        }
+        for (int b = 0; b < DIRECTIONS; ++b) {
+            weights[b] = Math.sqrt(weights[b] / sum);
+        }
+        return weights;
     }
 
     /**

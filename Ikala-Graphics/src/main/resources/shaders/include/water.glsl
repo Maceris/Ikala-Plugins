@@ -62,13 +62,15 @@ const float WAVE_FLOW_CYCLE = 4.0;
 // amplitude of its strongest direction, in x, which the grid's wind band keeps shares of; the
 // Jacobian its waves break into foam under, in y, see WaveMath.foamJacobian; and the variance of
 // the Jacobian's sum over all its waves, z, and over only the longest layer's, w, for a direction's
-// whole share, see WaveMath.jacobianVariance
+// whole share, see WaveMath.jacobianVariance; then each direction's share of its swell, see
+// WaveMath.swellAmplitudes
 struct WaveClimate {
     float amplitudes[WAVE_DIRECTIONS];
     float offsets[WAVE_DIRECTIONS];
     vec4 missingVariance;
     ivec4 levels;
     vec4 peak;
+    float swell[WAVE_DIRECTIONS];
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer WaveClimateList {
@@ -76,13 +78,13 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Wa
 };
 
 // The most climates drawn at once, the winds' and the ripples', WaterRender.MAX_CLIMATES + 1: the
-// long profiles have room for that many before the short ones start
+// long profiles have room for that many, then the swells' as many, before the short ones start
 const int WAVE_MAX_CLIMATES = 5;
 const int WAVE_LONG_REGION = WAVE_MAX_CLIMATES * WAVE_DEPTHS * WAVE_DIRECTIONS * WAVE_LONG_SAMPLES;
 
 // The long profiles first, each climate's depth after depth, in each direction after direction,
-// WAVE_LONG_SAMPLES each; then the short ones, the same and in each layer after layer,
-// WAVE_PROFILE_SAMPLES each. A sample is four half floats: height, slope, how far the choppy waves
+// WAVE_LONG_SAMPLES each; the swells' the same; then the short ones, the same and in each layer
+// after layer, WAVE_PROFILE_SAMPLES each. A sample is four half floats: height, slope, how far the choppy waves
 // move the surface along the profile, and the sum the Jacobian is made of, see water_waves.comp
 layout(buffer_reference, std430, buffer_reference_align = 8) readonly buffer WaveProfileList {
     uvec2 profiles[];
@@ -95,13 +97,18 @@ vec4 waveProfileSample(uvec2 packed) {
 
 // Where a climate's short profile starts in the list
 int waveShortBase(int climate, int level, int direction, int layer) {
-    return WAVE_LONG_REGION + (((climate * WAVE_DEPTHS + level) * WAVE_DIRECTIONS + direction)
+    return 2 * WAVE_LONG_REGION + (((climate * WAVE_DEPTHS + level) * WAVE_DIRECTIONS + direction)
         * WAVE_LAYERS + layer) * WAVE_PROFILE_SAMPLES;
 }
 
 // Where a climate's long profile starts in the list
 int waveLongBase(int climate, int level, int direction) {
     return ((climate * WAVE_DEPTHS + level) * WAVE_DIRECTIONS + direction) * WAVE_LONG_SAMPLES;
+}
+
+// Where a climate's swell profile starts in the list
+int waveSwellBase(int climate, int level, int direction) {
+    return WAVE_LONG_REGION + waveLongBase(climate, level, direction);
 }
 
 // One profile's sums at a distance along it, between its two nearest samples, wrapping; its
@@ -305,6 +312,28 @@ int waveClimateLevel(WaveField field, int climate) {
     return climate >= 0 ? field.climates.climates[climate].levels[field.level] : 0;
 }
 
+// Whether any climate drawn has a swell, WaterRender's specialization constant: compiled in but
+// unused, the swell's code cost the surface about 5%
+layout(constant_id = 0) const bool WAVE_SWELL = false;
+
+// Whether the field's climate has a swell, in its levels' last
+bool waveHasSwell(WaveField field) {
+    return WAVE_SWELL && field.climate >= 0
+        && field.climates.climates[field.climate].levels.w != 0;
+}
+
+// A direction's swell's sums at a distance along it, at the field's climate's depth level: the
+// swell's own waves, its share in that direction. The wave grid leaves swell alone. Only for a
+// climate with a swell, see waveHasSwell.
+vec4 waveSwell(WaveField field, int level, int b, float distance) {
+    float amplitude = field.climates.climates[field.climate].swell[b];
+    if (amplitude <= WAVE_FAINTEST) {
+        return vec4(0.0);
+    }
+    return amplitude * waveProfileAt(field.profiles, waveSwellBase(field.climate, level, b),
+        WAVE_LONG_SAMPLES, WAVE_LONG_LENGTH, distance);
+}
+
 // How the waves move the surface at a point relative to the camera, from one layer and the
 // directions' amplitudes there: x and z by the choppy waves, as much as WAVE_CHOP, and y, its height
 // above its rest
@@ -312,15 +341,21 @@ vec3 waveDisplacement(WaveField field, vec2 all[WAVE_DIRECTIONS], int layer, vec
     vec3 moved = vec3(0.0);
     int windLevel = waveClimateLevel(field, field.climate);
     int rippleLevel = waveClimateLevel(field, field.ripples);
+    bool swell = waveHasSwell(field);
     for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
         vec2 amplitudes = all[b];
         vec2 direction = waveDirection(b);
         float along = dot(renderXZ - field.shift, direction);
         vec2 sums = vec2(0.0);
-        if (amplitudes.x > WAVE_FAINTEST) {
+        if (amplitudes.x > WAVE_FAINTEST || swell) {
             float distance = along + field.climates.climates[field.climate].offsets[b];
-            sums += amplitudes.x
-                * waveProfile(field.profiles, field.climate, windLevel, b, layer, distance).xz;
+            if (amplitudes.x > WAVE_FAINTEST) {
+                sums += amplitudes.x
+                    * waveProfile(field.profiles, field.climate, windLevel, b, layer, distance).xz;
+            }
+            if (swell) {
+                sums += waveSwell(field, windLevel, b, distance).xz;
+            }
         }
         if (amplitudes.y > WAVE_FAINTEST) {
             float distance = along + field.climates.climates[field.ripples].offsets[b];
@@ -354,6 +389,7 @@ vec3 waveSlope(WaveField field, vec2 all[WAVE_DIRECTIONS], int layer, vec2 rende
     float rippleEnergy = 0.0;
     int windLevel = waveClimateLevel(field, field.climate);
     int rippleLevel = waveClimateLevel(field, field.ripples);
+    bool swell = waveHasSwell(field);
     for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
         vec2 amplitudes = all[b];
         vec2 direction = waveDirection(b);
@@ -377,6 +413,14 @@ vec3 waveSlope(WaveField field, vec2 all[WAVE_DIRECTIONS], int layer, vec2 rende
             jacobian += sums.w * vec3(direction.x * direction.x, direction.y * direction.y,
                 direction.x * direction.y);
             windEnergy += fine * fine;
+        }
+        if (swell) {
+            // The swell's own waves, long, so every layer keeps them
+            vec4 sums = waveSwell(field, windLevel, b,
+                along + field.climates.climates[field.climate].offsets[b]);
+            slope += direction * sums.y;
+            jacobian += sums.w * vec3(direction.x * direction.x, direction.y * direction.y,
+                direction.x * direction.y);
         }
         if (amplitudes.y > WAVE_FAINTEST) {
             float distance = along + field.climates.climates[field.ripples].offsets[b];

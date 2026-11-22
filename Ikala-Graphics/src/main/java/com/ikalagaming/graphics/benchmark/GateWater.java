@@ -260,6 +260,10 @@ public final class GateWater {
                     parts.length > 2 ? Float.parseFloat(parts[2].trim()) : Float.POSITIVE_INFINITY;
             body = body.withWind(speed, direction, fetch);
         }
+        final String swell = options.get("swell");
+        if (swell != null) {
+            body = body.withSwell(parseSwell(swell));
+        }
         waterBody = body;
         waterBodyName =
                 WATER_BODY_NAMES.containsKey(name.trim().toLowerCase(Locale.ROOT))
@@ -462,6 +466,26 @@ public final class GateWater {
     }
 
     /**
+     * The {@code .swell} option: height in meters, period in seconds, the way it travels in degrees
+     * and, optionally, its spread in degrees.
+     *
+     * @param value The option.
+     * @return The swell.
+     */
+    private static WaterBody.Swell parseSwell(@NonNull String value) {
+        final String[] parts = value.split(",");
+        final float height = Float.parseFloat(parts[0].trim());
+        final float period = parts.length > 1 ? Float.parseFloat(parts[1].trim()) : 12;
+        final float direction =
+                parts.length > 2 ? (float) Math.toRadians(Double.parseDouble(parts[2].trim())) : 0;
+        final float spread =
+                parts.length > 3
+                        ? (float) Math.toRadians(Double.parseDouble(parts[3].trim()))
+                        : WaterBody.Swell.NONE.spread();
+        return new WaterBody.Swell(height, period, direction, spread);
+    }
+
+    /**
      * What a placed tile's water holds, under the run's wind.
      *
      * @param own What the tile was placed holding.
@@ -562,7 +586,8 @@ public final class GateWater {
         }
         waterBodyName = name;
         waterBody =
-                base.withWind(waterBody.windSpeed(), waterBody.windDirection(), waterBody.fetch());
+                base.withWind(waterBody.windSpeed(), waterBody.windDirection(), waterBody.fetch())
+                        .withSwell(waterBody.swell());
         for (int i = 0; i < placedWater.size(); ++i) {
             final PlacedWater placed = placedWater.get(i);
             if (!placed.followsBody()) {

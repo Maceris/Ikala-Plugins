@@ -295,7 +295,9 @@ class ShaderBindingsTest {
         assertEquals(160, ShaderBindings.Water.CLIMATE_PEAK);
         assertEquals(164, ShaderBindings.Water.CLIMATE_FOAM_JACOBIAN);
         assertEquals(168, ShaderBindings.Water.CLIMATE_JACOBIAN_VARIANCE);
-        assertEquals(176, ShaderBindings.Water.CLIMATE_SIZE);
+        assertEquals(156, ShaderBindings.Water.CLIMATE_HAS_SWELL);
+        assertEquals(176, ShaderBindings.Water.CLIMATE_SWELL);
+        assertEquals(240, ShaderBindings.Water.CLIMATE_SIZE);
         // The waves pass: three addresses; uint waveCount; uint longPass;
         assertEquals(16, ShaderBindings.Water.WAVES_CLIMATES_OFFSET);
         assertEquals(24, ShaderBindings.Water.WAVES_COUNT_OFFSET);

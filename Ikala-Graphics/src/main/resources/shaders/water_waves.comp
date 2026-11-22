@@ -5,9 +5,9 @@
 // Fills each wave climate's profiles for this frame, see WaterRender and WaveMath.profile: one
 // thread per sample of a profile, x along it and y the climate's depth and direction, summing the
 // climate's waves at that depth, each turned by the direction's own phase, each layer leaving out
-// the waves shorter than its cutoff. Run twice: once for the long profiles, which sum the first
-// WAVE_LONG_WAVES waves into one layer that serves every layer, and once for the short ones, which
-// sum the rest. Each sample holds four sums, as half floats: the height,
+// the waves shorter than its cutoff. Run three times: for the long profiles, which sum the first
+// WAVE_LONG_WAVES waves into one layer that serves every layer; for the swells' profiles, the same
+// from the last WAVE_LONG_WAVES; and for the short ones, which sum the waves between. Each sample holds four sums, as half floats: the height,
 // a cos (k p + phase); the slope along the profile, its derivative, -a k sin (k p + phase); how far
 // the choppy waves move the surface along the profile, -a sin (k p + phase), as Gerstner and
 // Tessendorf's choppy waves do; and how fast that changes, which the Jacobian is made of,
@@ -18,8 +18,10 @@
 
 layout(local_size_x = 64) in;
 
-// The waves a climate's samples hold, WaveMath.WAVES, which spaces the directions' phases
-const int WAVE_SAMPLES = 142;
+// The waves a climate's samples hold, WaveMath.WAVES, which spaces the directions' phases, and where
+// its swell's start, WaveMath.SWELL_SLOT
+const int WAVE_SAMPLES = 156;
+const int WAVE_SWELL_SLOT = 142;
 
 // One wave of a climate: its wavenumber, amplitude, phase now and wavelength
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer WaveSampleList {
@@ -36,7 +38,7 @@ layout(push_constant) uniform Constants {
     WaveClimateList climates;
     // How many waves each climate has, padded with zeros
     uint waveCount;
-    // Nonzero to fill the long profiles rather than the short ones
+    // Which profiles to fill: 0 the short ones, 1 the long ones, 2 the swells'
     uint longPass;
 };
 
@@ -66,8 +68,10 @@ void main() {
     for (int layer = 0; layer < WAVE_LAYERS; ++layer) {
         sums[layer] = vec4(0.0);
     }
-    uint first = longWaves ? 0u : uint(WAVE_LONG_WAVES);
-    uint end = longWaves ? uint(WAVE_LONG_WAVES) : waveCount;
+    bool swellWaves = longPass == 2u;
+    uint first = swellWaves ? uint(WAVE_SWELL_SLOT) : longWaves ? 0u : uint(WAVE_LONG_WAVES);
+    uint end = swellWaves ? uint(WAVE_SWELL_SLOT + WAVE_LONG_WAVES)
+        : longWaves ? uint(WAVE_LONG_WAVES) : uint(WAVE_SWELL_SLOT);
     for (uint i = first; i < end; ++i) {
         vec4 wave = samples.waves[depthClimate * waveCount + i];
         if (wave.y <= 0.0) {
@@ -85,7 +89,9 @@ void main() {
     }
     if (longWaves) {
         // Every long wave is longer than every layer's cutoff
-        profiles.values[waveLongBase(int(climate), int(level), int(direction)) + sampleIndex] =
+        int base = swellWaves ? waveSwellBase(int(climate), int(level), int(direction))
+            : waveLongBase(int(climate), int(level), int(direction));
+        profiles.values[base + sampleIndex] =
             uvec2(packHalf2x16(sums[0].xy), packHalf2x16(sums[0].zw));
         return;
     }

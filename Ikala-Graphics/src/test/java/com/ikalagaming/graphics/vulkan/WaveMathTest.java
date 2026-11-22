@@ -140,6 +140,42 @@ class WaveMathTest {
         assertTrue(WaveMath.foamJacobian(waves, 20) > threshold, "more foam in more wind");
     }
 
+    /**
+     * A swell adds up to its height, peaks at its period, and keeps to the long profiles; its
+     * directions' energies sum to the whole, nearly all close to its way.
+     */
+    @Test
+    void testSwell() {
+        final WaveMath.Waves swell = WaveMath.sampleSwell(2, 12, 5);
+        assertEquals(WaveMath.SWELL_WAVES, swell.wavenumbers().length);
+        assertEquals(WaveMath.SWELL_WAVES, swell.longWaves());
+        assertEquals(2, WaveMath.significantHeight(swell), 1e-9);
+        int biggest = 0;
+        for (int i = 0; i < WaveMath.SWELL_WAVES; ++i) {
+            if (swell.amplitudes()[i] > swell.amplitudes()[biggest]) {
+                biggest = i;
+            }
+        }
+        // 12 s is 225 m in deep water, between the 256 m and 213 m harmonics
+        final double wavelength = 2 * Math.PI / swell.wavenumbers()[biggest];
+        assertTrue(wavelength > 200 && wavelength < 260, "peak at " + wavelength);
+        assertEquals(0, WaveMath.sampleSwell(0, 12, 5).wavenumbers().length);
+
+        final double[] amplitudes = WaveMath.swellAmplitudes(Math.PI / 2, 0.2);
+        double sum = 0;
+        for (double amplitude : amplitudes) {
+            sum += amplitude * amplitude;
+        }
+        assertEquals(1, sum, 1e-9);
+        final int way = WaveMath.DIRECTIONS / 4;
+        assertTrue(amplitudes[way] * amplitudes[way] > 0.6, "mostly along its way");
+        assertEquals(amplitudes[way - 1], amplitudes[way + 1], 1e-12);
+        assertTrue(amplitudes[0] < 1e-3, "nothing across it");
+        // Wraps around: a swell just short of +x reaches the last direction, not the third
+        final double[] back = WaveMath.swellAmplitudes(-0.1, 0.2);
+        assertTrue(back[WaveMath.DIRECTIONS - 1] > back[2]);
+    }
+
     /** The directions' energies sum to the whole, and none go against the wind. */
     @Test
     void testSpreading() {
