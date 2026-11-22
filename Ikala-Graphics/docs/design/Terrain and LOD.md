@@ -75,6 +75,17 @@ undisturbed height without anything new. Pressed prints are only drawn near the 
 - Thin surfaces on leaves erode in far levels of detail (the forest's snow thins with distance); on open ground it
   holds to the horizon.
 
+### Prints live in a scrolling field, not in the sections
+
+Stamps press a deformation field of 2048 x 2048 texels (3.125 cm, 64 m around the camera), addressed by world texel
+modulo its size, so as the camera moves only the newly covered texels are cleared and nothing is copied. It is a
+storage buffer with device addresses rather than a storage image: `atomicMax` works the same, no descriptor sets,
+and the drawing reads it with its own bilinear taps. A texel packs a biased press depth over the pressed surface's
+top in 1/16 m, so a refill pass finds that surface's rate in the column table (128 x 128 toroidal columns, up to 4
+surfaces each, tagged with their column, written on the CPU only for newly covered columns or when the layers
+change). Clearing and refilling are skipped until anything is pressed, so a world without prints pays nothing;
+with prints the passes cost about 0.07 ms.
+
 ### Edits are drawn in the frame they're made
 
 An edit rebakes its section (and a neighbor if on a boundary). A section bakes in about 0.4 ms, so a rebake near the

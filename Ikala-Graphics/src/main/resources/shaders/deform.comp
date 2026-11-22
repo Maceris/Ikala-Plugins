@@ -1,0 +1,215 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_buffer_reference : require
+
+// Keeps the deformation field, see DeformationField and DeformUpdate, in three modes: clearing the
+// texels newly in the window, a thread a texel of a rectangle; filling prints back in, a thread a
+// texel of the window, each at the rate of the surface it was pressed into, cleared at once where
+// that surface is gone; and pressing the stamps, a workgroup of 8 by 8 texels of a stamp's box,
+// each texel taking the deepest press with atomicMax.
+
+#include "deform.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+// One stamp, DeformationField.writeStamp: where it starts relative to the window's first texel, in
+// meters, its height and its rim's height; where it ends and its two sizes; its angle's cosine and
+// sine, how deep it presses and how wide its rim is; its box's first texel in the window, its width
+// with its shape above 16 bits, and its first workgroup
+struct Stamp {
+    vec4 start;
+    vec4 end;
+    vec4 shape;
+    uvec4 box;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer StampList {
+    Stamp stamps[];
+};
+
+layout(push_constant) uniform Constants {
+    DeformField field;
+    DeformTable table;
+    StampList stampList;
+    // The window's first world texel
+    ivec2 origin;
+    // 0 clear, 1 refill, 2 stamp
+    uint mode;
+    // How many stamps
+    uint stampCount;
+    // How long to fill back in over, in seconds
+    float seconds;
+    float pad;
+    // The rectangle to clear: its first world texel and size
+    ivec4 rect;
+};
+
+const uint MODE_CLEAR = 0u;
+const uint MODE_REFILL = 1u;
+const uint MODE_STAMP = 2u;
+
+const uint SHAPE_ELLIPSE = 0u;
+const uint SHAPE_CAPSULE = 1u;
+const uint SHAPE_BOX = 2u;
+
+// How far out a footprint's full depth holds before easing to its edge, by shape
+const float ROUND_EDGE = 0.6;
+const float BOX_EDGE = 0.85;
+
+// The surface a texel was pressed into, by its key, or -1
+int keyedSurface(ivec2 column, uint key) {
+    for (int slot = 0; slot < DEFORM_SLOTS; ++slot) {
+        DeformSurface surface = table.surfaces[deformSlot(column, slot)];
+        if (surface.column != column || (surface.flags & DEFORM_PRESENT) == 0u) {
+            return -1;
+        }
+        if (deformHeightKey(surface.top) == key) {
+            return slot;
+        }
+    }
+    return -1;
+}
+
+void clearTexel() {
+    ivec2 local = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(local, rect.zw))) {
+        return;
+    }
+    field.texels[deformIndex(rect.xy + local)] = 0u;
+}
+
+void refillTexel() {
+    ivec2 local = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(local, ivec2(DEFORM_SIZE)))) {
+        return;
+    }
+    ivec2 texel = origin + local;
+    int index = deformIndex(texel);
+    uint value = field.texels[index];
+    if (value == 0u) {
+        return;
+    }
+    ivec2 column = ivec2(floor(vec2(texel) / DEFORM_TEXELS_PER_METER));
+    int slot = keyedSurface(column, value & 0xFFFFu);
+    if (slot < 0) {
+        field.texels[index] = 0u;
+        return;
+    }
+    float rate = table.surfaces[deformSlot(column, slot)].refill;
+    int units = int(value >> 16) - DEFORM_DEPTH_BIAS;
+    int step = int(ceil(rate * seconds / DEFORM_DEPTH_UNIT));
+    if (step <= 0) {
+        return;
+    }
+    int after = units > 0 ? max(0, units - step) : min(0, units + step);
+    field.texels[index] = after == 0 ? 0u : (uint(after + DEFORM_DEPTH_BIAS) << 16) | (value & 0xFFFFu);
+}
+
+// How deep a footprint presses, by how far out a point is, 1 at its edge: see DeformMath.profile
+float profile(float s, float edge, float depth, float rim, float rimHeight) {
+    if (s <= edge) {
+        return depth;
+    }
+    if (s < 1.0) {
+        float t = (s - edge) / (1.0 - edge);
+        return depth * (1.0 - t * t * (3.0 - 2.0 * t));
+    }
+    if (rim > 0.0 && s < 1.0 + rim) {
+        return -rimHeight * sin(3.14159265 * (s - 1.0) / rim);
+    }
+    return 0.0;
+}
+
+// The stamp a workgroup presses: the last whose first workgroup is at or before it
+uint stampOf(uint group) {
+    uint low = 0u;
+    uint high = stampCount - 1u;
+    while (low < high) {
+        uint middle = (low + high + 1u) / 2u;
+        if (stampList.stamps[middle].box.w <= group) {
+            low = middle;
+        } else {
+            high = middle - 1u;
+        }
+    }
+    return low;
+}
+
+void stampTexel() {
+    uint group = gl_WorkGroupID.x;
+    Stamp stamp = stampList.stamps[stampOf(group)];
+    uint width = stamp.box.z & 0xFFFFu;
+    uint shape = stamp.box.z >> 16;
+    uint across = (width + 7u) / 8u;
+    uint inStamp = group - stamp.box.w;
+    uvec2 local = uvec2((inStamp % across) * 8u, (inStamp / across) * 8u) + gl_LocalInvocationID.xy;
+    if (local.x >= width) {
+        return;
+    }
+    ivec2 windowTexel = ivec2(stamp.box.xy + local);
+    if (any(greaterThanEqual(windowTexel, ivec2(DEFORM_SIZE)))) {
+        return;
+    }
+    // The texel's middle, in meters from the window's first texel
+    vec2 p = (vec2(windowTexel) + 0.5) / DEFORM_TEXELS_PER_METER;
+    float depth = stamp.shape.z;
+    float rimWidth = stamp.shape.w;
+    float s;
+    float rim;
+    float edge;
+    if (shape == SHAPE_CAPSULE) {
+        vec2 a = stamp.start.xy;
+        vec2 ab = stamp.end.xy - a;
+        float t = clamp(dot(p - a, ab) / max(dot(ab, ab), 1e-8), 0.0, 1.0);
+        float radius = stamp.end.z;
+        s = length(p - (a + t * ab)) / radius;
+        rim = rimWidth / radius;
+        edge = ROUND_EDGE;
+    } else {
+        vec2 d = p - stamp.start.xy;
+        vec2 along = vec2(stamp.shape.x, stamp.shape.y);
+        vec2 local2 = vec2(dot(d, along), dot(d, vec2(-along.y, along.x)));
+        vec2 size = stamp.end.zw;
+        if (shape == SHAPE_BOX) {
+            s = max(abs(local2.x) / size.x, abs(local2.y) / size.y);
+            rim = rimWidth / min(size.x, size.y);
+            edge = BOX_EDGE;
+        } else {
+            s = length(local2 / size);
+            rim = rimWidth / (0.5 * (size.x + size.y));
+            edge = ROUND_EDGE;
+        }
+    }
+    float press = profile(s, edge, depth, rim, stamp.start.w);
+    if (press == 0.0) {
+        return;
+    }
+    ivec2 texel = origin + windowTexel;
+    ivec2 column = ivec2(floor(vec2(texel) / DEFORM_TEXELS_PER_METER));
+    float height = stamp.start.z;
+    for (int slot = 0; slot < DEFORM_SLOTS; ++slot) {
+        DeformSurface surface = table.surfaces[deformSlot(column, slot)];
+        if (surface.column != column || (surface.flags & DEFORM_PRESENT) == 0u) {
+            return;
+        }
+        if ((surface.flags & DEFORM_PRESSABLE) == 0u
+                || height > surface.top + DEFORM_STAMP_REACH
+                || height < surface.bottom - DEFORM_STAMP_REACH) {
+            continue;
+        }
+        // No deeper than the surface: at its full depth the ground under it shows
+        float pressed = min(press, surface.top - surface.bottom);
+        atomicMax(field.texels[deformIndex(texel)], deformPack(pressed, surface.top));
+        return;
+    }
+}
+
+void main() {
+    if (mode == MODE_CLEAR) {
+        clearTexel();
+    } else if (mode == MODE_REFILL) {
+        refillTexel();
+    } else {
+        stampTexel();
+    }
+}

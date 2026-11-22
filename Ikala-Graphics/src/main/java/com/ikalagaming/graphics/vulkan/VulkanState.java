@@ -70,6 +70,9 @@ public class VulkanState {
     /** Which voxels around the camera hold something that doesn't move. */
     public OccupancyVolume occupancy = null;
 
+    /** The prints pressed into soft surfaces around the camera. */
+    public DeformationField deformation = null;
+
     /** The light the sky gives, for image-based lighting, see {@link Environment}. */
     public Environment environment = null;
 

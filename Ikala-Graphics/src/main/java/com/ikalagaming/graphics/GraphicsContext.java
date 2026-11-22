@@ -76,6 +76,9 @@ public final class GraphicsContext {
     /** The sections API for this plugin. */
     private final Sections sections;
 
+    /** The soft surfaces API for this plugin. */
+    private final Surfaces surfaces;
+
     /** The level of detail API. */
     private final Lods lods;
 
@@ -112,6 +115,7 @@ public final class GraphicsContext {
         particles = new Particles(this);
         water = new Water(this);
         sections = new Sections(this);
+        surfaces = new Surfaces(this);
         lods = new Lods(this);
         skins = new Skins(this);
         debug = new DebugDraw(this);
@@ -206,6 +210,17 @@ public final class GraphicsContext {
     public Sections sections() {
         checkOpen();
         return sections;
+    }
+
+    /**
+     * Press prints into soft surfaces near the camera, and set how fast they fill back in.
+     *
+     * @return The surfaces API for this plugin.
+     * @throws IllegalStateException If the plugin was unloaded.
+     */
+    public Surfaces surfaces() {
+        checkOpen();
+        return surfaces;
     }
 
     /**

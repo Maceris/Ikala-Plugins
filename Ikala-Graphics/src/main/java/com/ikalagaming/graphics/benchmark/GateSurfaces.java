@@ -45,6 +45,15 @@ final class GateSurfaces {
     }
 
     /**
+     * The snow's material.
+     *
+     * @return The material.
+     */
+    Material material() {
+        return snow;
+    }
+
+    /**
      * The option's surfaces, if it is set.
      *
      * @param options The run's options.

@@ -93,7 +93,9 @@ public final class Sections {
                             layer.stepsPerMeter(),
                             layer.tops().clone(),
                             layer.depths().clone(),
-                            indices);
+                            indices,
+                            layer.refillRates() == null ? null : layer.refillRates().clone(),
+                            layer.flags() == null ? null : layer.flags().clone());
             return this;
         }
 

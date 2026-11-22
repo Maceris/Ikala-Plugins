@@ -93,6 +93,13 @@ already run this way.
   ring of the neighbors' tops. It bakes into the section as flat tops with short side faces where
   a surface stands above its neighbor, so far levels of detail show it too. A surface belongs to
   the section of the block under it, so its top may stand past the section's top.
+- **Prints:** `surfaces().stamp(SurfaceStamp.ellipse(...))` (or `capsule`, `box`, with an optional
+  rim) presses a shape into the surfaces under it for a frame, into a deformation field of 3 cm
+  texels over 64 m around the camera that scrolls with it. A stamp presses only a surface whose
+  span its height is within a quarter meter of, so a roof and the ground under it keep their own
+  prints, never deeper than the surface; the deepest press stays. Prints fill back in at
+  `setRefillRate(material, metersPerSecond)` or a column's own rate. Nothing reads the field yet
+  (drawing prints comes next); `.deformShot` saves it as a picture.
 - **Level of detail:** `lods().fromSections()` makes a live LOD world that the plugin's sections
   feed as they bake. Far away, a section's opaque regions are drawn from simplified clusters instead
   of its own meshes. Built cells are cached on disk in the application's cache folder (see
@@ -471,6 +478,8 @@ These are Java system properties, given before `-jar`:
 | `-Dikala.benchmark.mixedWater=ocean\|green\|muddy` | none | Every other tile of the `ISLAND` sea holds this water instead, a checkerboard, to see waters blend where they meet. |
 | `-Dikala.benchmark.mixedWind=<m/s>[,<degrees>[,<fetch>]]` | none | Every other tile of the `ISLAND` sea in this wind instead, a checkerboard, to see winds meet. |
 | `-Dikala.benchmark.surface=<meters>` | none | Snow that deep on every full block with an empty cell above, the highest in each section's columns, as a soft surface layer. |
+| `-Dikala.benchmark.stampTest=<x>,<y>,<z>` | none | Presses prints into the surfaces around a point at the height they meet it: a walker's feet on a 4 m circle, a sled's track on a 7 m one, and a crate in the middle. `.refill=<m/s>` (0.002) sets how fast they fill back in. |
+| `-Dikala.benchmark.deformShot=<file.png>` | none | Saves the deformation field when the run finishes: red for press depth, green for rims, blue for which surface was pressed. |
 | `-Dikala.benchmark.seaReach=<meters>` | the view distance | How far the `ISLAND` sea reaches from the middle, past the land's view distance. |
 | `-Dikala.benchmark.coastWater=ocean\|green\|muddy` | none | The `ISLAND` sea's tiles touching the island, and those around them, hold this water. |
 | `-Dikala.benchmark.shot=<file.png>` | none | Saves the frame measuring starts on, without the window in front. |

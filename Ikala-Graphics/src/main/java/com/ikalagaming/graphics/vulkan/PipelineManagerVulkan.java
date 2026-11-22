@@ -181,6 +181,9 @@ public class PipelineManagerVulkan {
     /** Keeps the occupancy volume up to date. */
     private final OccupancyVoxelize stageOccupancyVoxelize;
 
+    /** Keeps the prints pressed into soft surfaces. */
+    private final DeformUpdate stageDeformUpdate;
+
     private final InstanceCull stageInstanceCull;
     private final InstanceCull stageInstanceCullLate;
 
@@ -231,6 +234,8 @@ public class PipelineManagerVulkan {
                         shaders.getShader(RenderStage.Type.OCCUPANCY_VOXELIZE),
                         shaders.getShader(RenderStage.Type.OCCUPANCY_BRICKS));
         stageOccupancyVoxelize.initialize(state);
+        stageDeformUpdate = new DeformUpdate(shaders.getShader(RenderStage.Type.DEFORM));
+        stageDeformUpdate.initialize(state);
         stageInstanceTransform =
                 new InstanceTransform(shaders.getShader(RenderStage.Type.INSTANCES));
         stageInstanceTransform.initialize(state);
@@ -438,6 +443,7 @@ public class PipelineManagerVulkan {
             stages.add(stageLodBake);
             stages.add(stageInstanceDrawUpdate);
             stages.add(stageOccupancyVoxelize);
+            stages.add(stageDeformUpdate);
             stages.add(stageInstanceTransform);
             stages.add(stageInstanceCull);
             stages.add(stageLodCull);
@@ -837,6 +843,7 @@ public class PipelineManagerVulkan {
                             state, Math.max(1, GraphicsManager.getSettings().maxParticles));
             state.waterVolume = new WaterVolume();
             state.occupancy = new OccupancyVolume(state);
+            state.deformation = new DeformationField(state);
             state.environment = new Environment(state);
             state.volumeBricks = new VolumeBricks(state);
 
@@ -1134,6 +1141,7 @@ public class PipelineManagerVulkan {
         state.tableScatter = null;
         stageInstanceDrawUpdate.cleanup(state);
         stageOccupancyVoxelize.cleanup(state);
+        stageDeformUpdate.cleanup(state);
         stageInstanceTransform.cleanup(state);
         stageInstanceCull.cleanup(state);
         stageInstanceCullLate.cleanup(state);
@@ -1158,6 +1166,8 @@ public class PipelineManagerVulkan {
         state.waterVolume = null;
         state.occupancy.cleanup(state);
         state.occupancy = null;
+        state.deformation.cleanup(state);
+        state.deformation = null;
         state.environment.cleanup(state);
         state.environment = null;
         state.volumeBricks.cleanup(state);

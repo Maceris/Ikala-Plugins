@@ -147,6 +147,9 @@ public final class GateBenchmark {
     /** The run's sea, fountain, lakes and test water. */
     private final GateWater water;
 
+    /** The prints the stampTest option presses into the world's surfaces. */
+    private final GateStamps stamps;
+
     /** The run's sections, torches and meshes, and its live level of detail world. */
     private final GateWorld gateWorld;
 
@@ -289,6 +292,7 @@ public final class GateBenchmark {
         this.effects = new GateEffects(graphics, options, () -> terrain);
         this.water = new GateWater(graphics, options, radius);
         this.gateWorld = new GateWorld(graphics, options, radius, lightCount);
+        this.stamps = new GateStamps(graphics, options, gateWorld::getSurfaces);
         this.digs = new GateDigs(gateWorld, () -> terrain);
         this.stream = new GateStream(graphics, gateWorld, water, radius);
         this.lodGate = new LodGate(graphics, gateWorld, digs, () -> terrain, radius);
@@ -674,6 +678,7 @@ public final class GateBenchmark {
         if (!gateWorld.isReleased()) {
             water.step();
             effects.step();
+            stamps.step();
             stream.step(scene, phase == Phase.MEASURING);
         }
         switch (phase) {
@@ -1018,6 +1023,13 @@ public final class GateBenchmark {
 
     /** Work out the results, report them, and release everything. */
     private void finish() {
+        final String deformShot = options.get("deformShot");
+        if (deformShot != null && renderer().getState().deformation != null) {
+            renderer()
+                    .getState()
+                    .deformation
+                    .dump(renderer().getState(), Path.of(deformShot.trim()));
+        }
         final var bricks = renderer().getState().volumeBricks;
         if (bricks != null) {
             log.info(

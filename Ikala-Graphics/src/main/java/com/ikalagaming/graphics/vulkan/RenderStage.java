@@ -61,6 +61,7 @@ public interface RenderStage {
         POINT_SHADOW,
         POINT_SHADOW_BAKED,
         OCCUPANCY_CLEAR,
+        DEFORM,
         OCCUPANCY_VOXELIZE,
         OCCUPANCY_BRICKS,
         SKYBOX,

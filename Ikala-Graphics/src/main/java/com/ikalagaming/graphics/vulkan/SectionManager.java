@@ -340,6 +340,9 @@ public class SectionManager {
     /** Guards the sections. */
     private final ReentrantLock lock = new ReentrantLock();
 
+    /** The sections' soft surface layers, by world column, for the deformation field. */
+    public final SurfaceRegistry surfaces = new SurfaceRegistry();
+
     /** Every live section, by id. */
     private final Map<Long, Section> sections = new HashMap<>();
 
@@ -725,6 +728,7 @@ public class SectionManager {
         } finally {
             lock.unlock();
         }
+        surfaces.put(id, owner, request.origin(), request.surfaces());
         schedule(id, owner, request);
         return id;
     }
@@ -747,6 +751,7 @@ public class SectionManager {
         } finally {
             lock.unlock();
         }
+        surfaces.put(id, owner, request.origin(), request.surfaces());
         schedule(id, owner, request);
         return true;
     }
@@ -963,6 +968,7 @@ public class SectionManager {
                 return false;
             }
             sections.remove(id);
+            surfaces.remove(id);
             if (section.position != null) {
                 byPosition.remove(section.position, section);
             }
@@ -994,6 +1000,7 @@ public class SectionManager {
      * @return How many sections were forgotten.
      */
     public int removeAllOwnedBy(@NonNull String owner) {
+        surfaces.removeOwner(owner);
         final Live world;
         final int removed;
         lock.lock();

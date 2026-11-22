@@ -17,6 +17,7 @@ import com.ikalagaming.graphics.lod.LodStore;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.util.IntArrayList;
 
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector3d;
@@ -107,8 +108,12 @@ final class GateWorld {
     /** The run's options. */
     private final GateOptions options;
 
-    /** The snow the {@code .surface} option lays on the world, or null for none. */
-    private final @Nullable GateSurfaces surfaces;
+    /**
+     * The snow the {@code .surface} option lays on the world, or null for none.
+     *
+     * @return The surfaces.
+     */
+    @Getter private final @Nullable GateSurfaces surfaces;
 
     /** The world sections are composed from, for their surfaces, once composing starts. */
     private volatile SyntheticTerrain surfaceWorld;
