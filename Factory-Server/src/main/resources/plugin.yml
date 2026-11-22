@@ -6,3 +6,4 @@ authors: [maceris]
 main-class: com.ikalagaming.factory.FactoryServerPlugin
 dependencies:
   - Factory-Core
+  - EntityComponentSystem

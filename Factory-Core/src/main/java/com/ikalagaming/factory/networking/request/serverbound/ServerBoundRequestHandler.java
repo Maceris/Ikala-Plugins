@@ -17,9 +17,9 @@ public interface ServerBoundRequestHandler extends RequestHandler {
     void handle(@NonNull Join request);
 
     /**
-     * A joined player moved.
+     * A joined player's inputs for some command frames.
      *
      * @param request The request.
      */
-    void handle(@NonNull PlayerMove request);
+    void handle(@NonNull PlayerInputs request);
 }

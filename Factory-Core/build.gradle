@@ -60,6 +60,7 @@ configurations {
 dependencies {
 	compileOnly project(':Ikala-Core')
 	compileOnly project(':Random')
+	compileOnly project(':EntityComponentSystem')
 	implementation "com.opencsv:opencsv:${openCSVVersion}"
 	// The definition loader reads CSV at runtime, from the shared libraries, see collectLibraries
 	library "com.opencsv:opencsv:${openCSVVersion}"
@@ -69,6 +70,7 @@ dependencies {
 	// Testing
 	testImplementation project(':Ikala-Core')
 	testImplementation project(':Random')
+	testImplementation project(':EntityComponentSystem')
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
 	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 	testImplementation "org.mockito:mockito-core:${mockitoVersion}"

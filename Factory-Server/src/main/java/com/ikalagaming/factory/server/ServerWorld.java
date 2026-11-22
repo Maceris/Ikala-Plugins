@@ -1,12 +1,20 @@
 package com.ikalagaming.factory.server;
 
+import com.ikalagaming.ecs.Schedule;
+import com.ikalagaming.ecs.World;
 import com.ikalagaming.factory.kvt.Node;
 import com.ikalagaming.factory.networking.base.Connection;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkData;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkUnload;
 import com.ikalagaming.factory.networking.request.clientbound.Joined;
+import com.ikalagaming.factory.networking.request.clientbound.PlayerState;
 import com.ikalagaming.factory.networking.request.clientbound.TimeUpdate;
+import com.ikalagaming.factory.sim.Fixed;
 import com.ikalagaming.factory.sim.Frames;
+import com.ikalagaming.factory.sim.MoveMode;
+import com.ikalagaming.factory.sim.Movement;
+import com.ikalagaming.factory.sim.PlayerInput;
+import com.ikalagaming.factory.sim.PlayerSimulation;
 import com.ikalagaming.factory.world.Block;
 import com.ikalagaming.factory.world.Chunk;
 import com.ikalagaming.factory.world.ChunkCodec;
@@ -127,6 +135,12 @@ public final class ServerWorld implements AutoCloseable {
      * Work for the tick thread, from requests and finished chunks, run before each frame and tick.
      */
     private final Queue<Runnable> tasks = new ConcurrentLinkedQueue<>();
+
+    /** Players and anything else simulated in command frames. Tick thread only. */
+    private final World sim = new World();
+
+    /** The systems that step {@link #sim} each frame. */
+    private final Schedule schedule = PlayerSimulation.schedule();
 
     /** Players in the world, by id. Tick thread only. */
     private final Map<String, ServerPlayer> players = new LinkedHashMap<>();
@@ -278,14 +292,25 @@ public final class ServerWorld implements AutoCloseable {
      * @return The player.
      */
     ServerPlayer join(@NonNull String name, @NonNull Connection connection) {
+        final long entity = sim.create();
         final ServerPlayer player =
                 new ServerPlayer(
                         UUID.randomUUID().toString(),
                         name,
                         connection,
+                        entity,
                         spawn.x() + HALF_BLOCK,
                         spawn.y(),
                         spawn.z() + HALF_BLOCK);
+        sim.set(
+                PlayerSimulation.MOVEMENT,
+                entity,
+                Movement.at(
+                        MoveMode.FLYING,
+                        Fixed.ofMeters(spawn.x()) + Fixed.ONE / 2,
+                        Fixed.ofMeters(spawn.y()),
+                        Fixed.ofMeters(spawn.z()) + Fixed.ONE / 2));
+        sim.set(PlayerSimulation.INPUT, entity, PlayerInput.NONE);
         players.put(player.getId(), player);
         connection.send(
                 new Joined(
@@ -296,7 +321,8 @@ public final class ServerWorld implements AutoCloseable {
                         0,
                         0,
                         VIEW_RADIUS,
-                        VERTICAL_RADIUS));
+                        VERTICAL_RADIUS,
+                        frames.get()));
         connection.send(new TimeUpdate(time.get(), Server.TICKS_PER_SECOND));
         log.info("{} joined at {}, {}, {}", name, player.getX(), player.getY(), player.getZ());
         return player;
@@ -330,6 +356,25 @@ public final class ServerWorld implements AutoCloseable {
      */
     void frame() {
         runTasks();
+        final long frame = frames.get();
+        for (ServerPlayer player : players.values()) {
+            sim.set(PlayerSimulation.INPUT, player.getEntity(), player.inputs.take(frame));
+        }
+        schedule.run(sim);
+        for (ServerPlayer player : players.values()) {
+            final Movement movement = sim.get(PlayerSimulation.MOVEMENT, player.getEntity());
+            player.moveTo(
+                    (double) movement.x() / Fixed.ONE,
+                    (double) movement.y() / Fixed.ONE,
+                    (double) movement.z() / Fixed.ONE);
+            player.getConnection()
+                    .send(
+                            PlayerState.of(
+                                    frame,
+                                    movement,
+                                    player.inputs.buffered(frame),
+                                    player.inputs.misses()));
+        }
         frames.incrementAndGet();
     }
 

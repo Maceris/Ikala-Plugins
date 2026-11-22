@@ -59,6 +59,16 @@ public final class ServerPlayer {
     @Getter private double z;
 
     /** Chunks the client has been sent and not told to drop. */
+    /**
+     * The player's simulated entity.
+     *
+     * @return The entity.
+     */
+    @Getter private final long entity;
+
+    /** The player's inputs waiting for their frames. Tick thread only. */
+    final InputBuffer inputs = new InputBuffer();
+
     final Set<ChunkPos> sent = new HashSet<>();
 
     /** Chunks being generated or encoded for this player. */
@@ -84,12 +94,14 @@ public final class ServerPlayer {
             @NonNull String id,
             @NonNull String name,
             @NonNull Connection connection,
+            long entity,
             double x,
             double y,
             double z) {
         this.id = id;
         this.name = name;
         this.connection = connection;
+        this.entity = entity;
         moveTo(x, y, z);
     }
 
@@ -128,15 +140,5 @@ public final class ServerPlayer {
         final long dy = pos.y() - here.y();
         final long dz = pos.z() - here.z();
         return dx * dx + dy * dy + dz * dz;
-    }
-
-    /**
-     * Whether a position is a finite place in the world, so bad moves can be ignored.
-     *
-     * @param value A coordinate.
-     * @return True if it is a finite number within the largest world.
-     */
-    static boolean isReasonable(double value) {
-        return Double.isFinite(value) && Math.abs(value) < (double) Integer.MAX_VALUE;
     }
 }

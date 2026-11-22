@@ -6,10 +6,14 @@ import com.ikalagaming.factory.networking.request.clientbound.ChunkData;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkUnload;
 import com.ikalagaming.factory.networking.request.clientbound.ClientBoundRequestHandler;
 import com.ikalagaming.factory.networking.request.clientbound.Joined;
+import com.ikalagaming.factory.networking.request.clientbound.PlayerState;
 import com.ikalagaming.factory.networking.request.clientbound.TimeUpdate;
 import com.ikalagaming.factory.networking.request.clientbound.UpdateTagRegistry;
 import com.ikalagaming.factory.networking.request.serverbound.Join;
-import com.ikalagaming.factory.networking.request.serverbound.PlayerMove;
+import com.ikalagaming.factory.networking.request.serverbound.PlayerInputs;
+import com.ikalagaming.factory.sim.Fixed;
+import com.ikalagaming.factory.sim.MoveMode;
+import com.ikalagaming.factory.sim.Movement;
 import com.ikalagaming.factory.world.ChunkCodec;
 import com.ikalagaming.factory.world.ChunkPos;
 
@@ -59,6 +63,13 @@ public final class ClientSession implements ClientBoundRequestHandler {
     @Getter private String playerId;
 
     /**
+     * The prediction of the player's movement, once joined.
+     *
+     * @return The prediction, or null before the server accepts the join.
+     */
+    @Getter private Prediction prediction;
+
+    /**
      * A session.
      *
      * @param mainThread Runs work on the main thread.
@@ -89,18 +100,14 @@ public final class ClientSession implements ClientBoundRequestHandler {
         return playerId != null;
     }
 
-    /**
-     * Tell the server where the player is.
-     *
-     * @param x The x of the player's feet.
-     * @param y The y of the player's feet.
-     * @param z The z of the player's feet.
-     * @param yaw Turn about the vertical axis, in radians.
-     * @param pitch Tilt up or down, in radians.
-     */
-    public void sendMove(double x, double y, double z, float yaw, float pitch) {
-        if (toServer != null && isJoined()) {
-            toServer.send(new PlayerMove(x, y, z, yaw, pitch));
+    /** Send the server the inputs it hasn't answered for yet. */
+    public void sendInputs() {
+        if (toServer == null || prediction == null) {
+            return;
+        }
+        final PlayerInputs inputs = prediction.unacknowledged();
+        if (inputs != null) {
+            toServer.send(inputs);
         }
     }
 
@@ -117,6 +124,14 @@ public final class ClientSession implements ClientBoundRequestHandler {
     @Override
     public void handle(@NonNull Joined request) {
         playerId = request.getPlayerId();
+        prediction =
+                new Prediction(
+                        request.getFrame(),
+                        Movement.at(
+                                MoveMode.FLYING,
+                                Math.round(request.getX() * Fixed.ONE),
+                                Math.round(request.getY() * Fixed.ONE),
+                                Math.round(request.getZ() * Fixed.ONE)));
         onJoined.accept(request);
     }
 
@@ -136,6 +151,22 @@ public final class ClientSession implements ClientBoundRequestHandler {
     }
 
     @Override
+    public void handle(@NonNull PlayerState request) {
+        if (prediction == null) {
+            return;
+        }
+        try {
+            prediction.onServerState(
+                    request.getFrame(),
+                    request.movement(),
+                    request.getBuffered(),
+                    request.getMissed());
+        } catch (IllegalArgumentException e) {
+            log.warn("The server sent a player state this can't read", e);
+        }
+    }
+
+    @Override
     public void handle(@NonNull ChunkUnload request) {
         world.remove(new ChunkPos(request.getX(), request.getY(), request.getZ()));
     }
@@ -145,5 +176,6 @@ public final class ClientSession implements ClientBoundRequestHandler {
         world.clear();
         toServer = null;
         playerId = null;
+        prediction = null;
     }
 }

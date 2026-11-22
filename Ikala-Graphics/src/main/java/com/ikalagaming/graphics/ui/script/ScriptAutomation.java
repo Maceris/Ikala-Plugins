@@ -11,6 +11,7 @@ import com.ikalagaming.scripting.interpreter.ScriptRuntime;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.lwjgl.glfw.GLFW;
 
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -427,6 +428,56 @@ public final class ScriptAutomation {
     public String itemExists(@NonNull String scope, @NonNull String label) {
         AtomicReference<Boolean> found = new AtomicReference<>(false);
         return start(steps -> steps.itemExists(scope, label, found::set), found::get);
+    }
+
+    /**
+     * Hold a key down in the scene window, as code that polls keys sees it (movement, not GUI
+     * text), until {@link #releaseKey}. Takes effect from the next frame.
+     *
+     * @param name The key's GLFW name without {@code GLFW_KEY_}, like {@code "w"}, {@code "space"}
+     *     or {@code "left_shift"}.
+     * @throws IllegalArgumentException If the key isn't known.
+     */
+    public void holdKey(@NonNull String name) {
+        final int code = glfwKey(name);
+        GraphicsManager.runOnMainThread(
+                () -> {
+                    if (GraphicsManager.getSceneWindow() != null) {
+                        GraphicsManager.getSceneWindow().holdKey(code);
+                    }
+                });
+    }
+
+    /**
+     * Stop holding a key that {@link #holdKey} held. Takes effect from the next frame.
+     *
+     * @param name The key's GLFW name without {@code GLFW_KEY_}.
+     * @throws IllegalArgumentException If the key isn't known.
+     */
+    public void releaseKey(@NonNull String name) {
+        final int code = glfwKey(name);
+        GraphicsManager.runOnMainThread(
+                () -> {
+                    if (GraphicsManager.getSceneWindow() != null) {
+                        GraphicsManager.getSceneWindow().releaseKey(code);
+                    }
+                });
+    }
+
+    /**
+     * A key's GLFW code by name.
+     *
+     * @param name The name without {@code GLFW_KEY_}, in any case.
+     * @return The code.
+     * @throws IllegalArgumentException If there is no such key.
+     */
+    private static int glfwKey(String name) {
+        final String field = "GLFW_KEY_" + name.trim().toUpperCase(Locale.ROOT);
+        try {
+            return GLFW.class.getField(field).getInt(null);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            throw new IllegalArgumentException("There is no key called '" + name + "'", e);
+        }
     }
 
     /**

@@ -43,6 +43,9 @@ public class Joined implements Request {
     /** How many chunks up and down from the player's chunk the server sends. */
     private int verticalRadius;
 
+    /** The command frame the server runs next; the client starts its own frames a little ahead. */
+    private long frame;
+
     @Override
     public void handleUsing(@NonNull ClientBoundRequestHandler handler) {
         handler.handle(this);

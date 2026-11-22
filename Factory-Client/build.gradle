@@ -60,6 +60,7 @@ dependencies {
 	compileOnly project(':Factory-Server')
 	compileOnly project(':Ikala-Graphics')
 	compileOnly project(':Random')
+	compileOnly project(':EntityComponentSystem')
 
 	implementation "org.joml:joml:${jomlVersion}"
 	implementation "org.lwjgl:lwjgl:${lwjglVersion}"
@@ -74,6 +75,7 @@ dependencies {
 	testImplementation project(':Ikala-Core')
 	testImplementation project(':Factory-Core')
 	testImplementation project(':Random')
+	testImplementation project(':EntityComponentSystem')
 	
 	// lombok
 	compileOnly "org.projectlombok:lombok:${lombokVersion}"

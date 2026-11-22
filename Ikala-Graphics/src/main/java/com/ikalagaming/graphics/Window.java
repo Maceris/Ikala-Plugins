@@ -23,6 +23,8 @@ import org.lwjgl.system.MemoryStack;
 import java.io.File;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -32,6 +34,9 @@ import java.util.function.Consumer;
 @Slf4j
 @Getter
 public class Window {
+
+    /** Keys held by automation, as GLFW key codes. Main thread only. */
+    private final Set<Integer> heldKeys = new HashSet<>();
 
     /**
      * Set up the window hints.
@@ -208,7 +213,7 @@ public class Window {
     }
 
     /**
-     * Checks if a key is pressed.
+     * Checks if a key is pressed, or held by {@link #holdKey}.
      *
      * @param keyCode The keycode to look for.
      * @return True if the key is pressed, false if not.
@@ -220,7 +225,26 @@ public class Window {
                 return false;
             }
         }
-        return glfwGetKey(windowHandle, keyCode) == GLFW_PRESS;
+        return heldKeys.contains(keyCode) || glfwGetKey(windowHandle, keyCode) == GLFW_PRESS;
+    }
+
+    /**
+     * Hold a key down as far as {@link #isKeyPressed} is concerned, as if it were pressed, until
+     * {@link #releaseKey}. For automation, which has no real keyboard to press. Main thread only.
+     *
+     * @param keyCode The GLFW key code.
+     */
+    public void holdKey(int keyCode) {
+        heldKeys.add(keyCode);
+    }
+
+    /**
+     * Stop holding a key that {@link #holdKey} held. Main thread only.
+     *
+     * @param keyCode The GLFW key code.
+     */
+    public void releaseKey(int keyCode) {
+        heldKeys.remove(keyCode);
     }
 
     /**

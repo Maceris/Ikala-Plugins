@@ -3,11 +3,14 @@ package com.ikalagaming.factory.server;
 import com.ikalagaming.factory.networking.base.Connection;
 import com.ikalagaming.factory.networking.base.Request;
 import com.ikalagaming.factory.networking.request.serverbound.Join;
-import com.ikalagaming.factory.networking.request.serverbound.PlayerMove;
+import com.ikalagaming.factory.networking.request.serverbound.PlayerInputs;
 import com.ikalagaming.factory.networking.request.serverbound.ServerBoundRequestHandler;
+import com.ikalagaming.factory.sim.PlayerInput;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.List;
 
 /**
  * The server's end of one client's connection. Requests arrive on whatever thread the client sent
@@ -62,15 +65,14 @@ final class ServerSession implements ServerBoundRequestHandler {
     }
 
     @Override
-    public void handle(@NonNull PlayerMove request) {
+    public void handle(@NonNull PlayerInputs request) {
         if (player == null) {
             return;
         }
-        if (!ServerPlayer.isReasonable(request.getX())
-                || !ServerPlayer.isReasonable(request.getY())
-                || !ServerPlayer.isReasonable(request.getZ())) {
-            return;
+        final List<PlayerInput> inputs = request.inputs();
+        final long next = world.getFrames();
+        for (int i = 0; i < inputs.size(); ++i) {
+            player.inputs.offer(next, request.getFirstFrame() + i, inputs.get(i).sanitized());
         }
-        player.moveTo(request.getX(), request.getY(), request.getZ());
     }
 }

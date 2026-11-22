@@ -16,6 +16,7 @@ import com.ikalagaming.graphics.scene.Camera;
 
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 
 import java.util.function.Supplier;
 
@@ -79,6 +80,15 @@ public class CameraManager {
     private boolean wasControl;
 
     /**
+     * Whether the keys move the camera. A game that places the camera itself turns this off; the
+     * mouse still turns the camera either way.
+     *
+     * @param moving True to move the camera with the keys.
+     * @return True if the keys move the camera.
+     */
+    @Getter @Setter private boolean moving = true;
+
+    /**
      * Create a new camera manager, moved by the keys of whichever window shows the scene.
      *
      * @param camera The camera we are managing.
@@ -119,6 +129,25 @@ public class CameraManager {
         }
         wasTurning = turning;
 
+        if (moving) {
+            moveByKeys(deltaTime);
+        }
+
+        // Update camera based on mouse
+        if (turning) {
+            float deltaX = ikIO.mouseDelta.x * sensitivity;
+            float deltaY = ikIO.mouseDelta.y * sensitivity;
+            camera.addRotation(deltaY, deltaX);
+        }
+    }
+
+    /**
+     * Move the camera by the keys held.
+     *
+     * @param deltaTime The fractional part of a second since the last update.
+     */
+    private void moveByKeys(float deltaTime) {
+        final IkIO ikIO = IkGui.getIO();
         final Window window = this.window.get();
         // Toggle on the press, not while held; not while typing, where Ctrl makes shortcuts
         final boolean control =
@@ -147,13 +176,6 @@ public class CameraManager {
         }
         if (window.isKeyPressed(GLFW_KEY_SPACE)) {
             camera.moveUp(step);
-        }
-
-        // Update camera based on mouse
-        if (turning) {
-            float deltaX = ikIO.mouseDelta.x * sensitivity;
-            float deltaY = ikIO.mouseDelta.y * sensitivity;
-            camera.addRotation(deltaY, deltaX);
         }
     }
 }

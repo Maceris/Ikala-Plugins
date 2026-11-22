@@ -38,4 +38,11 @@ public interface ClientBoundRequestHandler extends RequestHandler {
      * @param request The request.
      */
     void handle(@NonNull TimeUpdate request);
+
+    /**
+     * The player's state after a command frame.
+     *
+     * @param request The request.
+     */
+    void handle(@NonNull PlayerState request);
 }
