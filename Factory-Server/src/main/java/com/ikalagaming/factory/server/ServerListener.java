@@ -51,4 +51,9 @@ public class ServerListener implements Listener {
 
     @EventHandler(order = Order.LATEST)
     public void handleStopping(ServerStopping event) {}
+
+    @EventHandler(order = Order.LATEST)
+    public void handleLoaded(ServerLoaded event) {
+        server.markLoaded();
+    }
 }

@@ -24,6 +24,7 @@ import java.util.List;
  * @param fluids How open space fills.
  * @param climates Each biome's range for each parameter, in {@code parameters} order, null where
  *     the biome doesn't care. Indexed like {@code biomes}.
+ * @param spawn How new players' starting spot is found.
  */
 public record WorldType(
         @NonNull String id,
@@ -36,7 +37,8 @@ public record WorldType(
         @NonNull List<Biome> biomes,
         @NonNull Biome fallbackBiome,
         @NonNull Fluids fluids,
-        @NonNull List<ParameterRange[]> climates) {
+        @NonNull List<ParameterRange[]> climates,
+        @NonNull SpawnRule spawn) {
 
     /**
      * The largest border the engine allows on any axis, well inside the int range so chunk, cell

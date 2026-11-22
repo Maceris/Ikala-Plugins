@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.ikalagaming.factory.world.gen.SpawnFinder;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -132,5 +134,20 @@ class TestSaves {
     void testWorldFolder() {
         assertEquals("overworld", Saves.worldFolderFor(OVERWORLD));
         assertEquals("caves_deep", Saves.worldFolderFor("mod:caves/deep"));
+    }
+
+    @Test
+    void testSpawnRoundTrip() throws IOException {
+        SaveSummary save = create("Spawned", "1", 1);
+        Path folder = saves.resolve(save.folder());
+        String world = save.worlds().getFirst();
+        assertEquals(null, Saves.readWorld(folder, world).orElseThrow().spawn());
+
+        Saves.writeSpawn(folder, world, new SpawnFinder.Spawn(4, 70, -9, true));
+
+        Saves.WorldInfo info = Saves.readWorld(folder, world).orElseThrow();
+        assertEquals(new SpawnFinder.Spawn(4, 70, -9, true), info.spawn());
+        assertEquals(OVERWORLD, info.worldType());
+        assertEquals(1L, info.seed());
     }
 }

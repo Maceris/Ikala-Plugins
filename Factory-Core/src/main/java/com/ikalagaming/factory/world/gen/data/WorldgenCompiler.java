@@ -776,7 +776,7 @@ public final class WorldgenCompiler implements FieldReader.Problems {
      * @return The world type, or null after an error.
      */
     private WorldType buildWorldType(@NonNull String id, @NonNull FieldReader root) {
-        // structure_sets and spawn are read by later steps
+        // structure_sets is read by a later step
         root.warnUnknownFields(
                 Set.of(
                         "border",
@@ -904,7 +904,56 @@ public final class WorldgenCompiler implements FieldReader.Problems {
                 List.copyOf(biomes),
                 fallback.get(),
                 fluids,
-                List.copyOf(climates));
+                List.copyOf(climates),
+                root.has("spawn") ? spawnRule(root.get("spawn")) : SpawnRule.DEFAULT);
+    }
+
+    /**
+     * Read a world type's spawn rule, using the defaults for anything it leaves out.
+     *
+     * @param field The {@code spawn} field.
+     * @return The rule.
+     */
+    private static SpawnRule spawnRule(@NonNull FieldReader field) {
+        field.warnUnknownFields(Set.of("anchor", "origin", "radius", "y_range"));
+        int minAir = SpawnRule.DEFAULT_MIN_AIR;
+        if (field.has("anchor")) {
+            final FieldReader anchor = field.get("anchor");
+            anchor.warnUnknownFields(Set.of("type", "min_air"));
+            final String type = anchor.get("type").string(SpawnRule.FLOOR);
+            if (!SpawnRule.FLOOR.equals(type)) {
+                anchor.get("type").warn("WORLDGEN_SPAWN_ANCHOR", type, SpawnRule.FLOOR);
+            }
+            minAir = anchor.get("min_air").integer(SpawnRule.DEFAULT_MIN_AIR);
+            if (minAir <= 0) {
+                anchor.get("min_air").error("WORLDGEN_NOT_POSITIVE");
+                minAir = SpawnRule.DEFAULT_MIN_AIR;
+            }
+        }
+        int[] origin = {0, 0, 0};
+        if (field.has("origin")) {
+            final double[] values = field.get("origin").numbers(DensityNode.AXIS_COUNT);
+            for (int axis = 0; axis < origin.length; ++axis) {
+                origin[axis] = (int) values[axis];
+            }
+        }
+        int radius = field.get("radius").integer(SpawnRule.DEFAULT_RADIUS);
+        if (radius < 0) {
+            field.get("radius").error("WORLDGEN_NOT_POSITIVE");
+            radius = SpawnRule.DEFAULT_RADIUS;
+        }
+        int minY = SpawnRule.DEFAULT_MIN_Y;
+        int maxY = SpawnRule.DEFAULT_MAX_Y;
+        if (field.has("y_range")) {
+            final double[] range = field.get("y_range").numbers(2);
+            if (range[0] > range[1]) {
+                field.get("y_range").error("WORLDGEN_BAD_RANGE");
+            } else {
+                minY = (int) range[0];
+                maxY = (int) range[1];
+            }
+        }
+        return new SpawnRule(minAir, origin[0], origin[1], origin[2], radius, minY, maxY);
     }
 
     /**

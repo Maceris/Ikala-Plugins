@@ -1,6 +1,7 @@
 package com.ikalagaming.factory;
 
 import com.ikalagaming.factory.save.SaveSummary;
+import com.ikalagaming.factory.saves.SaveUtil;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.graph.Model;
@@ -15,8 +16,8 @@ import org.joml.Vector3d;
 import org.joml.Vector3f;
 
 /**
- * Starts a single player game: a local server, and for now a placeholder scene. The save is not
- * loaded into the server yet.
+ * Starts a single player game: opens the save on the local server, which finds a new world's spawn,
+ * and for now shows a placeholder scene. Joining the server and drawing the world come next.
  */
 @Slf4j
 public final class SinglePlayerGame {
@@ -33,12 +34,25 @@ public final class SinglePlayerGame {
                 save.folder(),
                 save.worldType(),
                 save.seed());
-        // TODO(ches) load the save into the server and connect to it, FACT-16 follow up
-        if (!LocalServer.start()) {
-            log.warn(
-                    SafeResourceLoader.getString(
-                            "NO_LOCAL_SERVER", FactoryClientPlugin.getResourceBundle()));
-        }
+        // Joining the server and drawing the world come in the next steps of Starting a Game
+        LocalServer.open(SaveUtil.savesFolder().resolve(save.folder()))
+                .whenComplete(
+                        (spawn, error) -> {
+                            if (error != null) {
+                                log.warn(
+                                        SafeResourceLoader.getString(
+                                                "NO_LOCAL_SERVER",
+                                                FactoryClientPlugin.getResourceBundle()),
+                                        error);
+                                return;
+                            }
+                            log.info(
+                                    "Opened {}; new players start at {}, {}, {}",
+                                    save.name(),
+                                    spawn.x(),
+                                    spawn.y(),
+                                    spawn.z());
+                        });
 
         Model cubeModel =
                 ModelLoader.loadModel(

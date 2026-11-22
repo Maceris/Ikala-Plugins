@@ -1,6 +1,12 @@
 package com.ikalagaming.factory;
 
+import com.ikalagaming.factory.world.gen.SpawnFinder;
 import com.ikalagaming.plugins.PluginManager;
+
+import lombok.NonNull;
+
+import java.nio.file.Path;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Starts a server in this process, for single player. Factory-Server is only a soft dependency, so
@@ -22,16 +28,19 @@ public final class LocalServer {
     }
 
     /**
-     * Start the local server.
+     * Open a save on the local server, starting the server if needed. The same save already open is
+     * reused, and another open save is closed first.
      *
-     * @return True if it was started, false if the server plugin isn't enabled.
+     * @param saveFolder The save's folder.
+     * @return Completes with where new players start once the world is open, or fails if it can't
+     *     be opened or the server plugin isn't enabled.
      */
-    public static boolean start() {
+    public static CompletableFuture<SpawnFinder.Spawn> open(@NonNull Path saveFolder) {
         if (!isAvailable()) {
-            return false;
+            return CompletableFuture.failedFuture(
+                    new IllegalStateException(SERVER_PLUGIN + " isn't enabled"));
         }
-        Starter.start();
-        return true;
+        return Starter.open(saveFolder);
     }
 
     /**
@@ -39,9 +48,16 @@ public final class LocalServer {
      * there.
      */
     private static final class Starter {
-        /** Start the server. */
-        static void start() {
-            FactoryServerPlugin.getServer().start();
+        /**
+         * Open a save.
+         *
+         * @param saveFolder The save's folder.
+         * @return Completes with the world's spawn.
+         */
+        static CompletableFuture<SpawnFinder.Spawn> open(@NonNull Path saveFolder) {
+            return FactoryServerPlugin.getServer()
+                    .open(saveFolder)
+                    .thenApply(com.ikalagaming.factory.server.ServerWorld::getSpawn);
         }
 
         private Starter() {}

@@ -58,7 +58,9 @@ dependencies {
 	compileOnly project(':Ikala-Core')
 	implementation project(':Factory-Core')
 
-	// Testing
+	// Testing: Ikala-Core and Random are provided at runtime, so tests need them directly
+	testImplementation project(':Ikala-Core')
+	testImplementation project(':Random')
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
 	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 	

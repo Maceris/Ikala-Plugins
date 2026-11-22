@@ -3,6 +3,7 @@ package com.ikalagaming.factory.save;
 import com.ikalagaming.factory.kvt.Node;
 import com.ikalagaming.factory.kvt.NodeType;
 import com.ikalagaming.factory.kvt.TreeBinarySerialization;
+import com.ikalagaming.factory.world.gen.SpawnFinder;
 import com.ikalagaming.factory.world.gen.WorldgenHash;
 
 import lombok.NonNull;
@@ -61,6 +62,22 @@ public final class Saves {
     static final String KEY_WORLDS = "worlds";
     static final String KEY_WORLD_TYPE = "worldType";
     static final String KEY_SEED = "seed";
+    static final String KEY_SPAWN = "spawn";
+    static final String KEY_SPAWN_PLATFORM = "spawnPlatform";
+
+    /**
+     * What a world's {@value #WORLD_FILE} says about it.
+     *
+     * @param folder The world's folder name.
+     * @param worldType Its world type, or blank if it can't be read.
+     * @param seed Its seed.
+     * @param spawn Where new players start, or null if it hasn't been found yet.
+     */
+    public record WorldInfo(
+            @NonNull String folder,
+            @NonNull String worldType,
+            long seed,
+            SpawnFinder.Spawn spawn) {}
 
     /** Folder names Windows reserves, which can't be used whatever the extension. */
     private static final Set<String> RESERVED_NAMES =
@@ -408,6 +425,56 @@ public final class Saves {
             return list.stream().map(String::valueOf).toList();
         }
         return List.of();
+    }
+
+    /**
+     * Read what a world's {@value #WORLD_FILE} says about it.
+     *
+     * @param saveFolder The save's folder.
+     * @param world The world's folder name, from {@link SaveSummary#worlds()}.
+     * @return The world, or empty if its file is missing or can't be read.
+     */
+    public static Optional<WorldInfo> readWorld(@NonNull Path saveFolder, @NonNull String world) {
+        final Optional<Node> node =
+                Saves.readNode(
+                        saveFolder.resolve(WORLDS_FOLDER).resolve(world).resolve(WORLD_FILE));
+        if (node.isEmpty()) {
+            return Optional.empty();
+        }
+        SpawnFinder.Spawn spawn = null;
+        if (Saves.value(node.get(), KEY_SPAWN) instanceof List<?> list && list.size() == 3) {
+            spawn =
+                    new SpawnFinder.Spawn(
+                            ((Number) list.get(0)).intValue(),
+                            ((Number) list.get(1)).intValue(),
+                            ((Number) list.get(2)).intValue(),
+                            Boolean.TRUE.equals(Saves.value(node.get(), KEY_SPAWN_PLATFORM)));
+        }
+        return Optional.of(
+                new WorldInfo(
+                        world,
+                        Saves.string(node.get(), KEY_WORLD_TYPE, ""),
+                        Saves.number(node.get(), KEY_SEED, 0L),
+                        spawn));
+    }
+
+    /**
+     * Record where new players start in a world.
+     *
+     * @param saveFolder The save's folder.
+     * @param world The world's folder name.
+     * @param spawn The spawn.
+     * @throws IOException If the world's file is missing or can't be written.
+     */
+    public static void writeSpawn(
+            @NonNull Path saveFolder, @NonNull String world, @NonNull SpawnFinder.Spawn spawn)
+            throws IOException {
+        final Path file = saveFolder.resolve(WORLDS_FOLDER).resolve(world).resolve(WORLD_FILE);
+        final Node node =
+                Saves.readNode(file).orElseThrow(() -> new IOException("Can't read " + file));
+        node.add(KEY_SPAWN, NodeType.INTEGER_ARRAY, List.of(spawn.x(), spawn.y(), spawn.z()));
+        node.add(KEY_SPAWN_PLATFORM, spawn.platform());
+        Saves.write(node, file);
     }
 
     /** Private constructor so this class is not instantiated. */
