@@ -557,10 +557,21 @@ public class SectionManager {
     private static final long URGENT_NANOS_PER_FRAME = 4_000_000L;
 
     /**
-     * How long the render thread may spend in a frame registering meshes coming back as the
-     * observer nears their sections; the rest wait for later frames.
+     * Until when in a frame, from its start, the render thread may register meshes coming back as
+     * the observer nears their sections, after urgent and finished bakes; the rest wait for later
+     * frames.
      */
-    private static final long RESTORE_NANOS_PER_FRAME = 4_000_000L;
+    private static final long RESTORE_NANOS_PER_FRAME = 5_000_000L;
+
+    /**
+     * Until when in a frame finished bakes are registered, from its start, counting urgent bakes,
+     * unless one was baked here for an edit: streaming finishes hundreds at once, which took up to
+     * 25 ms of a frame. Restored meshes go on until {@link #RESTORE_NANOS_PER_FRAME}.
+     */
+    private static final long UPLOAD_NANOS_PER_FRAME = 3_000_000L;
+
+    /** Whether this frame baked a section on the render thread, for an edit. Render thread. */
+    private boolean bakedUrgently;
 
     /** Where the observer was last frame, for deciding which bakes are urgent. */
     private volatile Vector3dc lastEye;
@@ -1058,17 +1069,22 @@ public class SectionManager {
             final long bakeStart = System.nanoTime();
             bake(next.id(), next.generation(), next.request(), next.feeds(), next.position());
             lastUrgentNanos = System.nanoTime() - bakeStart;
+            bakedUrgently = true;
         }
+        // Finished bakes, a few milliseconds' worth a frame counting the urgent ones, as streaming
+        // finishes hundreds at once; but all of them in a frame that baked an edit here, so it is
+        // drawn at once
         Baked done;
-        while ((done = baked.poll()) != null) {
+        while ((bakedUrgently || System.nanoTime() - start < UPLOAD_NANOS_PER_FRAME)
+                && (done = baked.poll()) != null) {
             upload(state, done);
         }
-        // Meshes coming back as the observer nears their sections, a few milliseconds' worth a
-        // frame: a jump of the camera brings back thousands at once, and the sections draw what
-        // they have until theirs are in
-        final long restoreStart = System.nanoTime();
+        bakedUrgently = false;
+        // Meshes coming back as the observer nears their sections, within what is left of the
+        // frame's time for this: a jump of the camera brings back thousands at once, and the
+        // sections draw what they have until theirs are in
         Restored back;
-        while (System.nanoTime() - restoreStart < RESTORE_NANOS_PER_FRAME
+        while (System.nanoTime() - start < RESTORE_NANOS_PER_FRAME
                 && (back = restored.poll()) != null) {
             restore(state, back);
         }
@@ -1937,7 +1953,10 @@ public class SectionManager {
             final List<Section> again = checkAgain;
             again.clear();
             int waitCount = 0;
-            while (!checks.isEmpty() && checks.peek().at() <= travel) {
+            // A burst, as when every section is due again at once, is spread over frames
+            while (!checks.isEmpty()
+                    && checks.peek().at() <= travel
+                    && again.size() < MAX_CHECKS_PER_FRAME) {
                 final Check check = checks.poll();
                 final Section section = check.section();
                 if (section.removed
@@ -1969,6 +1988,12 @@ public class SectionManager {
             lock.unlock();
         }
     }
+
+    /**
+     * The most sections checked in a frame: about 0.8 microseconds each, so a burst of all of them,
+     * 12,000 when streaming at radius 32, took 10 ms of a frame. The rest stay due for the next.
+     */
+    private static final int MAX_CHECKS_PER_FRAME = 2048;
 
     /** The sections checked this frame, to queue again; reused. Hold the lock. */
     private final List<Section> checkAgain = new ArrayList<>();
