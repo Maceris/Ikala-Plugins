@@ -1,7 +1,13 @@
 package com.ikalagaming.factory.server;
 
+import com.ikalagaming.factory.kvt.Node;
+import com.ikalagaming.factory.networking.base.Connection;
+import com.ikalagaming.factory.networking.request.clientbound.ChunkData;
+import com.ikalagaming.factory.networking.request.clientbound.ChunkUnload;
+import com.ikalagaming.factory.networking.request.clientbound.Joined;
 import com.ikalagaming.factory.world.Block;
 import com.ikalagaming.factory.world.Chunk;
+import com.ikalagaming.factory.world.ChunkCodec;
 import com.ikalagaming.factory.world.ChunkPos;
 import com.ikalagaming.factory.world.gen.SpawnFinder;
 import com.ikalagaming.factory.world.gen.SpawnPlatform;
@@ -12,10 +18,20 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Queue;
+import java.util.UUID;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -31,8 +47,32 @@ import java.util.concurrent.atomic.AtomicLong;
 @Slf4j
 public final class ServerWorld implements AutoCloseable {
 
+    /** Half a block, to put a player in the middle of their spawn block. */
+    private static final double HALF_BLOCK = 0.5;
+
     /** How long {@link #close()} waits for generation threads to stop. */
     private static final long CLOSE_WAIT_SECONDS = 5;
+
+    /** How many chunks out from a player's chunk are sent, sideways. */
+    public static final int VIEW_RADIUS = 8;
+
+    /** How many chunks up and down from a player's chunk are sent. */
+    public static final int VERTICAL_RADIUS = 4;
+
+    /**
+     * How many chunks past the view radius a sent chunk may be before the client is told to drop
+     * it, so walking back and forth over a chunk border doesn't send the same chunks again.
+     */
+    static final int DROP_MARGIN = 1;
+
+    /** How many chunks each player may be waiting on at once, so the nearest come first. */
+    static final int MAX_PENDING = 32;
+
+    /** How long a chunk no player needs stays loaded, in ticks. */
+    static final long IDLE_TICKS = 30L * Server.TICKS_PER_SECOND;
+
+    /** How often idle chunks are dropped, in ticks. */
+    static final long UNLOAD_EVERY_TICKS = Server.TICKS_PER_SECOND;
 
     /**
      * The save the world is in.
@@ -70,6 +110,15 @@ public final class ServerWorld implements AutoCloseable {
 
     /** Ticks run so far. */
     private final AtomicLong ticks = new AtomicLong();
+
+    /** Work for the tick thread, from requests and finished chunks. */
+    private final Queue<Runnable> tasks = new ConcurrentLinkedQueue<>();
+
+    /** Players in the world, by id. Tick thread only. */
+    private final Map<String, ServerPlayer> players = new LinkedHashMap<>();
+
+    /** When each chunk was last near a player, in ticks. Tick thread only. */
+    private final Map<ChunkPos, Long> lastWanted = new HashMap<>();
 
     /**
      * Open a world.
@@ -176,9 +225,197 @@ public final class ServerWorld implements AutoCloseable {
         return ticks.get();
     }
 
+    /**
+     * Run something on the tick thread, at the start of the next tick. Safe from any thread.
+     *
+     * @param task The work.
+     */
+    public void post(@NonNull Runnable task) {
+        tasks.add(task);
+    }
+
+    /**
+     * Add a player at the spawn and tell their client it joined. Tick thread only.
+     *
+     * @param name The name the player joins as.
+     * @param connection Sends requests to the player's client.
+     * @return The player.
+     */
+    ServerPlayer join(@NonNull String name, @NonNull Connection connection) {
+        final ServerPlayer player =
+                new ServerPlayer(
+                        UUID.randomUUID().toString(),
+                        name,
+                        connection,
+                        spawn.x() + HALF_BLOCK,
+                        spawn.y(),
+                        spawn.z() + HALF_BLOCK);
+        players.put(player.getId(), player);
+        connection.send(
+                new Joined(
+                        player.getId(),
+                        player.getX(),
+                        player.getY(),
+                        player.getZ(),
+                        0,
+                        0,
+                        VIEW_RADIUS,
+                        VERTICAL_RADIUS));
+        log.info("{} joined at {}, {}, {}", name, player.getX(), player.getY(), player.getZ());
+        return player;
+    }
+
+    /**
+     * The players in the world. Tick thread only.
+     *
+     * @return The players.
+     */
+    Collection<ServerPlayer> players() {
+        return players.values();
+    }
+
     /** Run one tick. Called {@value Server#TICKS_PER_SECOND} times a second by the server. */
     void tick() {
-        ticks.incrementAndGet();
+        final long now = ticks.incrementAndGet();
+        Runnable task = tasks.poll();
+        while (task != null) {
+            try {
+                task.run();
+            } catch (RuntimeException e) {
+                log.warn("A server task failed", e);
+            }
+            task = tasks.poll();
+        }
+        for (ServerPlayer player : players.values()) {
+            stream(player);
+        }
+        if (now % UNLOAD_EVERY_TICKS == 0) {
+            unloadIdle(now);
+        }
+    }
+
+    /**
+     * Send a player the chunks near them, nearest first, and tell their client to drop chunks they
+     * left behind.
+     *
+     * @param player The player.
+     */
+    private void stream(@NonNull ServerPlayer player) {
+        final ChunkPos here = player.chunk();
+        if (!here.equals(player.center)) {
+            player.center = here;
+            player.wanted = nearestFirst(here);
+            final List<ChunkPos> dropped = new ArrayList<>();
+            for (ChunkPos pos : player.sent) {
+                if (!isNear(here, pos, DROP_MARGIN)) {
+                    dropped.add(pos);
+                }
+            }
+            for (ChunkPos pos : dropped) {
+                player.sent.remove(pos);
+                player.getConnection().send(new ChunkUnload(pos.x(), pos.y(), pos.z()));
+            }
+        }
+        if (player.pending.size() >= MAX_PENDING) {
+            return;
+        }
+        for (ChunkPos pos : player.wanted) {
+            if (player.pending.size() >= MAX_PENDING) {
+                return;
+            }
+            if (player.sent.contains(pos) || player.pending.contains(pos)) {
+                continue;
+            }
+            player.pending.add(pos);
+            chunk(pos)
+                    .thenApply(ChunkCodec::encode)
+                    .whenComplete((node, error) -> post(() -> deliver(player, pos, node, error)));
+        }
+    }
+
+    /**
+     * Send a chunk that finished generating, if the player still wants it. Tick thread only.
+     *
+     * @param player The player it was for.
+     * @param pos The chunk.
+     * @param node The encoded chunk, or null if it failed.
+     * @param error Why it failed, or null.
+     */
+    private void deliver(
+            @NonNull ServerPlayer player, @NonNull ChunkPos pos, Node node, Throwable error) {
+        player.pending.remove(pos);
+        if (error != null || node == null) {
+            if (!(error instanceof CancellationException)
+                    && !(error != null && error.getCause() instanceof CancellationException)) {
+                log.warn("Chunk {} couldn't be made", pos, error);
+            }
+            return;
+        }
+        if (!players.containsKey(player.getId()) || !isNear(player.chunk(), pos, 0)) {
+            return;
+        }
+        player.sent.add(pos);
+        player.getConnection().send(new ChunkData(pos.x(), pos.y(), pos.z(), node));
+    }
+
+    /**
+     * Drop chunks no player has been near for {@value #IDLE_TICKS} ticks.
+     *
+     * @param now The current tick.
+     */
+    private void unloadIdle(long now) {
+        for (ServerPlayer player : players.values()) {
+            for (ChunkPos pos : player.wanted) {
+                lastWanted.put(pos, now);
+            }
+        }
+        for (ChunkPos pos : List.copyOf(chunks.keySet())) {
+            final long wanted = lastWanted.getOrDefault(pos, 0L);
+            if (now - wanted > IDLE_TICKS) {
+                unload(pos);
+                lastWanted.remove(pos);
+            }
+        }
+    }
+
+    /**
+     * The chunks within the view of a chunk, nearest first.
+     *
+     * @param center The chunk the player is in.
+     * @return The chunks.
+     */
+    static List<ChunkPos> nearestFirst(@NonNull ChunkPos center) {
+        final List<ChunkPos> result = new ArrayList<>();
+        for (int dy = -VERTICAL_RADIUS; dy <= VERTICAL_RADIUS; ++dy) {
+            for (int dz = -VIEW_RADIUS; dz <= VIEW_RADIUS; ++dz) {
+                for (int dx = -VIEW_RADIUS; dx <= VIEW_RADIUS; ++dx) {
+                    result.add(new ChunkPos(center.x() + dx, center.y() + dy, center.z() + dz));
+                }
+            }
+        }
+        result.sort(
+                Comparator.comparingLong(
+                        pos -> {
+                            final long dx = pos.x() - center.x();
+                            final long dy = pos.y() - center.y();
+                            final long dz = pos.z() - center.z();
+                            return dx * dx + dy * dy + dz * dz;
+                        }));
+        return result;
+    }
+
+    /**
+     * Whether a chunk is within the view of a chunk.
+     *
+     * @param center The chunk the player is in.
+     * @param pos The chunk.
+     * @param margin How many chunks past the view still count.
+     * @return True if it is near enough.
+     */
+    static boolean isNear(@NonNull ChunkPos center, @NonNull ChunkPos pos, int margin) {
+        return Math.abs(pos.x() - center.x()) <= VIEW_RADIUS + margin
+                && Math.abs(pos.z() - center.z()) <= VIEW_RADIUS + margin
+                && Math.abs(pos.y() - center.y()) <= VERTICAL_RADIUS + margin;
     }
 
     /**
@@ -207,5 +444,6 @@ public final class ServerWorld implements AutoCloseable {
             Thread.currentThread().interrupt();
         }
         chunks.clear();
+        tasks.clear();
     }
 }

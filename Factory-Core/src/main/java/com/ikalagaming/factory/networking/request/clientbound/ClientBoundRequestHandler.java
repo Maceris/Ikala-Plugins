@@ -10,4 +10,25 @@ import lombok.NonNull;
  */
 public interface ClientBoundRequestHandler extends RequestHandler {
     void handle(@NonNull UpdateTagRegistry request);
+
+    /**
+     * The server accepted the join.
+     *
+     * @param request The request.
+     */
+    void handle(@NonNull Joined request);
+
+    /**
+     * A chunk arrived.
+     *
+     * @param request The request.
+     */
+    void handle(@NonNull ChunkData request);
+
+    /**
+     * A chunk can be dropped.
+     *
+     * @param request The request.
+     */
+    void handle(@NonNull ChunkUnload request);
 }

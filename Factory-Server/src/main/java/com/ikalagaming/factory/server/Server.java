@@ -1,6 +1,9 @@
 package com.ikalagaming.factory.server;
 
 import com.ikalagaming.factory.FactoryServerPlugin;
+import com.ikalagaming.factory.networking.LocalConnection;
+import com.ikalagaming.factory.networking.base.Connection;
+import com.ikalagaming.factory.networking.base.RequestHandler;
 import com.ikalagaming.factory.networking.request.serverbound.ServerBoundRequestHandler;
 import com.ikalagaming.factory.registry.DefinitionLoader;
 import com.ikalagaming.factory.registry.Registries;
@@ -226,6 +229,26 @@ public class Server {
         } finally {
             worldLock.unlock();
         }
+    }
+
+    /**
+     * Connect a client in this process to the open world. Requests pass between the two as objects,
+     * never serialized, but only through {@link Connection}, so a remote client works the same way.
+     * The client then sends {@code Join}.
+     *
+     * @param client Handles the requests the server sends the client. They arrive on server
+     *     threads.
+     * @return The client's connection, which sends requests to the server.
+     * @throws IllegalStateException If no world is open.
+     */
+    public Connection connect(@NonNull RequestHandler client) {
+        final ServerWorld open = world;
+        if (open == null) {
+            throw new IllegalStateException("No world is open to connect to");
+        }
+        final ServerSession session = new ServerSession(open);
+        session.setConnection(new LocalConnection(session, client));
+        return new LocalConnection(client, session);
     }
 
     /**

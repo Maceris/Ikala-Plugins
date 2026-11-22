@@ -1,12 +1,15 @@
 package com.ikalagaming.factory;
 
+import com.ikalagaming.factory.client.ClientSession;
+import com.ikalagaming.factory.networking.base.Connection;
+import com.ikalagaming.factory.networking.request.clientbound.Joined;
 import com.ikalagaming.factory.save.SaveSummary;
 import com.ikalagaming.factory.saves.SaveUtil;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
-import com.ikalagaming.graphics.graph.Model;
-import com.ikalagaming.graphics.scene.ModelLoader;
+import com.ikalagaming.graphics.scene.Camera;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
+import com.ikalagaming.launcher.Launcher;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -15,12 +18,48 @@ import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector3d;
 import org.joml.Vector3f;
 
+import java.util.UUID;
+
 /**
- * Starts a single player game: opens the save on the local server, which finds a new world's spawn,
- * and for now shows a placeholder scene. Joining the server and drawing the world come next.
+ * Starts a single player game: opens the save on the local server, joins it, and keeps telling the
+ * server where the player is, so it sends the chunks around them. The player flies: the camera is
+ * the player's eye. See the Starting a Game design doc.
  */
 @Slf4j
 public final class SinglePlayerGame {
+
+    /** How high the eye is above the feet, in blocks. */
+    public static final double EYE_HEIGHT = 1.62;
+
+    /** The name single player joins as, until accounts exist. */
+    private static final String PLAYER_NAME = "Player";
+
+    /** How often the player's position is sent, at most, in milliseconds. */
+    private static final long MOVE_INTERVAL_MILLIS = 100;
+
+    /** How far the player has to move before it is sent again, in blocks. */
+    private static final double MOVE_THRESHOLD = 0.05;
+
+    /** How often the client's chunk count is logged when it changes, in milliseconds. */
+    private static final long REPORT_INTERVAL_MILLIS = 5000;
+
+    /** The session of the game being played, or null. Main thread only. */
+    private static ClientSession session;
+
+    /** The main loop stage that sends the player's position, or null. */
+    private static UUID moveStage;
+
+    /** Where the player was last sent. */
+    private static final Vector3d lastSent = new Vector3d(Double.NaN);
+
+    /** When the position was last sent, in milliseconds. */
+    private static long lastSentMillis;
+
+    /** When the chunk count was last logged, in milliseconds. */
+    private static long lastReportMillis;
+
+    /** The chunk count last logged. */
+    private static int lastReported = -1;
 
     /**
      * Start playing a save.
@@ -34,7 +73,8 @@ public final class SinglePlayerGame {
                 save.folder(),
                 save.worldType(),
                 save.seed());
-        // Joining the server and drawing the world come in the next steps of Starting a Game
+        stop();
+        setUpScene();
         LocalServer.open(SaveUtil.savesFolder().resolve(save.folder()))
                 .whenComplete(
                         (spawn, error) -> {
@@ -52,30 +92,101 @@ public final class SinglePlayerGame {
                                     spawn.x(),
                                     spawn.y(),
                                     spawn.z());
+                            GraphicsManager.runOnMainThread(SinglePlayerGame::join);
                         });
+    }
 
-        Model cubeModel =
-                ModelLoader.loadModel(
-                        new ModelLoader.ModelLoadRequest(
-                                "cube",
-                                FactoryClientPlugin.PLUGIN_NAME,
-                                "models/cube.obj",
-                                GraphicsManager.getScene().getMaterialCache(),
-                                false));
-        GraphicsManager.getScene().addModel(cubeModel);
-        GraphicsManager.forPlugin(FactoryClientPlugin.PLUGIN_NAME)
-                .instances()
-                .place(cubeModel, 0, 0, 0);
+    /** Leave the game being played, if any. Main thread only. */
+    public static void stop() {
+        if (moveStage != null) {
+            Launcher.removeMainThreadStage(moveStage);
+            moveStage = null;
+        }
+        if (session != null) {
+            session.close();
+            session = null;
+        }
+    }
+
+    /**
+     * The session of the game being played.
+     *
+     * @return The session, or null when not playing.
+     */
+    public static ClientSession getSession() {
+        return session;
+    }
+
+    /** Connect to the local server and join. Main thread only. */
+    private static void join() {
+        final ClientSession joining =
+                new ClientSession(GraphicsManager::runOnMainThread, SinglePlayerGame::onJoined);
+        final Connection connection = LocalServer.connect(joining);
+        session = joining;
+        joining.join(connection, PLAYER_NAME);
+        lastSent.set(Double.NaN);
+        moveStage = Launcher.addMainThreadStage(SinglePlayerGame::sendMove);
+    }
+
+    /**
+     * Put the camera at the player's eye once the server says where the player is.
+     *
+     * @param joined The server's answer.
+     */
+    private static void onJoined(@NonNull Joined joined) {
+        log.info(
+                "Joined as {} at {}, {}, {}",
+                joined.getPlayerId(),
+                joined.getX(),
+                joined.getY(),
+                joined.getZ());
+        final Camera camera = GraphicsManager.getScene().getCamera();
+        camera.setPosition(joined.getX(), joined.getY() + EYE_HEIGHT, joined.getZ());
+        camera.setRotation(joined.getPitch(), joined.getYaw());
+    }
+
+    /**
+     * Send the player's position when it moved, at most every {@value #MOVE_INTERVAL_MILLIS} ms. A
+     * main loop stage.
+     *
+     * @return The stage status.
+     */
+    private static int sendMove() {
+        final ClientSession playing = session;
+        if (playing == null || !playing.isJoined()) {
+            return 0;
+        }
+        final long now = System.currentTimeMillis();
+        if (now - lastSentMillis < MOVE_INTERVAL_MILLIS) {
+            return 0;
+        }
+        final Camera camera = GraphicsManager.getScene().getCamera();
+        final Vector3d eye = camera.getPosition();
+        if (Double.isNaN(lastSent.x) || eye.distance(lastSent) > MOVE_THRESHOLD) {
+            lastSent.set(eye);
+            lastSentMillis = now;
+            playing.sendMove(
+                    eye.x,
+                    eye.y - EYE_HEIGHT,
+                    eye.z,
+                    camera.getRotation().y,
+                    camera.getRotation().x);
+        }
+        final int chunks = playing.getWorld().size();
+        if (chunks != lastReported && now - lastReportMillis >= REPORT_INTERVAL_MILLIS) {
+            lastReported = chunks;
+            lastReportMillis = now;
+            log.info("The client has {} chunks", chunks);
+        }
+        return 0;
+    }
+
+    /** Light the scene and switch to drawing the world. */
+    private static void setUpScene() {
         GraphicsManager.getScene()
                 .getSceneLights()
                 .setAmbientLight(new AmbientLight(new Vector3f(1.0f, 1.0f, 1.0f), 0.6f));
-        GraphicsManager.forPlugin(FactoryClientPlugin.PLUGIN_NAME)
-                .lights()
-                .point(new Vector3d(2.0, 1.1, 0.0), new Vector3f(1.0f, 0.0f, 0.0f), 1.0f);
         GraphicsManager.swapPipeline(RenderConfig.WORLD);
-        GraphicsManager.getScene().getCamera().setPosition(1.86f, 2.43f, 2.33f);
-        GraphicsManager.getScene().getCamera().setRotation(0.64f, 5.62f);
-
         var texturePath =
                 PluginFolder.getResource(
                                 FactoryClientPlugin.PLUGIN_NAME,

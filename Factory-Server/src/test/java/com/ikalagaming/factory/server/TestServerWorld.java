@@ -4,6 +4,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.ikalagaming.factory.networking.base.Connection;
+import com.ikalagaming.factory.networking.base.Request;
+import com.ikalagaming.factory.networking.request.clientbound.ChunkData;
+import com.ikalagaming.factory.networking.request.clientbound.ChunkUnload;
+import com.ikalagaming.factory.networking.request.clientbound.Joined;
 import com.ikalagaming.factory.world.Chunk;
 import com.ikalagaming.factory.world.ChunkPos;
 import com.ikalagaming.factory.world.World;
@@ -18,8 +23,10 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 
 /** Tests for a world open on the server. */
@@ -67,6 +74,86 @@ class TestServerWorld {
 
             world.tick();
             assertEquals(1, world.getTicks());
+        }
+    }
+
+    /** Records what the server sends a client. */
+    private static final class Recorder implements Connection {
+        final List<Request> sent = new CopyOnWriteArrayList<>();
+
+        @Override
+        public void connect() {}
+
+        @Override
+        public void disconnect() {}
+
+        @Override
+        public boolean isLocal() {
+            return true;
+        }
+
+        @Override
+        public void receive(Request request) {}
+
+        @Override
+        public void send(Request request) {
+            sent.add(request);
+        }
+
+        long count(Class<?> type) {
+            return sent.stream().filter(type::isInstance).count();
+        }
+    }
+
+    /** Tick until a condition holds, failing after a while. */
+    private static void tickUntil(ServerWorld world, java.util.function.BooleanSupplier done)
+            throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(60);
+        while (!done.getAsBoolean()) {
+            if (System.nanoTime() > deadline) {
+                throw new AssertionError("Timed out");
+            }
+            world.tick();
+            Thread.sleep(1);
+        }
+    }
+
+    @Test
+    void testStreamsNearestFirstAndDropsBehind() throws Exception {
+        SpawnFinder.Spawn spawn = new SpawnFinder.Spawn(0, 64, 0, false);
+        try (ServerWorld world =
+                new ServerWorld(Path.of("save"), "world", emptyWorld(), spawn, 4)) {
+            Recorder client = new Recorder();
+            world.post(() -> world.join("Tester", client));
+            int all =
+                    (2 * ServerWorld.VIEW_RADIUS + 1)
+                            * (2 * ServerWorld.VIEW_RADIUS + 1)
+                            * (2 * ServerWorld.VERTICAL_RADIUS + 1);
+            tickUntil(world, () -> client.count(ChunkData.class) >= all);
+
+            Joined joined = (Joined) client.sent.getFirst();
+            assertEquals(0.5, joined.getX());
+            assertEquals(64.0, joined.getY());
+            ChunkData first = (ChunkData) client.sent.get(1);
+            // Chunks are asked for nearest first; threads finish in any order, so the first to
+            // arrive is one of the nearest
+            long dy = first.getY() - 4L;
+            assertTrue(
+                    first.getX() * (long) first.getX()
+                                    + dy * dy
+                                    + first.getZ() * (long) first.getZ()
+                            <= 4);
+            assertEquals(all, client.count(ChunkData.class));
+
+            // Move 10 chunks east: the chunks more than a chunk past the view behind are dropped
+            ServerPlayer player = world.players().iterator().next();
+            world.post(() -> player.moveTo(160.5, 64, 0.5));
+            int width = 2 * ServerWorld.VIEW_RADIUS + 1;
+            int height = 2 * ServerWorld.VERTICAL_RADIUS + 1;
+            int dropped = (10 - ServerWorld.DROP_MARGIN) * width * height;
+            tickUntil(world, () -> client.count(ChunkUnload.class) >= dropped);
+            world.tick();
+            assertEquals(dropped, client.count(ChunkUnload.class));
         }
     }
 }

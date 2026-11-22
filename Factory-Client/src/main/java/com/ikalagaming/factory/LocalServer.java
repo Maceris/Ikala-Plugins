@@ -1,5 +1,7 @@
 package com.ikalagaming.factory;
 
+import com.ikalagaming.factory.networking.base.Connection;
+import com.ikalagaming.factory.networking.base.RequestHandler;
 import com.ikalagaming.factory.world.gen.SpawnFinder;
 import com.ikalagaming.plugins.PluginManager;
 
@@ -44,6 +46,22 @@ public final class LocalServer {
     }
 
     /**
+     * Connect a client to the world open on the local server. Requests pass as objects, never
+     * serialized, but only through the returned connection, so a remote server would work the same
+     * way.
+     *
+     * @param client Handles the requests the server sends.
+     * @return The connection that sends requests to the server.
+     * @throws IllegalStateException If the server plugin isn't enabled or no world is open.
+     */
+    public static Connection connect(@NonNull RequestHandler client) {
+        if (!isAvailable()) {
+            throw new IllegalStateException(SERVER_PLUGIN + " isn't enabled");
+        }
+        return Starter.connect(client);
+    }
+
+    /**
      * Holds the reference to server classes, so they only load once the plugin is known to be
      * there.
      */
@@ -58,6 +76,16 @@ public final class LocalServer {
             return FactoryServerPlugin.getServer()
                     .open(saveFolder)
                     .thenApply(com.ikalagaming.factory.server.ServerWorld::getSpawn);
+        }
+
+        /**
+         * Connect a client.
+         *
+         * @param client Handles the requests the server sends.
+         * @return The client's connection.
+         */
+        static Connection connect(@NonNull RequestHandler client) {
+            return FactoryServerPlugin.getServer().connect(client);
         }
 
         private Starter() {}

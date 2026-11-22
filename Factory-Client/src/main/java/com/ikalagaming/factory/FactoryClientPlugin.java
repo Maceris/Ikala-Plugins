@@ -136,6 +136,7 @@ public class FactoryClientPlugin extends Plugin {
         }
         // Their surfaces are removed with the plugin's graphics
         menus = null;
+        SinglePlayerGame.stop();
         return true;
     }
 

@@ -3,7 +3,12 @@ package com.ikalagaming.factory.networking;
 import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.factory.networking.base.Request;
 import com.ikalagaming.factory.networking.base.RequestDirection;
+import com.ikalagaming.factory.networking.request.clientbound.ChunkData;
+import com.ikalagaming.factory.networking.request.clientbound.ChunkUnload;
+import com.ikalagaming.factory.networking.request.clientbound.Joined;
 import com.ikalagaming.factory.networking.request.clientbound.UpdateTagRegistry;
+import com.ikalagaming.factory.networking.request.serverbound.Join;
+import com.ikalagaming.factory.networking.request.serverbound.PlayerMove;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import com.google.common.collect.BiMap;
@@ -111,6 +116,11 @@ public class RequestRegistry {
         }
         setUp = true;
         registerClientBound(UpdateTagRegistry.class);
+        registerClientBound(Joined.class);
+        registerClientBound(ChunkData.class);
+        registerClientBound(ChunkUnload.class);
+        registerServerBound(Join.class);
+        registerServerBound(PlayerMove.class);
     }
 
     /**
