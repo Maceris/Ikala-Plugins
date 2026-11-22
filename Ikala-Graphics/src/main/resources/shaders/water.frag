@@ -232,10 +232,11 @@ vec3 behindPoint(ivec2 pixel, float behindDepth) {
 
 void main() {
     WaterTileData tile = tileList.waterTiles[outTile];
-    vec3 absorption = tile.absorption.rgb;
-    vec3 scattering = tile.scattering.rgb;
+    vec3 absorption;
+    vec3 scattering;
+    vec3 backscattering;
+    waterTileOptics(tileList, tile, outRestXZ, absorption, scattering, backscattering);
     vec3 extinction = absorption + scattering;
-    vec3 backscattering = tile.backscattering.rgb;
 
     // Render space: world axes, the camera at the origin
     const vec3 up = vec3(0.0, 1.0, 0.0);

@@ -692,8 +692,20 @@ public class ShaderBindings {
         /** Where its width along z is, in meters, the scattering's fourth float. */
         public static final int TILE_WIDTH_Z = TILE_SCATTERING + 3 * Float.BYTES;
 
+        /**
+         * Where the tiles across its edges are, -x, +x, -z, +z, an ivec4, -1 for none, see {@link
+         * WaterNeighbors}.
+         */
+        public static final int TILE_NEIGHBORS = 64;
+
+        /**
+         * Where whether it blends its optics with its neighbors' is, 1 or 0, the backscattering's
+         * fourth float, see {@link WaterNeighbors#blends}.
+         */
+        public static final int TILE_BLENDS = TILE_BACKSCATTERING + 3 * Float.BYTES;
+
         /** The size of one tile's entry. */
-        public static final int TILE_SIZE = 64;
+        public static final int TILE_SIZE = TILE_NEIGHBORS + WaterNeighbors.EDGES * Integer.BYTES;
 
         /**
          * The size of a vertex: its place relative to its tile's corner, its tile, its calm factor

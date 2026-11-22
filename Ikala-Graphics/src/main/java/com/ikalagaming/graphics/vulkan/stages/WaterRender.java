@@ -22,6 +22,7 @@ import com.ikalagaming.graphics.vulkan.TextureInfoVulkan;
 import com.ikalagaming.graphics.vulkan.VulkanState;
 import com.ikalagaming.graphics.vulkan.WaterMath;
 import com.ikalagaming.graphics.vulkan.WaterMesh;
+import com.ikalagaming.graphics.vulkan.WaterNeighbors;
 import com.ikalagaming.graphics.vulkan.WaterVolume;
 import com.ikalagaming.graphics.vulkan.WaveGrid;
 import com.ikalagaming.graphics.vulkan.WaveMath;
@@ -343,6 +344,12 @@ public class WaterRender implements RenderStage {
     /** Each tile's optics, in step with {@link #tiles}. */
     private final List<WaterMath.Optics> optics = new ArrayList<>();
 
+    /** The tiles across each drawn tile's edges, see {@link WaterNeighbors#find}. */
+    private int[] neighbors = new int[0];
+
+    /** Which drawn tiles blend their optics, see {@link WaterNeighbors#blends}. */
+    private boolean[] blends = new boolean[0];
+
     /** The version of the tiles drawn, -1 for none. */
     private long version = -1;
 
@@ -395,13 +402,18 @@ public class WaterRender implements RenderStage {
      * @param climates Their climates.
      * @param mesh Their surfaces and sides.
      * @param cells What each one meter cell they cover holds.
+     * @param neighbors The tiles across each one's edges, see {@link WaterNeighbors#find}.
+     * @param blends Which blend their optics with their neighbors', see {@link
+     *     WaterNeighbors#blends}.
      */
     private record Built(
             long version,
             @NonNull List<WaterTile> tiles,
             @NonNull Climates climates,
             WaterMesh.@NonNull Mesh mesh,
-            WaterMesh.@NonNull CellData cells) {}
+            WaterMesh.@NonNull CellData cells,
+            int @NonNull [] neighbors,
+            boolean @NonNull [] blends) {}
 
     /**
      * Set up the stage.
@@ -1016,12 +1028,15 @@ public class WaterRender implements RenderStage {
      */
     private Built build(long version, @NonNull List<WaterTile> list) {
         final Climates found = findClimates(list);
+        final int[] neighbors = WaterNeighbors.find(list);
         return new Built(
                 version,
                 list,
                 found,
                 meshBuilder.mesh(list),
-                meshBuilder.cellData(list, found.tileClimates()));
+                meshBuilder.cellData(list, found.tileClimates()),
+                neighbors,
+                WaterNeighbors.blends(list, neighbors));
     }
 
     /**
@@ -1037,6 +1052,8 @@ public class WaterRender implements RenderStage {
         for (WaterTile tile : tiles) {
             optics.add(WaterMath.optics(tile.body()));
         }
+        neighbors = built.neighbors();
+        blends = built.blends();
         // What was drawn goes back to be filled by the next build: nothing reads it after this
         if (mesh != null) {
             meshBuilder.recycle(mesh);
@@ -1507,6 +1524,12 @@ public class WaterRender implements RenderStage {
             MemoryUtil.memPutFloat(
                     at + ShaderBindings.Water.TILE_WIDTH_Z,
                     (float) (tile.cellsZ() * tile.cellSize()));
+            for (int edge = 0; edge < WaterNeighbors.EDGES; ++edge) {
+                MemoryUtil.memPutInt(
+                        at + ShaderBindings.Water.TILE_NEIGHBORS + (long) edge * Integer.BYTES,
+                        neighbors[index * WaterNeighbors.EDGES + edge]);
+            }
+            MemoryUtil.memPutFloat(at + ShaderBindings.Water.TILE_BLENDS, blends[index] ? 1 : 0);
             final WaterMath.Optics tileOptics = optics.get(index);
             for (int channel = 0; channel < WaterMath.CHANNELS; ++channel) {
                 final long offset = (long) channel * Float.BYTES;

@@ -15,11 +15,76 @@ struct WaterTileData {
     vec4 absorption;
     vec4 scattering;
     vec4 backscattering;
+    // The tiles across its edges, -x, +x, -z, +z, -1 for none; backscattering.w is 1 if its optics
+    // blend with theirs, see WaterNeighbors.blends
+    ivec4 neighbors;
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer WaterTileList {
     WaterTileData waterTiles[];
 };
+
+// How far in from a tile's edge its water blends with the water across it, in meters, at most half
+// the tile: an even mix at the edge, its own water this far in
+const float WATER_BLEND_BAND = 8.0;
+
+// A tile's optics at a point relative to the camera, blended near its edges with the waters across
+// them, so a muddy river meets the clear sea in a band, not a line: mixed water's optics are its
+// waters' mixed in the same shares. Bilinear between this tile, the ones across the nearer x and z
+// edges and the one diagonally across both, the x neighbor's z neighbor, so the blend is continuous
+// at corners too. Where a neighbor is missing, land, this tile's water stands in.
+void waterTileOptics(WaterTileList list, WaterTileData tile, vec2 renderXZ, out vec3 absorption,
+        out vec3 scattering, out vec3 backscattering) {
+    absorption = tile.absorption.rgb;
+    scattering = tile.scattering.rgb;
+    backscattering = tile.backscattering.rgb;
+    if (tile.backscattering.w == 0.0) {
+        return;
+    }
+    vec2 size = vec2(tile.absorption.w, tile.scattering.w);
+    vec2 band = min(vec2(WATER_BLEND_BAND), 0.5 * size);
+    vec2 local = renderXZ - tile.offset.xz;
+    bvec2 high = greaterThan(local, 0.5 * size);
+    // How far in from the nearer edges, as shares of the band, and how much the water across counts
+    vec2 inward = mix(local, size - local, vec2(high)) / band;
+    vec2 across = 0.5 * max(vec2(0.0), 1.0 - inward);
+    int xEdge = high.x ? 1 : 0;
+    int zEdge = high.y ? 3 : 2;
+    if (across.x <= 0.0 && across.y <= 0.0) {
+        return;
+    }
+    int xTile = across.x > 0.0 ? tile.neighbors[xEdge] : -1;
+    int zTile = across.y > 0.0 ? tile.neighbors[zEdge] : -1;
+    mat3 x = mat3(absorption, scattering, backscattering);
+    if (xTile >= 0) {
+        WaterTileData t = list.waterTiles[xTile];
+        x = mat3(t.absorption.rgb, t.scattering.rgb, t.backscattering.rgb);
+    }
+    mat3 z = mat3(absorption, scattering, backscattering);
+    if (zTile >= 0) {
+        WaterTileData t = list.waterTiles[zTile];
+        z = mat3(t.absorption.rgb, t.scattering.rgb, t.backscattering.rgb);
+    }
+    // Diagonally across: the x neighbor's z neighbor, or the z neighbor's x neighbor; else the x
+    // neighbor's water, or the z neighbor's
+    mat3 d = xTile >= 0 ? x : z;
+    if (across.x > 0.0 && across.y > 0.0) {
+        int xz = xTile >= 0 ? list.waterTiles[xTile].neighbors[zEdge] : -1;
+        if (xz < 0 && zTile >= 0) {
+            xz = list.waterTiles[zTile].neighbors[xEdge];
+        }
+        if (xz >= 0) {
+            WaterTileData t = list.waterTiles[xz];
+            d = mat3(t.absorption.rgb, t.scattering.rgb, t.backscattering.rgb);
+        }
+    }
+    mat3 own = mat3(absorption, scattering, backscattering);
+    mat3 mixed = (1.0 - across.x) * (1.0 - across.y) * own + across.x * (1.0 - across.y) * x
+        + (1.0 - across.x) * across.y * z + across.x * across.y * d;
+    absorption = mixed[0];
+    scattering = mixed[1];
+    backscattering = mixed[2];
+}
 
 // Wind waves, see WaveMath: the directions the surface sums, the samples and length of each
 // short profile, its layers, and the shortest wave each layer holds, in meters

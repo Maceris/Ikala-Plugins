@@ -23,6 +23,13 @@ rivers then come from real concentrations.
   behind; waves too small to draw become roughness (Bruneton, Neyret and Holzschuch 2010), so far water stays
   sharp without shimmering.
 
+- **Waters blend where tiles meet:** across 8 m either side of an edge (at most half a tile) the optics mix
+  linearly, as mixed water's would, bilinearly with the tiles across the nearer x and z edges and the one
+  diagonally across, so corners are continuous too. `WaterNeighbors` finds each tile's neighbor per edge by probing
+  just past its water cells from the middle out (land at an edge's middle hid the rest), and only if the surfaces
+  meet within 0.5 m, so a pool under a lip doesn't take the river's color. Tiles with no different water beside
+  them, across an edge or diagonally, skip the blend; one neighbor per edge assumes tiles line up, as chunks do.
+
 ## Waves
 
 - **Wind spectrum:** JONSWAP, becoming Pierson-Moskowitz for a fully developed sea; 128 waves at whole harmonics of

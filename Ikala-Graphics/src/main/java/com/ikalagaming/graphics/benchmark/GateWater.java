@@ -286,6 +286,24 @@ public final class GateWater {
         final int reach = radius * SyntheticTerrain.SECTION;
         final int tiles = (2 * reach + OCEAN_CELLS - 1) / OCEAN_CELLS;
         final int corners = OCEAN_CELLS + 1;
+        // Every other tile's water another body's, a checkerboard, to see waters meet
+        final String mixedName = options.get("mixedWater");
+        final WaterBody mixedBase =
+                mixedName == null
+                        ? null
+                        : WATER_BODY_NAMES.get(mixedName.trim().toLowerCase(Locale.ROOT));
+        if (mixedName != null && mixedBase == null) {
+            log.warn(
+                    "The benchmark's mixed water must be one of {}, not {}",
+                    WATER_BODY_NAMES.keySet(),
+                    mixedName);
+        }
+        final WaterBody mixed =
+                mixedBase == null
+                        ? null
+                        : mixedBase
+                                .withWind(body.windSpeed(), body.windDirection(), body.fetch())
+                                .withSwell(body.swell());
         for (int tileZ = 0; tileZ < tiles; ++tileZ) {
             for (int tileX = 0; tileX < tiles; ++tileX) {
                 final int startX = -reach + tileX * OCEAN_CELLS;
@@ -320,7 +338,7 @@ public final class GateWater {
                                     heights,
                                     bottoms,
                                     mask,
-                                    body),
+                                    mixed != null && ((tileX + tileZ) & 1) == 1 ? mixed : body),
                             Float.POSITIVE_INFINITY);
                 }
             }
