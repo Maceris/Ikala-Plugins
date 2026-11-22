@@ -75,8 +75,29 @@ public final class WorldgenCompiler implements FieldReader.Problems {
     /** The only feature type built so far: one block in its own cell. */
     public static final String FEATURE_BLOCK = "block";
 
-    /** The only layer built so far: single blocks. */
+    /** The feature type for a tree of a species. */
+    public static final String FEATURE_TREE = "tree";
+
+    /** The tree shape grown by space colonization. */
+    public static final String SHAPE_BROADLEAF = "broadleaf";
+
+    /** The layer of single blocks. */
     public static final String LAYER_SMALL = "small";
+
+    /** The layer of instances, such as trees. */
+    public static final String LAYER_LARGE = "large";
+
+    /** The placement that spreads candidates over cells. */
+    public static final String PLACEMENT_CELLS = "cells";
+
+    /** The placement step saying what candidates stand on. */
+    public static final String PLACEMENT_ATTACH = "attach";
+
+    /** Standing on the floor, the only attachment built. */
+    public static final String ATTACH_FLOOR = "floor";
+
+    /** A cell's height when only its width is given. */
+    public static final int DEFAULT_CELL_HEIGHT = 32;
 
     /** The placement where every floor cell rolls a chance. */
     public static final String PLACEMENT_EACH_FLOOR = "each_floor";
@@ -171,6 +192,7 @@ public final class WorldgenCompiler implements FieldReader.Problems {
                     case FLUIDS -> fluidsFile(file.id(), null);
                     case FEATURE -> feature(file.id(), null);
                     case PLACED_FEATURE -> placedFeature(file.id(), null);
+                    case TREE_SPECIES -> treeSpecies(file.id(), null);
                     case WORLD_TYPE -> worldType(file.id(), null);
                 }
             }
@@ -984,9 +1006,16 @@ public final class WorldgenCompiler implements FieldReader.Problems {
     private Feature buildFeature(@NonNull FieldReader reader) {
         final FieldReader typeField = reader.get(KEY_TYPE);
         final String type = typeField.string();
+        if (FEATURE_TREE.equals(type)) {
+            reader.warnUnknownFields(Set.of(KEY_TYPE, "species"));
+            final FieldReader speciesField = reader.get("species");
+            return treeSpecies(speciesField.string(), speciesField)
+                    .map(Feature.Tree::new)
+                    .orElse(null);
+        }
         if (!FEATURE_BLOCK.equals(type)) {
             if (!type.isEmpty()) {
-                typeField.error("WORLDGEN_UNKNOWN_TYPE", type, FEATURE_BLOCK);
+                typeField.error("WORLDGEN_UNKNOWN_TYPE", type, FEATURE_BLOCK + ", " + FEATURE_TREE);
             }
             return null;
         }
@@ -1014,6 +1043,60 @@ public final class WorldgenCompiler implements FieldReader.Problems {
     }
 
     /**
+     * A tree species file.
+     *
+     * @param id The ID.
+     * @param from The referencing field, or null.
+     * @return The species, if the file is good.
+     */
+    public Optional<TreeSpecies> treeSpecies(@NonNull String id, FieldReader from) {
+        return compileFile(Kind.TREE_SPECIES, id, from, root -> buildTreeSpecies(id, root));
+    }
+
+    /**
+     * Build a tree species.
+     *
+     * @param id The ID.
+     * @param root The file.
+     * @return The species, or null after an error.
+     */
+    private TreeSpecies buildTreeSpecies(@NonNull String id, @NonNull FieldReader root) {
+        root.warnUnknownFields(
+                Set.of(
+                        KEY_TYPE,
+                        "trunk",
+                        "leaves",
+                        "height",
+                        "crown_start",
+                        "crown_radius",
+                        "leaf_radius"));
+        final FieldReader typeField = root.get(KEY_TYPE);
+        final String type = typeField.string();
+        if (!SHAPE_BROADLEAF.equals(type)) {
+            if (!type.isEmpty()) {
+                typeField.error("WORLDGEN_UNKNOWN_TYPE", type, SHAPE_BROADLEAF);
+            }
+            return null;
+        }
+        final Block trunk = block(root.get("trunk"));
+        final Block leaves = block(root.get("leaves"));
+        try {
+            return new TreeSpecies(
+                    id,
+                    TreeSpecies.Shape.BROADLEAF,
+                    trunk,
+                    leaves,
+                    root.get("height").numbers(RANGE_LENGTH),
+                    root.get("crown_start").numbers(RANGE_LENGTH),
+                    root.get("crown_radius").numbers(RANGE_LENGTH),
+                    root.get("leaf_radius").numbers(RANGE_LENGTH));
+        } catch (IllegalArgumentException e) {
+            root.error("WORLDGEN_BAD_TREE", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
      * A placed feature file.
      *
      * @param id The ID.
@@ -1025,8 +1108,9 @@ public final class WorldgenCompiler implements FieldReader.Problems {
     }
 
     /**
-     * Build a placed feature. Only the small layer is built: a single block feature placed with
-     * {@code each_floor}, and conditions.
+     * Build a placed feature: in the small layer, a single block feature placed with {@code
+     * each_floor}; in the large layer, a tree placed over {@code cells}, on the floor. Both take
+     * conditions.
      *
      * @param id The ID.
      * @param root The file.
@@ -1037,12 +1121,20 @@ public final class WorldgenCompiler implements FieldReader.Problems {
         final Optional<Feature> feature = featureValue(root.get("feature"));
         final Set<String> biomes = biomeSet(root.get("biomes"));
         final FieldReader layerField = root.get("layer");
-        final String layer = layerField.string(LAYER_SMALL);
-        if (!LAYER_SMALL.equals(layer)) {
-            layerField.error("WORLDGEN_LAYER_NOT_BUILT", layer, LAYER_SMALL);
+        final String layerName = layerField.string(LAYER_SMALL);
+        final PlacedFeature.Layer layer;
+        if (LAYER_SMALL.equals(layerName)) {
+            layer = PlacedFeature.Layer.SMALL;
+        } else if (LAYER_LARGE.equals(layerName)) {
+            layer = PlacedFeature.Layer.LARGE;
+        } else {
+            layerField.error(
+                    "WORLDGEN_LAYER_NOT_BUILT", layerName, LAYER_SMALL + ", " + LAYER_LARGE);
+            return null;
         }
         final int priority = root.get("priority").integer(0);
         double chance = -1;
+        PlacedFeature.Cells cells = null;
         final List<BlockRules.Condition> conditions = new ArrayList<>();
         for (FieldReader step : root.get("placement").list()) {
             final FieldReader typeField = step.get(KEY_TYPE);
@@ -1060,6 +1152,19 @@ public final class WorldgenCompiler implements FieldReader.Problems {
                         chance = 0;
                     }
                 }
+                case PLACEMENT_CELLS -> {
+                    if (cells != null) {
+                        step.error("WORLDGEN_PLACEMENT_TWICE", type);
+                    }
+                    cells = cellPlacement(step);
+                }
+                case PLACEMENT_ATTACH -> {
+                    step.warnUnknownFields(Set.of(KEY_TYPE, "to"));
+                    final FieldReader to = step.get("to");
+                    if (!ATTACH_FLOOR.equals(to.string(ATTACH_FLOOR))) {
+                        to.error("WORLDGEN_ATTACH_NOT_BUILT", to.string(), ATTACH_FLOOR);
+                    }
+                }
                 case PLACEMENT_CONDITION -> {
                     step.warnUnknownFields(Set.of(KEY_TYPE, "if"));
                     conditions.add(condition(step.get("if")));
@@ -1069,20 +1174,33 @@ public final class WorldgenCompiler implements FieldReader.Problems {
                         typeField.error(
                                 "WORLDGEN_UNKNOWN_TYPE",
                                 type,
-                                PLACEMENT_EACH_FLOOR + ", " + PLACEMENT_CONDITION);
+                                String.join(
+                                        ", ",
+                                        PLACEMENT_EACH_FLOOR,
+                                        PLACEMENT_CELLS,
+                                        PLACEMENT_ATTACH,
+                                        PLACEMENT_CONDITION));
                     }
                 }
             }
         }
-        if (chance < 0) {
+        if (layer == PlacedFeature.Layer.SMALL && chance < 0) {
             root.get("placement").error("WORLDGEN_NEEDS_EACH_FLOOR");
+            return null;
+        }
+        if (layer == PlacedFeature.Layer.LARGE && cells == null) {
+            root.get("placement").error("WORLDGEN_NEEDS_CELLS");
             return null;
         }
         if (feature.isEmpty()) {
             return null;
         }
-        if (!(feature.get() instanceof Feature.SingleBlock)) {
+        if (layer == PlacedFeature.Layer.SMALL && !(feature.get() instanceof Feature.SingleBlock)) {
             root.get("feature").error("WORLDGEN_EACH_FLOOR_SINGLE_BLOCK");
+            return null;
+        }
+        if (layer == PlacedFeature.Layer.LARGE && !(feature.get() instanceof Feature.Tree)) {
+            root.get("feature").error("WORLDGEN_LARGE_NEEDS_TREE");
             return null;
         }
         return new PlacedFeature(
@@ -1090,9 +1208,50 @@ public final class WorldgenCompiler implements FieldReader.Problems {
                 feature.get(),
                 biomes,
                 priority,
-                chance,
+                layer,
+                layer == PlacedFeature.Layer.SMALL ? chance : 0,
+                cells,
                 conditions,
                 WorldgenHash.seed(seed, Kind.PLACED_FEATURE.getFolder() + "/" + id));
+    }
+
+    /**
+     * Read a {@code cells} placement step.
+     *
+     * @param step The step.
+     * @return The cells, or null after an error.
+     */
+    private PlacedFeature.Cells cellPlacement(@NonNull FieldReader step) {
+        step.warnUnknownFields(Set.of(KEY_TYPE, "size", "candidates", "spacing"));
+        final FieldReader sizeField = step.get("size");
+        final int[] size;
+        if (sizeField.isNumber()) {
+            final int across = sizeField.integer();
+            size = new int[] {across, DEFAULT_CELL_HEIGHT, across};
+        } else {
+            final double[] read = sizeField.numbers(DensityNode.AXIS_COUNT);
+            size = new int[] {(int) read[0], (int) read[1], (int) read[2]};
+        }
+        final FieldReader countField = step.get("candidates");
+        final int candidates = countField.integer(1);
+        double min = 0;
+        double max = 0;
+        DensityNode by = null;
+        if (step.has("spacing")) {
+            final FieldReader spacing = step.get("spacing");
+            spacing.warnUnknownFields(Set.of("min", "max", "by"));
+            min = spacing.get("min").number(0);
+            max = spacing.get("max").number(min);
+            if (spacing.has("by")) {
+                by = density(spacing.get("by"));
+            }
+        }
+        try {
+            return new PlacedFeature.Cells(size, candidates, min, max, by);
+        } catch (IllegalArgumentException e) {
+            step.error("WORLDGEN_BAD_CELLS", e.getMessage());
+            return null;
+        }
     }
 
     /**

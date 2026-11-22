@@ -12,7 +12,9 @@ import com.ikalagaming.factory.world.gen.density.Styles;
 
 import lombok.NonNull;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -86,6 +88,19 @@ public final class WorldGenerator {
     /** The world type's biomes by ID, including the fallback. */
     private final java.util.Map<String, Biome> biomesById = new java.util.HashMap<>();
 
+    /** How many block rule chunks to keep for the large layer to look at. */
+    private static final int BASE_CAPACITY = 8192;
+
+    /** Chunks generated to the block rules stage, which the large layer looks at. */
+    private final ComputeCache<ChunkPos, Chunk> baseChunks =
+            new ComputeCache<>(BASE_CAPACITY, pos -> generate(pos, Stage.BLOCK_RULES));
+
+    /** The large layer, or null if the world type places nothing large. */
+    private final LargeFeatures large;
+
+    /** The small layer's placed features, in order. */
+    private final List<PlacedFeature> small;
+
     /**
      * Set up generation.
      *
@@ -99,6 +114,38 @@ public final class WorldGenerator {
         for (Biome biome : worldType.biomes()) {
             biomesById.put(biome.id(), biome);
         }
+        final List<PlacedFeature> largeFeatures = new ArrayList<>();
+        final List<PlacedFeature> smallFeatures = new ArrayList<>();
+        for (PlacedFeature placed : worldType.features()) {
+            (placed.layer() == PlacedFeature.Layer.LARGE ? largeFeatures : smallFeatures)
+                    .add(placed);
+        }
+        small = List.copyOf(smallFeatures);
+        large =
+                largeFeatures.isEmpty()
+                        ? null
+                        : new LargeFeatures(largeFeatures, baseChunks::get, fluidBlocks());
+    }
+
+    /**
+     * The names of the blocks the world type's fluids fill with.
+     *
+     * @return The names.
+     */
+    private Set<String> fluidBlocks() {
+        if (worldType.fluids() instanceof Fluids.Level level) {
+            return Set.of(level.fluid().getName());
+        }
+        return Set.of();
+    }
+
+    /**
+     * The large layer, for tests and debug views.
+     *
+     * @return The layer, or null if the world type places nothing large.
+     */
+    LargeFeatures getLarge() {
+        return large;
     }
 
     /**
@@ -163,8 +210,13 @@ public final class WorldGenerator {
         final Block[] fluid =
                 until.includes(Stage.FLUIDS) ? fluids(pos, solid, cache) : new Block[0];
         fill(chunk, pos, solid, fluid, until.includes(Stage.BLOCK_RULES), cache);
-        if (until.includes(Stage.FEATURES) && !worldType.features().isEmpty()) {
-            placeFeatures(chunk, pos, solid, fluid, cache);
+        if (until.includes(Stage.FEATURES)) {
+            if (large != null) {
+                large.stamp(chunk, pos);
+            }
+            if (!small.isEmpty()) {
+                placeFeatures(chunk, pos, solid, fluid, cache);
+            }
         }
         return chunk;
     }
@@ -212,10 +264,10 @@ public final class WorldGenerator {
     }
 
     /**
-     * Place the small features: every open position with solid ground under it rolls once for each
-     * placed feature that goes in its biome, in order, and takes the first that lands and passes
-     * its conditions. Everything is worked out from the terrain and block rules, so the chunk below
-     * never needs to exist.
+     * Place the small features, after the large ones: every open position with solid ground under
+     * it that is still air rolls once for each placed feature that goes in its biome, in order, and
+     * takes the first that lands and passes its conditions. Everything is worked out from the
+     * terrain and block rules, so the chunk below never needs to exist.
      *
      * @param chunk The chunk, its blocks chosen.
      * @param pos Where it is.
@@ -268,13 +320,17 @@ public final class WorldGenerator {
             boolean @NonNull [] solid,
             Block @NonNull [] fluid,
             EvalCache cache) {
+        if (!World.AIR.equals(chunk.getBlock(x, y, z))) {
+            // A large feature is already here
+            return;
+        }
         final String biome = chunk.getBiome(x, y, z);
         final long wx = pos.blockX() + x;
         final long wy = pos.blockY() + y;
         final long wz = pos.blockZ() + z;
         final long position = WorldgenHash.combine(wx, WorldgenHash.combine(wy, wz));
         BlockRules.Context context = null;
-        for (PlacedFeature placed : worldType.features()) {
+        for (PlacedFeature placed : small) {
             if (!placed.biomes().contains(biome)) {
                 continue;
             }

@@ -217,15 +217,21 @@ class TestFeatures {
                         .toList());
     }
 
-    /** Layers and placements that aren't built yet are errors, not silently ignored. */
+    /** Unknown layers, and placements a layer needs but lacks, are errors. */
     @Test
-    void testUnbuiltPlacements() {
+    void testPlacementErrors() {
         final WorldgenCompiler compiler =
                 new WorldgenFixtures.Text()
                         .add(Kind.BIOME, "t:meadow", "{climate:{}}")
                         .add(
                                 Kind.PLACED_FEATURE,
-                                "t:tree",
+                                "t:huge",
+                                "{feature:{type:\"block\", blocks:[N;{block:\"t:log\"}]},"
+                                        + " biomes:[T;\"t:meadow\"], layer:\"huge\","
+                                        + " placement:[N;{type:\"each_floor\", chance:0.5}]}")
+                        .add(
+                                Kind.PLACED_FEATURE,
+                                "t:nocells",
                                 "{feature:{type:\"block\", blocks:[N;{block:\"t:log\"}]},"
                                         + " biomes:[T;\"t:meadow\"], layer:\"large\","
                                         + " placement:[N;{type:\"each_floor\", chance:0.5}]}")
@@ -234,11 +240,12 @@ class TestFeatures {
                                 "t:nofloor",
                                 "{feature:{type:\"block\", blocks:[N;{block:\"t:log\"}]},"
                                         + " biomes:[T;\"t:meadow\"],"
-                                        + " placement:[N;{type:\"cells\", size:16}]}")
+                                        + " placement:[N;{type:\"scatter\", count:3}]}")
                         .compileAll();
         final List<String> codes =
                 compiler.getDiagnostics().stream().map(Diagnostic::code).toList();
         assertTrue(codes.contains("WORLDGEN_LAYER_NOT_BUILT"), codes::toString);
+        assertTrue(codes.contains("WORLDGEN_NEEDS_CELLS"), codes::toString);
         assertTrue(codes.contains("WORLDGEN_NEEDS_EACH_FLOOR"), codes::toString);
         assertTrue(codes.contains("WORLDGEN_UNKNOWN_TYPE"), codes::toString);
     }

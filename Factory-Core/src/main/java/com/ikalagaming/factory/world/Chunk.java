@@ -98,6 +98,24 @@ public class Chunk {
     }
 
     /**
+     * A copy that can be changed without changing this chunk.
+     *
+     * @return The copy.
+     */
+    public Chunk copy() {
+        final Chunk copy = new Chunk(palette.get(0), biomePalette.get(0));
+        for (Block block : palette) {
+            copy.indexOf(block);
+        }
+        for (String biome : biomePalette) {
+            copy.biomeIndexOf(biome);
+        }
+        System.arraycopy(blocks, 0, copy.blocks, 0, blocks.length);
+        System.arraycopy(biomes, 0, copy.biomes, 0, biomes.length);
+        return copy;
+    }
+
+    /**
      * Set the block at a position.
      *
      * @param x The x coordinate within the chunk.

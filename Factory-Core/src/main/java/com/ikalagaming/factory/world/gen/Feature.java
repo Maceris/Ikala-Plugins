@@ -13,6 +13,13 @@ import java.util.List;
 public sealed interface Feature {
 
     /**
+     * A tree of a species, grown from its own seed.
+     *
+     * @param species The species.
+     */
+    record Tree(@NonNull TreeSpecies species) implements Feature {}
+
+    /**
      * One block in its own cell, picked by weight, for grass tufts and flowers.
      *
      * @param blocks The blocks to pick from.

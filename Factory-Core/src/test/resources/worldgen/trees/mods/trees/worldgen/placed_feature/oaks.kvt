@@ -1,0 +1,1 @@
+{feature:{type:"tree", species:"trees:oak"}, biomes:[T;"test:plains"], layer:"large", placement:[N;{type:"cells", size:[I;8,32,8], candidates:2, spacing:{min:4.0, max:4.0}}, {type:"attach", to:"floor"}, {type:"condition", if:{type:"below", blocks:[T;"test:grass"]}}]}
