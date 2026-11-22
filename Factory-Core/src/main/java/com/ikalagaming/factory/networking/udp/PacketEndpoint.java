@@ -63,8 +63,11 @@ public final class PacketEndpoint {
     /** Packets received since the last one sent, after which acks go back at once. */
     private static final int ACK_EVERY = 16;
 
-    /** How long acks wait for a packet to ride on. */
-    private static final long ACK_DELAY_NANOS = TimeUnit.MILLISECONDS.toNanos(10);
+    /**
+     * How long acks wait for a packet to ride on, from the last packet sent. Longer than a command
+     * frame, so the per-frame messages each way carry them and no packet goes for acks alone.
+     */
+    private static final long ACK_DELAY_NANOS = TimeUnit.MILLISECONDS.toNanos(25);
 
     /** How long between packets when there is nothing to say. */
     private static final long KEEPALIVE_NANOS = TimeUnit.MILLISECONDS.toNanos(250);
@@ -238,6 +241,20 @@ public final class PacketEndpoint {
     @Getter private long resends;
 
     /**
+     * Bytes of packets sent, without the IP and UDP headers.
+     *
+     * @return The count.
+     */
+    @Getter private long bytesSent;
+
+    /**
+     * Bytes of packets received for this connection, without the IP and UDP headers.
+     *
+     * @return The count.
+     */
+    @Getter private long bytesReceived;
+
+    /**
      * Whether the far end sent something this can't make sense of, so the connection should close.
      *
      * @return True if it did.
@@ -367,6 +384,7 @@ public final class PacketEndpoint {
                             sequence, now, ids.stream().mapToInt(Integer::intValue).toArray());
             nextSequence = Sequences.add(sequence, 1);
             ++packetsSent;
+            bytesSent += packet.position();
             receivedSinceSend = 0;
             lastSendNanos = now;
             out.add(Arrays.copyOf(packet.array(), packet.position()));
@@ -386,6 +404,7 @@ public final class PacketEndpoint {
      */
     public List<Delivered> receive(byte @NonNull [] packet, long now) {
         final List<Delivered> out = new ArrayList<>();
+        bytesReceived += packet.length;
         final ByteBuffer in = ByteBuffer.wrap(packet);
         try {
             if (in.getInt() != PacketFormat.MAGIC

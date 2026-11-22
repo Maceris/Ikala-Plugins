@@ -20,14 +20,18 @@ import java.util.function.Consumer;
 
 /**
  * One connection over UDP, at either end. Requests sent through it are written on the caller's
- * thread and queued on the network thread, which owns the {@link PacketEndpoint}; requests that
- * arrive go to the local handler from the network thread.
+ * thread (inputs and states on the network thread, since they are packed against what this end last
+ * sent and received) and queued on the network thread, which owns the {@link PacketEndpoint};
+ * requests that arrive go to the local handler from the network thread.
  */
 @Slf4j
 public final class UdpConnection implements Connection {
 
     /** How many times a disconnect is sent, since it gets no answer. */
     private static final int DISCONNECT_COPIES = 3;
+
+    /** How often the byte rates are measured. */
+    private static final long RATE_NANOS = 1_000_000_000L;
 
     /** The socket. */
     private final Channel channel;
@@ -51,6 +55,11 @@ public final class UdpConnection implements Connection {
     /** The share of outgoing packets to drop, for testing over a perfect network; 0 normally. */
     private final double dropShare;
 
+    /**
+     * Packs inputs and states against what this end last sent and received. Network thread only.
+     */
+    private final FrameCodec frames = new FrameCodec();
+
     /** Decides which packets to drop. Network thread only. */
     private final SplittableRandom random = new SplittableRandom();
 
@@ -66,6 +75,24 @@ public final class UdpConnection implements Connection {
 
     /** Whether the connection has closed. */
     private volatile boolean closed;
+
+    /** When the connection was made, by {@link System#nanoTime()}. */
+    private final long openedNanos = System.nanoTime();
+
+    /** When the rates were last measured. Network thread only. */
+    private long rateSince = openedNanos;
+
+    /** Bytes sent when the rates were last measured. Network thread only. */
+    private long sentAtRate;
+
+    /** Bytes received when the rates were last measured. Network thread only. */
+    private long receivedAtRate;
+
+    /** Bytes sent a second, over the last second, without the IP and UDP headers. */
+    private volatile double sendRate;
+
+    /** Bytes received a second, over the last second, without the IP and UDP headers. */
+    private volatile double receiveRate;
 
     /**
      * A connection.
@@ -142,6 +169,17 @@ public final class UdpConnection implements Connection {
         if (closed) {
             return;
         }
+        if (FrameCodec.handles(request)) {
+            channel.eventLoop()
+                    .execute(
+                            () -> {
+                                if (!closed) {
+                                    endpoint.queue(frames.encode(request), false);
+                                    flush(System.nanoTime());
+                                }
+                            });
+            return;
+        }
         final byte[] bytes;
         try {
             bytes = MessageCodec.encode(request, outgoing);
@@ -190,7 +228,23 @@ public final class UdpConnection implements Connection {
             return;
         }
         for (PacketEndpoint.Delivered delivered : endpoint.receive(packet, now)) {
-            final Optional<Request> request = MessageCodec.decode(delivered.data(), incoming);
+            final byte[] data = delivered.data();
+            final Optional<Request> request;
+            if (FrameCodec.handles(data)) {
+                try {
+                    final Optional<Request> unpacked = frames.decode(data, now);
+                    if (unpacked.isEmpty()) {
+                        continue;
+                    }
+                    request = unpacked;
+                } catch (IllegalArgumentException e) {
+                    log.warn("{} sent a per-frame message this can't read; closing", remote);
+                    close(true);
+                    return;
+                }
+            } else {
+                request = MessageCodec.decode(data, incoming);
+            }
             if (request.isEmpty()) {
                 log.warn("{} sent a message this can't read; closing", remote);
                 close(true);
@@ -220,6 +274,32 @@ public final class UdpConnection implements Connection {
             return;
         }
         flush(now);
+        final long elapsed = now - rateSince;
+        if (elapsed >= RATE_NANOS) {
+            sendRate = (endpoint.getBytesSent() - sentAtRate) * 1e9 / elapsed;
+            receiveRate = (endpoint.getBytesReceived() - receivedAtRate) * 1e9 / elapsed;
+            sentAtRate = endpoint.getBytesSent();
+            receivedAtRate = endpoint.getBytesReceived();
+            rateSince = now;
+        }
+    }
+
+    /**
+     * Bytes sent a second, over the last second.
+     *
+     * @return The rate, without the IP and UDP headers.
+     */
+    public double sendRate() {
+        return sendRate;
+    }
+
+    /**
+     * Bytes received a second, over the last second.
+     *
+     * @return The rate, without the IP and UDP headers.
+     */
+    public double receiveRate() {
+        return receiveRate;
     }
 
     /**
@@ -255,6 +335,16 @@ public final class UdpConnection implements Connection {
             return;
         }
         closed = true;
+        final double seconds = Math.max(1e-9, (System.nanoTime() - openedNanos) / 1e9);
+        log.info(
+                "Closed {} after {} s: {} packets ({} B/s) sent, {} B/s received, {} lost, {} resends",
+                remote,
+                String.format("%.1f", seconds),
+                endpoint.getPacketsSent(),
+                Math.round(endpoint.getBytesSent() / seconds),
+                Math.round(endpoint.getBytesReceived() / seconds),
+                endpoint.getPacketsLost(),
+                endpoint.getResends());
         if (tellFarEnd) {
             final ByteBuffer packet = ByteBuffer.allocate(PacketFormat.PREFIX + Long.BYTES);
             packet.putInt(PacketFormat.MAGIC)

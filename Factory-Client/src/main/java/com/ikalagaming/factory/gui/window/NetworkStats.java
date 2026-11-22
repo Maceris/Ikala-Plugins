@@ -75,6 +75,10 @@ public class NetworkStats extends GuiWindow {
                                 udp.packetsLost(),
                                 udp.resends(),
                                 udp.roundTripMillis()));
+                IkGui.text(
+                        String.format(
+                                "Traffic: %.1f KB/s up, %.1f KB/s down",
+                                udp.sendRate() / 1000, udp.receiveRate() / 1000));
             }
         }
         IkGui.end();

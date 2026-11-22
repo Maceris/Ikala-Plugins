@@ -11,18 +11,24 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.NonNull;
 
-import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Optional;
+import java.util.zip.DataFormatException;
+import java.util.zip.Deflater;
+import java.util.zip.Inflater;
 
 /**
  * Requests as bytes, for packets. The first byte says how the rest is written:
  *
  * <ul>
- *   <li>{@link #INPUTS} and {@link #STATE}: the per-frame messages, written by hand to stay small,
- *       since they go 62.5 times a second.
+ *   <li>{@link #INPUTS} and {@link #STATE}: the per-frame messages, packed by each connection's
+ *       {@link FrameCodec} against what it last sent and received, so not here.
  *   <li>{@link #GENERAL}: anything else, as its registered id and its fields as a tree, the same as
  *       the stream codec.
+ *   <li>{@link #DEFLATED}: the same, compressed, for messages of at least {@value #COMPRESS_FROM}
+ *       bytes that compression makes smaller, like chunks. The length before compression comes
+ *       first, as 4 bytes, and is at most {@value #MAX_INFLATED}.
  * </ul>
  */
 public final class MessageCodec {
@@ -30,11 +36,23 @@ public final class MessageCodec {
     /** A request written as its id and a tree. */
     static final byte GENERAL = 0;
 
-    /** {@link PlayerInputs}, by hand. */
+    /** {@link PlayerInputs}, packed by {@link FrameCodec}. */
     static final byte INPUTS = 1;
 
-    /** {@link PlayerState}, by hand. */
+    /** {@link PlayerState}, packed by {@link FrameCodec}. */
     static final byte STATE = 2;
+
+    /** A {@link #GENERAL} request, compressed. */
+    static final byte DEFLATED = 3;
+
+    /** The smallest general request worth compressing, in bytes. */
+    static final int COMPRESS_FROM = 128;
+
+    /**
+     * The largest a compressed request may be once inflated, so a hostile peer can't make the other
+     * end inflate a few bytes into gigabytes.
+     */
+    static final int MAX_INFLATED = 16 * 1024 * 1024;
 
     /** Not made. */
     private MessageCodec() {
@@ -48,13 +66,12 @@ public final class MessageCodec {
      * @param direction Which way it goes, which picks the ids.
      * @return The bytes.
      * @throws io.netty.handler.codec.EncoderException If a general request can't be written.
+     * @throws IllegalArgumentException For inputs or a state, which {@link FrameCodec} packs.
      */
     public static byte[] encode(@NonNull Request request, @NonNull RequestDirection direction) {
-        if (request instanceof PlayerInputs inputs) {
-            return encodeInputs(inputs);
-        }
-        if (request instanceof PlayerState state) {
-            return encodeState(state);
+        if (FrameCodec.handles(request)) {
+            throw new IllegalArgumentException(
+                    "Per-frame messages are packed by the connection's FrameCodec");
         }
         final ByteBuf buffer = Unpooled.buffer();
         try {
@@ -62,9 +79,79 @@ public final class MessageCodec {
             RequestEncoder.encode(request, direction, buffer);
             final byte[] out = new byte[buffer.readableBytes()];
             buffer.readBytes(out);
-            return out;
+            return out.length - 1 >= COMPRESS_FROM ? compressed(out) : out;
         } finally {
             buffer.release();
+        }
+    }
+
+    /**
+     * A general request compressed, if that makes it smaller.
+     *
+     * @param general The request as {@link #GENERAL} bytes.
+     * @return {@link #DEFLATED} bytes, or the request as it was.
+     */
+    private static byte[] compressed(byte[] general) {
+        final int length = general.length - 1;
+        if (length > MAX_INFLATED) {
+            return general;
+        }
+        final Deflater deflater = new Deflater(Deflater.DEFAULT_COMPRESSION, true);
+        try {
+            deflater.setInput(general, 1, length);
+            deflater.finish();
+            final int header = 1 + Integer.BYTES;
+            final byte[] out = new byte[general.length];
+            final int size = deflater.deflate(out, header, out.length - header);
+            if (!deflater.finished()) {
+                return general;
+            }
+            ByteBuffer.wrap(out).put(DEFLATED).putInt(length);
+            return Arrays.copyOf(out, header + size);
+        } finally {
+            deflater.end();
+        }
+    }
+
+    /**
+     * Inflate a compressed request.
+     *
+     * @param data The {@link #DEFLATED} bytes.
+     * @return The request's tree bytes, without the type.
+     * @throws IllegalArgumentException If they don't inflate to the length they give.
+     */
+    private static byte[] inflated(byte[] data) {
+        final int header = 1 + Integer.BYTES;
+        if (data.length < header) {
+            throw new IllegalArgumentException("Cut off");
+        }
+        final int length = ByteBuffer.wrap(data, 1, Integer.BYTES).getInt();
+        if (length < COMPRESS_FROM || length > MAX_INFLATED) {
+            throw new IllegalArgumentException("Inflated length out of range: " + length);
+        }
+        final Inflater inflater = new Inflater(true);
+        try {
+            inflater.setInput(data, header, data.length - header);
+            final byte[] out = new byte[length];
+            int at = 0;
+            while (at < length) {
+                final int got = inflater.inflate(out, at, length - at);
+                if (got == 0) {
+                    break;
+                }
+                at += got;
+            }
+            // With the output full, raw deflate may need one more call to reach the stream's end
+            final boolean longer =
+                    at == length && !inflater.finished() && inflater.inflate(new byte[1]) != 0;
+            if (longer || at != length || !inflater.finished() || inflater.getRemaining() != 0) {
+                throw new IllegalArgumentException("Doesn't inflate to " + length + " bytes");
+            }
+            return out;
+        } catch (DataFormatException e) {
+            throw new IllegalArgumentException("Not deflated data", e);
+        } finally {
+            inflater.end();
         }
     }
 
@@ -73,7 +160,7 @@ public final class MessageCodec {
      *
      * @param data The bytes.
      * @param direction Which way it came, which picks the ids.
-     * @return The request, or empty if the bytes don't make one.
+     * @return The request, or empty if the bytes don't make one, inputs and states included.
      */
     public static Optional<Request> decode(
             byte @NonNull [] data, @NonNull RequestDirection direction) {
@@ -82,8 +169,6 @@ public final class MessageCodec {
         }
         try {
             return switch (data[0]) {
-                case INPUTS -> decodeInputs(data);
-                case STATE -> decodeState(data);
                 case GENERAL -> {
                     final ByteBuf buffer = Unpooled.wrappedBuffer(data, 1, data.length - 1);
                     try {
@@ -92,118 +177,18 @@ public final class MessageCodec {
                         buffer.release();
                     }
                 }
+                case DEFLATED -> {
+                    final ByteBuf buffer = Unpooled.wrappedBuffer(inflated(data));
+                    try {
+                        yield RequestDecoder.decode(buffer, direction);
+                    } finally {
+                        buffer.release();
+                    }
+                }
                 default -> Optional.empty();
             };
-        } catch (BufferUnderflowException | IllegalArgumentException e) {
+        } catch (IllegalArgumentException e) {
             return Optional.empty();
         }
-    }
-
-    /**
-     * Write inputs: the first frame, the send time, then each run's count, buttons, yaw and pitch.
-     *
-     * @param inputs The inputs.
-     * @return The bytes.
-     */
-    private static byte[] encodeInputs(PlayerInputs inputs) {
-        final int runs = inputs.getCounts() == null ? 0 : inputs.getCounts().length;
-        final ByteBuffer out = ByteBuffer.allocate(1 + 2 * Long.BYTES + Short.BYTES + runs * 6);
-        out.put(INPUTS).putLong(inputs.getFirstFrame()).putLong(inputs.getSentNanos());
-        out.putShort((short) runs);
-        for (int i = 0; i < runs; ++i) {
-            out.put((byte) inputs.getCounts()[i])
-                    .put((byte) inputs.getButtons()[i])
-                    .putShort((short) inputs.getYaws()[i])
-                    .putShort((short) inputs.getPitches()[i]);
-        }
-        return out.array();
-    }
-
-    /**
-     * Read inputs.
-     *
-     * @param data The bytes.
-     * @return The inputs, or empty if they don't fit.
-     */
-    private static Optional<Request> decodeInputs(byte[] data) {
-        final ByteBuffer in = ByteBuffer.wrap(data, 1, data.length - 1);
-        final long firstFrame = in.getLong();
-        final long sentNanos = in.getLong();
-        final int runs = Short.toUnsignedInt(in.getShort());
-        if (runs > PlayerInputs.MAX_FRAMES) {
-            return Optional.empty();
-        }
-        final int[] counts = new int[runs];
-        final int[] buttons = new int[runs];
-        final int[] yaws = new int[runs];
-        final int[] pitches = new int[runs];
-        for (int i = 0; i < runs; ++i) {
-            counts[i] = Byte.toUnsignedInt(in.get());
-            buttons[i] = Byte.toUnsignedInt(in.get());
-            yaws[i] = Short.toUnsignedInt(in.getShort());
-            pitches[i] = in.getShort();
-        }
-        if (in.hasRemaining()) {
-            return Optional.empty();
-        }
-        return Optional.of(new PlayerInputs(firstFrame, counts, buttons, yaws, pitches, sentNanos));
-    }
-
-    /**
-     * Write a state: the frame, the movement, then the buffer, misses and echo.
-     *
-     * @param state The state.
-     * @return The bytes.
-     */
-    private static byte[] encodeState(PlayerState state) {
-        final ByteBuffer out = ByteBuffer.allocate(1 + 10 * Long.BYTES + 3 * Short.BYTES + 2);
-        out.put(STATE)
-                .putLong(state.getFrame())
-                .put((byte) state.getMode())
-                .putLong(state.getX())
-                .putLong(state.getY())
-                .putLong(state.getZ())
-                .putLong(state.getVx())
-                .putLong(state.getVy())
-                .putLong(state.getVz())
-                .putShort((short) state.getYaw())
-                .putShort((short) state.getPitch())
-                .put((byte) (state.isOnGround() ? 1 : 0))
-                .putShort((short) Math.min(Short.MAX_VALUE, state.getBuffered()))
-                .putLong(state.getMissed())
-                .putLong(state.getEchoNanos())
-                .putLong(state.getHeldNanos());
-        return out.array();
-    }
-
-    /**
-     * Read a state.
-     *
-     * @param data The bytes.
-     * @return The state, or empty if it doesn't fit.
-     */
-    private static Optional<Request> decodeState(byte[] data) {
-        final ByteBuffer in = ByteBuffer.wrap(data, 1, data.length - 1);
-        final PlayerState state =
-                new PlayerState(
-                        in.getLong(),
-                        Byte.toUnsignedInt(in.get()),
-                        in.getLong(),
-                        in.getLong(),
-                        in.getLong(),
-                        in.getLong(),
-                        in.getLong(),
-                        in.getLong(),
-                        Short.toUnsignedInt(in.getShort()),
-                        in.getShort(),
-                        in.get() != 0,
-                        in.getShort(),
-                        in.getLong(),
-                        in.getLong(),
-                        in.getLong());
-        if (in.hasRemaining()) {
-            return Optional.empty();
-        }
-        return Optional.of(state);
     }
 }

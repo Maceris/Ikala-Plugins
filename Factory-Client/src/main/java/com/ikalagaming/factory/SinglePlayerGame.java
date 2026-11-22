@@ -15,6 +15,7 @@ import com.ikalagaming.factory.networking.base.Connection;
 import com.ikalagaming.factory.networking.request.clientbound.Joined;
 import com.ikalagaming.factory.networking.udp.PacketEndpoint;
 import com.ikalagaming.factory.networking.udp.UdpClient;
+import com.ikalagaming.factory.networking.udp.UdpConnection;
 import com.ikalagaming.factory.networking.udp.UdpServer;
 import com.ikalagaming.factory.render.SkyLight;
 import com.ikalagaming.factory.render.WorldRenderer;
@@ -60,6 +61,9 @@ public final class SinglePlayerGame {
 
     /** How often the client's chunk count is logged when it changes, in milliseconds. */
     private static final long REPORT_INTERVAL_MILLIS = 5000;
+
+    /** How often the client's state is logged when nothing changes, in milliseconds. */
+    private static final long IDLE_REPORT_MILLIS = 30_000;
 
     /** The most command frames run in one drawn frame; any more wait for the next one. */
     private static final int MAX_FRAMES_PER_UPDATE = 8;
@@ -344,8 +348,9 @@ public final class SinglePlayerGame {
                         || movement.x() != lastReportedMovement.x()
                         || movement.y() != lastReportedMovement.y()
                         || movement.z() != lastReportedMovement.z();
-        if ((chunks == lastReported && !moved)
-                || nowMillis - lastReportMillis < REPORT_INTERVAL_MILLIS) {
+        final long since = nowMillis - lastReportMillis;
+        if (since < REPORT_INTERVAL_MILLIS
+                || (chunks == lastReported && !moved && since < IDLE_REPORT_MILLIS)) {
             return;
         }
         lastReported = chunks;
@@ -371,6 +376,12 @@ public final class SinglePlayerGame {
                 playing.getFrameClock().getTarget(),
                 String.format("%.1f", playing.getFrameClock().rate() * 100),
                 playing.getFrameClock().getResyncs());
+        if (playing.getConnection() instanceof UdpConnection udp) {
+            log.info(
+                    "UDP traffic: {} B/s up, {} B/s down",
+                    Math.round(udp.sendRate()),
+                    Math.round(udp.receiveRate()));
+        }
     }
 
     /** Light the scene by the world's clock and switch to drawing the world. */

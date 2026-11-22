@@ -181,9 +181,9 @@ class TestPacketEndpoint {
         pair.run(500);
         assertEquals(200, pair.atB.size());
         assertEquals(0, pair.a.pendingFragments());
-        // 80 ms each way and back, plus up to the 10 ms ack delay and a millisecond of stepping
+        // 80 ms each way and back, plus up to the 25 ms ack delay and a millisecond of stepping
         assertTrue(
-                pair.a.roundTripMillis() >= 80 && pair.a.roundTripMillis() < 95,
+                pair.a.roundTripMillis() >= 80 && pair.a.roundTripMillis() < 110,
                 "round trip " + pair.a.roundTripMillis());
     }
 
