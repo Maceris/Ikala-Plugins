@@ -1,11 +1,9 @@
 package com.ikalagaming.rpg;
 
-import com.ikalagaming.ecs.ECSManager;
+import com.ikalagaming.ecs.World;
 import com.ikalagaming.rpg.inventory.Inventory;
 
 import lombok.Getter;
-
-import java.util.UUID;
 
 /**
  * Manages general game things, like the player.
@@ -14,13 +12,25 @@ import java.util.UUID;
  */
 public class GameManager {
 
-    @Getter private static UUID player;
+    /**
+     * The entities.
+     *
+     * @return The world.
+     */
+    @Getter private static final World world = new World();
+
+    /**
+     * The player's entity.
+     *
+     * @return The entity, or null before the player is made.
+     */
+    @Getter private static Long player;
 
     /** Create a player. */
     public static void createPlayer() {
-        GameManager.player = ECSManager.createEntity();
+        GameManager.player = world.create();
         Inventory inventory = new Inventory(100, true);
-        ECSManager.addComponent(GameManager.player, inventory);
+        world.set(Inventory.TYPE, GameManager.player, inventory);
     }
 
     /** Private constructor so this is not instantiated. */

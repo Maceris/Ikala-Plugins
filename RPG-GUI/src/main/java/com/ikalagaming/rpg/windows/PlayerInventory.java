@@ -1,6 +1,5 @@
 package com.ikalagaming.rpg.windows;
 
-import com.ikalagaming.ecs.ECSManager;
 import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.enums.ColorType;
@@ -37,7 +36,6 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * An inventory for items.
@@ -364,7 +362,7 @@ public class PlayerInventory implements GUIWindow {
     @Override
     public void setup(@NonNull Scene scene) {
         itemDragInfo = new InventoryDrag();
-        UUID player = GameManager.getPlayer();
+        Long player = GameManager.getPlayer();
 
         if (player == null) {
             inventory =
@@ -374,7 +372,8 @@ public class PlayerInventory implements GUIWindow {
                     SafeResourceLoader.getString(
                             "INVALID_INVENTORY", GUIPlugin.getResourceBundle()));
         } else {
-            Optional<Inventory> inventoryMaybe = ECSManager.getComponent(player, Inventory.class);
+            Optional<Inventory> inventoryMaybe =
+                    Optional.ofNullable(GameManager.getWorld().get(Inventory.TYPE, player));
             if (inventoryMaybe.isEmpty()) {
                 inventory =
                         new Inventory(

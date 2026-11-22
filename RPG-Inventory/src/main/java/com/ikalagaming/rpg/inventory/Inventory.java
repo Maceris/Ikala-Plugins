@@ -1,6 +1,6 @@
 package com.ikalagaming.rpg.inventory;
 
-import com.ikalagaming.ecs.Component;
+import com.ikalagaming.ecs.ComponentType;
 import com.ikalagaming.rpg.item.Accessory;
 import com.ikalagaming.rpg.item.Armor;
 import com.ikalagaming.rpg.item.Equipment;
@@ -21,8 +21,12 @@ import java.util.Optional;
  * @author Ches Burks
  */
 @Slf4j
-@EqualsAndHashCode(callSuper = false)
-public class Inventory extends Component<Inventory> {
+@EqualsAndHashCode
+public class Inventory {
+    /** Inventories as a component, which belongs to one process and isn't rolled back. */
+    public static final ComponentType<Inventory> TYPE =
+            ComponentType.local("rpg:inventory", Inventory.class);
+
     /**
      * The specific equipment slots that we have. The position in this enum also uniquely describes
      * that slots position in the inventory. Be careful modifying or reordering this, or saves will
