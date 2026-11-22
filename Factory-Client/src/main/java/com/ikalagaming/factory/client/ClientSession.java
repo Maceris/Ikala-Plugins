@@ -70,6 +70,13 @@ public final class ClientSession implements ClientBoundRequestHandler {
     @Getter private Prediction prediction;
 
     /**
+     * When the player's command frames run, once joined.
+     *
+     * @return The clock, or null before the server accepts the join.
+     */
+    @Getter private FrameClock frameClock;
+
+    /**
      * A session.
      *
      * @param mainThread Runs work on the main thread.
@@ -107,6 +114,7 @@ public final class ClientSession implements ClientBoundRequestHandler {
         }
         final PlayerInputs inputs = prediction.unacknowledged();
         if (inputs != null) {
+            inputs.setSentNanos(System.nanoTime());
             toServer.send(inputs);
         }
     }
@@ -132,6 +140,8 @@ public final class ClientSession implements ClientBoundRequestHandler {
                                 Math.round(request.getX() * Fixed.ONE),
                                 Math.round(request.getY() * Fixed.ONE),
                                 Math.round(request.getZ() * Fixed.ONE)));
+        frameClock = new FrameClock();
+        frameClock.start(System.nanoTime());
         onJoined.accept(request);
     }
 
@@ -155,6 +165,7 @@ public final class ClientSession implements ClientBoundRequestHandler {
         if (prediction == null) {
             return;
         }
+        final long clientFrame = prediction.getFrame();
         try {
             prediction.onServerState(
                     request.getFrame(),
@@ -163,6 +174,24 @@ public final class ClientSession implements ClientBoundRequestHandler {
                     request.getMissed());
         } catch (IllegalArgumentException e) {
             log.warn("The server sent a player state this can't read", e);
+            return;
+        }
+        final long resync =
+                frameClock.onServer(
+                        request.getFrame(),
+                        clientFrame,
+                        request.getBuffered(),
+                        request.getMissed(),
+                        request.getEchoNanos(),
+                        request.getHeldNanos(),
+                        System.nanoTime());
+        if (resync != FrameClock.NO_RESYNC) {
+            log.info(
+                    "Resyncing the command frames from {} to {}; the server answered for {}",
+                    prediction.getFrame(),
+                    resync,
+                    request.getFrame());
+            prediction.resync(resync);
         }
     }
 
@@ -177,5 +206,6 @@ public final class ClientSession implements ClientBoundRequestHandler {
         toServer = null;
         playerId = null;
         prediction = null;
+        frameClock = null;
     }
 }

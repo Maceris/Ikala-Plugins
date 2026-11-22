@@ -93,6 +93,7 @@ public class FactoryClientPlugin extends Plugin {
         UserDataUtil.createUserDataFolder();
         guiManager = GraphicsManager.getWindowManager();
         guiManager.addWindow(graphics, DEBUG.getName(), new Debug());
+        guiManager.addWindow(graphics, NETWORK.getName(), new NetworkStats());
         guiManager.addWindow(graphics, IkGuiDemo.WINDOW_NAME, new IkGuiDemo());
         guiManager.addWindow(graphics, GraphicsDebug.WINDOW_NAME, new GraphicsDebug());
         guiManager.addWindow(graphics, IkScriptDebugger.WINDOW_NAME, new IkScriptDebugger());

@@ -367,13 +367,14 @@ public final class ServerWorld implements AutoCloseable {
                     (double) movement.x() / Fixed.ONE,
                     (double) movement.y() / Fixed.ONE,
                     (double) movement.z() / Fixed.ONE);
-            player.getConnection()
-                    .send(
-                            PlayerState.of(
-                                    frame,
-                                    movement,
-                                    player.inputs.buffered(frame),
-                                    player.inputs.misses()));
+            final PlayerState state =
+                    PlayerState.of(
+                            frame, movement, player.inputs.buffered(frame), player.inputs.misses());
+            if (player.echoNanos != 0) {
+                state.setEchoNanos(player.echoNanos);
+                state.setHeldNanos(System.nanoTime() - player.echoReceivedNanos);
+            }
+            player.getConnection().send(state);
         }
         frames.incrementAndGet();
     }

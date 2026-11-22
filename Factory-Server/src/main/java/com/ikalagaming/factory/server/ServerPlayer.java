@@ -69,6 +69,12 @@ public final class ServerPlayer {
     /** The player's inputs waiting for their frames. Tick thread only. */
     final InputBuffer inputs = new InputBuffer();
 
+    /** When the newest input message was sent, by the client's clock, or 0. Tick thread only. */
+    long echoNanos;
+
+    /** When that message was handled, by the server's clock. Tick thread only. */
+    long echoReceivedNanos;
+
     final Set<ChunkPos> sent = new HashSet<>();
 
     /** Chunks being generated or encoded for this player. */

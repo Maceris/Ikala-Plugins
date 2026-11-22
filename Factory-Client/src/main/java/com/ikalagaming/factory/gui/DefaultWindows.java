@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 @Getter
 public enum DefaultWindows {
     DEBUG("Debug"),
+    NETWORK("Network"),
     ROOT_WINDOW("Root Window");
     private final String name;
 }

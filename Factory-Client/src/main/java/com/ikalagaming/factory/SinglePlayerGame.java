@@ -9,6 +9,7 @@ import static org.lwjgl.glfw.GLFW.GLFW_KEY_SPACE;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_W;
 
 import com.ikalagaming.factory.client.ClientSession;
+import com.ikalagaming.factory.client.FrameClock;
 import com.ikalagaming.factory.client.Prediction;
 import com.ikalagaming.factory.networking.base.Connection;
 import com.ikalagaming.factory.networking.request.clientbound.Joined;
@@ -18,7 +19,6 @@ import com.ikalagaming.factory.save.SaveSummary;
 import com.ikalagaming.factory.saves.SaveUtil;
 import com.ikalagaming.factory.sim.Angle;
 import com.ikalagaming.factory.sim.Fixed;
-import com.ikalagaming.factory.sim.Frames;
 import com.ikalagaming.factory.sim.Movement;
 import com.ikalagaming.factory.sim.PlayerInput;
 import com.ikalagaming.factory.world.WorldTime;
@@ -71,9 +71,6 @@ public final class SinglePlayerGame {
 
     /** The main loop stage that plays, or null. */
     private static UUID playStage;
-
-    /** When the next command frame is due, from {@link System#nanoTime()}. */
-    private static long nextFrameNanos;
 
     /** When the chunk count was last logged, in milliseconds. */
     private static long lastReportMillis;
@@ -187,7 +184,6 @@ public final class SinglePlayerGame {
         if (cameras != null) {
             cameras.setMoving(false);
         }
-        nextFrameNanos = System.nanoTime();
     }
 
     /**
@@ -205,17 +201,16 @@ public final class SinglePlayerGame {
             sky.update(playing.getClock().now());
         }
         final Prediction prediction = playing.getPrediction();
+        final FrameClock clock = playing.getFrameClock();
         final long now = System.nanoTime();
-        int run = 0;
-        while (now - nextFrameNanos >= 0 && run < MAX_FRAMES_PER_UPDATE) {
+        final int due = clock.due(now, MAX_FRAMES_PER_UPDATE);
+        for (int i = 0; i < due; ++i) {
             prediction.step(sampleInput());
-            nextFrameNanos += Frames.FRAME_NANOS;
-            ++run;
         }
-        if (run > 0) {
+        if (due > 0) {
             playing.sendInputs();
         }
-        placeCamera(prediction, now);
+        placeCamera(prediction, clock, now);
         report(playing);
         return 0;
     }
@@ -254,14 +249,16 @@ public final class SinglePlayerGame {
      * the next one, so it moves smoothly at any drawing rate.
      *
      * @param prediction The prediction.
+     * @param clock When frames run.
      * @param now The time, from {@link System#nanoTime()}.
      */
-    private static void placeCamera(@NonNull Prediction prediction, long now) {
+    private static void placeCamera(
+            @NonNull Prediction prediction, @NonNull FrameClock clock, long now) {
         final long frame = prediction.getFrame();
         final Movement before = prediction.movement(frame - 1);
         final Movement after = prediction.movement(frame);
-        final long frameStart = nextFrameNanos - Frames.FRAME_NANOS;
-        final double t = Math.clamp((double) (now - frameStart) / Frames.FRAME_NANOS, 0, 1);
+        final double t =
+                Math.clamp((double) (now - clock.frameStartNanos()) / clock.getFrameNanos(), 0, 1);
         final double x = (before.x() + (after.x() - before.x()) * t) / Fixed.ONE;
         final double y = (before.y() + (after.y() - before.y()) * t) / Fixed.ONE;
         final double z = (before.z() + (after.z() - before.z()) * t) / Fixed.ONE;
@@ -294,7 +291,8 @@ public final class SinglePlayerGame {
         log.info(
                 "The client has {} chunks, {} with sections; it is {} o'clock; the player is at"
                         + " {}, {}, {} on frame {}, {} mispredicts, server holds {} inputs and"
-                        + " missed {}",
+                        + " missed {}; round trip {} ms, {} frames ahead, aiming for {}, rate {}%,"
+                        + " {} resyncs",
                 chunks,
                 renderer == null ? 0 : renderer.sectionCount(),
                 String.format("%.2f", WorldTime.hour(playing.getClock().now())),
@@ -304,7 +302,12 @@ public final class SinglePlayerGame {
                 prediction.getFrame(),
                 prediction.getMispredicts(),
                 prediction.getServerBuffered(),
-                prediction.getServerMisses());
+                prediction.getServerMisses(),
+                String.format("%.1f", playing.getFrameClock().roundTripMillis()),
+                prediction.getFrame() - prediction.getAcknowledged(),
+                playing.getFrameClock().getTarget(),
+                String.format("%.1f", playing.getFrameClock().rate() * 100),
+                playing.getFrameClock().getResyncs());
     }
 
     /** Light the scene by the world's clock and switch to drawing the world. */

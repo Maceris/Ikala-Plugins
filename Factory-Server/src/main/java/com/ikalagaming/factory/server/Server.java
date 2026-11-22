@@ -2,6 +2,7 @@ package com.ikalagaming.factory.server;
 
 import com.ikalagaming.factory.FactoryServerPlugin;
 import com.ikalagaming.factory.networking.LocalConnection;
+import com.ikalagaming.factory.networking.SimulatedLink;
 import com.ikalagaming.factory.networking.base.Connection;
 import com.ikalagaming.factory.networking.base.RequestHandler;
 import com.ikalagaming.factory.networking.request.serverbound.ServerBoundRequestHandler;
@@ -30,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -80,6 +82,9 @@ public class Server {
 
     /** How long closing a world waits for the frame or tick it is on to finish. */
     private static final long LOOP_STOP_MILLIS = 2000;
+
+    /** Simulated links made for local clients, stopped when the world closes. */
+    private final List<SimulatedLink> links = new CopyOnWriteArrayList<>();
 
     /** Runs the open world's frames and ticks. */
     private ServerLoop loop;
@@ -237,7 +242,8 @@ public class Server {
     /**
      * Connect a client in this process to the open world. Requests pass between the two as objects,
      * never serialized, but only through {@link Connection}, so a remote client works the same way.
-     * The client then sends {@code Join}.
+     * The client then sends {@code Join}. When the {@code ikala.net.*} system properties ask for a
+     * bad network, both directions go through a {@link SimulatedLink}.
      *
      * @param client Handles the requests the server sends the client. They arrive on server
      *     threads.
@@ -250,8 +256,23 @@ public class Server {
             throw new IllegalStateException("No world is open to connect to");
         }
         final ServerSession session = new ServerSession(open);
-        session.setConnection(new LocalConnection(session, client));
-        return new LocalConnection(client, session);
+        final SimulatedLink.Settings link = SimulatedLink.Settings.fromProperties();
+        if (!link.isActive()) {
+            session.setConnection(new LocalConnection(session, client));
+            return new LocalConnection(client, session);
+        }
+        log.info(
+                "Simulating a bad network: {} ms delay, up to {} ms jitter, {}% loss each way",
+                link.delayMillis(), link.jitterMillis(), String.format("%.1f", link.loss() * 100));
+        final long seed = System.nanoTime();
+        final SimulatedLink toClient =
+                new SimulatedLink(new LocalConnection(session, client), link, seed);
+        final SimulatedLink toServer =
+                new SimulatedLink(new LocalConnection(client, session), link, ~seed);
+        links.add(toClient);
+        links.add(toServer);
+        session.setConnection(toClient);
+        return toServer;
     }
 
     /**
@@ -298,6 +319,10 @@ public class Server {
                 loop = null;
                 loopThread = null;
             }
+            for (SimulatedLink link : links) {
+                link.disconnect();
+            }
+            links.clear();
             if (world != null) {
                 try {
                     Saves.writeTime(world.getSaveFolder(), world.getWorldFolder(), world.getTime());

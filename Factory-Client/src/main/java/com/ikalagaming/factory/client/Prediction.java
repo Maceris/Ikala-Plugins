@@ -52,8 +52,12 @@ public final class Prediction {
      */
     @Getter private long frame;
 
-    /** The newest frame the server has answered for. */
-    private long acknowledged;
+    /**
+     * The newest frame the server has answered for.
+     *
+     * @return The frame.
+     */
+    @Getter private long acknowledged;
 
     /**
      * How many times the server disagreed with the prediction.
@@ -169,6 +173,30 @@ public final class Prediction {
             run(f, inputs[slot(f)]);
         }
         return true;
+    }
+
+    /**
+     * Move to another frame number without stepping, as when the frame clock resyncs. The state
+     * stays as it is. Frames skipped going forward get no input, so the server leaves the player
+     * where this state has them; going back drops the frames past the new one.
+     *
+     * @param newFrame The frame to be on.
+     */
+    public void resync(long newFrame) {
+        final Snapshot current = world.snapshot();
+        if (newFrame > frame) {
+            for (long f = Math.max(frame + 1, newFrame - RING + 1); f <= newFrame; ++f) {
+                inputs[slot(f)] = PlayerInput.NONE;
+                results[slot(f)] = current;
+            }
+        } else {
+            results[slot(newFrame)] = current;
+            if (inputs[slot(newFrame)] == null) {
+                inputs[slot(newFrame)] = PlayerInput.NONE;
+            }
+        }
+        frame = newFrame;
+        acknowledged = Math.min(acknowledged, newFrame);
     }
 
     /**

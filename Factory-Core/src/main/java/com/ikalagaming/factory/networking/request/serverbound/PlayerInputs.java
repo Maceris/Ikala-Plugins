@@ -44,6 +44,12 @@ public class PlayerInputs implements Request {
     private int[] pitches;
 
     /**
+     * When the client sent this, from its {@link System#nanoTime()}, which the server echoes so the
+     * client can measure the round trip. 0 if not set.
+     */
+    private long sentNanos;
+
+    /**
      * Inputs for consecutive frames, with runs of the same input joined.
      *
      * @param firstFrame The frame the first input is for.
@@ -79,7 +85,8 @@ public class PlayerInputs implements Request {
                 Arrays.copyOf(counts, runs),
                 Arrays.copyOf(buttons, runs),
                 Arrays.copyOf(yaws, runs),
-                Arrays.copyOf(pitches, runs));
+                Arrays.copyOf(pitches, runs),
+                0);
     }
 
     /**
@@ -117,6 +124,11 @@ public class PlayerInputs implements Request {
             at += counts[run];
         }
         return List.of(out);
+    }
+
+    @Override
+    public boolean isReliable() {
+        return false;
     }
 
     @Override

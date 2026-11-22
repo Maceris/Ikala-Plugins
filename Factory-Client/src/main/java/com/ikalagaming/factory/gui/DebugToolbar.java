@@ -24,6 +24,7 @@ import lombok.NonNull;
 public class DebugToolbar extends MainToolbar {
     private final WindowManager windowManager;
     private final Checkbox debug;
+    private final Checkbox network;
     private final Checkbox demoIkGuiWindow;
     private final Checkbox graphicsWindow;
     private final Checkbox scriptDebugger;
@@ -36,6 +37,11 @@ public class DebugToolbar extends MainToolbar {
                 SafeResourceLoader.getString(
                         "TOOLBAR_DEBUG_DEBUG", FactoryClientPlugin.getResourceBundle());
         debug = new Checkbox(textDebug, windowManager.isVisible(DEBUG.getName()));
+
+        var textNetwork =
+                SafeResourceLoader.getString(
+                        "TOOLBAR_DEBUG_NETWORK", FactoryClientPlugin.getResourceBundle());
+        network = new Checkbox(textNetwork, windowManager.isVisible(NETWORK.getName()));
 
         var textIkGuiDemo =
                 SafeResourceLoader.getString(
@@ -73,6 +79,7 @@ public class DebugToolbar extends MainToolbar {
         if (IkGui.beginMainMenuBar()) {
             if (IkGui.beginMenu("Windows")) {
                 debug.draw(width, height);
+                network.draw(width, height);
                 demoIkGuiWindow.draw(width, height);
                 graphicsWindow.draw(width, height);
                 scriptDebugger.draw(width, height);
@@ -94,6 +101,10 @@ public class DebugToolbar extends MainToolbar {
     public boolean handleGuiInput(@NonNull Scene scene) {
         if (debug.checkResult()) {
             windowManager.setVisible(DEBUG.getName(), debug.getState());
+            return true;
+        }
+        if (network.checkResult()) {
+            windowManager.setVisible(NETWORK.getName(), network.getState());
             return true;
         }
         if (demoIkGuiWindow.checkResult()) {

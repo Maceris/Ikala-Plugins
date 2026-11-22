@@ -24,4 +24,15 @@ public interface Request {
      * @see #handleUsing(ClientBoundRequestHandler)
      */
     default void handleUsing(@NonNull ServerBoundRequestHandler handler) {}
+
+    /**
+     * Whether the request must arrive, in order with the other reliable requests. Unreliable
+     * requests may be lost or arrive out of order, and only make sense when a newer one replaces an
+     * older one, like the player's state each command frame.
+     *
+     * @return True if the request must arrive, which is the default.
+     */
+    default boolean isReliable() {
+        return true;
+    }
 }

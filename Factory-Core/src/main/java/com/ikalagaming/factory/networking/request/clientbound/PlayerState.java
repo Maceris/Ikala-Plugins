@@ -61,6 +61,12 @@ public class PlayerState implements Request {
     /** How many frames so far had no input from the player when they ran. */
     private long missed;
 
+    /** When the newest input message the server had was sent, by the client's clock; 0 if none. */
+    private long echoNanos;
+
+    /** How long the server had held that message when it sent this, in nanoseconds. */
+    private long heldNanos;
+
     /**
      * A state.
      *
@@ -85,7 +91,9 @@ public class PlayerState implements Request {
                 movement.pitch(),
                 movement.onGround(),
                 buffered,
-                missed);
+                missed,
+                0,
+                0);
     }
 
     /**
@@ -100,6 +108,11 @@ public class PlayerState implements Request {
             throw new IllegalArgumentException("Unknown movement mode " + mode);
         }
         return new Movement(modes[mode], x, y, z, vx, vy, vz, yaw, pitch, onGround);
+    }
+
+    @Override
+    public boolean isReliable() {
+        return false;
     }
 
     @Override

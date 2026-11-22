@@ -69,6 +69,10 @@ final class ServerSession implements ServerBoundRequestHandler {
         if (player == null) {
             return;
         }
+        if (request.getSentNanos() != 0 && request.getSentNanos() - player.echoNanos > 0) {
+            player.echoNanos = request.getSentNanos();
+            player.echoReceivedNanos = System.nanoTime();
+        }
         final List<PlayerInput> inputs = request.inputs();
         final long next = world.getFrames();
         for (int i = 0; i < inputs.size(); ++i) {
