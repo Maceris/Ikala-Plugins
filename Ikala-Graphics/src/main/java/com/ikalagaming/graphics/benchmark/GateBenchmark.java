@@ -762,6 +762,10 @@ public final class GateBenchmark {
             case DONE -> {
                 views.placeOnce(scene, options.get("view"));
                 digs.update();
+                // The world stays until the frame the end shot asked for is saved
+                if (!keepWorld && !shotPending()) {
+                    release();
+                }
             }
                 // A builder that failed stops the run itself, leaving what it made to release here;
                 // once released, nothing more to do
@@ -1137,7 +1141,7 @@ public final class GateBenchmark {
         log.info("Gate benchmark results:\n{}", report);
         if (keepWorld) {
             log.info("Gate benchmark keeping its world; the camera is free again");
-        } else {
+        } else if (!shotPending()) {
             release();
         }
     }

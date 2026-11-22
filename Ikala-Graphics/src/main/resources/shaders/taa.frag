@@ -14,7 +14,9 @@
 // - History is read with a Catmull-Rom filter where every texel matches, so it doesn't blur over
 //   many frames, and clipped toward the spread of the new frame's colors around the pixel, in
 //   YCoCg, so changes in lighting don't leave trails. Pixels with a long steady history get a
-//   wider clip, so a steady picture isn't clipped back toward the new frame's noise.
+//   wider clip, so a steady picture isn't clipped back toward the new frame's noise. The clip never
+//   reaches past the darkest and brightest colors around the pixel: next to a bright highlight the
+//   spread is wide enough to take in black, and the filter's negative lobes ring dark there.
 // - Each pixel keeps how many frames its history holds in alpha, and blends the new one in by its
 //   share of them, but never less than MIN_BLEND. Translucent surfaces have no history of their
 //   own, so where they cover the pixel it blends faster and clips tighter.
@@ -138,6 +140,8 @@ void main()
     // pixel from the lighting spread to a few black ones
     vec3 moment1 = vec3(0.0);
     vec3 moment2 = vec3(0.0);
+    vec3 lowest = vec3(1e30);
+    vec3 highest = vec3(-1e30);
     float finite = 0.0;
     float centerDepth = texelFetch(bindlessTextures[nonuniformEXT(depthIndex)], pixel, 0).x;
     float nearestDepth = centerDepth;
@@ -152,6 +156,8 @@ void main()
                 vec3 color = toYCoCg(raw);
                 moment1 += color;
                 moment2 += color * color;
+                lowest = min(lowest, color);
+                highest = max(highest, color);
                 finite += 1.0;
             }
             float depth = texelFetch(bindlessTextures[nonuniformEXT(depthIndex)], at, 0).x;
@@ -246,9 +252,16 @@ void main()
         samples = 0.0;
     }
 
-    // Clip the history toward this frame's colors around the pixel
+    // Clip the history toward this frame's colors around the pixel, within the colors there really
+    // are: the spread alone can take in black beside a highlight the history rang dark against, and
+    // the 1 / (1 + luma) weights then keep the black
     float gamma = (steady ? STEADY_CLIP_GAMMA : CLIP_GAMMA) * mix(1.0, REACTIVE_CLIP_SCALE, reactive);
-    history = fromYCoCg(clipToBox(toYCoCg(history), mean, deviation * gamma));
+    vec3 boxLow = max(mean - deviation * gamma, lowest);
+    vec3 boxHigh = min(mean + deviation * gamma, highest);
+    if (finite > 0.0) {
+        history = fromYCoCg(clipToBox(toYCoCg(history), 0.5 * (boxLow + boxHigh),
+            0.5 * (boxHigh - boxLow)));
+    }
 
     // Blend by the pixel's share of the frames, weighted against fireflies
     float blend = max(1.0 / (samples + 1.0), mix(MIN_BLEND, REACTIVE_BLEND, reactive));
