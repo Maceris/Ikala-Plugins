@@ -44,6 +44,37 @@ layout(location = 16) out float outFoam;
 layout(location = 17) out float outFall;
 // How hard it rains here, in drops a square meter a second, from the wave grid
 layout(location = 18) out float outRain;
+// Near an edge with another wind, the winds blended and how much each counts, see
+// waveClimateBlend: the weights are bilinear, so they interpolate exactly
+layout(location = 19) flat out ivec4 outWinds;
+layout(location = 20) out vec4 outWindWeights;
+
+// How the waves move the surface at rest at a point, in one climate with its directions' amplitudes
+// there: between the two nearest depths' profiles, and the flow's two phases
+vec3 waveMoved(WaveField field, vec2 amplitudes[WAVE_DIRECTIONS], vec2 rest) {
+    float level = waveDepthLevel(inDepth);
+    int lower = int(floor(level));
+    int upper = min(lower + 1, WAVE_DEPTHS - 1);
+    float depthBlend = level - float(lower);
+    float phaseBlend = dot(inFlow, inFlow) > 0.0 ? waveFlowWeight(waveTime) : 0.0;
+    vec3 moved = vec3(0.0);
+    for (int phase = 0; phase < 2; ++phase) {
+        float phaseWeight = phase == 0 ? 1.0 - phaseBlend : phaseBlend;
+        if (phaseWeight <= 0.0) {
+            continue;
+        }
+        field.shift = waveFlowShift(inFlow, waveTime, phase);
+        field.level = lower;
+        vec3 atLevel = waveDisplacement(field, amplitudes, WAVE_VERTEX_LAYER, rest);
+        if (depthBlend > 0.0) {
+            field.level = upper;
+            atLevel = mix(atLevel,
+                waveDisplacement(field, amplitudes, WAVE_VERTEX_LAYER, rest), depthBlend);
+        }
+        moved += phaseWeight * atLevel;
+    }
+    return moved;
+}
 
 void main() {
     WaterTileData tile = tileList.waterTiles[inTile];
@@ -59,8 +90,20 @@ void main() {
     for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
         amplitudes[b] = vec2(0.0);
     }
+    // Near an edge with another wind, the winds' waves blend, the same at the edge from either
+    // side, so the shared edge doesn't step or crack, see waveClimateBlend
+    WaterBlend winds;
+    winds.tiles = ivec4(climate);
+    winds.weights = vec4(1.0, 0.0, 0.0, 0.0);
+    if (!side && waves > 0.0 && waveWindBlends(tile)) {
+        winds = waveClimateBlend(tileList, int(inTile), tile, render.xz);
+    }
+    outWinds = winds.tiles;
+    outWindWeights = winds.weights;
+    bool anyWind = climate >= 0 || (winds.weights.x < 1.0 && any(greaterThanEqual(winds.tiles,
+        ivec4(0))));
     // Sides read the amplitudes too, for the waves crossing the lip above them
-    if ((climate >= 0 || gridOn != 0) && (waves > 0.0 || side)) {
+    if ((anyWind || gridOn != 0) && (waves > 0.0 || side)) {
         WaveField field;
         field.climates = climateList;
         field.profiles = profileList;
@@ -75,28 +118,24 @@ void main() {
         } else if (climate >= 0) {
             foam = waveFoamLeft(climateList.climates[climate]);
         }
-        if (climate >= 0 && waves > 0.0) {
-            // Between the two nearest depths' profiles, and the flow's two phases
-            float level = waveDepthLevel(inDepth);
-            int lower = int(floor(level));
-            int upper = min(lower + 1, WAVE_DEPTHS - 1);
-            float depthBlend = level - float(lower);
-            float phaseBlend = dot(inFlow, inFlow) > 0.0 ? waveFlowWeight(waveTime) : 0.0;
+        if (anyWind && waves > 0.0) {
             vec3 moved = vec3(0.0);
-            for (int phase = 0; phase < 2; ++phase) {
-                float phaseWeight = phase == 0 ? 1.0 - phaseBlend : phaseBlend;
-                if (phaseWeight <= 0.0) {
+            for (int i = 0; i < 4; ++i) {
+                int wind = winds.tiles[i];
+                if (winds.weights[i] <= 0.0 || wind < 0) {
                     continue;
                 }
-                field.shift = waveFlowShift(inFlow, waveTime, phase);
-                field.level = lower;
-                vec3 atLevel = waveDisplacement(field, amplitudes, WAVE_VERTEX_LAYER, rest);
-                if (depthBlend > 0.0) {
-                    field.level = upper;
-                    atLevel = mix(atLevel,
-                        waveDisplacement(field, amplitudes, WAVE_VERTEX_LAYER, rest), depthBlend);
+                if (wind == climate) {
+                    field.climate = climate;
+                    moved += winds.weights[i] * waveMoved(field, amplitudes, rest);
+                } else {
+                    // Another wind's amplitudes here, by the grid as this tile's are
+                    WaveField other = field;
+                    other.climate = wind;
+                    vec2 otherAmplitudes[WAVE_DIRECTIONS];
+                    waveAmplitudesAll(other, otherAmplitudes);
+                    moved += winds.weights[i] * waveMoved(other, otherAmplitudes, rest);
                 }
-                moved += phaseWeight * atLevel;
             }
             render += waves * moved;
         }

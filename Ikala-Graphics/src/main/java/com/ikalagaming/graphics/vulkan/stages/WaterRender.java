@@ -284,26 +284,38 @@ public class WaterRender implements RenderStage {
     /** The pipeline layout, VK_NULL_HANDLE until set up. */
     private long pipelineLayout = VK_NULL_HANDLE;
 
-    /** The pipeline, VK_NULL_HANDLE until set up. */
-    private long pipeline = VK_NULL_HANDLE;
-
-    /** The gate's pipeline: the surface's depth alone, VK_NULL_HANDLE until set up. */
-    private long gatePipeline = VK_NULL_HANDLE;
-
     /**
-     * The surface's and the gate's pipelines with the swell's code compiled in, for when a climate
-     * has a swell, VK_NULL_HANDLE until set up: compiled in but unused, it cost the surface about
-     * 5%.
+     * The surface's pipelines, and the gate's, the surface's depth alone, by variant: {@link
+     * #VARIANT_SWELL} and {@link #VARIANT_WIND_BLEND} compile code in that only some scenes need,
+     * VK_NULL_HANDLE until set up. Compiled in but unused, the swell's code cost the surface about
+     * 5% and the winds' blend about 20%.
      */
-    private long swellPipeline = VK_NULL_HANDLE;
+    private final long[] pipelines = new long[VARIANTS];
 
-    private long swellGatePipeline = VK_NULL_HANDLE;
+    private final long[] gatePipelines = new long[VARIANTS];
+
+    /** A variant's bit: a climate drawn has a swell. */
+    private static final int VARIANT_SWELL = 1;
+
+    /** A variant's bit: tiles drawn blend their waves with a neighbor's different wind. */
+    private static final int VARIANT_WIND_BLEND = 2;
+
+    /** How many variants there are. */
+    private static final int VARIANTS = 4;
 
     /** Whether any of the climates drawn has a swell. */
     private boolean swellDrawn;
 
-    /** The specialization constant that compiles the swell's code in, see {@code water.glsl}. */
+    /** Whether any tile drawn blends its waves with a neighbor's different wind. */
+    private boolean windBlendDrawn;
+
+    /**
+     * The specialization constants that compile the swell's code in, and the winds' blend's, see
+     * {@code water.glsl}.
+     */
     private static final int SWELL_CONSTANT_ID = 0;
+
+    private static final int WIND_BLEND_CONSTANT_ID = 1;
 
     /** The frame number {@link #prepare} last got ready, and what it worked out for it. */
     private long preparedFrame = -1;
@@ -347,8 +359,14 @@ public class WaterRender implements RenderStage {
     /** The tiles across each drawn tile's edges, see {@link WaterNeighbors#find}. */
     private int[] neighbors = new int[0];
 
-    /** Which drawn tiles blend their optics, see {@link WaterNeighbors#blends}. */
-    private boolean[] blends = new boolean[0];
+    /** The drawn tiles' blend flags, see {@link Built#blends}. */
+    private int[] blends = new int[0];
+
+    /** A tile's flag: its optics blend with its neighbors'. */
+    private static final int BLEND_OPTICS = 1;
+
+    /** A tile's flag: its waves blend with its neighbors', their winds differing. */
+    private static final int BLEND_WAVES = 2;
 
     /** The version of the tiles drawn, -1 for none. */
     private long version = -1;
@@ -403,8 +421,8 @@ public class WaterRender implements RenderStage {
      * @param mesh Their surfaces and sides.
      * @param cells What each one meter cell they cover holds.
      * @param neighbors The tiles across each one's edges, see {@link WaterNeighbors#find}.
-     * @param blends Which blend their optics with their neighbors', see {@link
-     *     WaterNeighbors#blends}.
+     * @param blends Each one's blend flags: {@link #BLEND_OPTICS} if its optics blend with its
+     *     neighbors', {@link #BLEND_WAVES} if its waves do, see {@link WaterNeighbors#blends}.
      */
     private record Built(
             long version,
@@ -413,7 +431,7 @@ public class WaterRender implements RenderStage {
             WaterMesh.@NonNull Mesh mesh,
             WaterMesh.@NonNull CellData cells,
             int @NonNull [] neighbors,
-            boolean @NonNull [] blends) {}
+            int @NonNull [] blends) {}
 
     /**
      * Set up the stage.
@@ -469,10 +487,10 @@ public class WaterRender implements RenderStage {
                             null,
                             longOutput));
             pipelineLayout = longOutput.get(0);
-            pipeline = createPipeline(state, stack, false, false);
-            gatePipeline = createPipeline(state, stack, true, false);
-            swellPipeline = createPipeline(state, stack, false, true);
-            swellGatePipeline = createPipeline(state, stack, true, true);
+            for (int variant = 0; variant < VARIANTS; ++variant) {
+                pipelines[variant] = createPipeline(state, stack, false, variant);
+                gatePipelines[variant] = createPipeline(state, stack, true, variant);
+            }
 
             VkPushConstantRange.Buffer wavesRanges = VkPushConstantRange.calloc(1, stack);
             wavesRanges
@@ -525,14 +543,12 @@ public class WaterRender implements RenderStage {
         Arrays.fill(vertexVersions, -1);
         building = null;
         seenVersion = version;
-        vkDestroyPipeline(state.device.logical, pipeline, null);
-        pipeline = VK_NULL_HANDLE;
-        vkDestroyPipeline(state.device.logical, gatePipeline, null);
-        gatePipeline = VK_NULL_HANDLE;
-        vkDestroyPipeline(state.device.logical, swellPipeline, null);
-        swellPipeline = VK_NULL_HANDLE;
-        vkDestroyPipeline(state.device.logical, swellGatePipeline, null);
-        swellGatePipeline = VK_NULL_HANDLE;
+        for (int variant = 0; variant < VARIANTS; ++variant) {
+            vkDestroyPipeline(state.device.logical, pipelines[variant], null);
+            pipelines[variant] = VK_NULL_HANDLE;
+            vkDestroyPipeline(state.device.logical, gatePipelines[variant], null);
+            gatePipelines[variant] = VK_NULL_HANDLE;
+        }
         vkDestroyPipelineLayout(state.device.logical, pipelineLayout, null);
         pipelineLayout = VK_NULL_HANDLE;
         grid.cleanup(state);
@@ -588,8 +604,7 @@ public class WaterRender implements RenderStage {
                             .pColorAttachments(colorAttachments)
                             .pDepthAttachment(depthAttachment));
             TranslucentRender.setViewport(commandBuffer, width, height, stack);
-            bindSurface(
-                    commandBuffer, state, frameData, swellDrawn ? swellPipeline : pipeline, stack);
+            bindSurface(commandBuffer, state, frameData, pipelines[variant()], stack);
             // The surfaces: from above, water only ever has its own water under it
             vkCmdDrawIndexed(commandBuffer, surfaceIndexCounts[frame], 1, 0, 0, 0);
             vkCmdEndRendering(commandBuffer);
@@ -607,12 +622,7 @@ public class WaterRender implements RenderStage {
                                 .pColorAttachments(colorAttachments)
                                 .pDepthAttachment(depthAttachment));
                 TranslucentRender.setViewport(commandBuffer, width, height, stack);
-                bindSurface(
-                        commandBuffer,
-                        state,
-                        frameData,
-                        swellDrawn ? swellPipeline : pipeline,
-                        stack);
+                bindSurface(commandBuffer, state, frameData, pipelines[variant()], stack);
                 vkCmdDrawIndexed(commandBuffer, sides, 1, surfaceIndexCounts[frame], 0, 0);
                 vkCmdEndRendering(commandBuffer);
             }
@@ -892,12 +902,7 @@ public class WaterRender implements RenderStage {
                             .pDepthAttachment(depthAttachment));
             if (water) {
                 TranslucentRender.setViewport(commandBuffer, width, height, stack);
-                bindSurface(
-                        commandBuffer,
-                        state,
-                        frameData,
-                        swellDrawn ? swellGatePipeline : gatePipeline,
-                        stack);
+                bindSurface(commandBuffer, state, frameData, gatePipelines[variant()], stack);
                 vkCmdDrawIndexed(commandBuffer, indexCounts[state.frameIndex], 1, 0, 0, 0);
             }
             vkCmdEndRendering(commandBuffer);
@@ -1036,7 +1041,7 @@ public class WaterRender implements RenderStage {
                 meshBuilder.mesh(list),
                 meshBuilder.cellData(list, found.tileClimates()),
                 neighbors,
-                WaterNeighbors.blends(list, neighbors));
+                blendFlags(list, neighbors, found.tileClimates()));
     }
 
     /**
@@ -1054,6 +1059,10 @@ public class WaterRender implements RenderStage {
         }
         neighbors = built.neighbors();
         blends = built.blends();
+        windBlendDrawn = false;
+        for (int flags : blends) {
+            windBlendDrawn |= (flags & BLEND_WAVES) != 0;
+        }
         // What was drawn goes back to be filled by the next build: nothing reads it after this
         if (mesh != null) {
             meshBuilder.recycle(mesh);
@@ -1062,6 +1071,38 @@ public class WaterRender implements RenderStage {
         mesh = built.mesh();
         cellData = built.cells();
         useClimates(built.climates());
+    }
+
+    /**
+     * Which pipeline variant this frame's climates and tiles need.
+     *
+     * @return The variant, see {@link #pipelines}.
+     */
+    private int variant() {
+        return (swellDrawn ? VARIANT_SWELL : 0) | (windBlendDrawn ? VARIANT_WIND_BLEND : 0);
+    }
+
+    /**
+     * Each tile's blend flags: whether different water lies beside it, and a different wind.
+     *
+     * @param list The tiles.
+     * @param neighbors Their neighbors, see {@link WaterNeighbors#find}.
+     * @param tileClimates Each one's climate, -1 for still water.
+     * @return The flags, {@link #BLEND_OPTICS} and {@link #BLEND_WAVES}.
+     */
+    private static int[] blendFlags(
+            @NonNull List<WaterTile> list,
+            int @NonNull [] neighbors,
+            @NonNull List<Integer> tileClimates) {
+        final boolean[] optics = WaterNeighbors.blends(list, neighbors);
+        final boolean[] waves =
+                WaterNeighbors.blends(
+                        neighbors, (a, b) -> tileClimates.get(a).equals(tileClimates.get(b)));
+        final int[] flags = new int[list.size()];
+        for (int i = 0; i < flags.length; ++i) {
+            flags[i] = (optics[i] ? BLEND_OPTICS : 0) | (waves[i] ? BLEND_WAVES : 0);
+        }
+        return flags;
     }
 
     /**
@@ -1529,7 +1570,7 @@ public class WaterRender implements RenderStage {
                         at + ShaderBindings.Water.TILE_NEIGHBORS + (long) edge * Integer.BYTES,
                         neighbors[index * WaterNeighbors.EDGES + edge]);
             }
-            MemoryUtil.memPutFloat(at + ShaderBindings.Water.TILE_BLENDS, blends[index] ? 1 : 0);
+            MemoryUtil.memPutFloat(at + ShaderBindings.Water.TILE_BLENDS, blends[index]);
             final WaterMath.Optics tileOptics = optics.get(index);
             for (int channel = 0; channel < WaterMath.CHANNELS; ++channel) {
                 final long offset = (long) channel * Float.BYTES;
@@ -1553,14 +1594,15 @@ public class WaterRender implements RenderStage {
      * @param state The Vulkan state.
      * @param stack The stack to allocate on.
      * @param depthOnly Whether for the gate: the vertex shader alone, writing only depth.
-     * @param swell Whether to compile the swell's code in.
+     * @param variant Which code to compile in, {@link #VARIANT_SWELL} and {@link
+     *     #VARIANT_WIND_BLEND}.
      * @return The VkPipeline.
      */
     private long createPipeline(
             @NonNull VulkanState state,
             @NonNull MemoryStack stack,
             boolean depthOnly,
-            boolean swell) {
+            int variant) {
         int count = 0;
         for (int i = 0; i < shader.shaderModules.length; ++i) {
             if (!depthOnly || shader.shaderStages.get(i).stage() == VK_SHADER_STAGE_VERTEX_BIT) {
@@ -1575,12 +1617,14 @@ public class WaterRender implements RenderStage {
                 stages.get(added++).set(shader.shaderStages.get(i));
             }
         }
-        VkSpecializationMapEntry.Buffer entries = VkSpecializationMapEntry.calloc(1, stack);
+        VkSpecializationMapEntry.Buffer entries = VkSpecializationMapEntry.calloc(2, stack);
         entries.get(0).constantID(SWELL_CONSTANT_ID).offset(0).size(Integer.BYTES);
+        entries.get(1).constantID(WIND_BLEND_CONSTANT_ID).offset(Integer.BYTES).size(Integer.BYTES);
+        final ByteBuffer data = stack.malloc(2 * Integer.BYTES);
+        data.putInt(0, (variant & VARIANT_SWELL) != 0 ? 1 : 0);
+        data.putInt(Integer.BYTES, (variant & VARIANT_WIND_BLEND) != 0 ? 1 : 0);
         VkSpecializationInfo specialization =
-                VkSpecializationInfo.calloc(stack)
-                        .pMapEntries(entries)
-                        .pData(stack.malloc(Integer.BYTES).putInt(0, swell ? 1 : 0));
+                VkSpecializationInfo.calloc(stack).pMapEntries(entries).pData(data);
         for (int i = 0; i < count; ++i) {
             stages.get(i).pSpecializationInfo(specialization);
         }

@@ -141,6 +141,9 @@ public final class GateWater {
     /** The run's options. */
     private final GateOptions options;
 
+    /** The body the checkerboard's tiles hold in their own wind, or null, see mixedWind. */
+    private @Nullable WaterBody ownWind;
+
     /** The view distance, in sections. */
     private final int radius;
 
@@ -298,12 +301,27 @@ public final class GateWater {
                     WATER_BODY_NAMES.keySet(),
                     mixedName);
         }
-        final WaterBody mixed =
-                mixedBase == null
+        // And in another wind, to see winds meet
+        final String mixedWindOption = options.get("mixedWind");
+        WaterBody mixed =
+                mixedBase == null && mixedWindOption == null
                         ? null
-                        : mixedBase
+                        : (mixedBase == null ? body : mixedBase)
                                 .withWind(body.windSpeed(), body.windDirection(), body.fetch())
                                 .withSwell(body.swell());
+        if (mixed != null && mixedWindOption != null) {
+            final String[] parts = mixedWindOption.split(",");
+            mixed =
+                    mixed.withWind(
+                            Float.parseFloat(parts[0].trim()),
+                            parts.length > 1
+                                    ? (float) Math.toRadians(Double.parseDouble(parts[1].trim()))
+                                    : 0,
+                            parts.length > 2
+                                    ? Float.parseFloat(parts[2].trim())
+                                    : Float.POSITIVE_INFINITY);
+            ownWind = mixed;
+        }
         for (int tileZ = 0; tileZ < tiles; ++tileZ) {
             for (int tileX = 0; tileX < tiles; ++tileX) {
                 final int startX = -reach + tileX * OCEAN_CELLS;
@@ -511,6 +529,10 @@ public final class GateWater {
      * @return It, with the run's wind, over no more than that fetch.
      */
     private WaterBody withRunWind(@NonNull WaterBody own, float fetch) {
+        if (own == ownWind) {
+            // The checkerboard's own wind, see the mixedWind option
+            return own.withWind(own.windSpeed(), own.windDirection(), Math.min(own.fetch(), fetch));
+        }
         return own.withWind(
                 waterBody.windSpeed(),
                 waterBody.windDirection(),

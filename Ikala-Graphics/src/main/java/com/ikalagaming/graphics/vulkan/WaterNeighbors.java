@@ -181,26 +181,50 @@ public final class WaterNeighbors {
      * @return Whether each tile blends.
      */
     public static boolean[] blends(@NonNull List<WaterTile> tiles, int @NonNull [] neighbors) {
-        final boolean[] blends = new boolean[tiles.size()];
-        for (int i = 0; i < tiles.size(); ++i) {
-            final WaterBody body = tiles.get(i).body();
+        return blends(neighbors, (a, b) -> sameWater(tiles.get(a).body(), tiles.get(b).body()));
+    }
+
+    /**
+     * Which tiles have a different kind of tile beside them, across an edge or diagonally, the x
+     * neighbors' z neighbors and the z neighbors' x neighbors: water, or wind.
+     *
+     * @param neighbors The tiles' neighbors, see {@link #find}.
+     * @param same Whether two tiles, by index, are the same kind.
+     * @return Whether each tile blends.
+     */
+    public static boolean[] blends(int @NonNull [] neighbors, @NonNull Same same) {
+        final boolean[] blends = new boolean[neighbors.length / EDGES];
+        for (int i = 0; i < blends.length; ++i) {
             boolean differs = false;
             for (int edge = 0; edge < EDGES && !differs; ++edge) {
                 final int other = neighbors[i * EDGES + edge];
                 if (other == NONE) {
                     continue;
                 }
-                differs = !sameWater(body, tiles.get(other).body());
+                differs = !same.test(i, other);
                 // Diagonally: across the other axis's two edges from there
                 final int first = edge < 2 ? 2 : 0;
                 for (int turn = first; turn < first + 2 && !differs; ++turn) {
                     final int diagonal = neighbors[other * EDGES + turn];
-                    differs = diagonal != NONE && !sameWater(body, tiles.get(diagonal).body());
+                    differs = diagonal != NONE && !same.test(i, diagonal);
                 }
             }
             blends[i] = differs;
         }
         return blends;
+    }
+
+    /** Whether two tiles, by index, are the same kind, for {@link #blends}. */
+    @FunctionalInterface
+    public interface Same {
+        /**
+         * Whether two tiles are the same kind.
+         *
+         * @param a One tile's index.
+         * @param b The other's.
+         * @return True if they are.
+         */
+        boolean test(int a, int b);
     }
 
     /**

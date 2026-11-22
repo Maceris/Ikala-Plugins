@@ -40,6 +40,9 @@ layout(location = 16) in float outFoam;
 layout(location = 17) in float outFall;
 // How hard it rains here, in drops a square meter a second, from the wave grid
 layout(location = 18) in float outRain;
+// Near an edge with another wind, the winds blended and how much each counts, see water.vert
+layout(location = 19) flat in ivec4 outWinds;
+layout(location = 20) in vec4 outWindWeights;
 
 layout(location = 0) out vec4 outColor;
 
@@ -235,7 +238,8 @@ void main() {
     vec3 absorption;
     vec3 scattering;
     vec3 backscattering;
-    waterTileOptics(tileList, tile, outRestXZ, absorption, scattering, backscattering);
+    waterTileOptics(tileList, int(outTile), tile, outRestXZ, absorption, scattering,
+        backscattering);
     vec3 extinction = absorption + scattering;
 
     // Render space: world axes, the camera at the origin
@@ -257,6 +261,21 @@ void main() {
     // The waves: their slope from the layer whose shortest waves this pixel can still show, and
     // the slopes of those it can't as roughness
     int climate = int(tile.offset.w);
+    // Near an edge with another wind, one of the winds a pixel, picked at random each frame by how
+    // much each counts, which the anti-aliasing blends, as the vertices blend them. Picking for
+    // blocks of pixels, to keep warps on one wind, saved little and left blocks TAA didn't hide
+    if (!side && outCalm > 0.0 && waveWindBlends(tile)) {
+        uint pickSeed = (uint(gl_FragCoord.x) * 7919u + uint(gl_FragCoord.y) * 6151u
+            + frame * 15485863u) | 1u;
+        float pick = waterRandom(pickSeed);
+        for (int i = 0; i < 4; ++i) {
+            pick -= outWindWeights[i];
+            if (pick < 0.0) {
+                climate = outWinds[i];
+                break;
+            }
+        }
+    }
     if ((climate >= 0 || gridOn != 0) && outCalm > 0.0 && !side) {
         WaveField field;
         field.climates = climateList;
@@ -285,6 +304,24 @@ void main() {
         for (int i = 0; i < WAVE_AMPLITUDE_VECTORS; ++i) {
             amplitudes[2 * i] = outAmplitudes[i].xy;
             amplitudes[2 * i + 1] = outAmplitudes[i].zw;
+        }
+        int ownClimate = int(tile.offset.w);
+        if (climate != ownClimate) {
+            // Another wind's, picked near the edge. In the grid the wind band is a share of the
+            // climate's strongest direction, so this tile's amplitudes scale by the two winds'
+            // strongest; past it, or where this tile's water is still, the other climate's own.
+            // Reading the grid again here cost more
+            bool inGrid = field.gridOn
+                && waveGridAt(outRestXZ, gridCorner, gridCornerCell).inside;
+            float ownPeak = ownClimate >= 0 ? climateList.climates[ownClimate].peak.x : 0.0;
+            bool scaled = inGrid && ownPeak > 0.0;
+            float scale = climate >= 0 && scaled
+                ? climateList.climates[climate].peak.x / ownPeak : 0.0;
+            for (int b = 0; b < WAVE_DIRECTIONS; ++b) {
+                amplitudes[b].x = climate < 0 ? 0.0
+                    : scaled ? scale * amplitudes[b].x
+                    : climateList.climates[climate].amplitudes[b];
+            }
         }
         vec2 firstShift = waveFlowShift(outFlow, waveTime, 0);
         vec2 secondShift = waveFlowShift(outFlow, waveTime, 1);

@@ -79,6 +79,10 @@ class WaterNeighborsTest {
         assertArrayEquals(new int[] {none, 1, none, none, 0, none, none, none}, neighbors);
         final boolean[] blends = WaterNeighbors.blends(tiles, neighbors);
         assertFalse(blends[0] || blends[1]);
+        // The same water in different winds: their waves blend
+        final int[] winds = {0, 1};
+        final boolean[] waves = WaterNeighbors.blends(neighbors, (a, b) -> winds[a] == winds[b]);
+        assertTrue(waves[0] && waves[1]);
     }
 
     /** A pool below a lip isn't the same water, nor is a tile with land at the edge. */

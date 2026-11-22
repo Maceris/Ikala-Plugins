@@ -47,9 +47,18 @@ rivers then come from real concentrations.
 - **The wave grid leaves swell alone:** the grid's wind band holds shares of the wind's strongest direction, and
   swell from another way has no share there. Swell near shores is calmed only by the edge calm, and it doesn't
   reflect. A body may have swell and no wind.
+- **Winds blend where tiles meet:** each tile has one wind, so a different wind next door displaced the shared
+  edge differently, leaving steps and cracks. Within the same 8 m band and weights as the optics, a vertex sums
+  each wind's displacement by weight, the same from either side of the edge. A pixel picks one wind at random by
+  weight and TAA averages them, as with depths and layers; the vertex passes the winds and their bilinear weights,
+  which interpolate exactly. Another wind's amplitudes in the grid are this tile's scaled by the two winds'
+  strongest directions, since the grid holds shares; reading the grid again cost more. Picking per 8 x 4 block to
+  keep warps on one wind saved 0.1 ms and left blocks TAA didn't hide. On a checkerboard of 4 and 13 m/s winds,
+  44% of the sea in a band, the water costs 2.5 ms against 1.6 ms with cracks.
 - **Swell code is compiled out when no climate has one** (a specialization constant, and the swell profiles' pass
   is skipped): compiled in but unused, it cost the surface 5% (1.28 to 1.35 ms on the island gate), from the
-  unrolled 16-direction loops growing, not from the work.
+  unrolled 16-direction loops growing, not from the work. The winds' blend is a second constant for the same
+  reason (0.3 ms unused); the water and gate pipelines come in four variants.
 - **Each direction has its own profile.** Sharing one, shifted, made straight crest lines in a lattice and swells
   2.5 times too tall.
 - **Band-limited layers** (all, 0.25, 1 and 4 m): vertices ride the 4 m layer, and normals use the layer a pixel's

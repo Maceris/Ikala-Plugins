@@ -699,8 +699,9 @@ public class ShaderBindings {
         public static final int TILE_NEIGHBORS = 64;
 
         /**
-         * Where whether it blends its optics with its neighbors' is, 1 or 0, the backscattering's
-         * fourth float, see {@link WaterNeighbors#blends}.
+         * Where its blend flags are, as a float, the backscattering's fourth: 1 if its optics blend
+         * with its neighbors', plus 2 if its waves do, their winds differing, see {@link
+         * WaterNeighbors#blends}.
          */
         public static final int TILE_BLENDS = TILE_BACKSCATTERING + 3 * Float.BYTES;
 

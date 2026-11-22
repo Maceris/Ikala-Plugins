@@ -319,7 +319,8 @@ What the renderer does and the work it builds on.
   0.33 b_b / (a + b_b) (Gordon et al. 1975, Morel and Prieur 1977), reached with depth as in
   Maritorena, Morel and Gentili 1994; light leaving the water loses n^2 of its radiance. The air's
   fog the light stage put on the bottom is taken back off. Where tiles of different water meet,
-  their optics blend over 8 m either side of the edge. `WaterMath` has the math in Java, with
+  their optics blend over 8 m either side of the edge, and where tiles in different winds meet, so do
+  their waves, with no step or crack at the shared edge. `WaterMath` has the math in Java, with
   tests.
 - Wind waves from a `WaterBody`'s wind speed, direction and fetch: the JONSWAP spectrum
   (Pierson-Moskowitz on the open sea), spread as cos^2 about the wind, sampled into periodic 1D
@@ -458,6 +459,7 @@ These are Java system properties, given before `-jar`:
 | `-Dikala.benchmark.turnAt=<x>,<y>,<z>` | over the middle | Where the camera turns while measuring, as under the sea. |
 | `-Dikala.benchmark.swell=<m>,<s>[,<deg>[,<deg>]]` | none | A swell on the sea: height, period, the way it travels and its spread (11 degrees). |
 | `-Dikala.benchmark.mixedWater=ocean\|green\|muddy` | none | Every other tile of the `ISLAND` sea holds this water instead, a checkerboard, to see waters blend where they meet. |
+| `-Dikala.benchmark.mixedWind=<m/s>[,<degrees>[,<fetch>]]` | none | Every other tile of the `ISLAND` sea in this wind instead, a checkerboard, to see winds meet. |
 | `-Dikala.benchmark.shot=<file.png>` | none | Saves the frame measuring starts on, without the window in front. |
 | `-Dikala.benchmark.view=<x>,<y>,<z>,<pitch>,<yaw>` | not set | Places the camera there once the world is loaded, its pitch and yaw in radians. |
 | `-Dikala.benchmark.ripples=<x>,<z>,<radius>,<strength>,<seconds>` | not set | Disturbs the water at x, z every so many seconds, its ripples starting that high in meters over that radius, to watch them spread and reflect off shores. |
