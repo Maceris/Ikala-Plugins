@@ -329,7 +329,9 @@ What the renderer does and the work it builds on.
   longer; normals come from the profile layer whose shortest waves a pixel can still show, and the
   slopes of the waves left out become roughness (Bruneton, Neyret and Holzschuch 2010), so far water
   doesn't shimmer. Each tile's fetch is limited by its own size, so a pool gets a pool's waves.
-  Waves from 85 to 640 m long have their own 1280 m profiles, so a gale's sea reaches its full
+  Tiles the observer can't see aren't drawn, and open water far away is drawn with coarser cells
+  (2 to 16 m) from the same vertices, the finer tile's edge folded onto the coarser one's, so a
+  sea a few kilometers across stays cheap. Waves from 85 to 640 m long have their own 1280 m profiles, so a gale's sea reaches its full
   height. A swell is a narrow JONSWAP spectrum of 8 to 20 s periods spread a few degrees about its
   way, in profiles of its own; the wave grid leaves it alone.
   `WaveMath` has the math in Java, with tests.
@@ -409,7 +411,10 @@ under Benchmarks, and `GateBenchmark.start(preset)` opens one. There is one per 
 every feature in it, and two worst cases:
 - *Island*: the sea with wind waves and a figure eight path offshore, the stepped fountain, a glass
   wall with smoke behind it, and a glass dome on the sea floor; views of the shore, the fountain,
-  the glass and water, the figure eight and under the sea.
+  the glass and water, the figure eight and under the sea. The sea reaches 512 m each way.
+- *Rough sea*: the island in a gale, 15 m/s with a 2 m, 13 s swell, green water along its coast
+  blending into the open sea, which reaches a kilometer each way; views offshore, from above and by
+  the coast.
 - *Hills*: hills with trees, huts with glass, lakes as water tiles and caves, under a hazy physical
   sky; views from above, from the middle, over a lake and by the huts. *Hills, streaming* is the
   same out to 512 m with level of detail, generated around the camera as it moves: sections and lake
@@ -460,6 +465,8 @@ These are Java system properties, given before `-jar`:
 | `-Dikala.benchmark.swell=<m>,<s>[,<deg>[,<deg>]]` | none | A swell on the sea: height, period, the way it travels and its spread (11 degrees). |
 | `-Dikala.benchmark.mixedWater=ocean\|green\|muddy` | none | Every other tile of the `ISLAND` sea holds this water instead, a checkerboard, to see waters blend where they meet. |
 | `-Dikala.benchmark.mixedWind=<m/s>[,<degrees>[,<fetch>]]` | none | Every other tile of the `ISLAND` sea in this wind instead, a checkerboard, to see winds meet. |
+| `-Dikala.benchmark.seaReach=<meters>` | the view distance | How far the `ISLAND` sea reaches from the middle, past the land's view distance. |
+| `-Dikala.benchmark.coastWater=ocean\|green\|muddy` | none | The `ISLAND` sea's tiles touching the island, and those around them, hold this water. |
 | `-Dikala.benchmark.shot=<file.png>` | none | Saves the frame measuring starts on, without the window in front. |
 | `-Dikala.benchmark.view=<x>,<y>,<z>,<pitch>,<yaw>` | not set | Places the camera there once the world is loaded, its pitch and yaw in radians. |
 | `-Dikala.benchmark.ripples=<x>,<z>,<radius>,<strength>,<seconds>` | not set | Disturbs the water at x, z every so many seconds, its ripples starting that high in meters over that radius, to watch them spread and reflect off shores. |

@@ -235,6 +235,10 @@ public final class GateWater {
      * flow that many meters a second, that many degrees from +x toward +z, except on the {@code
      * .loop=circle|infinity} path out at sea, which flows along itself, {@code .loopSpeed=speed} in
      * its middle. All of these can be changed while the world is kept, see {@link #setWater}.
+     * {@code .seaReach=meters} takes the sea further than the view distance; {@code
+     * .coastWater=body} fills the tiles touching the island, and those around them, with another
+     * body; {@code .swell}, {@code .mixedWater} and {@code .mixedWind} add a swell and a
+     * checkerboard of other water or wind.
      *
      * @param world The world.
      */
@@ -286,9 +290,16 @@ public final class GateWater {
                 Float.parseFloat(
                         options.get("loopSpeed", Float.toString(DEFAULT_LOOP_SPEED)).trim());
         loopWaves = Float.parseFloat(options.get("loopWaves", "0").trim());
-        final int reach = radius * SyntheticTerrain.SECTION;
+        // The sea reaches the view distance, or further with the seaReach option, in meters
+        final int seaReach = Integer.parseInt(options.get("seaReach", "0").trim());
+        final int reach =
+                Math.max(
+                        radius * SyntheticTerrain.SECTION,
+                        (seaReach + OCEAN_CELLS - 1) / OCEAN_CELLS * OCEAN_CELLS);
         final int tiles = (2 * reach + OCEAN_CELLS - 1) / OCEAN_CELLS;
         final int corners = OCEAN_CELLS + 1;
+        final WaterBody coast = coastBody(body);
+        final boolean[] land = coast == null ? null : landTiles(world, reach, tiles);
         // Every other tile's water another body's, a checkerboard, to see waters meet
         final String mixedName = options.get("mixedWater");
         final WaterBody mixedBase =
@@ -356,11 +367,87 @@ public final class GateWater {
                                     heights,
                                     bottoms,
                                     mask,
-                                    mixed != null && ((tileX + tileZ) & 1) == 1 ? mixed : body),
+                                    land != null && nearLand(land, tiles, tileX, tileZ)
+                                            ? coast
+                                            : mixed != null && ((tileX + tileZ) & 1) == 1
+                                                    ? mixed
+                                                    : body),
                             Float.POSITIVE_INFINITY);
                 }
             }
         }
+    }
+
+    /**
+     * The coast's water, from the {@code .coastWater} option: one of the named bodies, in the sea's
+     * wind and swell.
+     *
+     * @param sea The sea's body.
+     * @return The coast's body, or null to leave the coast the sea's.
+     */
+    private @Nullable WaterBody coastBody(@NonNull WaterBody sea) {
+        final String name = options.get("coastWater");
+        if (name == null) {
+            return null;
+        }
+        final WaterBody base = WATER_BODY_NAMES.get(name.trim().toLowerCase(Locale.ROOT));
+        if (base == null) {
+            log.warn(
+                    "The benchmark's coast water must be one of {}, not {}",
+                    WATER_BODY_NAMES.keySet(),
+                    name);
+            return null;
+        }
+        return base.withWind(sea.windSpeed(), sea.windDirection(), sea.fetch())
+                .withSwell(sea.swell());
+    }
+
+    /**
+     * Which of the sea's tiles hold land.
+     *
+     * @param world The world.
+     * @param reach How far the sea reaches from the middle, in meters.
+     * @param tiles How many tiles across.
+     * @return Whether each tile, row by row, holds a cell of land.
+     */
+    private static boolean[] landTiles(@NonNull SyntheticTerrain world, int reach, int tiles) {
+        final boolean[] land = new boolean[tiles * tiles];
+        for (int tileZ = 0; tileZ < tiles; ++tileZ) {
+            for (int tileX = 0; tileX < tiles; ++tileX) {
+                final int startX = -reach + tileX * OCEAN_CELLS;
+                final int startZ = -reach + tileZ * OCEAN_CELLS;
+                boolean any = false;
+                for (int z = 0; z < OCEAN_CELLS && !any; ++z) {
+                    for (int x = 0; x < OCEAN_CELLS && !any; ++x) {
+                        any =
+                                Math.floor(world.islandHeight(startX + x, startZ + z)) + 1
+                                        >= SyntheticTerrain.SEA_LEVEL;
+                    }
+                }
+                land[tileZ * tiles + tileX] = any;
+            }
+        }
+        return land;
+    }
+
+    /**
+     * Whether a tile or one around it holds land, so it holds the coast's water.
+     *
+     * @param land Which tiles hold land, see {@link #landTiles}.
+     * @param tiles How many tiles across.
+     * @param tileX The tile along x.
+     * @param tileZ The tile along z.
+     * @return Whether it is on the coast.
+     */
+    private static boolean nearLand(boolean @NonNull [] land, int tiles, int tileX, int tileZ) {
+        for (int z = Math.max(0, tileZ - 1); z <= Math.min(tiles - 1, tileZ + 1); ++z) {
+            for (int x = Math.max(0, tileX - 1); x <= Math.min(tiles - 1, tileX + 1); ++x) {
+                if (land[z * tiles + x]) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**

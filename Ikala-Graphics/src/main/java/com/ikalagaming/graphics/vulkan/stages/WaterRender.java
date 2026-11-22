@@ -6,11 +6,13 @@ import static org.lwjgl.vulkan.VK13.*;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.ThreadStops;
+import com.ikalagaming.graphics.scene.Observer;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.WaterBody;
 import com.ikalagaming.graphics.scene.WaterRegistry;
 import com.ikalagaming.graphics.scene.WaterTile;
 import com.ikalagaming.graphics.vulkan.Commands;
+import com.ikalagaming.graphics.vulkan.FrustumPlanes;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.PipelineManagerVulkan;
 import com.ikalagaming.graphics.vulkan.RenderStage;
@@ -30,8 +32,10 @@ import com.ikalagaming.graphics.vulkan.WaveletMath;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Matrix4f;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
+import org.joml.Vector3f;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.*;
@@ -328,9 +332,48 @@ public class WaterRender implements RenderStage {
 
     /**
      * How many of each frame in flight's indices are the surfaces', drawn first; the sides' come
-     * after, drawn over a copy of the scene with the surfaces, so water shows through them.
+     * after, drawn over a copy of the scene with the surfaces, so water shows through them, then
+     * the open tiles' coarser levels.
      */
     private final int[] surfaceIndexCounts = new int[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
+    /** How many of each frame in flight's indices are the sides', after the surfaces'. */
+    private final int[] sideIndexCounts = new int[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
+    /**
+     * Each frame in flight's draws of the tiles' surfaces, one a tile the observer may see, at its
+     * level of detail, or null before its first water.
+     */
+    private final SharedBuffer[] drawBuffers =
+            new SharedBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
+    /** How many draws each frame in flight's draw buffer holds. */
+    private final int[] drawCounts = new int[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
+    /** Each drawn tile's lowest and highest surface, in the world, for culling. */
+    private float[] tileHeights = new float[0];
+
+    /** The observer's projection times view, and its frustum's planes in render space. */
+    private final Matrix4f projectionView = new Matrix4f();
+
+    private final float[] planes = new float[FrustumPlanes.FLOATS];
+
+    /** Scratch for culling a tile: its box's middle and half its size, in render space. */
+    private final Vector3f boxCenter = new Vector3f();
+
+    private final Vector3f boxExtents = new Vector3f();
+
+    /**
+     * How far waves may move the surface from its rest, in meters, which culling allows for: a
+     * gale's crests and the choppy waves' sideways push.
+     */
+    private static final float WAVE_REACH = 16;
+
+    /**
+     * How far from the observer a tile's cells are drawn in full, in meters: past it, each doubling
+     * of the distance doubles the cells' size, on open tiles, see {@link WaterMesh#LEVELS}.
+     */
+    private static final double FULL_DETAIL_DISTANCE = 96;
 
     /** Each frame in flight's surface vertices, or null before its first water. */
     private final SharedBuffer[] vertexBuffers =
@@ -528,6 +571,7 @@ public class WaterRender implements RenderStage {
                 new SharedBuffer[][] {
                     vertexBuffers,
                     indexBuffers,
+                    drawBuffers,
                     tileBuffers,
                     climateBuffers,
                     sampleBuffers,
@@ -606,9 +650,9 @@ public class WaterRender implements RenderStage {
             TranslucentRender.setViewport(commandBuffer, width, height, stack);
             bindSurface(commandBuffer, state, frameData, pipelines[variant()], stack);
             // The surfaces: from above, water only ever has its own water under it
-            vkCmdDrawIndexed(commandBuffer, surfaceIndexCounts[frame], 1, 0, 0, 0);
+            drawSurfaces(commandBuffer, frame);
             vkCmdEndRendering(commandBuffer);
-            final int sides = indexCounts[frame] - surfaceIndexCounts[frame];
+            final int sides = sideIndexCounts[frame];
             if (sides > 0) {
                 // The sides: over a copy of the scene with the surfaces drawn, so a side shows the
                 // water behind it, the sea, a pool below, as well as the ground and the sky
@@ -710,7 +754,7 @@ public class WaterRender implements RenderStage {
             startNanos = nanos;
         }
         final double seconds = (nanos - startNanos) / NANOS_PER_SECOND;
-        writeTiles(state, frame, scene.getCamera().getPosition());
+        writeTiles(state, frame, scene);
         writeClimates(state, frame, scene.getCamera().getPosition(), seconds);
         final float pixelAngle =
                 2 / (Math.abs(scene.getProjection().getProjectionMatrix().m11()) * height);
@@ -903,7 +947,17 @@ public class WaterRender implements RenderStage {
             if (water) {
                 TranslucentRender.setViewport(commandBuffer, width, height, stack);
                 bindSurface(commandBuffer, state, frameData, gatePipelines[variant()], stack);
-                vkCmdDrawIndexed(commandBuffer, indexCounts[state.frameIndex], 1, 0, 0, 0);
+                final int frame = state.frameIndex;
+                drawSurfaces(commandBuffer, frame);
+                if (sideIndexCounts[frame] > 0) {
+                    vkCmdDrawIndexed(
+                            commandBuffer,
+                            sideIndexCounts[frame],
+                            1,
+                            surfaceIndexCounts[frame],
+                            0,
+                            0);
+                }
             }
             vkCmdEndRendering(commandBuffer);
             gateBarrier(commandBuffer, frameData, false, stack);
@@ -1058,6 +1112,18 @@ public class WaterRender implements RenderStage {
             optics.add(WaterMath.optics(tile.body()));
         }
         neighbors = built.neighbors();
+        tileHeights = new float[2 * tiles.size()];
+        for (int i = 0; i < tiles.size(); ++i) {
+            final WaterTile tile = tiles.get(i);
+            float low = Float.POSITIVE_INFINITY;
+            float high = Float.NEGATIVE_INFINITY;
+            for (float height : tile.heights()) {
+                low = Math.min(low, height);
+                high = Math.max(high, height);
+            }
+            tileHeights[2 * i] = (float) tile.origin().y() + low;
+            tileHeights[2 * i + 1] = (float) tile.origin().y() + high;
+        }
         blends = built.blends();
         windBlendDrawn = false;
         for (int flags : blends) {
@@ -1071,6 +1137,127 @@ public class WaterRender implements RenderStage {
         mesh = built.mesh();
         cellData = built.cells();
         useClimates(built.climates());
+    }
+
+    /**
+     * Each tile's level of detail this frame, by its distance from the observer: full detail within
+     * {@link #FULL_DETAIL_DISTANCE}, one level coarser for each doubling past it, as far as the
+     * tile has levels.
+     *
+     * @param from The observer's world position.
+     * @return Each tile's level.
+     */
+    private int[] pickLevels(@NonNull Vector3dc from) {
+        final int[] tileLevels = new int[tiles.size()];
+        final int[] meshLevels = mesh.levels();
+        for (int i = 0; i < tiles.size(); ++i) {
+            final WaterTile tile = tiles.get(i);
+            final double lowX = tile.origin().x();
+            final double lowZ = tile.origin().z();
+            final double dx =
+                    Math.max(
+                            0,
+                            Math.max(
+                                    lowX - from.x(),
+                                    from.x() - (lowX + tile.cellsX() * (double) tile.cellSize())));
+            final double dy =
+                    Math.max(
+                            0,
+                            Math.max(
+                                    tileHeights[2 * i] - from.y(),
+                                    from.y() - tileHeights[2 * i + 1]));
+            final double dz =
+                    Math.max(
+                            0,
+                            Math.max(
+                                    lowZ - from.z(),
+                                    from.z() - (lowZ + tile.cellsZ() * (double) tile.cellSize())));
+            final double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            int level = 0;
+            if (distance >= FULL_DETAIL_DISTANCE) {
+                level =
+                        Math.min(
+                                WaterMesh.LEVELS - 1,
+                                1
+                                        + (int)
+                                                Math.floor(
+                                                        Math.log(distance / FULL_DETAIL_DISTANCE)
+                                                                / Math.log(2)));
+            }
+            while (level > 0 && meshLevels[(i * WaterMesh.LEVELS + level) * 2 + 1] == 0) {
+                --level;
+            }
+            tileLevels[i] = level;
+        }
+        return tileLevels;
+    }
+
+    /**
+     * Write this frame's draws of the tiles' surfaces: one a tile whose box, grown by how far waves
+     * move the surface, the observer's frustum touches, at its level of detail.
+     *
+     * @param state The Vulkan state.
+     * @param frame The frame in flight.
+     * @param camera The camera's world position, render space's origin.
+     * @param tileLevels Each tile's level, see {@link #pickLevels}.
+     */
+    private void writeDraws(
+            @NonNull VulkanState state,
+            int frame,
+            @NonNull Vector3dc camera,
+            int @NonNull [] tileLevels) {
+        final long bytes = Math.max(1L, tiles.size()) * ShaderBindings.Water.DRAW_INDEXED_SIZE;
+        if (drawBuffers[frame] == null) {
+            drawBuffers[frame] =
+                    SharedBuffer.allocate(bytes, state, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+        }
+        drawBuffers[frame].ensureCapacity(bytes, state);
+        final long address = drawBuffers[frame].allocationInfo.pMappedData();
+        final int[] meshLevels = mesh.levels();
+        int draws = 0;
+        for (int i = 0; i < tiles.size(); ++i) {
+            final WaterTile tile = tiles.get(i);
+            final float halfX = tile.cellsX() * tile.cellSize() / 2;
+            final float halfZ = tile.cellsZ() * tile.cellSize() / 2;
+            final float low = tileHeights[2 * i];
+            final float high = tileHeights[2 * i + 1];
+            boxCenter.set(
+                    (float) (tile.origin().x() - camera.x()) + halfX,
+                    (float) ((low + high) / 2.0 - camera.y()),
+                    (float) (tile.origin().z() - camera.z()) + halfZ);
+            boxExtents.set(halfX + WAVE_REACH, (high - low) / 2 + WAVE_REACH, halfZ + WAVE_REACH);
+            final int at = (i * WaterMesh.LEVELS + tileLevels[i]) * 2;
+            if (meshLevels[at + 1] == 0
+                    || !FrustumPlanes.boxInside(planes, boxCenter, boxExtents)) {
+                continue;
+            }
+            final long draw = address + (long) draws * ShaderBindings.Water.DRAW_INDEXED_SIZE;
+            MemoryUtil.memPutInt(draw, meshLevels[at + 1]);
+            MemoryUtil.memPutInt(draw + Integer.BYTES, 1);
+            MemoryUtil.memPutInt(draw + 2L * Integer.BYTES, meshLevels[at]);
+            MemoryUtil.memPutInt(draw + 3L * Integer.BYTES, 0);
+            MemoryUtil.memPutInt(draw + 4L * Integer.BYTES, 0);
+            ++draws;
+        }
+        drawCounts[frame] = draws;
+    }
+
+    /**
+     * Draw this frame's tiles' surfaces, see {@link #writeDraws}, with the surface's pipeline and
+     * buffers bound.
+     *
+     * @param commandBuffer The command buffer.
+     * @param frame The frame in flight.
+     */
+    private void drawSurfaces(@NonNull VkCommandBuffer commandBuffer, int frame) {
+        if (drawCounts[frame] > 0) {
+            vkCmdDrawIndexedIndirect(
+                    commandBuffer,
+                    drawBuffers[frame].buffer,
+                    0,
+                    drawCounts[frame],
+                    ShaderBindings.Water.DRAW_INDEXED_SIZE);
+        }
     }
 
     /**
@@ -1511,6 +1698,7 @@ public class WaterRender implements RenderStage {
     private void writeVertices(@NonNull VulkanState state, int frame) {
         indexCounts[frame] = mesh.indexCount();
         surfaceIndexCounts[frame] = mesh.surfaceIndexCount();
+        sideIndexCounts[frame] = mesh.sideIndexCount();
         if (mesh.indexCount() == 0) {
             return;
         }
@@ -1540,9 +1728,16 @@ public class WaterRender implements RenderStage {
      *
      * @param state The Vulkan state.
      * @param frame The frame in flight.
-     * @param camera The camera's position.
+     * @param scene The scene, whose camera the tiles are placed relative to and whose observer
+     *     culls them and picks their levels of detail.
      */
-    private void writeTiles(@NonNull VulkanState state, int frame, @NonNull Vector3dc camera) {
+    private void writeTiles(@NonNull VulkanState state, int frame, @NonNull Scene scene) {
+        final Vector3dc camera = scene.getCamera().getPosition();
+        final Observer observer = scene.getObserver();
+        observer.getProjectionMatrix().mul(observer.getViewMatrix(), projectionView);
+        FrustumPlanes.extract(projectionView, observer.getPosition(), camera, planes);
+        final int[] tileLevels = pickLevels(observer.getPosition());
+        writeDraws(state, frame, camera, tileLevels);
         final long bytes = (long) tiles.size() * ShaderBindings.Water.TILE_SIZE;
         SharedBuffer buffer = tileBuffers[frame];
         if (buffer == null) {
@@ -1571,6 +1766,8 @@ public class WaterRender implements RenderStage {
                         neighbors[index * WaterNeighbors.EDGES + edge]);
             }
             MemoryUtil.memPutFloat(at + ShaderBindings.Water.TILE_BLENDS, blends[index]);
+            MemoryUtil.memPutFloat(at + ShaderBindings.Water.TILE_LEVEL, tileLevels[index]);
+            MemoryUtil.memPutFloat(at + ShaderBindings.Water.TILE_CELL_SIZE, tile.cellSize());
             final WaterMath.Optics tileOptics = optics.get(index);
             for (int channel = 0; channel < WaterMath.CHANNELS; ++channel) {
                 final long offset = (long) channel * Float.BYTES;

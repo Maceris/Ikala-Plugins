@@ -78,11 +78,15 @@ vec3 waveMoved(WaveField field, vec2 amplitudes[WAVE_DIRECTIONS], vec2 rest) {
 
 void main() {
     WaterTileData tile = tileList.waterTiles[inTile];
-    vec3 render = tile.offset.xyz + inPosition;
-    vec2 rest = render.xz;
-    int climate = int(tile.offset.w);
     // A side's calm slot holds how far its water has fallen instead, see WaterMesh
     bool side = dot(inSideNormal, inSideNormal) > 0.0;
+    vec3 local = inPosition;
+    if (!side) {
+        local.xz = waterSnapEdge(tileList, tile, local.xz);
+    }
+    vec3 render = tile.offset.xyz + local;
+    vec2 rest = render.xz;
+    int climate = int(tile.offset.w);
     float waves = side ? 0.0 : inCalm;
     float foam = 0.0;
     float rain = 0.0;

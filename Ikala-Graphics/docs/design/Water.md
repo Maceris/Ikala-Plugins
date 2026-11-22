@@ -81,6 +81,20 @@ rivers then come from real concentrations.
   long-wave Jacobian crosses its threshold and fading over 4 s. Use the tanh form of the normal CDF (a logistic's
   tail is 8 times too heavy at 3 sigma) and clamp it to 8 sigma (some drivers overflow to NaN).
 
+## Far water
+
+- **Tiles are culled and drawn at a level of detail,** one indirect draw a tile, both by the observer, not the
+  camera, so a frozen debug view shows what it culled. Drawn whole and in full, a 2 km sea of 1 m cells cost
+  25 to 30 ms; culled and at levels, 2.8 ms.
+- **Open tiles get coarser levels from their own vertices:** cells of 2, 4, 8 and 16 m, past 96 m and each
+  doubling of the distance after, as index ranges over the corners the tile already has. Only tiles with water in
+  every cell and full waves at every corner get them; banks, steps, shallows and the sea's edge keep their cells,
+  since the calm fade and the sides need them.
+- **No cracks where levels meet:** a finer tile's corners along an edge with a coarser neighbor are moved onto the
+  neighbor's grid in the vertex shader (the tile list carries each tile's level), so the triangles between fold
+  flat and both edges run between the same corners, displaced alike. Snapping costs nothing like stitching
+  indices per neighbor would.
+
 ## Sides, underwater and transparency
 
 - Sides are faces of the water's volume, 1 cm off what they stand against, closing banks, steps and waterfall tops.

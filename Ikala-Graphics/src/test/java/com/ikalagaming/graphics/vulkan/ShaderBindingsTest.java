@@ -306,7 +306,9 @@ class ShaderBindingsTest {
         // WaterTileData: four vec4s, backscattering last; a vertex: vec3 position, uint tile
         assertEquals(48, ShaderBindings.Water.TILE_BACKSCATTERING);
         assertEquals(64, ShaderBindings.Water.TILE_NEIGHBORS);
-        assertEquals(80, ShaderBindings.Water.TILE_SIZE);
+        assertEquals(80, ShaderBindings.Water.TILE_LEVEL);
+        assertEquals(84, ShaderBindings.Water.TILE_CELL_SIZE);
+        assertEquals(96, ShaderBindings.Water.TILE_SIZE);
         assertEquals(28, ShaderBindings.Water.TILE_WIDTH_X);
         assertEquals(44, ShaderBindings.Water.TILE_WIDTH_Z);
         assertEquals(40, ShaderBindings.Water.VERTEX_SIZE);

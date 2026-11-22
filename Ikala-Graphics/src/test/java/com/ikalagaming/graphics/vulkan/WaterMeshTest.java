@@ -196,4 +196,61 @@ class WaterMeshTest {
             }
         }
     }
+
+    /**
+     * An open tile, water all round so its waves aren't calmed, gets coarser levels made of its own
+     * corners; a tile at the water's edge keeps only its cells.
+     */
+    @Test
+    void testLevels() {
+        final int size = 16;
+        final List<WaterTile> tiles = new java.util.ArrayList<>();
+        for (int z = -1; z <= 1; ++z) {
+            for (int x = -1; x <= 1; ++x) {
+                tiles.add(
+                        WaterTile.flat(
+                                new Vector3d(x * size, 0, z * size), 1, size, size, 1, STILL));
+            }
+        }
+        final WaterMesh.Mesh mesh = WaterMesh.build(tiles);
+        final int middle = 4;
+        final int[] levels = mesh.levels();
+        for (int level = 0; level < WaterMesh.LEVELS; ++level) {
+            final int cells = size >> level;
+            final int at = (middle * WaterMesh.LEVELS + level) * 2;
+            assertEquals(cells * cells * QUAD, levels[at + 1], "level " + level);
+            // Made of the tile's own corners
+            for (int i = levels[at]; i < levels[at] + levels[at + 1]; ++i) {
+                final int vertex = mesh.indices()[i];
+                assertEquals(
+                        middle,
+                        Float.floatToRawIntBits(
+                                mesh.vertices()[
+                                        vertex * WaterMesh.VERTEX_FLOATS + WaterMesh.TILE_FLOAT]));
+            }
+        }
+        assertEquals(size * size * QUAD, levels[1]);
+        for (int level = 1; level < WaterMesh.LEVELS; ++level) {
+            assertEquals(0, levels[level * 2 + 1], "an edge tile's level " + level);
+        }
+        assertEquals(
+                mesh.indexCount(),
+                mesh.surfaceIndexCount() + mesh.sideIndexCount() + coarseIndices(levels));
+    }
+
+    /**
+     * How many indices the coarser levels take.
+     *
+     * @param levels The mesh's levels.
+     * @return Their indices.
+     */
+    private static int coarseIndices(int[] levels) {
+        int sum = 0;
+        for (int i = 0; i < levels.length; i += 2) {
+            if ((i / 2) % WaterMesh.LEVELS != 0) {
+                sum += levels[i + 1];
+            }
+        }
+        return sum;
+    }
 }

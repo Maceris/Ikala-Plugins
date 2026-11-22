@@ -118,12 +118,28 @@ public final class WaterMesh {
      * @param vertices The vertices, {@link #VERTEX_FLOATS} floats each.
      * @param count How many vertices.
      * @param indices The triangles' corners, three a triangle, indices into the vertices: the
-     *     surfaces' first, then the sides'.
+     *     surfaces' first, then the sides', then the open tiles' coarser levels.
      * @param indexCount How many indices.
-     * @param surfaceIndexCount How many of them are the surfaces', the rest the sides'.
+     * @param surfaceIndexCount How many of them are the surfaces'.
+     * @param sideIndexCount How many after those are the sides'.
+     * @param levels Each tile's levels of detail, {@link #LEVELS} pairs a tile of its first index
+     *     and how many: level 0 every cell, level k a cell every 2^k along each axis, from the same
+     *     vertices; a count of 0 where the tile has no such level, see {@link #addLevels}.
      */
     public record Mesh(
-            float[] vertices, int count, int[] indices, int indexCount, int surfaceIndexCount) {}
+            float[] vertices,
+            int count,
+            int[] indices,
+            int indexCount,
+            int surfaceIndexCount,
+            int sideIndexCount,
+            int[] levels) {}
+
+    /**
+     * How many levels of detail a tile's surface may have: cells of 1, 2, 4, 8 and 16 times its
+     * cell size, far water needing fewer vertices to carry its long waves.
+     */
+    public static final int LEVELS = 5;
 
     /**
      * A cell of a tile, found by its place in the world.
@@ -193,6 +209,18 @@ public final class WaterMesh {
     /** Each surface corner's vertex in the tile being added, -1 before it is made. */
     private int[] cornerVertices = new int[0];
 
+    /** The coarser levels' indices so far, which go after the sides'. */
+    private int[] levelIndices = new int[QUAD_VERTICES];
+
+    /** How many coarser level indices so far. */
+    private int levelIndexCount;
+
+    /**
+     * Each tile's levels so far, see {@link Mesh#levels}: the coarser ones' first indices count
+     * from the start of {@link #levelIndices} until the mesh is put together.
+     */
+    private int[] levels = new int[0];
+
     /** Make a builder, to use for every version of some tiles. */
     public WaterMesh() {
         // Its scratch starts small and grows to fit the tiles
@@ -223,15 +251,42 @@ public final class WaterMesh {
         count = 0;
         indexCount = 0;
         sideIndexCount = 0;
+        levelIndexCount = 0;
+        levels = new int[list.size() * LEVELS * 2];
         index();
         for (int index = 0; index < list.size(); ++index) {
+            final int first = indexCount;
             addTile(index);
+            levels[index * LEVELS * 2] = first;
+            levels[index * LEVELS * 2 + 1] = indexCount - first;
+            addLevels(index);
         }
         final int surfaceIndices = indexCount;
         for (int i = 0; i < sideIndexCount; ++i) {
             addIndex(sideIndices[i]);
         }
-        final Mesh built = new Mesh(vertices, count, indices, indexCount, surfaceIndices);
+        final int levelStart = indexCount;
+        for (int i = 0; i < levelIndexCount; ++i) {
+            addIndex(levelIndices[i]);
+        }
+        for (int index = 0; index < list.size(); ++index) {
+            for (int level = 1; level < LEVELS; ++level) {
+                final int at = (index * LEVELS + level) * 2;
+                if (levels[at + 1] > 0) {
+                    levels[at] += levelStart;
+                }
+            }
+        }
+        final Mesh built =
+                new Mesh(
+                        vertices,
+                        count,
+                        indices,
+                        indexCount,
+                        surfaceIndices,
+                        sideIndexCount,
+                        levels);
+        levels = new int[0];
         // The mesh's arrays are the caller's now
         vertices = null;
         indices = null;
@@ -332,6 +387,58 @@ public final class WaterMesh {
                 }
             }
         }
+    }
+
+    /**
+     * Add the coarser levels of a tile just added, if it is open water: every cell holds water and
+     * every corner takes the waves in full, so no bank, step or shallows needs its cells. A level's
+     * cells are 2^k of the tile's on a side, made of the corners the tile already has, where its
+     * cells divide evenly. Where a coarser tile meets a finer one, the finer one's edge corners are
+     * moved onto the coarser one's, see {@code water.vert}, so no crack opens.
+     *
+     * @param index The tile's index.
+     */
+    private void addLevels(int index) {
+        final WaterTile tile = tiles.get(index);
+        final int stride = tile.cellsX() + 1;
+        for (int z = 0; z <= tile.cellsZ(); ++z) {
+            for (int x = 0; x <= tile.cellsX(); ++x) {
+                final int vertex = cornerVertices[z * stride + x];
+                if (vertex < 0 || vertices[vertex * VERTEX_FLOATS + CALM_FLOAT] < 1) {
+                    return;
+                }
+            }
+        }
+        for (int level = 1; level < LEVELS; ++level) {
+            final int step = 1 << level;
+            if (tile.cellsX() % step != 0 || tile.cellsZ() % step != 0) {
+                break;
+            }
+            final int first = levelIndexCount;
+            for (int z = 0; z < tile.cellsZ(); z += step) {
+                for (int x = 0; x < tile.cellsX(); x += step) {
+                    for (int[] corner : QUAD) {
+                        addLevelIndex(
+                                cornerVertices[
+                                        (z + corner[1] * step) * stride + x + corner[0] * step]);
+                    }
+                }
+            }
+            levels[(index * LEVELS + level) * 2] = first;
+            levels[(index * LEVELS + level) * 2 + 1] = levelIndexCount - first;
+        }
+    }
+
+    /**
+     * Add a coarser level's index, drawn instead of a tile's cells when it is far.
+     *
+     * @param vertex The vertex it points to.
+     */
+    private void addLevelIndex(int vertex) {
+        if (levelIndexCount == levelIndices.length) {
+            levelIndices = Arrays.copyOf(levelIndices, levelIndices.length * 2);
+        }
+        levelIndices[levelIndexCount++] = vertex;
     }
 
     /**

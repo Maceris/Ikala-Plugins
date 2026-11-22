@@ -219,7 +219,7 @@ class GateReportTest {
         }
         assertEquals(
                 "island Island ISLAND 8 false {fountain=true, glassTest=true, loop=infinity,"
-                        + " loopSpeed=0, wind=6,30}\n"
+                        + " loopSpeed=0, seaReach=512, wind=6,30}\n"
                         + "  View[name=Shore, x=0.0, y=6.0, z=70.0, pitch=0.15, yaw=0.0]\n"
                         + "  View[name=Fountain, x=0.0, y=16.0, z=16.0, pitch=0.45, yaw=0.0]\n"
                         + "  View[name=Glass and water, x=0.0, y=15.0, z=20.0, pitch=0.3,"
@@ -227,6 +227,11 @@ class GateReportTest {
                         + "  View[name=Figure eight, x=0.0, y=55.0, z=130.0, pitch=1.0, yaw=0.0]\n"
                         + "  View[name=Under the sea, x=0.0, y=-4.0, z=72.0, pitch=-0.1,"
                         + " yaw=0.0]\n"
+                        + "rough-sea Rough sea ISLAND 8 false {coastWater=green,"
+                        + " physicalSky=true, seaReach=1024, sunUp=35, swell=2,13,60, wind=15,30}\n"
+                        + "  View[name=Offshore, x=0.0, y=30.0, z=200.0, pitch=0.12, yaw=0.0]\n"
+                        + "  View[name=From above, x=0.0, y=150.0, z=500.0, pitch=0.3, yaw=0.0]\n"
+                        + "  View[name=Coast, x=40.0, y=8.0, z=90.0, pitch=0.1, yaw=0.0]\n"
                         + "hills Hills TERRAIN 12 false {fog=0.01,0.05,20, haze=true,"
                         + " physicalSky=true}\n"
                         + "hills-stream Hills, streaming TERRAIN 32 true {fog=0.01,0.05,20,"
@@ -235,6 +240,6 @@ class GateReportTest {
                         + "glass Glass GLASS 8 false {}\n"
                         + "jumble Jumble JUMBLE 16 true {}\n",
                 out.toString());
-        assertEquals(Map.of(), GatePresets.PRESETS.get(3).options());
+        assertEquals(Map.of(), GatePresets.PRESETS.get(4).options());
     }
 }

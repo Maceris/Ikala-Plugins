@@ -18,6 +18,8 @@ struct WaterTileData {
     // The tiles across its edges, -x, +x, -z, +z, -1 for none; backscattering.w holds its blend
     // flags, WATER_BLEND_OPTICS and WATER_BLEND_WAVES, see WaterNeighbors.blends
     ivec4 neighbors;
+    // Its level of detail this frame, x, and its cell size in meters, y, see WaterMesh.LEVELS
+    vec4 level;
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer WaterTileList {
@@ -27,6 +29,35 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Wa
 // How far in from a tile's edge its water blends with the water across it, in meters, at most half
 // the tile: an even mix at the edge, its own water this far in
 const float WATER_BLEND_BAND = 8.0;
+
+// A surface corner's place in its tile, moved onto the grid of a coarser tile across the edge it
+// lies on, so the two edges meet: the coarser tile's edge runs straight between its own corners,
+// and the finer tile's corners between them fold onto them. Corners already on the coarser grid
+// stay put, so the triangles between only fold flat.
+vec2 waterSnapEdge(WaterTileList list, WaterTileData tile, vec2 local) {
+    vec2 size = vec2(tile.absorption.w, tile.scattering.w);
+    float own = tile.level.x;
+    float cell = tile.level.y;
+    // The -x and +x edges run along z; the -z and +z edges along x
+    bvec4 on = bvec4(local.x <= 0.0, local.x >= size.x, local.y <= 0.0, local.y >= size.y);
+    for (int edge = 0; edge < 4; ++edge) {
+        int other = tile.neighbors[edge];
+        if (!on[edge] || other < 0) {
+            continue;
+        }
+        float theirs = list.waterTiles[other].level.x;
+        if (theirs <= own) {
+            continue;
+        }
+        float step = cell * exp2(theirs);
+        if (edge < 2) {
+            local.y = floor(local.y / step + 0.001) * step;
+        } else {
+            local.x = floor(local.x / step + 0.001) * step;
+        }
+    }
+    return local;
+}
 
 // What a tile's flags in backscattering.w say, see WaterNeighbors: its optics blend with its
 // neighbors', and its waves do, their winds differing

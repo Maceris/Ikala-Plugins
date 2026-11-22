@@ -705,8 +705,20 @@ public class ShaderBindings {
          */
         public static final int TILE_BLENDS = TILE_BACKSCATTERING + 3 * Float.BYTES;
 
+        /**
+         * Where its level of detail this frame and its cell size are, the first two floats of a
+         * vec4, see {@link WaterMesh#LEVELS}.
+         */
+        public static final int TILE_LEVEL = TILE_NEIGHBORS + WaterNeighbors.EDGES * Integer.BYTES;
+
+        /** Where its cell size is, in meters. */
+        public static final int TILE_CELL_SIZE = TILE_LEVEL + Float.BYTES;
+
         /** The size of one tile's entry. */
-        public static final int TILE_SIZE = TILE_NEIGHBORS + WaterNeighbors.EDGES * Integer.BYTES;
+        public static final int TILE_SIZE = TILE_LEVEL + 4 * Float.BYTES;
+
+        /** The size of one indexed indirect draw: five ints. */
+        public static final int DRAW_INDEXED_SIZE = 5 * Integer.BYTES;
 
         /**
          * The size of a vertex: its place relative to its tile's corner, its tile, its calm factor
