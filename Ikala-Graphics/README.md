@@ -4,6 +4,9 @@ This plugin adds graphics functionality backed by LWJGL libraries.
 
 See src/main/resources/licenses for licenses.
 
+This README says what exists and how to use it. Why each part is built the way it is lives in the design notes
+in [docs/design](docs/design/README.md).
+
 ## Features
 
 The renderer is Vulkan 1.3 only. Plugins use it through a `GraphicsContext`, from
