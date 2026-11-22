@@ -186,6 +186,12 @@ public final class LodDag {
     /** The groups, by id. */
     private final List<Group> groups = new ArrayList<>();
 
+    /** A read-only view of {@link #clusters}, made once: callers ask for it in tight loops. */
+    private final List<Cluster> clusterView = Collections.unmodifiableList(clusters);
+
+    /** A read-only view of {@link #groups}, made once. */
+    private final List<Group> groupView = Collections.unmodifiableList(groups);
+
     /** The group that consumed each cluster, -1 for roots. */
     private int[] consumer = new int[0];
 
@@ -426,7 +432,7 @@ public final class LodDag {
      * @return Every cluster, by id.
      */
     public List<Cluster> clusters() {
-        return Collections.unmodifiableList(clusters);
+        return clusterView;
     }
 
     /**
@@ -435,7 +441,7 @@ public final class LodDag {
      * @return Every group, by id.
      */
     public List<Group> groups() {
-        return Collections.unmodifiableList(groups);
+        return groupView;
     }
 
     /**

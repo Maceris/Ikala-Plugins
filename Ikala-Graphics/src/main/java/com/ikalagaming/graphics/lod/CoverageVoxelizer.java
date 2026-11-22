@@ -4,9 +4,7 @@ import lombok.NonNull;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Set;
 import java.util.SplittableRandom;
-import java.util.TreeSet;
 
 /**
  * Turns triangles finer than a resolution into a {@link CoverageVolume}, after Loubet and Neyret,
@@ -177,10 +175,10 @@ public final class CoverageVoxelizer {
             // A voxel of room below, for the blur to reach into
             origin[axis] = empty ? 0 : (Math.floor(origin[axis] / voxelSize) - 1) * voxelSize;
         }
-        final TreeSet<Long> reached = new TreeSet<>();
+        final Keys reached = new Keys();
         candidates(triangles, origin, voxelSize, reached);
         medium.candidates(origin, voxelSize, reached);
-        final long[] candidates = reached.stream().mapToLong(Long::longValue).toArray();
+        final long[] candidates = reached.sortedUnique();
         final TriangleBvh bvh = n == 0 ? null : new TriangleBvh(triangles);
         final Shadows shadows = new Shadows(bvh, triangles, medium);
         final int[] stack = new int[TriangleBvh.STACK_SIZE];
@@ -548,7 +546,7 @@ public final class CoverageVoxelizer {
          * @param voxelSize How wide its voxels are.
          * @param out Receives their keys.
          */
-        void candidates(double @NonNull [] origin, double voxelSize, @NonNull Set<Long> out) {
+        void candidates(double @NonNull [] origin, double voxelSize, @NonNull Keys out) {
             final long[] lo = new long[AXES];
             final long[] hi = new long[AXES];
             for (CoverageVolume volume : volumes) {
@@ -763,7 +761,7 @@ public final class CoverageVoxelizer {
             float @NonNull [] triangles,
             double @NonNull [] origin,
             double voxelSize,
-            @NonNull Set<Long> reached) {
+            @NonNull Keys reached) {
         final double[] a = new double[AXES];
         final double[] b = new double[AXES];
         final double[] c = new double[AXES];
@@ -920,6 +918,54 @@ public final class CoverageVoxelizer {
         }
         for (int axis = 0; axis < AXES; ++axis) {
             out[axis] /= length;
+        }
+    }
+
+    /** Voxel keys gathered with repeats, then sorted once, rather than boxed into a sorted set. */
+    static final class Keys {
+        /** The keys so far, repeats included. */
+        private long[] keys = new long[64];
+
+        /** How many of {@link #keys} are in use. */
+        private int count;
+
+        /**
+         * Add a key.
+         *
+         * @param key The key.
+         */
+        void add(long key) {
+            if (count == keys.length) {
+                // Most keys repeat, as samples close together reach the same voxels: drop the
+                // repeats first, and only grow if that leaves the array more than half full
+                compact();
+                if (2 * count > keys.length) {
+                    keys = Arrays.copyOf(keys, keys.length * 2);
+                }
+            }
+            keys[count++] = key;
+        }
+
+        /** Sort the keys and drop repeats, in place. */
+        private void compact() {
+            Arrays.sort(keys, 0, count);
+            int unique = 0;
+            for (int i = 0; i < count; ++i) {
+                if (unique == 0 || keys[i] != keys[unique - 1]) {
+                    keys[unique++] = keys[i];
+                }
+            }
+            count = unique;
+        }
+
+        /**
+         * The keys, each once, in ascending order.
+         *
+         * @return The keys.
+         */
+        long[] sortedUnique() {
+            compact();
+            return Arrays.copyOf(keys, count);
         }
     }
 

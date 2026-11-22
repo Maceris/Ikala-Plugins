@@ -87,6 +87,7 @@ final class VirtualEdges {
         int pairCount = 0;
         final double[] a = new double[TRIANGLE_VALUES];
         final double[] b = new double[TRIANGLE_VALUES];
+        final Geometry.TriangleScratch scratch = new Geometry.TriangleScratch();
         final double limit = reach * reach;
         for (int ta = 0; ta < mesh.getTriangleCount(); ++ta) {
             bounds(mesh, ta, reach, min, max);
@@ -112,7 +113,7 @@ final class VirtualEdges {
                                 loaded = true;
                             }
                             load(mesh, tb, b);
-                            if (Geometry.triangleDistanceSquared(a, b) < limit) {
+                            if (Geometry.triangleDistanceSquared(a, b, scratch) < limit) {
                                 if (pairCount == pairs.length) {
                                     pairs = Arrays.copyOf(pairs, pairs.length * 2);
                                 }

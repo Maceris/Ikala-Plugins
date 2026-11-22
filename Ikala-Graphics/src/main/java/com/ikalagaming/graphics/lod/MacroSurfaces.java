@@ -5,8 +5,6 @@ import com.ikalagaming.util.IntArrayList;
 import lombok.NonNull;
 
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Tells a mesh's macro-surfaces at some resolution from what is finer than it, after Loubet and
@@ -155,7 +153,7 @@ public final class MacroSurfaces {
         final double[] b = new double[AXES];
         final double[] c = new double[AXES];
         final double[] normal = new double[AXES];
-        final Map<Long, IntArrayList> grid = new HashMap<>();
+        final long[] keys = new long[n];
         for (int t = 0; t < n; ++t) {
             Geometry.corners(mesh, t, a, b, c);
             Geometry.normal(a, b, c, normal);
@@ -165,8 +163,28 @@ public final class MacroSurfaces {
                 centers[t * AXES + axis] = (a[axis] + b[axis] + c[axis]) / CORNERS;
                 normals[t * AXES + axis] = length > 0 ? normal[axis] / length : 0;
             }
-            grid.computeIfAbsent(cellKey(centers, t, radius, 0, 0, 0), k -> new IntArrayList())
-                    .addInt(t);
+            keys[t] = cellKey(centers, t, radius, 0, 0, 0);
+        }
+        // The triangles in each cell, in order, as runs of one array: cell i's run is
+        // members[start[i]] up to members[start[i + 1]]
+        final LongIntMap cells = new LongIntMap(n);
+        final int[] cellOf = new int[n];
+        int cellCount = 0;
+        for (int t = 0; t < n; ++t) {
+            final int found = cells.putIfAbsent(keys[t], cellCount);
+            cellOf[t] = found == LongIntMap.MISSING ? cellCount++ : found;
+        }
+        final int[] start = new int[cellCount + 1];
+        for (int t = 0; t < n; ++t) {
+            start[cellOf[t] + 1] += 1;
+        }
+        for (int i = 0; i < cellCount; ++i) {
+            start[i + 1] += start[i];
+        }
+        final int[] members = new int[n];
+        final int[] filled = Arrays.copyOf(start, cellCount);
+        for (int t = 0; t < n; ++t) {
+            members[filled[cellOf[t]]++] = t;
         }
         final boolean[] out = new boolean[n];
         final double disc = Math.PI * radius * radius;
@@ -176,12 +194,12 @@ public final class MacroSurfaces {
             for (int dx = -1; dx <= 1 && area < COVERAGE * disc; ++dx) {
                 for (int dy = -1; dy <= 1; ++dy) {
                     for (int dz = -1; dz <= 1; ++dz) {
-                        final IntArrayList near = grid.get(cellKey(centers, t, radius, dx, dy, dz));
-                        if (near == null) {
+                        final int cell = cells.get(cellKey(centers, t, radius, dx, dy, dz));
+                        if (cell == LongIntMap.MISSING) {
                             continue;
                         }
-                        for (int k = 0; k < near.size(); ++k) {
-                            final int u = near.getInt(k);
+                        for (int k = start[cell]; k < start[cell + 1]; ++k) {
+                            final int u = members[k];
                             double distance = 0;
                             double facing = 0;
                             for (int axis = 0; axis < AXES; ++axis) {
@@ -209,12 +227,12 @@ public final class MacroSurfaces {
             for (int dx = -1; dx <= 1 && !grown[t]; ++dx) {
                 for (int dy = -1; dy <= 1 && !grown[t]; ++dy) {
                     for (int dz = -1; dz <= 1 && !grown[t]; ++dz) {
-                        final IntArrayList near = grid.get(cellKey(centers, t, radius, dx, dy, dz));
-                        if (near == null) {
+                        final int cell = cells.get(cellKey(centers, t, radius, dx, dy, dz));
+                        if (cell == LongIntMap.MISSING) {
                             continue;
                         }
-                        for (int k = 0; k < near.size() && !grown[t]; ++k) {
-                            final int u = near.getInt(k);
+                        for (int k = start[cell]; k < start[cell + 1] && !grown[t]; ++k) {
+                            final int u = members[k];
                             if (!out[u]) {
                                 continue;
                             }

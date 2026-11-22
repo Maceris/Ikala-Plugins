@@ -77,8 +77,17 @@ final class AverageTransfer {
     /** How far around a corner the input is blended from, set by {@link #transfer}. */
     private double radius;
 
-    /** The input triangles reaching each grid cell, cells a radius wide. */
-    private final Map<Long, IntArrayList> cells = new HashMap<>();
+    /** Each grid cell's index in {@link #cellLists}, cells a radius wide. */
+    private final LongIntMap cells = new LongIntMap(0);
+
+    /**
+     * The input triangles reaching each grid cell, by its index in {@link #cells}. Lists past
+     * {@link #cellCount} are kept empty for the next index, so indexing again doesn't allocate.
+     */
+    private final List<IntArrayList> cellLists = new ArrayList<>();
+
+    /** How many of {@link #cellLists} are in use. */
+    private int cellCount;
 
     /**
      * Add an input triangle.
@@ -121,6 +130,10 @@ final class AverageTransfer {
      */
     private void index() {
         cells.clear();
+        for (int i = 0; i < cellCount; ++i) {
+            cellLists.get(i).clear();
+        }
+        cellCount = 0;
         final int[] lo = new int[AXES];
         final int[] hi = new int[AXES];
         for (int index = 0; index < corners.size(); ++index) {
@@ -138,12 +151,28 @@ final class AverageTransfer {
             for (int x = lo[0]; x <= hi[0]; ++x) {
                 for (int y = lo[1]; y <= hi[1]; ++y) {
                     for (int z = lo[2]; z <= hi[2]; ++z) {
-                        final int at = index;
-                        cells.computeIfAbsent(key(x, y, z), k -> new IntArrayList()).addInt(at);
+                        cellList(key(x, y, z)).addInt(index);
                     }
                 }
             }
         }
+    }
+
+    /**
+     * A grid cell's list of input triangles, added empty if the cell has none yet.
+     *
+     * @param key The cell's key.
+     * @return Its list.
+     */
+    private IntArrayList cellList(long key) {
+        final int found = cells.putIfAbsent(key, cellCount);
+        if (found != LongIntMap.MISSING) {
+            return cellLists.get(found);
+        }
+        if (cellCount == cellLists.size()) {
+            cellLists.add(new IntArrayList());
+        }
+        return cellLists.get(cellCount++);
     }
 
     /**
@@ -322,8 +351,8 @@ final class AverageTransfer {
      */
     private Blend blendAt(
             double @NonNull [] point, double @NonNull [] normal, float @NonNull [] out) {
-        final IntArrayList near =
-                cells.get(key(cellOf(point[0]), cellOf(point[1]), cellOf(point[2])));
+        final int cell = cells.get(key(cellOf(point[0]), cellOf(point[1]), cellOf(point[2])));
+        final IntArrayList near = cell == LongIntMap.MISSING ? null : cellLists.get(cell);
         final double[] sum = new double[MaterialAverages.VALUES];
         final double[] normalSum = new double[AXES];
         double total = 0;

@@ -49,13 +49,13 @@ final class TriangleBvh {
     private final int[] placed;
 
     /** Each node's bounds: min x, y, z, then max x, y, z. */
-    private float[] bounds = new float[2 * AXES * LEAF_SIZE];
+    private float[] bounds;
 
     /** Each node's first child, or for a leaf, its first triangle. */
-    private int[] first = new int[LEAF_SIZE];
+    private int[] first;
 
     /** How many triangles a leaf has, or 0 for an inner node, whose children are adjacent. */
-    private int[] count = new int[LEAF_SIZE];
+    private int[] count;
 
     /** How many nodes there are. */
     private int nodeCount;
@@ -67,6 +67,11 @@ final class TriangleBvh {
      */
     TriangleBvh(float @NonNull [] triangles) {
         final int n = triangles.length / TRIANGLE_VALUES;
+        // Room for about as many nodes as a tree of full leaves has, so it rarely grows
+        final int nodes = Math.max(LEAF_SIZE, 4 * n / LEAF_SIZE);
+        first = new int[nodes];
+        count = new int[nodes];
+        bounds = new float[nodes * 2 * AXES];
         final int[] order = new int[n];
         final float[] centers = new float[n * AXES];
         for (int t = 0; t < n; ++t) {
@@ -174,22 +179,36 @@ final class TriangleBvh {
      * @return Where the second half starts.
      */
     private static int split(float @NonNull [] centers, int @NonNull [] order, int start, int end) {
-        final float[] lo = {Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE};
-        final float[] hi = {-Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
+        float lo0 = Float.MAX_VALUE;
+        float lo1 = Float.MAX_VALUE;
+        float lo2 = Float.MAX_VALUE;
+        float hi0 = -Float.MAX_VALUE;
+        float hi1 = -Float.MAX_VALUE;
+        float hi2 = -Float.MAX_VALUE;
         for (int i = start; i < end; ++i) {
-            for (int axis = 0; axis < AXES; ++axis) {
-                final float c = centers[order[i] * AXES + axis];
-                lo[axis] = Math.min(lo[axis], c);
-                hi[axis] = Math.max(hi[axis], c);
-            }
+            final int at = order[i] * AXES;
+            lo0 = Math.min(lo0, centers[at]);
+            hi0 = Math.max(hi0, centers[at]);
+            lo1 = Math.min(lo1, centers[at + 1]);
+            hi1 = Math.max(hi1, centers[at + 1]);
+            lo2 = Math.min(lo2, centers[at + 2]);
+            hi2 = Math.max(hi2, centers[at + 2]);
         }
+        // The longest axis, the first of any tied, as a loop over the axes picked it
         int axis = 0;
-        for (int a = 1; a < AXES; ++a) {
-            if (hi[a] - lo[a] > hi[axis] - lo[axis]) {
-                axis = a;
-            }
+        float lo = lo0;
+        float hi = hi0;
+        if (hi1 - lo1 > hi - lo) {
+            axis = 1;
+            lo = lo1;
+            hi = hi1;
         }
-        final float middle = (lo[axis] + hi[axis]) / 2;
+        if (hi2 - lo2 > hi - lo) {
+            axis = 2;
+            lo = lo2;
+            hi = hi2;
+        }
+        final float middle = (lo + hi) / 2;
         int i = start;
         int j = end - 1;
         while (i <= j) {
@@ -361,7 +380,7 @@ final class TriangleBvh {
             double enoughSquared,
             int skip,
             @NonNull Scratch scratch) {
-        return nearest(point, limitSquared, enoughSquared, t -> t != skip, scratch);
+        return search(point, limitSquared, enoughSquared, null, skip, scratch);
     }
 
     /**
@@ -380,6 +399,30 @@ final class TriangleBvh {
             double limitSquared,
             double enoughSquared,
             @NonNull IntPredicate accept,
+            @NonNull Scratch scratch) {
+        return search(point, limitSquared, enoughSquared, accept, -1, scratch);
+    }
+
+    /**
+     * The squared distance from a point to the nearest triangle that passes a test, or that isn't
+     * one to skip; skipping needs no test object, which callers asking per point would allocate.
+     *
+     * @param point The point.
+     * @param limitSquared Don't look farther than the square root of this.
+     * @param enoughSquared Stop once a triangle is within the square root of this.
+     * @param accept Which triangles may be found, by their index in the input, or null for all but
+     *     the one skipped.
+     * @param skip The triangle to leave out when there is no test, or -1 for none.
+     * @param scratch Room for the query, which also holds the nearest triangle found.
+     * @return The squared distance, as {@link #nearest(double[], double, double, IntPredicate,
+     *     Scratch)} gives it.
+     */
+    private double search(
+            double @NonNull [] point,
+            double limitSquared,
+            double enoughSquared,
+            IntPredicate accept,
+            int skip,
             @NonNull Scratch scratch) {
         scratch.triangle = -1;
         if (corners.length == 0) {
@@ -412,7 +455,7 @@ final class TriangleBvh {
                 continue;
             }
             for (int t = first[node]; t < first[node] + count[node]; ++t) {
-                if (!accept.test(original[t])) {
+                if (accept == null ? original[t] == skip : !accept.test(original[t])) {
                     continue;
                 }
                 final int base = t * TRIANGLE_VALUES;

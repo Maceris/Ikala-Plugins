@@ -271,7 +271,28 @@ final class Geometry {
             double @NonNull [] a,
             double @NonNull [] b,
             double @NonNull [] c) {
-        final double[] n = new double[AXES];
+        return segmentCrossesTriangle(p, q, a, b, c, new TriangleScratch());
+    }
+
+    /**
+     * Whether a segment crosses a triangle, working in scratch arrays.
+     *
+     * @param p The segment's start.
+     * @param q The segment's end.
+     * @param a The first corner.
+     * @param b The second corner.
+     * @param c The third corner.
+     * @param scratch Where to work.
+     * @return True if they intersect.
+     */
+    private static boolean segmentCrossesTriangle(
+            double @NonNull [] p,
+            double @NonNull [] q,
+            double @NonNull [] a,
+            double @NonNull [] b,
+            double @NonNull [] c,
+            @NonNull TriangleScratch scratch) {
+        final double[] n = scratch.normal;
         normal(a, b, c, n);
         final double dp = n[0] * (p[0] - a[0]) + n[1] * (p[1] - a[1]) + n[2] * (p[2] - a[2]);
         final double dq = n[0] * (q[0] - a[0]) + n[1] * (q[1] - a[1]) + n[2] * (q[2] - a[2]);
@@ -279,10 +300,11 @@ final class Geometry {
             return false;
         }
         final double t = dp / (dp - dq);
-        final double[] hit = {
-            p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1]), p[2] + t * (q[2] - p[2])
-        };
-        final double[] closest = new double[AXES];
+        final double[] hit = scratch.hit;
+        hit[0] = p[0] + t * (q[0] - p[0]);
+        hit[1] = p[1] + t * (q[1] - p[1]);
+        hit[2] = p[2] + t * (q[2] - p[2]);
+        final double[] closest = scratch.closest;
         closestOnTriangle(hit, a, b, c, closest);
         return distanceSquared(hit, closest) <= EPSILON;
     }
@@ -296,17 +318,37 @@ final class Geometry {
      * @return The squared distance.
      */
     static double triangleDistanceSquared(double @NonNull [] a, double @NonNull [] b) {
-        final double[][] ta = {{a[0], a[1], a[2]}, {a[3], a[4], a[5]}, {a[6], a[7], a[8]}};
-        final double[][] tb = {{b[0], b[1], b[2]}, {b[3], b[4], b[5]}, {b[6], b[7], b[8]}};
+        return triangleDistanceSquared(a, b, new TriangleScratch());
+    }
+
+    /**
+     * The squared distance between two triangles, working in scratch arrays so a caller testing
+     * many pairs allocates nothing per pair.
+     *
+     * @param a The first triangle's corners, 9 values.
+     * @param b The second triangle's corners, 9 values.
+     * @param scratch Where to work, used by one thread at a time.
+     * @return The squared distance.
+     */
+    static double triangleDistanceSquared(
+            double @NonNull [] a, double @NonNull [] b, @NonNull TriangleScratch scratch) {
+        final double[][] ta = scratch.first;
+        final double[][] tb = scratch.second;
+        for (int i = 0; i < AXES; ++i) {
+            for (int k = 0; k < AXES; ++k) {
+                ta[i][k] = a[i * AXES + k];
+                tb[i][k] = b[i * AXES + k];
+            }
+        }
         for (int i = 0; i < AXES; ++i) {
             final int j = (i + 1) % AXES;
-            if (segmentCrossesTriangle(ta[i], ta[j], tb[0], tb[1], tb[2])
-                    || segmentCrossesTriangle(tb[i], tb[j], ta[0], ta[1], ta[2])) {
+            if (segmentCrossesTriangle(ta[i], ta[j], tb[0], tb[1], tb[2], scratch)
+                    || segmentCrossesTriangle(tb[i], tb[j], ta[0], ta[1], ta[2], scratch)) {
                 return 0;
             }
         }
         double best = Double.MAX_VALUE;
-        final double[] closest = new double[AXES];
+        final double[] closest = scratch.closest;
         for (int i = 0; i < AXES; ++i) {
             closestOnTriangle(ta[i], tb[0], tb[1], tb[2], closest);
             best = Math.min(best, distanceSquared(ta[i], closest));
@@ -479,6 +521,24 @@ final class Geometry {
         out[0] = from[0];
         out[1] = from[1];
         out[2] = from[2];
+    }
+
+    /** Arrays {@link #triangleDistanceSquared(double[], double[], TriangleScratch)} works in. */
+    static final class TriangleScratch {
+        /** The first triangle's corners. */
+        private final double[][] first = new double[AXES][AXES];
+
+        /** The second triangle's corners. */
+        private final double[][] second = new double[AXES][AXES];
+
+        /** A triangle's normal. */
+        private final double[] normal = new double[AXES];
+
+        /** Where a segment meets a triangle's plane. */
+        private final double[] hit = new double[AXES];
+
+        /** The closest point on a triangle. */
+        private final double[] closest = new double[AXES];
     }
 
     /** Static helpers only. */

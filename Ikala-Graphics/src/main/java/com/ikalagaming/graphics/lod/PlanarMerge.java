@@ -134,8 +134,15 @@ public final class PlanarMerge {
         }
         removed = new boolean[vertexCount];
         around = new IntArrayList[vertexCount];
+        // Each list sized to its vertex's triangles, so building them allocates once a vertex
+        final int[] degree = new int[vertexCount];
+        for (int t = 0; t < triangleCount; ++t) {
+            for (int c = 0; c < CORNERS; ++c) {
+                degree[corners[t * CORNERS + c]] += 1;
+            }
+        }
         for (int v = 0; v < vertexCount; ++v) {
-            around[v] = new IntArrayList();
+            around[v] = new IntArrayList(degree[v]);
         }
         normals = new double[triangleCount * AXES];
         final double[] normal = new double[AXES];
