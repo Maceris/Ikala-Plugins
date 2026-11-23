@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
+import java.util.function.BooleanSupplier;
 
 /**
  * The server's thread: runs command frames every {@value Frames#FRAME_MILLIS} ms and world ticks
@@ -79,6 +80,21 @@ final class ServerLoop implements Runnable {
     /** Set to end the loop. */
     private volatile boolean stopped;
 
+    /** Run while paused, so posted work like a join still happens. */
+    private volatile Runnable whilePaused = () -> {};
+
+    /** Whether pausing is allowed right now; checked while paused, so it can end a pause. */
+    private volatile BooleanSupplier pauseAllowed = () -> true;
+
+    /** The thread running the loop, to wake from a pause. */
+    private volatile Thread owner;
+
+    /** Set to stop running frames and ticks until cleared, as while single player is paused. */
+    private volatile boolean paused;
+
+    /** How long a paused loop parks between checks. */
+    private static final long PAUSED_PARK_NANOS = TimeUnit.MILLISECONDS.toNanos(5);
+
     /**
      * A loop.
      *
@@ -97,9 +113,72 @@ final class ServerLoop implements Runnable {
 
     @Override
     public void run() {
+        owner = Thread.currentThread();
         while (!stopped && !Thread.currentThread().isInterrupted()) {
+            if (paused) {
+                waitWhilePaused();
+                continue;
+            }
             waitUntil(runDue(System.nanoTime()));
         }
+    }
+
+    /**
+     * Stop or restart running frames and ticks. Paused time is skipped, not caught up on, so the
+     * frame and tick numbers carry on from where they stopped.
+     *
+     * @param pause True to pause, false to carry on.
+     */
+    void setPaused(boolean pause) {
+        paused = pause;
+        if (!pause) {
+            LockSupport.unpark(owner);
+        }
+    }
+
+    /**
+     * What a paused loop does.
+     *
+     * @param idle Run every few milliseconds while paused; it should not throw.
+     * @param allowed Whether the loop may stay paused; once false, the pause ends.
+     */
+    void whilePaused(@NonNull Runnable idle, @NonNull BooleanSupplier allowed) {
+        whilePaused = idle;
+        pauseAllowed = allowed;
+    }
+
+    /**
+     * Whether the loop is paused.
+     *
+     * @return True while paused.
+     */
+    boolean isPaused() {
+        return paused;
+    }
+
+    /** Park until unpaused or stopped, then move the deadlines past the time spent. */
+    private void waitWhilePaused() {
+        final long start = System.nanoTime();
+        while (paused && !stopped && !Thread.currentThread().isInterrupted()) {
+            whilePaused.run();
+            if (!pauseAllowed.getAsBoolean()) {
+                paused = false;
+                log.info("Unpaused, since another player joined");
+                break;
+            }
+            LockSupport.parkNanos(PAUSED_PARK_NANOS);
+        }
+        shift(System.nanoTime() - start);
+    }
+
+    /**
+     * Move both deadlines later, as after a pause.
+     *
+     * @param nanos How far.
+     */
+    void shift(long nanos) {
+        nextFrame += nanos;
+        nextTick += nanos;
     }
 
     /** End the loop after the step it is on. */

@@ -2,15 +2,25 @@ package com.ikalagaming.factory.server;
 
 import com.ikalagaming.ecs.Schedule;
 import com.ikalagaming.ecs.World;
+import com.ikalagaming.factory.auth.Ed25519;
+import com.ikalagaming.factory.auth.HostIdentity;
+import com.ikalagaming.factory.auth.SignInProof;
+import com.ikalagaming.factory.chat.ChatText;
 import com.ikalagaming.factory.kvt.Node;
 import com.ikalagaming.factory.networking.base.Connection;
+import com.ikalagaming.factory.networking.request.clientbound.ChatMessage;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkData;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkUnload;
 import com.ikalagaming.factory.networking.request.clientbound.Joined;
 import com.ikalagaming.factory.networking.request.clientbound.PlayerState;
 import com.ikalagaming.factory.networking.request.clientbound.TimeUpdate;
+import com.ikalagaming.factory.save.Accounts;
+import com.ikalagaming.factory.save.PlayerFiles;
+import com.ikalagaming.factory.save.Registration;
+import com.ikalagaming.factory.sim.Angle;
 import com.ikalagaming.factory.sim.Fixed;
 import com.ikalagaming.factory.sim.Frames;
+import com.ikalagaming.factory.sim.GameMode;
 import com.ikalagaming.factory.sim.MoveMode;
 import com.ikalagaming.factory.sim.Movement;
 import com.ikalagaming.factory.sim.PlayerInput;
@@ -24,12 +34,19 @@ import com.ikalagaming.factory.world.WorldTime;
 import com.ikalagaming.factory.world.gen.SpawnFinder;
 import com.ikalagaming.factory.world.gen.SpawnPlatform;
 import com.ikalagaming.factory.world.gen.WorldGenerator;
+import com.ikalagaming.permissions.Group;
+import com.ikalagaming.permissions.PermissionPlugin;
+import com.ikalagaming.permissions.PermissionStore;
+import com.ikalagaming.permissions.Permissions;
+import com.ikalagaming.permissions.Subject;
 
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.IOException;
 import java.nio.file.Path;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -148,6 +165,79 @@ public final class ServerWorld implements AutoCloseable {
 
     /** Players in the world, by id. Tick thread only. */
     private final Map<String, ServerPlayer> players = new LinkedHashMap<>();
+
+    /**
+     * Who can sign in to the world: the save's host identity, its accounts and its registration
+     * policy.
+     *
+     * @param host The save's server id and host key.
+     * @param accounts The save's accounts.
+     * @param registration Who can make an account.
+     * @param savesPlayers Whether players' files are read and written in the save.
+     * @param permissions The save's permission groups and players' own permissions.
+     */
+    public record Access(
+            @NonNull HostIdentity host,
+            @NonNull Accounts accounts,
+            @NonNull Registration registration,
+            boolean savesPlayers,
+            @NonNull PermissionStore permissions) {
+
+        /** The groups every save has: one for each role, each inheriting the one below. */
+        public static final Group[] DEFAULT_GROUPS = {
+            Group.inheriting(Groups.DEFAULT),
+            Group.inheriting(Groups.OPERATOR, Groups.DEFAULT),
+            Group.inheriting(Groups.OWNER, Groups.OPERATOR)
+        };
+
+        /**
+         * Access kept in memory, with a new host key, for tests.
+         *
+         * @return The access.
+         */
+        public static Access inMemory() {
+            final byte[] id = new byte[SignInProof.SERVER_ID_BYTES];
+            new SecureRandom().nextBytes(id);
+            return new Access(
+                    new HostIdentity(id, Ed25519.generate()),
+                    Accounts.inMemory(),
+                    Registration.OPEN,
+                    false,
+                    PermissionStore.inMemory(DEFAULT_GROUPS));
+        }
+    }
+
+    /**
+     * Who can sign in.
+     *
+     * @return The access.
+     */
+    @Getter private volatile Access access = Access.inMemory();
+
+    /** The game mode new players start in. */
+    private volatile GameMode defaultGameMode = GameMode.SURVIVAL;
+
+    /**
+     * Set the game mode new players start in.
+     *
+     * @param mode The game mode.
+     */
+    public void setDefaultGameMode(@NonNull GameMode mode) {
+        defaultGameMode = mode;
+    }
+
+    /** The node needed to talk in chat. */
+    public static final String CHAT_PERMISSION = "lotomation.chat";
+
+    /** What players may do; replaced with the access. */
+    private volatile Permissions permissions =
+            new Permissions(PermissionPlugin.getRegistry(), access.permissions());
+
+    /** The commands players and the console run. */
+    private final ServerCommands commands = new ServerCommands(this);
+
+    /** How many entries {@link #players} has, for other threads. */
+    private final AtomicInteger playerCount = new AtomicInteger();
 
     /** When each chunk was last near a player, in ticks. Tick thread only. */
     private final Map<ChunkPos, Long> lastWanted = new HashMap<>();
@@ -320,50 +410,223 @@ public final class ServerWorld implements AutoCloseable {
     }
 
     /**
-     * Add a player at the spawn and tell their client it joined. Tick thread only.
+     * Set who can sign in, before anyone connects.
+     *
+     * @param newAccess The access.
+     */
+    public void setAccess(@NonNull Access newAccess) {
+        access = newAccess;
+        permissions = new Permissions(PermissionPlugin.getRegistry(), newAccess.permissions());
+    }
+
+    /**
+     * What players may do, from the declared nodes and the save's groups.
+     *
+     * @return The permissions.
+     */
+    public Permissions permissions() {
+        return permissions;
+    }
+
+    /**
+     * Who a player is for permissions: an operator if their role is, in their role's group.
+     *
+     * @param player The player.
+     * @return The subject.
+     */
+    public static Subject subjectFor(@NonNull ServerPlayer player) {
+        final Accounts.Account account = player.getAccount();
+        return new Subject(
+                account.id(), account.role().isOperator(), List.of(Groups.of(account.role())));
+    }
+
+    /**
+     * The commands players and the console run.
+     *
+     * @return The commands.
+     */
+    public ServerCommands commands() {
+        return commands;
+    }
+
+    /**
+     * Send a player a line of chat. Tick thread only.
+     *
+     * @param player The player.
+     * @param text The line.
+     */
+    public void tell(@NonNull ServerPlayer player, @NonNull ChatText text) {
+        player.getConnection().send(ChatMessage.of(text));
+    }
+
+    /**
+     * Send everyone a line of chat, and log it. Tick thread only.
+     *
+     * @param text The line.
+     */
+    public void broadcast(@NonNull ChatText text) {
+        log.info("[Chat] {}", text.plain());
+        for (ServerPlayer player : players.values()) {
+            tell(player, text);
+        }
+    }
+
+    /**
+     * A player says something, or runs a command. Tick thread only.
+     *
+     * @param player The player.
+     * @param text What they typed.
+     */
+    void chat(@NonNull ServerPlayer player, @NonNull String text) {
+        final String line = text.strip();
+        if (line.isEmpty()) {
+            return;
+        }
+        if (line.startsWith("/")) {
+            commands.dispatch(new PlayerSender(this, player), line);
+            return;
+        }
+        if (!permissions.has(subjectFor(player), CHAT_PERMISSION)) {
+            tell(player, ChatText.of("You can't talk in chat here.", ChatText.RED));
+            return;
+        }
+        broadcast(nameTag(player).append(line, ChatText.DEFAULT));
+    }
+
+    /**
+     * How a player's name starts their lines: their role's title in its color, then their name.
+     *
+     * @param player The player.
+     * @return The start of the line.
+     */
+    static ChatText nameTag(@NonNull ServerPlayer player) {
+        return switch (player.getAccount().role()) {
+            case OWNER ->
+                    ChatText.of("[Owner] ", ChatText.GOLD)
+                            .append("<" + player.getName() + "> ", ChatText.DEFAULT);
+            case OPERATOR ->
+                    ChatText.of("[Op] ", ChatText.AQUA)
+                            .append("<" + player.getName() + "> ", ChatText.DEFAULT);
+            case PLAYER -> ChatText.of("<" + player.getName() + "> ");
+        };
+    }
+
+    /** A player as the sender of a command. */
+    private record PlayerSender(@NonNull ServerWorld world, @NonNull ServerPlayer player)
+            implements CommandSender {
+        @Override
+        public String name() {
+            return player.getName();
+        }
+
+        @Override
+        public Subject subject() {
+            return subjectFor(player);
+        }
+
+        @Override
+        public void reply(@NonNull ChatText text) {
+            world.tell(player, text);
+        }
+    }
+
+    /**
+     * Add a player with a throwaway account, for tests. Tick thread only.
      *
      * @param name The name the player joins as.
      * @param connection Sends requests to the player's client.
      * @return The player.
      */
     ServerPlayer join(@NonNull String name, @NonNull Connection connection) {
-        final long entity = sim.create();
-        final ServerPlayer player =
-                new ServerPlayer(
+        return join(
+                new Accounts.Account(
                         UUID.randomUUID().toString(),
                         name,
-                        connection,
-                        entity,
-                        spawn.x() + HALF_BLOCK,
-                        spawn.y(),
-                        spawn.z() + HALF_BLOCK);
+                        new byte[0],
+                        Accounts.Role.PLAYER,
+                        false,
+                        false,
+                        0),
+                connection);
+    }
+
+    /**
+     * Find a player who is in the world, by account id. Tick thread only.
+     *
+     * @param accountId The account id.
+     * @return The player, or null if they aren't here.
+     */
+    ServerPlayer player(@NonNull String accountId) {
+        return players.get(accountId);
+    }
+
+    /**
+     * Add a signed-in player where they left off, or at the spawn the first time, and tell their
+     * client it joined. Tick thread only.
+     *
+     * @param account The player's account.
+     * @param connection Sends requests to the player's client.
+     * @return The player.
+     */
+    ServerPlayer join(@NonNull Accounts.Account account, @NonNull Connection connection) {
+        final long entity = sim.create();
+        double startX = spawn.x() + HALF_BLOCK;
+        double startY = spawn.y();
+        double startZ = spawn.z() + HALF_BLOCK;
+        float yaw = 0;
+        float pitch = 0;
+        GameMode gameMode = defaultGameMode;
+        final Optional<PlayerFiles.PlayerData> saved =
+                access.savesPlayers()
+                        ? PlayerFiles.read(saveFolder, account.id())
+                                .filter(data -> data.world().equals(worldFolder))
+                        : Optional.empty();
+        if (saved.isPresent()) {
+            startX = saved.get().x();
+            startY = saved.get().y();
+            startZ = saved.get().z();
+            yaw = saved.get().yaw();
+            pitch = saved.get().pitch();
+            gameMode = GameMode.named(saved.get().gameMode()).orElse(defaultGameMode);
+        }
+        final ServerPlayer player =
+                new ServerPlayer(account, connection, entity, startX, startY, startZ);
         sim.set(
                 PlayerSimulation.MOVEMENT,
                 entity,
                 Movement.at(
                         MoveMode.WALKING,
-                        Fixed.ofMeters(spawn.x()) + Fixed.ONE / 2,
-                        Fixed.ofMeters(spawn.y()),
-                        Fixed.ofMeters(spawn.z()) + Fixed.ONE / 2));
+                        Math.round(startX * Fixed.ONE),
+                        Math.round(startY * Fixed.ONE),
+                        Math.round(startZ * Fixed.ONE)));
         sim.set(PlayerSimulation.INPUT, entity, PlayerInput.NONE);
+        sim.set(PlayerSimulation.GAME_MODE, entity, gameMode);
         sim.set(
                 PlayerSimulation.BLOCKS,
                 entity,
                 new ChunkBlockView(pos -> sentChunk(player, pos), solidByName));
         players.put(player.getId(), player);
+        playerCount.set(players.size());
         connection.send(
                 new Joined(
                         player.getId(),
                         player.getX(),
                         player.getY(),
                         player.getZ(),
-                        0,
-                        0,
+                        (float) Math.toRadians(yaw),
+                        (float) Math.toRadians(pitch),
                         VIEW_RADIUS,
                         VERTICAL_RADIUS,
-                        frames.get()));
+                        frames.get(),
+                        gameMode.ordinal()));
         connection.send(new TimeUpdate(time.get(), Server.TICKS_PER_SECOND));
-        log.info("{} joined at {}, {}, {}", name, player.getX(), player.getY(), player.getZ());
+        broadcast(ChatText.of(account.username() + " joined the game", ChatText.YELLOW));
+        log.info(
+                "{} joined at {}, {}, {}",
+                account.username(),
+                player.getX(),
+                player.getY(),
+                player.getZ());
         return player;
     }
 
@@ -394,8 +657,64 @@ public final class ServerWorld implements AutoCloseable {
         if (players.remove(player.getId()) == null) {
             return;
         }
+        savePlayer(player);
+        playerCount.set(players.size());
         sim.destroy(player.getEntity());
         log.info("{} left", player.getName());
+        broadcast(ChatText.of(player.getName() + " left the game", ChatText.YELLOW));
+    }
+
+    /**
+     * Write a player's file: where they are and which way they face. Tick thread only, or after it
+     * stopped.
+     *
+     * @param player The player.
+     */
+    private void savePlayer(@NonNull ServerPlayer player) {
+        if (!access.savesPlayers()) {
+            return;
+        }
+        final Movement movement = sim.get(PlayerSimulation.MOVEMENT, player.getEntity());
+        final float yaw = movement == null ? 0 : (float) (movement.yaw() * 360.0 / Angle.TURN);
+        final float pitch = movement == null ? 0 : (float) (movement.pitch() * 360.0 / Angle.TURN);
+        try {
+            PlayerFiles.write(
+                    saveFolder,
+                    new PlayerFiles.PlayerData(
+                            player.getId(),
+                            worldFolder,
+                            player.getX(),
+                            player.getY(),
+                            player.getZ(),
+                            yaw,
+                            pitch,
+                            gameMode(player).id()));
+        } catch (IOException e) {
+            log.warn("Could not save {}'s player file", player.getName(), e);
+        }
+    }
+
+    /**
+     * A player's game mode. Tick thread only.
+     *
+     * @param player The player.
+     * @return Their game mode.
+     */
+    public GameMode gameMode(@NonNull ServerPlayer player) {
+        final GameMode mode = sim.get(PlayerSimulation.GAME_MODE, player.getEntity());
+        return mode == null ? defaultGameMode : mode;
+    }
+
+    /**
+     * Change a player's game mode from the next frame. Their client learns it from the next state
+     * it gets. Tick thread only.
+     *
+     * @param player The player.
+     * @param mode The game mode.
+     */
+    public void setGameMode(@NonNull ServerPlayer player, @NonNull GameMode mode) {
+        sim.set(PlayerSimulation.GAME_MODE, player.getEntity(), mode);
+        log.info("{} is now in {} mode", player.getName(), mode.id());
     }
 
     /**
@@ -407,8 +726,17 @@ public final class ServerWorld implements AutoCloseable {
         return players.values();
     }
 
-    /** Run the work posted to the tick thread. */
-    private void runTasks() {
+    /**
+     * How many players are in the world. Safe from any thread.
+     *
+     * @return The count.
+     */
+    public int playerCount() {
+        return playerCount.get();
+    }
+
+    /** Run the work posted to the tick thread, as a paused world still does. Tick thread only. */
+    void runTasks() {
         Runnable task = tasks.poll();
         while (task != null) {
             try {
@@ -439,7 +767,11 @@ public final class ServerWorld implements AutoCloseable {
                     (double) movement.z() / Fixed.ONE);
             final PlayerState state =
                     PlayerState.of(
-                            frame, movement, player.inputs.buffered(frame), player.inputs.misses());
+                            frame,
+                            movement,
+                            gameMode(player),
+                            player.inputs.buffered(frame),
+                            player.inputs.misses());
             if (player.echoNanos != 0) {
                 state.setEchoNanos(player.echoNanos);
                 state.setHeldNanos(System.nanoTime() - player.echoReceivedNanos);
@@ -608,6 +940,10 @@ public final class ServerWorld implements AutoCloseable {
 
     @Override
     public void close() {
+        // Called after the tick thread stopped, so the players can be read here
+        for (ServerPlayer player : players.values()) {
+            savePlayer(player);
+        }
         generation.shutdownNow();
         try {
             if (!generation.awaitTermination(CLOSE_WAIT_SECONDS, TimeUnit.SECONDS)) {

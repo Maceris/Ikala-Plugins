@@ -1,6 +1,7 @@
 package com.ikalagaming.factory.networking.request.clientbound;
 
 import com.ikalagaming.factory.networking.base.Request;
+import com.ikalagaming.factory.sim.GameMode;
 import com.ikalagaming.factory.sim.MoveMode;
 import com.ikalagaming.factory.sim.Movement;
 
@@ -21,6 +22,12 @@ import lombok.NonNull;
 @NoArgsConstructor
 @AllArgsConstructor
 public class PlayerState implements Request {
+
+    /** Where the game mode sits in {@link #mode}, above the move mode. */
+    public static final int GAME_MODE_SHIFT = 4;
+
+    /** The bits of {@link #mode} that hold the move mode. */
+    public static final int MOVE_MODE_MASK = (1 << GAME_MODE_SHIFT) - 1;
 
     /** The frame this is the state after. */
     private long frame;
@@ -77,10 +84,14 @@ public class PlayerState implements Request {
      * @return The message.
      */
     public static PlayerState of(
-            long frame, @NonNull Movement movement, int buffered, long missed) {
+            long frame,
+            @NonNull Movement movement,
+            @NonNull GameMode gameMode,
+            int buffered,
+            long missed) {
         return new PlayerState(
                 frame,
-                movement.mode().ordinal(),
+                movement.mode().ordinal() | gameMode.ordinal() << GAME_MODE_SHIFT,
                 movement.x(),
                 movement.y(),
                 movement.z(),
@@ -104,10 +115,21 @@ public class PlayerState implements Request {
      */
     public Movement movement() {
         final MoveMode[] modes = MoveMode.values();
-        if (mode < 0 || mode >= modes.length) {
-            throw new IllegalArgumentException("Unknown movement mode " + mode);
+        final int moveMode = mode & MOVE_MODE_MASK;
+        if (moveMode >= modes.length) {
+            throw new IllegalArgumentException("Unknown movement mode " + moveMode);
         }
-        return new Movement(modes[mode], x, y, z, vx, vy, vz, yaw, pitch, onGround);
+        return new Movement(modes[moveMode], x, y, z, vx, vy, vz, yaw, pitch, onGround);
+    }
+
+    /**
+     * The player's game mode after the frame.
+     *
+     * @return The game mode.
+     * @throws IllegalArgumentException If the mode is not one this knows.
+     */
+    public GameMode gameMode() {
+        return GameMode.byOrdinal(mode >>> GAME_MODE_SHIFT);
     }
 
     @Override

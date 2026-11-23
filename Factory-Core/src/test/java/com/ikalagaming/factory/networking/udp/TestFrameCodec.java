@@ -8,6 +8,7 @@ import com.ikalagaming.factory.networking.base.Request;
 import com.ikalagaming.factory.networking.request.clientbound.PlayerState;
 import com.ikalagaming.factory.networking.request.serverbound.PlayerInputs;
 import com.ikalagaming.factory.sim.Angle;
+import com.ikalagaming.factory.sim.GameMode;
 import com.ikalagaming.factory.sim.MoveMode;
 import com.ikalagaming.factory.sim.Movement;
 import com.ikalagaming.factory.sim.PlayerInput;
@@ -67,6 +68,7 @@ class TestFrameCodec {
                                 Angle.QUARTER,
                                 -100,
                                 true),
+                        GameMode.SURVIVAL,
                         2,
                         3);
         state.setEchoNanos(NOW - 1_000_000);
@@ -151,6 +153,7 @@ class TestFrameCodec {
                                 Angle.TURN - 1,
                                 -Angle.QUARTER,
                                 true),
+                        GameMode.SURVIVAL,
                         31,
                         1_000_000_000_000L);
         extreme.setEchoNanos(NOW - 5);

@@ -1,0 +1,35 @@
+# Lotomation's permission nodes, in Bukkit's format. Operators and the owner have the op ones.
+lotomation.chat:
+  description: Talk in chat
+  default: true
+lotomation.command.help:
+  description: List the commands you can use
+  default: true
+lotomation.command.gamemode:
+  description: Change your own game mode
+  default: op
+lotomation.command.gamemode.others:
+  description: Change other players' game modes
+  default: op
+lotomation.command.op:
+  description: Make a player an operator
+  default: op
+lotomation.command.deop:
+  description: Take operator away from a player
+  default: op
+lotomation.command.accept:
+  description: Let a player who asked to join in
+  default: op
+lotomation.command.say:
+  description: Send a message to everyone as the server
+  default: op
+lotomation.admin:
+  description: Everything an operator can do
+  default: op
+  children:
+    lotomation.command.gamemode: true
+    lotomation.command.gamemode.others: true
+    lotomation.command.op: true
+    lotomation.command.deop: true
+    lotomation.command.accept: true
+    lotomation.command.say: true

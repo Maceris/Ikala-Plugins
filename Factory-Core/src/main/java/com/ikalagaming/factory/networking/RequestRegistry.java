@@ -3,14 +3,19 @@ package com.ikalagaming.factory.networking;
 import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.factory.networking.base.Request;
 import com.ikalagaming.factory.networking.base.RequestDirection;
+import com.ikalagaming.factory.networking.request.clientbound.ChatMessage;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkData;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkUnload;
+import com.ikalagaming.factory.networking.request.clientbound.Disconnect;
 import com.ikalagaming.factory.networking.request.clientbound.Joined;
 import com.ikalagaming.factory.networking.request.clientbound.PlayerState;
+import com.ikalagaming.factory.networking.request.clientbound.ServerHello;
 import com.ikalagaming.factory.networking.request.clientbound.TimeUpdate;
 import com.ikalagaming.factory.networking.request.clientbound.UpdateTagRegistry;
-import com.ikalagaming.factory.networking.request.serverbound.Join;
+import com.ikalagaming.factory.networking.request.serverbound.ChatSend;
+import com.ikalagaming.factory.networking.request.serverbound.Hello;
 import com.ikalagaming.factory.networking.request.serverbound.PlayerInputs;
+import com.ikalagaming.factory.networking.request.serverbound.SignIn;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import com.google.common.collect.BiMap;
@@ -123,7 +128,12 @@ public class RequestRegistry {
         registerClientBound(ChunkUnload.class);
         registerClientBound(TimeUpdate.class);
         registerClientBound(PlayerState.class);
-        registerServerBound(Join.class);
+        registerClientBound(ServerHello.class);
+        registerClientBound(Disconnect.class);
+        registerClientBound(ChatMessage.class);
+        registerServerBound(Hello.class);
+        registerServerBound(SignIn.class);
+        registerServerBound(ChatSend.class);
         registerServerBound(PlayerInputs.class);
     }
 

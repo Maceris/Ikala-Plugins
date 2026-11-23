@@ -58,6 +58,11 @@ dependencies {
 	compileOnly project(':Ikala-Core')
 	implementation project(':Factory-Core')
 	compileOnly project(':EntityComponentSystem')
+	compileOnly project(':Ikala-Permissions')
+	// Ships inside the Ikala-Core jar
+	compileOnly "org.yaml:snakeyaml:${snakeYamlVersion}"
+	testImplementation "org.yaml:snakeyaml:${snakeYamlVersion}"
+	testImplementation project(':Ikala-Permissions')
 
 	// Testing: Ikala-Core and Random are provided at runtime, so tests need them directly
 	testImplementation project(':Ikala-Core')

@@ -55,6 +55,9 @@ public final class Saves {
     /** The {@value #SERVER_FILE} key for the port to listen on. */
     static final String PORT_KEY = "port";
 
+    /** The key in {@value #SERVER_FILE} for who can make an account. */
+    static final String REGISTRATION_KEY = "registration";
+
     /** The version of the save and world files this writes. */
     public static final int FORMAT_VERSION = 1;
 
@@ -361,7 +364,7 @@ public final class Saves {
      * @param file The file.
      * @return The tree, or empty if the file is missing or broken.
      */
-    private static Optional<Node> readNode(@NonNull Path file) {
+    public static Optional<Node> readNode(@NonNull Path file) {
         if (!Files.isRegularFile(file)) {
             return Optional.empty();
         }
@@ -381,7 +384,7 @@ public final class Saves {
      * @param file The file.
      * @throws IOException If it can't be written.
      */
-    private static void write(@NonNull Node node, @NonNull Path file) throws IOException {
+    public static void write(@NonNull Node node, @NonNull Path file) throws IOException {
         final Path temporary = file.resolveSibling(file.getFileName() + ".tmp");
         try (OutputStream stream = Files.newOutputStream(temporary)) {
             if (!TreeBinarySerialization.write(node, stream)) {
@@ -467,6 +470,23 @@ public final class Saves {
             log.warn("{} in {} has a bad port: {}", SERVER_FILE, saveFolder, port);
             return Hosting.SINGLE_PLAYER;
         }
+    }
+
+    /**
+     * Read who can make an account on a save's server, from its {@value #SERVER_FILE}.
+     *
+     * @param saveFolder The save's folder.
+     * @param dedicated Whether it runs as a dedicated server, which changes the default.
+     * @return The policy.
+     */
+    public static Registration readRegistration(@NonNull Path saveFolder, boolean dedicated) {
+        final Registration fallback = Registration.defaultFor(dedicated);
+        return Saves.readNode(saveFolder.resolve(SERVER_FILE))
+                .map(
+                        node ->
+                                Registration.named(
+                                        Saves.string(node, REGISTRATION_KEY, null), fallback))
+                .orElse(fallback);
     }
 
     /**

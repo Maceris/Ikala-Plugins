@@ -1,6 +1,8 @@
 package com.ikalagaming.factory.server;
 
 import com.ikalagaming.factory.FactoryServerPlugin;
+import com.ikalagaming.factory.auth.HostIdentity;
+import com.ikalagaming.factory.chat.ChatText;
 import com.ikalagaming.factory.networking.LocalConnection;
 import com.ikalagaming.factory.networking.SimulatedLink;
 import com.ikalagaming.factory.networking.base.Connection;
@@ -12,6 +14,7 @@ import com.ikalagaming.factory.networking.udp.UdpServer;
 import com.ikalagaming.factory.registry.DefinitionLoader;
 import com.ikalagaming.factory.registry.Registries;
 import com.ikalagaming.factory.registry.events.LoadingTags;
+import com.ikalagaming.factory.save.Accounts;
 import com.ikalagaming.factory.save.Hosting;
 import com.ikalagaming.factory.save.SaveSummary;
 import com.ikalagaming.factory.save.Saves;
@@ -25,6 +28,8 @@ import com.ikalagaming.factory.world.gen.WorldType;
 import com.ikalagaming.factory.world.gen.data.WorldgenCompiler;
 import com.ikalagaming.factory.world.gen.data.WorldgenData;
 import com.ikalagaming.launcher.AppPaths;
+import com.ikalagaming.permissions.PermissionStore;
+import com.ikalagaming.permissions.Subject;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.Getter;
@@ -32,6 +37,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -95,6 +101,9 @@ public class Server {
 
     /** Runs the open world's frames and ticks. */
     private ServerLoop loop;
+
+    /** The file in a save with its permission groups and players' own permissions. */
+    public static final String PERMISSIONS_FILE = "permissions.yml";
 
     /** The system property that makes the server listen on a port, even in single player. */
     public static final String PORT_PROPERTY = "ikala.server.port";
@@ -236,6 +245,20 @@ public class Server {
                             ServerWorld.defaultThreads(),
                             info.time(),
                             ChunkBlockView.solidByName(loadedRegistries.getBlockRegistry()));
+            try {
+                opened.setAccess(
+                        new ServerWorld.Access(
+                                HostIdentity.loadOrCreate(saveFolder),
+                                Accounts.load(saveFolder),
+                                Saves.readRegistration(saveFolder, isDedicated(saveFolder)),
+                                true,
+                                PermissionStore.load(
+                                        saveFolder.resolve(PERMISSIONS_FILE),
+                                        ServerWorld.Access.DEFAULT_GROUPS)));
+            } catch (IOException e) {
+                opened.close();
+                throw new UncheckedIOException("Could not read the save's host identity", e);
+            }
             world = opened;
             loop =
                     new ServerLoop(
@@ -243,6 +266,7 @@ public class Server {
                             () -> tickSafely(opened),
                             System.nanoTime(),
                             Boolean.getBoolean(ServerLoop.PRECISE_PROPERTY));
+            loop.whilePaused(opened::runTasks, () -> opened.playerCount() <= 1);
             loopThread = new Thread(loop, "Server tick");
             loopThread.setDaemon(true);
             loopThread.start();
@@ -270,7 +294,7 @@ public class Server {
         if (open == null) {
             throw new IllegalStateException("No world is open to connect to");
         }
-        final ServerSession session = new ServerSession(open);
+        final ServerSession session = new ServerSession(open, true);
         final SimulatedLink.Settings link = SimulatedLink.Settings.fromProperties();
         if (!link.isActive()) {
             session.setConnection(new LocalConnection(session, client));
@@ -300,12 +324,7 @@ public class Server {
      */
     private void listenIfHosted(@NonNull Path saveFolder, @NonNull ServerWorld opened) {
         Hosting hosting = Saves.readHosting(saveFolder);
-        final Path save = saveFolder.toAbsolutePath().normalize();
-        final boolean dedicated =
-                AppPaths.instance()
-                        .map(instance -> instance.toAbsolutePath().normalize().equals(save))
-                        .orElse(false);
-        if (dedicated) {
+        if (isDedicated(saveFolder)) {
             hosting = hosting.listening();
         }
         final Integer port = Integer.getInteger(PORT_PROPERTY);
@@ -333,6 +352,19 @@ public class Server {
     }
 
     /**
+     * Whether this process is a dedicated server for a save: the save is the instance.
+     *
+     * @param saveFolder The save.
+     * @return True if dedicated.
+     */
+    private static boolean isDedicated(@NonNull Path saveFolder) {
+        final Path save = saveFolder.toAbsolutePath().normalize();
+        return AppPaths.instance()
+                .map(instance -> instance.toAbsolutePath().normalize().equals(save))
+                .orElse(false);
+    }
+
+    /**
      * Make the session for a player connecting over the network.
      *
      * @param opened The world.
@@ -341,7 +373,7 @@ public class Server {
      */
     private static RequestHandler accept(
             @NonNull ServerWorld opened, @NonNull UdpConnection connection) {
-        final ServerSession session = new ServerSession(opened);
+        final ServerSession session = new ServerSession(opened, false);
         session.setConnection(connection);
         return session;
     }
@@ -393,8 +425,80 @@ public class Server {
         }
     }
 
-    /** Close the open world, if there is one, and stop ticking it. */
-    private void closeWorld() {
+    /**
+     * Pause or carry on the open world: no command frames, no ticks and no clock while paused. Only
+     * a world with at most one player connected can pause, as single player can, so a friend who
+     * joins never finds it stopped; a second player joining unpauses it.
+     *
+     * @param pause True to pause, false to carry on.
+     * @return Whether the world is paused now.
+     */
+    public boolean setPaused(boolean pause) {
+        worldLock.lock();
+        try {
+            if (loop == null || world == null) {
+                return false;
+            }
+            loop.setPaused(pause && world.playerCount() <= 1);
+            if (loop.isPaused()) {
+                log.info("Paused {}", world.getSaveFolder().getFileName());
+            }
+            return loop.isPaused();
+        } finally {
+            worldLock.unlock();
+        }
+    }
+
+    /**
+     * Whether the open world is paused.
+     *
+     * @return True while paused.
+     */
+    public boolean isPaused() {
+        final ServerLoop running = loop;
+        return running != null && running.isPaused();
+    }
+
+    /**
+     * Run a command from the server console, on the open world's tick thread.
+     *
+     * @param line The command, without a {@code /}.
+     */
+    public void consoleCommand(@NonNull String line) {
+        final ServerWorld open = world;
+        if (open == null) {
+            log.warn("No world is open to run {} in", line);
+            return;
+        }
+        open.post(() -> open.commands().dispatch(CONSOLE, line));
+    }
+
+    /** The server console as the sender of a command. */
+    private static final CommandSender CONSOLE =
+            new CommandSender() {
+                @Override
+                public String name() {
+                    return "Console";
+                }
+
+                @Override
+                public Subject subject() {
+                    return Subject.CONSOLE;
+                }
+
+                @Override
+                public void reply(@NonNull ChatText text) {
+                    log.info("{}", text.plain());
+                }
+
+                @Override
+                public ServerPlayer player() {
+                    return null;
+                }
+            };
+
+    /** Close the open world, if there is one, and stop ticking it, saving what it keeps. */
+    public void closeWorld() {
         worldLock.lock();
         try {
             if (loop != null) {

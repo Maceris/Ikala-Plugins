@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.ui;
 
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.IkString;
+import com.ikalagaming.graphics.gui.enums.Key;
 import com.ikalagaming.graphics.gui.flags.InputTextFlags;
 
 import lombok.NonNull;
@@ -24,6 +25,15 @@ public class TextInput extends Node<TextInput> {
 
     /** Runs on the render thread with the text, after the frame it is submitted in. */
     private Consumer<String> onSubmit;
+
+    /** Runs when Escape is pressed while the field is being edited. */
+    private Runnable onCancel;
+
+    /** Whether only Enter submits, not leaving the field after changing it. */
+    private boolean enterOnly;
+
+    /** Whether the field takes the keyboard the next time it is drawn. */
+    private boolean focusNext;
 
     /**
      * The text last handed to {@link #onSubmit}, so leaving the field after Enter doesn't repeat.
@@ -79,6 +89,39 @@ public class TextInput extends Node<TextInput> {
         return this;
     }
 
+    /**
+     * Set what happens when Escape is pressed while the field is being edited, like closing a chat
+     * box. It runs on the render thread after the GUI is drawn.
+     *
+     * @param action The action, or null for nothing.
+     * @return This field.
+     */
+    public TextInput onCancel(Runnable action) {
+        onCancel = action;
+        return this;
+    }
+
+    /**
+     * Submit only on Enter, not when the field is left after a change, as for a chat line.
+     *
+     * @param only True for Enter only.
+     * @return This field.
+     */
+    public TextInput submitOnEnterOnly(boolean only) {
+        enterOnly = only;
+        return this;
+    }
+
+    /**
+     * Take the keyboard the next time the field is drawn, so typing goes straight into it.
+     *
+     * @return This field.
+     */
+    public TextInput focus() {
+        focusNext = true;
+        return this;
+    }
+
     @Override
     public String styleType() {
         return "text-input";
@@ -102,9 +145,19 @@ public class TextInput extends Node<TextInput> {
         IkGuiStyler.Pushed pushed = IkGuiStyler.push(IkGuiStyler.Kind.TEXT_INPUT, this, frame);
         IkGui.setCursorScreenPos(rect.getLeft(), rect.getTop());
         IkGui.setNextItemWidth(rect.getWidth());
+        if (focusNext) {
+            IkGui.setKeyboardFocusHere();
+            focusNext = false;
+        }
         boolean entered = IkGui.inputText("##input", buffer, InputTextFlags.ENTER_RETURNS_TRUE);
         recordItem(IkGui.getItemID());
-        boolean leftAfterEdit = IkGui.isItemDeactivatedAfterEdit();
+        // Escape ends editing inside inputText, so the field may already be inactive
+        if (onCancel != null
+                && (IkGui.isItemActive() || IkGui.isItemDeactivated())
+                && IkGui.isKeyPressed(Key.ESCAPE, false)) {
+            frame.fire(onCancel);
+        }
+        boolean leftAfterEdit = !enterOnly && IkGui.isItemDeactivatedAfterEdit();
         String text = buffer.get();
         if (entered || (leftAfterEdit && !text.equals(lastSubmitted))) {
             lastSubmitted = text;

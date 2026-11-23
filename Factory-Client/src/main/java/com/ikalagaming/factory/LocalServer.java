@@ -62,6 +62,24 @@ public final class LocalServer {
     }
 
     /**
+     * Pause or carry on the world open on the local server, as the pause menu does in single
+     * player. A world with another player connected doesn't pause.
+     *
+     * @param pause True to pause.
+     * @return Whether the world is paused now; false if there is no local server.
+     */
+    public static boolean setPaused(boolean pause) {
+        return isAvailable() && Starter.setPaused(pause);
+    }
+
+    /** Close the world open on the local server, if any, saving it, as when leaving to the menu. */
+    public static void closeWorld() {
+        if (isAvailable()) {
+            Starter.closeWorld();
+        }
+    }
+
+    /**
      * Holds the reference to server classes, so they only load once the plugin is known to be
      * there.
      */
@@ -86,6 +104,21 @@ public final class LocalServer {
          */
         static Connection connect(@NonNull RequestHandler client) {
             return FactoryServerPlugin.getServer().connect(client);
+        }
+
+        /**
+         * Pause or carry on.
+         *
+         * @param pause True to pause.
+         * @return Whether paused now.
+         */
+        static boolean setPaused(boolean pause) {
+            return FactoryServerPlugin.getServer().setPaused(pause);
+        }
+
+        /** Close the open world. */
+        static void closeWorld() {
+            FactoryServerPlugin.getServer().closeWorld();
         }
 
         private Starter() {}

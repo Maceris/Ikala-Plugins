@@ -34,7 +34,7 @@ import java.util.concurrent.TimeUnit;
 class TestServerWorld {
 
     /** An empty world: air everywhere. */
-    private static WorldGenerator emptyWorld() {
+    static WorldGenerator emptyWorld() {
         Map<Kind, Map<String, String>> files = new EnumMap<>(Kind.class);
         files.computeIfAbsent(Kind.PARAMETER, k -> new TreeMap<>()).put("t:p", "{density:0.0}");
         files.computeIfAbsent(Kind.BIOME, k -> new TreeMap<>())

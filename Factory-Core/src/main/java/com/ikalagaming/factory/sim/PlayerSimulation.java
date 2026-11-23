@@ -26,14 +26,18 @@ public final class PlayerSimulation {
      * sent different chunks. Local: blocks aren't rolled back with the frames. An entity without
      * one moves as if everything were solid.
      */
+    /** Each player's game mode, which decides how they move. Survival when missing. */
+    public static final ComponentType<GameMode> GAME_MODE =
+            ComponentType.simulated("lotomation:game_mode", GameMode.class);
+
     public static final ComponentType<BlockView> BLOCKS =
             ComponentType.local("lotomation:blocks", BlockView.class);
 
     /** Half the player's width: the box is 0.6 m across. */
-    static final long HALF_WIDTH = Fixed.ofMeters(3, 10);
+    public static final long HALF_WIDTH = Fixed.ofMeters(3, 10);
 
     /** The player's height: 1.8 m. */
-    static final long HEIGHT = Fixed.ofMeters(18, 10);
+    public static final long HEIGHT = Fixed.ofMeters(18, 10);
 
     /** Walking speed: 4.3 m/s. */
     static final long WALK_SPEED = Fixed.perFrame(43, 10);
@@ -58,6 +62,9 @@ public final class PlayerSimulation {
 
     /** Flying speed: 10 m/s. */
     static final long FLY_SPEED = Fixed.perFrame(10, 1);
+
+    /** How fast creative flight goes while sprinting, per frame. */
+    static final long CREATIVE_SPRINT_SPEED = Fixed.perFrame(20, 1);
 
     /** Flying speed when sprinting: 40 m/s. */
     static final long FLY_SPRINT_SPEED = Fixed.perFrame(40, 1);
@@ -93,38 +100,53 @@ public final class PlayerSimulation {
                 entity -> {
                     final BlockView blocks =
                             world.has(BLOCKS, entity) ? world.get(BLOCKS, entity) : BlockView.SOLID;
+                    final GameMode gameMode =
+                            world.has(GAME_MODE, entity)
+                                    ? world.get(GAME_MODE, entity)
+                                    : GameMode.SURVIVAL;
                     world.set(
                             MOVEMENT,
                             entity,
-                            step(world.get(MOVEMENT, entity), world.get(INPUT, entity), blocks));
+                            step(
+                                    world.get(MOVEMENT, entity),
+                                    world.get(INPUT, entity),
+                                    blocks,
+                                    gameMode));
                 });
     }
 
     /**
-     * One frame of movement: flying while the input holds {@link PlayerInput#FLY}, otherwise
-     * walking.
+     * Step a player's movement one frame.
      *
-     * @param before The movement after the previous frame.
-     * @param input This frame's input.
-     * @param blocks The blocks to move through.
+     * <ul>
+     *   <li><b>Survival:</b> walks; the flight button does nothing.
+     *   <li><b>Creative:</b> walks, or while the flight button is held, flies: hovering, at {@link
+     *       #FLY_SPEED} or {@link #CREATIVE_SPRINT_SPEED}, still stopped by blocks. Landing marks
+     *       the movement on the ground, so the client can let go of flight.
+     *   <li><b>Spectator:</b> flies through everything.
+     * </ul>
+     *
+     * @param before The movement after the frame before.
+     * @param input The player's input for this frame.
+     * @param blocks The blocks they move through.
+     * @param gameMode Their game mode.
      * @return The movement after this frame.
      */
     public static Movement step(
-            @NonNull Movement before, @NonNull PlayerInput input, @NonNull BlockView blocks) {
-        return input.held(PlayerInput.FLY) ? fly(before, input) : walk(before, input, blocks);
+            @NonNull Movement before,
+            @NonNull PlayerInput input,
+            @NonNull BlockView blocks,
+            @NonNull GameMode gameMode) {
+        return switch (gameMode) {
+            case SURVIVAL -> walk(before, input, blocks);
+            case CREATIVE ->
+                    input.held(PlayerInput.FLY)
+                            ? hover(before, input, blocks)
+                            : walk(before, input, blocks);
+            case SPECTATOR -> fly(before, input);
+        };
     }
 
-    /**
-     * One frame of walking: speed up or slow down toward where the keys point, quickly on the
-     * ground and slowly in the air; fall; jump from the ground while jump is held; then sweep the
-     * box through the blocks, y first, then x, then z. Hitting something stops the speed along that
-     * axis, and landing sets the on-ground flag.
-     *
-     * @param before The movement after the previous frame.
-     * @param input This frame's input.
-     * @param blocks The blocks.
-     * @return The movement after this frame.
-     */
     static Movement walk(Movement before, PlayerInput input, BlockView blocks) {
         final long speed = input.held(PlayerInput.SPRINT) ? SPRINT_SPEED : WALK_SPEED;
         final long[] wanted = direction(input, speed);
@@ -214,6 +236,46 @@ public final class PlayerSimulation {
             dirZ = Fixed.mul(dirZ, DIAGONAL);
         }
         return new long[] {Fixed.mul(speed, dirX), Fixed.mul(speed, dirZ)};
+    }
+
+    /**
+     * Creative flight: moves at a steady speed, hovering when nothing is held, stopped by blocks.
+     *
+     * @param before The movement before.
+     * @param input The input.
+     * @param blocks The blocks in the way.
+     * @return The movement after.
+     */
+    static Movement hover(Movement before, PlayerInput input, BlockView blocks) {
+        final long speed = input.held(PlayerInput.SPRINT) ? CREATIVE_SPRINT_SPEED : FLY_SPEED;
+        final long[] flat = direction(input, speed);
+        long vx = flat[0];
+        long vy = axis(input, PlayerInput.UP, PlayerInput.DOWN) * speed;
+        long vz = flat[1];
+        final long[] min = {before.x() - HALF_WIDTH, before.y(), before.z() - HALF_WIDTH};
+        final long[] max = {before.x() + HALF_WIDTH, before.y() + HEIGHT, before.z() + HALF_WIDTH};
+        final long dy = slide(blocks, min, max, BoxSweep.Y, vy);
+        final boolean landed = vy < 0 && dy != vy;
+        if (dy != vy) {
+            vy = 0;
+        }
+        if (slide(blocks, min, max, BoxSweep.X, vx) != vx) {
+            vx = 0;
+        }
+        if (slide(blocks, min, max, BoxSweep.Z, vz) != vz) {
+            vz = 0;
+        }
+        return new Movement(
+                MoveMode.FLYING,
+                min[BoxSweep.X] + HALF_WIDTH,
+                min[BoxSweep.Y],
+                min[BoxSweep.Z] + HALF_WIDTH,
+                vx,
+                vy,
+                vz,
+                input.yaw(),
+                input.pitch(),
+                landed);
     }
 
     /**

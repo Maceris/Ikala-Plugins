@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.ui;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.IkGuiInternal;
 import com.ikalagaming.graphics.gui.enums.Condition;
+import com.ikalagaming.graphics.gui.flags.FocusedFlags;
 import com.ikalagaming.graphics.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.gui.util.RectFloat;
 import com.ikalagaming.graphics.ui.style.ComputedStyle;
@@ -67,6 +68,12 @@ public class Surface {
 
     /** Extra IkGui window flags. */
     private int extraFlags;
+
+    /**
+     * Whether the surface gives up focus after a click, so neither it nor a child window like a
+     * scroll area keeps the keyboard.
+     */
+    private boolean dropsFocus;
 
     /** The style classes, in order; later ones win. */
     private List<String> classes = List.of();
@@ -191,6 +198,24 @@ public class Surface {
     public Surface hud() {
         layer = Layer.BACKGROUND;
         extraFlags |= WindowFlags.NO_BACKGROUND | WindowFlags.NO_INPUTS;
+        return this;
+    }
+
+    /**
+     * Whether the surface can take keyboard navigation. A panel that only gets clicked while the
+     * game reads the keys, like the debug overlay, says no, so clicking it doesn't make IkGui claim
+     * the keyboard.
+     *
+     * @param keep False to never take keyboard navigation or focus when it appears.
+     * @return This surface.
+     */
+    public Surface keepsKeyboard(boolean keep) {
+        dropsFocus = !keep;
+        if (keep) {
+            extraFlags &= ~(WindowFlags.NO_NAV | WindowFlags.NO_FOCUS_ON_APPEARING);
+        } else {
+            extraFlags |= WindowFlags.NO_NAV | WindowFlags.NO_FOCUS_ON_APPEARING;
+        }
         return this;
     }
 
@@ -366,6 +391,12 @@ public class Surface {
             content.submitTree(frame);
             if (scaled) {
                 IkGui.popFont();
+            }
+            // Child windows don't take the no-nav flags, so give the focus back once a click ends
+            if (dropsFocus
+                    && !IkGui.isAnyItemActive()
+                    && IkGui.isWindowFocused(FocusedFlags.ROOT_AND_CHILD_WINDOWS)) {
+                IkGui.setWindowFocus(null);
             }
         }
         IkGui.end();

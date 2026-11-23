@@ -11,6 +11,7 @@ import com.ikalagaming.factory.world.gen.data.Kind;
 import com.ikalagaming.factory.world.gen.data.WorldgenData;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.UI;
+import com.ikalagaming.graphics.input.ControlsScreen;
 import com.ikalagaming.graphics.ui.Node;
 import com.ikalagaming.graphics.ui.TextInput;
 import com.ikalagaming.graphics.ui.spec.Observable;
@@ -19,6 +20,7 @@ import com.ikalagaming.graphics.ui.spec.SpecBindings;
 import com.ikalagaming.graphics.ui.spec.SpecEvent;
 import com.ikalagaming.graphics.ui.spec.SpecInstance;
 import com.ikalagaming.graphics.ui.spec.SpecLoader;
+import com.ikalagaming.launcher.events.Shutdown;
 import com.ikalagaming.plugins.PluginInfo;
 import com.ikalagaming.plugins.PluginManager;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -57,11 +59,32 @@ public class GameMenus {
     /** The New Game screen's surface. */
     public static final String NEW_GAME = "factory/new-game";
 
+    /** The pause menu's surface, over the game. */
+    public static final String PAUSE = "factory/pause";
+
+    /** The Options screen's surface. */
+    public static final String OPTIONS = "factory/options";
+
+    /** Every surface here, of which at most one shows. */
+    private static final List<String> SURFACES =
+            List.of(MAIN_MENU, SINGLE_PLAYER, NEW_GAME, PAUSE, OPTIONS);
+
     /** The specs, in the plugin's resources. */
     private static final String MAIN_MENU_SPEC = "/ui/main-menu.yml";
 
     private static final String SINGLE_PLAYER_SPEC = "/ui/single-player.yml";
     private static final String NEW_GAME_SPEC = "/ui/new-game.yml";
+    private static final String PAUSE_SPEC = "/ui/pause.yml";
+    private static final String OPTIONS_SPEC = "/ui/options.yml";
+
+    /** What the pause menu's buttons do in the game. */
+    public interface GameActions {
+        /** Close the pause menu and carry on playing. */
+        void resume();
+
+        /** Leave the game and go back to the main menu. */
+        void exitToMainMenu();
+    }
 
     /** Node paths in the New Game spec, from its root. */
     private static final String NAME_INPUT = "form/name";
@@ -117,8 +140,37 @@ public class GameMenus {
     /** Whether there is an error to show. */
     private final Observable<Boolean> hasError = Observable.of(false);
 
+    /** A note on the main menu, like why a server turned the player away. */
+    private final Observable<String> mainMenuNote = Observable.of("");
+
+    /** Whether there is a note on the main menu. */
+    private final Observable<Boolean> hasMainMenuNote = Observable.of(false);
+
     /** The open New Game screen, to read its fields. */
     private SpecInstance newGame;
+
+    /** The surface showing, or null for none. */
+    private String showing;
+
+    /** Where the Options screen goes back to. */
+    private String optionsReturn = MAIN_MENU;
+
+    /** What the pause menu's buttons do; nothing until the game sets it. */
+    private GameActions gameActions =
+            new GameActions() {
+                @Override
+                public void resume() {
+                    hideAll();
+                }
+
+                @Override
+                public void exitToMainMenu() {
+                    showMainMenu();
+                }
+            };
+
+    /** The Controls screen, once opened. */
+    private ControlsScreen controls;
 
     /**
      * Menus for the plugin.
@@ -154,10 +206,26 @@ public class GameMenus {
                 SpecLoader.loadResource(GameMenus.class, MAIN_MENU_SPEC),
                 new SpecBindings()
                         .bundle(bundle)
+                        .value("note", mainMenuNote)
+                        .value("hasNote", hasMainMenuNote)
                         .handler("open-single-player", this::showSinglePlayer)
                         // Not built yet: FACT-13 and FACT-14
                         .handler("open-multiplayer", () -> {})
-                        .handler("open-options", () -> {}));
+                        .handler("open-options", () -> showOptions(MAIN_MENU))
+                        .handler("quit-game", () -> new Shutdown().fire()));
+        ui.open(
+                SpecLoader.loadResource(GameMenus.class, PAUSE_SPEC),
+                new SpecBindings()
+                        .bundle(bundle)
+                        .handler("resume", () -> gameActions.resume())
+                        .handler("open-options", () -> showOptions(PAUSE))
+                        .handler("exit-to-menu", () -> gameActions.exitToMainMenu()));
+        ui.open(
+                SpecLoader.loadResource(GameMenus.class, OPTIONS_SPEC),
+                new SpecBindings()
+                        .bundle(bundle)
+                        .handler("open-controls", this::showControls)
+                        .handler("options-back", () -> show(optionsReturn)));
         ui.open(
                 SpecLoader.loadResource(GameMenus.class, SINGLE_PLAYER_SPEC),
                 new SpecBindings()
@@ -184,26 +252,114 @@ public class GameMenus {
 
     /** Hide every menu, as when the game starts. */
     public void hideAll() {
-        UI ui = graphics.ui();
-        for (String surface : List.of(MAIN_MENU, SINGLE_PLAYER, NEW_GAME)) {
-            ui.setVisible(surface, false);
+        show(null);
+    }
+
+    /** Show the main menu, as after leaving a game. */
+    public void showMainMenu() {
+        showMainMenu("");
+    }
+
+    /**
+     * Show the main menu with a note, like why a server turned the player away.
+     *
+     * @param note The note, or blank for none.
+     */
+    public void showMainMenu(@NonNull String note) {
+        mainMenuNote.set(note);
+        hasMainMenuNote.set(!note.isBlank());
+        show(MAIN_MENU);
+    }
+
+    /** Show the pause menu over the game. */
+    public void showPause() {
+        show(PAUSE);
+    }
+
+    /**
+     * Set what the pause menu's buttons do.
+     *
+     * @param actions The game's actions.
+     */
+    public void setGameActions(@NonNull GameActions actions) {
+        gameActions = actions;
+    }
+
+    /**
+     * Whether any menu, or the Controls screen, is showing, so the game should ignore the keys.
+     *
+     * @return True if one is showing.
+     */
+    public boolean isShowing() {
+        return showing != null || (controls != null && controls.isOpen());
+    }
+
+    /**
+     * Whether the pause menu, or a screen opened from it, is showing.
+     *
+     * @return True if the game is in its menu.
+     */
+    public boolean isPauseShowing() {
+        return PAUSE.equals(showing)
+                || (PAUSE.equals(optionsReturn)
+                        && (OPTIONS.equals(showing) || (controls != null && controls.isOpen())));
+    }
+
+    /**
+     * Go back a step, as the pause key does in a menu: Controls to Options, Options to where it
+     * came from, the pause menu to the game.
+     */
+    public void back() {
+        if (controls != null && controls.isOpen()) {
+            controls.close();
+            show(OPTIONS);
+        } else if (OPTIONS.equals(showing)) {
+            show(optionsReturn);
+        } else if (PAUSE.equals(showing)) {
+            gameActions.resume();
+        } else if (SINGLE_PLAYER.equals(showing)) {
+            show(MAIN_MENU);
+        } else if (NEW_GAME.equals(showing)) {
+            show(SINGLE_PLAYER);
         }
+    }
+
+    /**
+     * Show the Options screen.
+     *
+     * @param returnTo The surface its Back button goes to.
+     */
+    private void showOptions(@NonNull String returnTo) {
+        optionsReturn = returnTo;
+        show(OPTIONS);
+    }
+
+    /** Show the Controls screen, which goes back to Options. */
+    private void showControls() {
+        if (controls == null) {
+            controls = new ControlsScreen(graphics, () -> show(OPTIONS));
+        }
+        show(null);
+        controls.open();
     }
 
     /**
      * Show one menu and hide the others.
      *
-     * @param surface The menu's surface.
+     * @param surface The menu's surface, or null to hide them all.
      */
-    private void show(@NonNull String surface) {
+    private void show(String surface) {
         UI ui = graphics.ui();
-        for (String other : List.of(MAIN_MENU, SINGLE_PLAYER, NEW_GAME)) {
+        for (String other : SURFACES) {
             ui.setVisible(other, other.equals(surface));
         }
+        showing = surface;
     }
 
     /** Read the saves again and show the Single Player screen. */
     void showSinglePlayer() {
+        mainMenuNote.set("");
+        hasMainMenuNote.set(false);
         refreshSaves();
         show(SINGLE_PLAYER);
     }

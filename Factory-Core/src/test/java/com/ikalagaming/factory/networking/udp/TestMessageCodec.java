@@ -10,8 +10,9 @@ import com.ikalagaming.factory.networking.base.RequestDirection;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkData;
 import com.ikalagaming.factory.networking.request.clientbound.Joined;
 import com.ikalagaming.factory.networking.request.clientbound.PlayerState;
-import com.ikalagaming.factory.networking.request.serverbound.Join;
+import com.ikalagaming.factory.networking.request.serverbound.Hello;
 import com.ikalagaming.factory.networking.serialization.RequestEncoder;
+import com.ikalagaming.factory.sim.GameMode;
 import com.ikalagaming.factory.sim.MoveMode;
 import com.ikalagaming.factory.sim.Movement;
 import com.ikalagaming.factory.world.Block;
@@ -56,9 +57,9 @@ class TestMessageCodec {
     /** Other requests go as their id and a tree. */
     @Test
     void testGeneral() {
-        final Join join = new Join("Somebody");
+        final Hello join = new Hello("Somebody");
         assertEquals(join, roundTrip(join, RequestDirection.SERVER_BOUND));
-        final Joined joined = new Joined("id", 1.5, 2.5, -3.5, 0.25f, -0.5f, 8, 4, 1234);
+        final Joined joined = new Joined("id", 1.5, 2.5, -3.5, 0.25f, -0.5f, 8, 4, 1234, 0);
         assertEquals(joined, roundTrip(joined, RequestDirection.CLIENT_BOUND));
     }
 
@@ -122,7 +123,7 @@ class TestMessageCodec {
         }
         assertEquals(
                 MessageCodec.GENERAL,
-                MessageCodec.encode(new Join("Somebody"), RequestDirection.SERVER_BOUND)[0]);
+                MessageCodec.encode(new Hello("Somebody"), RequestDirection.SERVER_BOUND)[0]);
     }
 
     /**
@@ -157,7 +158,8 @@ class TestMessageCodec {
     /** Inputs and states are left to the connection's {@link FrameCodec}. */
     @Test
     void testPerFrameRefused() {
-        final PlayerState state = PlayerState.of(1, Movement.at(MoveMode.FLYING, 0, 0, 0), 0, 0);
+        final PlayerState state =
+                PlayerState.of(1, Movement.at(MoveMode.FLYING, 0, 0, 0), GameMode.SURVIVAL, 0, 0);
         assertThrows(
                 IllegalArgumentException.class,
                 () -> MessageCodec.encode(state, RequestDirection.CLIENT_BOUND));
@@ -173,7 +175,7 @@ class TestMessageCodec {
                 MessageCodec.decode(
                                 new byte[] {MessageCodec.STATE, 1}, RequestDirection.CLIENT_BOUND)
                         .isEmpty());
-        final byte[] general = MessageCodec.encode(new Join("x"), RequestDirection.SERVER_BOUND);
+        final byte[] general = MessageCodec.encode(new Hello("x"), RequestDirection.SERVER_BOUND);
         assertTrue(
                 MessageCodec.decode(
                                 Arrays.copyOf(general, general.length - 2),

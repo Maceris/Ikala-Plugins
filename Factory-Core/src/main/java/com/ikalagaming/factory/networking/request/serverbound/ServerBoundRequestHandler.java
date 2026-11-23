@@ -10,11 +10,25 @@ import lombok.NonNull;
  */
 public interface ServerBoundRequestHandler extends RequestHandler {
     /**
-     * A client asks to join.
+     * A client says hello.
      *
      * @param request The request.
      */
-    void handle(@NonNull Join request);
+    void handle(@NonNull Hello request);
+
+    /**
+     * A client signs in.
+     *
+     * @param request The request.
+     */
+    void handle(@NonNull SignIn request);
+
+    /**
+     * A player says something, or runs a command.
+     *
+     * @param request The request.
+     */
+    void handle(@NonNull ChatSend request);
 
     /**
      * A joined player's inputs for some command frames.

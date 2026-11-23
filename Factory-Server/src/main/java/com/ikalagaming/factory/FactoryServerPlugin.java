@@ -5,13 +5,21 @@ import com.ikalagaming.factory.server.Server;
 import com.ikalagaming.factory.server.ServerListener;
 import com.ikalagaming.launcher.AppPaths;
 import com.ikalagaming.localization.Localization;
+import com.ikalagaming.permissions.PermissionDefault;
+import com.ikalagaming.permissions.PermissionPlugin;
 import com.ikalagaming.plugins.Plugin;
+import com.ikalagaming.plugins.PluginManager;
 
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.yaml.snakeyaml.Yaml;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.*;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Handles the server-side part of Lotomation.
@@ -56,8 +64,23 @@ public class FactoryServerPlugin extends Plugin {
      *
      * @return True.
      */
+    /** The resource declaring this plugin's permission nodes. */
+    private static final String PERMISSIONS_RESOURCE = "/permissions.yml";
+
+    /** The commands the console can run, besides the plugin manager's own. */
+    private static final List<String> CONSOLE_COMMANDS =
+            List.of("gamemode", "op", "deop", "accept", "say");
+
     @Override
     public boolean onEnable() {
+        declarePermissions();
+        for (String command : CONSOLE_COMMANDS) {
+            PluginManager.getInstance()
+                    .registerCommand(
+                            command,
+                            args -> server.consoleCommand(command + " " + String.join(" ", args)),
+                            PLUGIN_NAME);
+        }
         AppPaths.instance()
                 .ifPresent(
                         instance -> {
@@ -67,8 +90,28 @@ public class FactoryServerPlugin extends Plugin {
         return true;
     }
 
+    /** Declare the permission nodes in {@value #PERMISSIONS_RESOURCE}. */
+    private void declarePermissions() {
+        try (InputStream in = FactoryServerPlugin.class.getResourceAsStream(PERMISSIONS_RESOURCE)) {
+            if (in == null) {
+                log.warn("{} is missing; commands will need operator", PERMISSIONS_RESOURCE);
+                return;
+            }
+            if (new Yaml().load(in) instanceof Map<?, ?> nodes) {
+                PermissionPlugin.getRegistry()
+                        .registerAll(PLUGIN_NAME, nodes, PermissionDefault.OP);
+            }
+        } catch (IOException | RuntimeException e) {
+            log.warn("Could not read {}", PERMISSIONS_RESOURCE, e);
+        }
+    }
+
     @Override
     public boolean onDisable() {
+        for (String command : CONSOLE_COMMANDS) {
+            PluginManager.getInstance().unregisterCommand(command);
+        }
+        PermissionPlugin.getRegistry().removeAllOwnedBy(PLUGIN_NAME);
         server.stop();
         return true;
     }

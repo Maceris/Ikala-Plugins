@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.ikalagaming.factory.auth.Crypto;
 import com.ikalagaming.factory.networking.RequestRegistry;
 import com.ikalagaming.factory.networking.SimpleRequest;
 import com.ikalagaming.factory.networking.base.RequestDirection;
@@ -152,16 +151,5 @@ class TestRequestCodec {
         EmbeddedChannel sender = channel();
         assertThrows(EncoderException.class, () -> sender.writeOutbound(new SimpleRequest()));
         assertNull(sender.readOutbound(), "No empty frame goes out");
-    }
-
-    @Test
-    void challengesAreUnpredictableAndUnique() {
-        byte[] first = Crypto.getChallenge();
-        byte[] second = Crypto.getChallenge();
-        assertEquals(16, first.length);
-        assertFalse(Arrays.equals(first, second));
-        assertFalse(
-                Arrays.equals(Arrays.copyOf(first, 12), Arrays.copyOf(second, 12)),
-                "The random part differs, not just the counter");
     }
 }

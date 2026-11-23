@@ -1,0 +1,75 @@
+# The Controls screen: every action plugins registered, by category, with the key each is bound to.
+# Clicking a binding waits for the next key or mouse button. The rows, the handlers and the @ text
+# come from ControlsScreen.java and the Graphics plugin's strings.properties.
+surface:
+  id: graphics/controls
+  anchors: fill
+  layer: overlay
+
+templates:
+  control-row:
+    node:
+      type: row
+      id: control
+      gap: 12
+      align: center
+      width: grow
+      children:
+        - type: label
+          id: category
+          text: "{row.label}"
+          classes: [title]
+          visible: "{row.header}"
+        - type: row
+          id: action
+          gap: 12
+          align: center
+          width: grow
+          visible: "{row.action}"
+          children:
+            - { type: label, id: name, text: "{row.label}", width: grow }
+            - { type: label, id: conflict, text: "@CONTROLS_CONFLICT", classes: [error-text], visible: "{row.conflict}" }
+            - type: button
+              id: binding
+              text: "{row.binding}"
+              width: 200
+              height: 32
+              onClick: rebind
+            - type: button
+              id: reset
+              text: "@CONTROLS_RESET"
+              width: 90
+              height: 32
+              visible: "{row.changed}"
+              onClick: reset
+
+content:
+  type: column
+  id: content
+  justify: center
+  align: center
+  gap: 16
+  classes: [dialog-backdrop]
+  width: grow
+  height: grow
+  children:
+    - { type: label, id: title, text: "@CONTROLS_TITLE", classes: [title] }
+    - { type: label, id: hint, text: "{hint}", classes: [muted] }
+    - type: scroll
+      id: list
+      width: 760
+      height: 460
+      border: true
+      children:
+        - type: column
+          id: rows
+          gap: 8
+          padding: 10
+          width: grow
+          repeat: { list: rows, as: row, template: control-row, key: "{row.key}" }
+    - type: row
+      id: buttons
+      gap: 12
+      children:
+        - { type: button, id: reset-all, text: "@CONTROLS_RESET_ALL", width: 160, height: 40, onClick: reset-all }
+        - { type: button, id: done, text: "@CONTROLS_DONE", width: 160, height: 40, autofocus: true, onClick: done }

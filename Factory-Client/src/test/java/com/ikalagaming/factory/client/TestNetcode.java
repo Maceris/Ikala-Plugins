@@ -9,6 +9,7 @@ import com.ikalagaming.factory.sim.Angle;
 import com.ikalagaming.factory.sim.BlockView;
 import com.ikalagaming.factory.sim.Fixed;
 import com.ikalagaming.factory.sim.Frames;
+import com.ikalagaming.factory.sim.GameMode;
 import com.ikalagaming.factory.sim.MoveMode;
 import com.ikalagaming.factory.sim.Movement;
 import com.ikalagaming.factory.sim.PlayerInput;
@@ -189,10 +190,11 @@ class TestNetcode {
             } else if (started) {
                 ++misses;
             }
-            movement = PlayerSimulation.step(movement, last, FLOOR);
+            movement = PlayerSimulation.step(movement, last, FLOOR, GameMode.SURVIVAL);
             results.put(next, movement);
             final int buffered = inputs.subMap(next + 1, next + MAX_AHEAD + 1).size();
-            final PlayerState state = PlayerState.of(next, movement, buffered, misses);
+            final PlayerState state =
+                    PlayerState.of(next, movement, GameMode.SURVIVAL, buffered, misses);
             if (echo != 0) {
                 state.setEchoNanos(echo);
                 state.setHeldNanos(now - echoArrived);
@@ -257,6 +259,7 @@ class TestNetcode {
                                     p.onServerState(
                                             state.getFrame(),
                                             state.movement(),
+                                            GameMode.SURVIVAL,
                                             state.getBuffered(),
                                             state.getMissed());
                                     final long jump =
@@ -279,7 +282,7 @@ class TestNetcode {
         events.at(
                 network.delayMs() * MS + network.jitterMs() * MS,
                 () -> {
-                    prediction[0] = new Prediction(joinFrame, START, FLOOR);
+                    prediction[0] = new Prediction(joinFrame, START, GameMode.SURVIVAL, FLOOR);
                     clock.start(events.now);
                 });
         // The client draws frames every 7 to 10 ms, except while stalled

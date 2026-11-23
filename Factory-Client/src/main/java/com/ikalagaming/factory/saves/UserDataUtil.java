@@ -1,76 +1,90 @@
 package com.ikalagaming.factory.saves;
 
 import com.ikalagaming.factory.FactoryPlugin;
-import com.ikalagaming.factory.auth.Crypto;
+import com.ikalagaming.factory.auth.Identity;
+import com.ikalagaming.factory.auth.KnownHosts;
 import com.ikalagaming.launcher.AppPaths;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.File;
-import java.security.KeyPair;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.concurrent.locks.ReentrantLock;
 
-/** Utilities relating to the user data folder and its shared contents. */
+/**
+ * The player's identity in the application's Home: the master secret their key for every server
+ * comes from, and the host keys of servers they have joined. See the Accounts and Identity design
+ * doc.
+ */
 @Slf4j
 public class UserDataUtil {
 
     /** The folder in the application's Home that holds this computer's identity. */
     public static final String IDENTITY_FOLDER = "identity";
 
-    /** The file in the identity folder that holds the keys for signing in to servers. */
+    /** The file in the identity folder that holds the master secret. */
     public static final String KEYS_FILE_NAME = "identity.key";
+
+    /** Guards loading the identity. */
+    private static final ReentrantLock LOCK = new ReentrantLock();
+
+    /** The identity, once loaded. */
+    private static Identity identity;
 
     /** Create the identity folder in the Home if it does not already exist. */
     public static void createUserDataFolder() {
-        File folder = UserDataUtil.keysFile().getParentFile();
-        if (!folder.exists() && !folder.mkdirs()) {
+        final Path folder = keysFile().getParent();
+        try {
+            Files.createDirectories(folder);
+        } catch (IOException e) {
             log.error(
                     SafeResourceLoader.getStringFormatted(
                             "DATA_FOLDER_CREATION_FAILED",
                             FactoryPlugin.getResourceBundle(),
-                            folder.toString()));
+                            folder.toString()),
+                    e);
         }
     }
 
     /**
-     * The file that holds the keys for signing in to servers.
+     * The file that holds the master secret.
      *
-     * @return The keys file, in the identity folder in the application's Home.
+     * @return The file, in the identity folder in the application's Home.
      */
-    private static File keysFile() {
-        return AppPaths.home()
-                .resolve(UserDataUtil.IDENTITY_FOLDER)
-                .resolve(UserDataUtil.KEYS_FILE_NAME)
-                .toFile();
+    private static Path keysFile() {
+        return AppPaths.home().resolve(IDENTITY_FOLDER).resolve(KEYS_FILE_NAME);
     }
 
     /**
-     * Generate a new key pair, store it in the expected file for next time, then return it.
+     * The player's identity, made the first time it is needed.
      *
-     * @return The newly generated key pair.
+     * @return The identity.
+     * @throws UncheckedIOException If the file can't be read or written.
      */
-    private static KeyPair generateAndStoreKeyPair() {
-        log.debug(
-                SafeResourceLoader.getString(
-                        "KEY_FILE_GENERATING", FactoryPlugin.getResourceBundle()),
-                UserDataUtil.keysFile());
-        KeyPair result = Crypto.generateKeyPair();
-        if (!Crypto.writeKeysToFile(result, UserDataUtil.keysFile())) {
-            log.warn(
-                    SafeResourceLoader.getString(
-                            "KEY_FILE_CANT_CREATE", FactoryPlugin.getResourceBundle()));
+    public static Identity identity() {
+        LOCK.lock();
+        try {
+            if (identity == null) {
+                identity = Identity.loadOrCreate(keysFile());
+            }
+            return identity;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } finally {
+            LOCK.unlock();
         }
-        return result;
     }
 
     /**
-     * Load the key pair from the user data folder, or generate and store one then return that.
+     * The host keys of servers the player has joined.
      *
-     * @return The key pair for this computer.
+     * @return The known hosts, in the Home.
      */
-    public static KeyPair getKeyPair() {
-        return Crypto.readKeysFromFile(UserDataUtil.keysFile())
-                .orElseGet(UserDataUtil::generateAndStoreKeyPair);
+    public static KnownHosts knownHosts() {
+        return new KnownHosts(AppPaths.home().resolve(KnownHosts.FILE));
     }
 
     /** Private constructor so that this class is not instantiated. */

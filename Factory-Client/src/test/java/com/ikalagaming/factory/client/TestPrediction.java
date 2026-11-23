@@ -9,6 +9,7 @@ import com.ikalagaming.factory.networking.request.serverbound.PlayerInputs;
 import com.ikalagaming.factory.sim.Angle;
 import com.ikalagaming.factory.sim.BlockView;
 import com.ikalagaming.factory.sim.Fixed;
+import com.ikalagaming.factory.sim.GameMode;
 import com.ikalagaming.factory.sim.MoveMode;
 import com.ikalagaming.factory.sim.Movement;
 import com.ikalagaming.factory.sim.PlayerInput;
@@ -78,7 +79,7 @@ class TestPrediction {
             if (input != null) {
                 last = input;
             }
-            movement = PlayerSimulation.step(movement, last, FLOOR);
+            movement = PlayerSimulation.step(movement, last, FLOOR, GameMode.SURVIVAL);
             results.put(next, movement);
             ++next;
         }
@@ -134,18 +135,20 @@ class TestPrediction {
             pending.add(server.next - 1);
             if (pending.size() > DELAY) {
                 final long answered = pending.remove(0);
-                prediction.onServerState(answered, server.results.get(answered), 0, 0);
+                prediction.onServerState(
+                        answered, server.results.get(answered), GameMode.SURVIVAL, 0, 0);
             }
         }
         for (long answered : pending) {
-            prediction.onServerState(answered, server.results.get(answered), 0, 0);
+            prediction.onServerState(
+                    answered, server.results.get(answered), GameMode.SURVIVAL, 0, 0);
         }
     }
 
     /** With every input arriving in time, the prediction always matches the server. */
     @Test
     void testInStep() {
-        final Prediction prediction = new Prediction(JOIN_FRAME, START, FLOOR);
+        final Prediction prediction = new Prediction(JOIN_FRAME, START, GameMode.SURVIVAL, FLOOR);
         final FakeServer server = new FakeServer();
         play(prediction, server, inputs(200), -1, 0, 0);
         assertEquals(0, prediction.getMispredicts());
@@ -159,7 +162,7 @@ class TestPrediction {
      */
     @Test
     void testLossCovered() {
-        final Prediction prediction = new Prediction(JOIN_FRAME, START, FLOOR);
+        final Prediction prediction = new Prediction(JOIN_FRAME, START, GameMode.SURVIVAL, FLOOR);
         final FakeServer server = new FakeServer();
         // The client leads by a few frames, so one lost message is made up by the next
         play(prediction, server, inputs(200), JOIN_FRAME + 50, 1, 0);
@@ -172,7 +175,7 @@ class TestPrediction {
      */
     @Test
     void testMispredictConverges() {
-        final Prediction prediction = new Prediction(JOIN_FRAME, START, FLOOR);
+        final Prediction prediction = new Prediction(JOIN_FRAME, START, GameMode.SURVIVAL, FLOOR);
         final FakeServer server = new FakeServer();
         // A long gap of lost messages, longer than the client's lead
         play(prediction, server, inputs(300), JOIN_FRAME + 80, 20, 0);
@@ -184,15 +187,15 @@ class TestPrediction {
     /** States older than one already handled change nothing. */
     @Test
     void testOldStatesIgnored() {
-        final Prediction prediction = new Prediction(JOIN_FRAME, START, FLOOR);
+        final Prediction prediction = new Prediction(JOIN_FRAME, START, GameMode.SURVIVAL, FLOOR);
         for (PlayerInput input : inputs(20)) {
             prediction.step(input);
         }
         final long frame = prediction.getFrame();
         final Movement wrong = Movement.at(MoveMode.FLYING, 0, 0, 0);
-        assertTrue(prediction.onServerState(frame - 5, wrong, 0, 0));
+        assertTrue(prediction.onServerState(frame - 5, wrong, GameMode.SURVIVAL, 0, 0));
         final Movement corrected = prediction.movement(frame);
-        assertFalse(prediction.onServerState(frame - 7, START, 0, 0));
+        assertFalse(prediction.onServerState(frame - 7, START, GameMode.SURVIVAL, 0, 0));
         assertEquals(corrected, prediction.movement(frame));
         assertNotEquals(START, corrected);
         // The window now starts after the newest answer
@@ -203,9 +206,10 @@ class TestPrediction {
     /** A client that falls behind the server takes the server's state and frame. */
     @Test
     void testBehindServer() {
-        final Prediction prediction = new Prediction(JOIN_FRAME, START, FLOOR);
+        final Prediction prediction = new Prediction(JOIN_FRAME, START, GameMode.SURVIVAL, FLOOR);
         final Movement far = Movement.at(MoveMode.FLYING, Fixed.ofMeters(100), 0, 0);
-        assertTrue(prediction.onServerState(prediction.getFrame() + 10, far, 0, 0));
+        assertTrue(
+                prediction.onServerState(prediction.getFrame() + 10, far, GameMode.SURVIVAL, 0, 0));
         assertEquals(far, prediction.movement(prediction.getFrame()));
         assertEquals(1, prediction.getMispredicts());
     }

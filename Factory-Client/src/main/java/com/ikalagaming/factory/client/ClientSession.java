@@ -1,17 +1,28 @@
 package com.ikalagaming.factory.client;
 
+import com.ikalagaming.factory.auth.Ed25519;
+import com.ikalagaming.factory.auth.Identity;
+import com.ikalagaming.factory.auth.KnownHosts;
+import com.ikalagaming.factory.auth.SignInProof;
+import com.ikalagaming.factory.chat.ChatText;
 import com.ikalagaming.factory.networking.base.Connection;
 import com.ikalagaming.factory.networking.base.Request;
+import com.ikalagaming.factory.networking.request.clientbound.ChatMessage;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkData;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkUnload;
 import com.ikalagaming.factory.networking.request.clientbound.ClientBoundRequestHandler;
+import com.ikalagaming.factory.networking.request.clientbound.Disconnect;
 import com.ikalagaming.factory.networking.request.clientbound.Joined;
 import com.ikalagaming.factory.networking.request.clientbound.PlayerState;
+import com.ikalagaming.factory.networking.request.clientbound.ServerHello;
 import com.ikalagaming.factory.networking.request.clientbound.TimeUpdate;
 import com.ikalagaming.factory.networking.request.clientbound.UpdateTagRegistry;
-import com.ikalagaming.factory.networking.request.serverbound.Join;
+import com.ikalagaming.factory.networking.request.serverbound.ChatSend;
+import com.ikalagaming.factory.networking.request.serverbound.Hello;
 import com.ikalagaming.factory.networking.request.serverbound.PlayerInputs;
+import com.ikalagaming.factory.networking.request.serverbound.SignIn;
 import com.ikalagaming.factory.sim.Fixed;
+import com.ikalagaming.factory.sim.GameMode;
 import com.ikalagaming.factory.sim.MoveMode;
 import com.ikalagaming.factory.sim.Movement;
 import com.ikalagaming.factory.world.ChunkBlockView;
@@ -22,6 +33,10 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import java.security.KeyPair;
+import java.security.SecureRandom;
+import java.util.Base64;
+import java.util.HexFormat;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
@@ -32,6 +47,12 @@ import java.util.function.Consumer;
  */
 @Slf4j
 public final class ClientSession implements ClientBoundRequestHandler {
+
+    /** Makes nonces. */
+    private static final SecureRandom RANDOM = new SecureRandom();
+
+    private static final Base64.Encoder BASE64 = Base64.getEncoder();
+    private static final Base64.Decoder UNBASE64 = Base64.getDecoder();
 
     /**
      * The chunks the server sent.
@@ -52,6 +73,30 @@ public final class ClientSession implements ClientBoundRequestHandler {
 
     /** Told once the server accepts the join. */
     private final Consumer<Joined> onJoined;
+
+    /** Told why, if the server turns the player away or can't prove who it is. */
+    private final Consumer<String> onRefused;
+
+    /** The player's master secret, which their key for each server comes from. */
+    private final Identity identity;
+
+    /** The host keys seen before, by server id. */
+    private final KnownHosts knownHosts;
+
+    /** The name the player signs in as. */
+    private String username;
+
+    /** This connection's nonce, sent in {@code Hello}. */
+    private byte[] clientNonce;
+
+    /** Whether the sign-in was sent, so a second {@code ServerHello} is ignored. */
+    private boolean signInSent;
+
+    /** Whether the session was refused, so nothing more is handled. */
+    private boolean refused;
+
+    /** Shows lines of chat. */
+    private Consumer<ChatText> onChat = text -> {};
 
     /** Sends requests to the server; set once connected. */
     private Connection toServer;
@@ -81,22 +126,148 @@ public final class ClientSession implements ClientBoundRequestHandler {
      * A session.
      *
      * @param mainThread Runs work on the main thread.
+     * @param identity The player's master secret.
+     * @param knownHosts The host keys seen before.
      * @param onJoined Told on the main thread once the server accepts the join.
+     * @param onRefused Told on the main thread, with the reason to show, if the server turns the
+     *     player away or can't prove who it is.
      */
-    public ClientSession(@NonNull Executor mainThread, @NonNull Consumer<Joined> onJoined) {
+    public ClientSession(
+            @NonNull Executor mainThread,
+            @NonNull Identity identity,
+            @NonNull KnownHosts knownHosts,
+            @NonNull Consumer<Joined> onJoined,
+            @NonNull Consumer<String> onRefused) {
         this.mainThread = mainThread;
+        this.identity = identity;
+        this.knownHosts = knownHosts;
         this.onJoined = onJoined;
+        this.onRefused = onRefused;
     }
 
     /**
-     * Join the server over a connection.
+     * Join the server over a connection: say hello, check the server's proof of who it is, then
+     * sign in with this player's key for that server. See {@link SignInProof}.
      *
      * @param connection Sends requests to the server.
      * @param name The name to join as.
      */
     public void join(@NonNull Connection connection, @NonNull String name) {
         toServer = connection;
-        toServer.send(new Join(name));
+        username = name;
+        clientNonce = new byte[SignInProof.NONCE_BYTES];
+        RANDOM.nextBytes(clientNonce);
+        toServer.send(new Hello(BASE64.encodeToString(clientNonce)));
+    }
+
+    @Override
+    public void handle(@NonNull ServerHello request) {
+        if (signInSent || refused || toServer == null) {
+            return;
+        }
+        final byte[] serverId;
+        final byte[] hostKey;
+        final byte[] serverNonce;
+        final boolean proven;
+        try {
+            serverId = UNBASE64.decode(request.getServerId());
+            hostKey = UNBASE64.decode(request.getHostKey());
+            serverNonce = UNBASE64.decode(request.getServerNonce());
+            proven =
+                    serverId.length == SignInProof.SERVER_ID_BYTES
+                            && Ed25519.verify(
+                                    Ed25519.publicKey(hostKey),
+                                    SignInProof.host(serverId, hostKey, clientNonce, serverNonce),
+                                    UNBASE64.decode(request.getSignature()));
+        } catch (IllegalArgumentException | NullPointerException e) {
+            refuse("The server sent a greeting this can't read");
+            return;
+        }
+        if (!proven) {
+            refuse("The server couldn't prove who it is");
+            return;
+        }
+        switch (knownHosts.check(serverId, hostKey)) {
+            case CHANGED -> {
+                refuse(
+                        "This server's host key changed since you last joined it, so it may not"
+                                + " be the same server. Not signing in.");
+                return;
+            }
+            case NEW ->
+                    log.info("First visit to server {}; its host key is now pinned", hex(serverId));
+            case MATCH -> log.debug("Server {} proved its host key", hex(serverId));
+        }
+        final KeyPair key = identity.keyFor(serverId);
+        final byte[] publicKey = key.getPublic().getEncoded();
+        final byte[] signature =
+                Ed25519.sign(
+                        key.getPrivate(),
+                        SignInProof.signIn(
+                                serverId, hostKey, clientNonce, serverNonce, username, publicKey));
+        signInSent = true;
+        toServer.send(
+                new SignIn(
+                        username,
+                        BASE64.encodeToString(publicKey),
+                        BASE64.encodeToString(signature)));
+    }
+
+    /**
+     * Set what shows lines of chat from the server.
+     *
+     * @param listener Gets each line, on the main thread.
+     */
+    public void setOnChat(@NonNull Consumer<ChatText> listener) {
+        onChat = listener;
+    }
+
+    /**
+     * Say something in chat, or run a command if it starts with {@code /}.
+     *
+     * @param text What the player typed.
+     */
+    public void sendChat(@NonNull String text) {
+        if (toServer != null && playerId != null) {
+            toServer.send(new ChatSend(text));
+        }
+    }
+
+    @Override
+    public void handle(@NonNull ChatMessage request) {
+        onChat.accept(request.text());
+    }
+
+    @Override
+    public void handle(@NonNull Disconnect request) {
+        refuse(
+                request.getReason() == null
+                        ? "The server closed the connection"
+                        : request.getReason());
+    }
+
+    /**
+     * Give up on this session and say why.
+     *
+     * @param reason Why, to show the player.
+     */
+    private void refuse(@NonNull String reason) {
+        if (refused) {
+            return;
+        }
+        refused = true;
+        log.warn("Not playing on the server: {}", reason);
+        onRefused.accept(reason);
+    }
+
+    /**
+     * Bytes as hex, for logs.
+     *
+     * @param bytes The bytes.
+     * @return The hex.
+     */
+    private static String hex(byte @NonNull [] bytes) {
+        return HexFormat.of().formatHex(bytes);
     }
 
     /**
@@ -122,7 +293,12 @@ public final class ClientSession implements ClientBoundRequestHandler {
 
     @Override
     public void process(@NonNull Request request) {
-        mainThread.execute(() -> request.handleUsing(this));
+        mainThread.execute(
+                () -> {
+                    if (!refused) {
+                        request.handleUsing(this);
+                    }
+                });
     }
 
     @Override
@@ -141,6 +317,7 @@ public final class ClientSession implements ClientBoundRequestHandler {
                                 Math.round(request.getX() * Fixed.ONE),
                                 Math.round(request.getY() * Fixed.ONE),
                                 Math.round(request.getZ() * Fixed.ONE)),
+                        GameMode.byOrdinal(request.getGameMode()),
                         new ChunkBlockView(
                                 pos -> world.chunk(pos).orElse(null),
                                 BlockCollisions.solidByName()));
@@ -174,6 +351,7 @@ public final class ClientSession implements ClientBoundRequestHandler {
             prediction.onServerState(
                     request.getFrame(),
                     request.movement(),
+                    request.gameMode(),
                     request.getBuffered(),
                     request.getMissed());
         } catch (IllegalArgumentException e) {

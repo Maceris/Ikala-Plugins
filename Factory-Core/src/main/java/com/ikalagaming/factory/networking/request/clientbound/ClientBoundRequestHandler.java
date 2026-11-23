@@ -45,4 +45,25 @@ public interface ClientBoundRequestHandler extends RequestHandler {
      * @param request The request.
      */
     void handle(@NonNull PlayerState request);
+
+    /**
+     * The server proves who it is.
+     *
+     * @param request The request.
+     */
+    void handle(@NonNull ServerHello request);
+
+    /**
+     * The server ends the session.
+     *
+     * @param request The request.
+     */
+    void handle(@NonNull Disconnect request);
+
+    /**
+     * A line of chat.
+     *
+     * @param request The request.
+     */
+    void handle(@NonNull ChatMessage request);
 }

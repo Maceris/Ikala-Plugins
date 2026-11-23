@@ -50,6 +50,10 @@ idea {
 
 dependencies {
 	compileOnly project(':Ikala-Core')
+	// Ships inside the Ikala-Core jar
+	compileOnly "org.yaml:snakeyaml:${snakeYamlVersion}"
+	testImplementation "org.yaml:snakeyaml:${snakeYamlVersion}"
+	testImplementation project(':Ikala-Core')
 
 	// Testing
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"

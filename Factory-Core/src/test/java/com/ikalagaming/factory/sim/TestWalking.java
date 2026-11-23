@@ -40,9 +40,24 @@ class TestWalking {
      * @return Where it ends.
      */
     private static Movement run(Movement start, PlayerInput input, int frames, BlockView blocks) {
+        return run(start, input, frames, blocks, GameMode.SURVIVAL);
+    }
+
+    /**
+     * Step one input for a number of frames in a game mode.
+     *
+     * @param start Where to start.
+     * @param input The input, every frame.
+     * @param frames How many frames.
+     * @param blocks The blocks.
+     * @param mode The game mode.
+     * @return Where it ends.
+     */
+    private static Movement run(
+            Movement start, PlayerInput input, int frames, BlockView blocks, GameMode mode) {
         Movement movement = start;
         for (int i = 0; i < frames; ++i) {
-            movement = PlayerSimulation.step(movement, input, blocks);
+            movement = PlayerSimulation.step(movement, input, blocks, mode);
         }
         return movement;
     }
@@ -60,7 +75,7 @@ class TestWalking {
         Movement movement = Movement.at(MoveMode.WALKING, 0, Fixed.ofMeters(10), 0);
         int frames = 0;
         while (!movement.onGround() && frames < 200) {
-            movement = PlayerSimulation.step(movement, PlayerInput.NONE, FLOOR);
+            movement = PlayerSimulation.step(movement, PlayerInput.NONE, FLOOR, GameMode.SURVIVAL);
             ++frames;
         }
         assertTrue(movement.onGround());
@@ -93,11 +108,11 @@ class TestWalking {
     /** A jump rises a little over 1.25 m and comes back down to the floor. */
     @Test
     void testJumpHeight() {
-        Movement movement = PlayerSimulation.step(STANDING, JUMP, FLOOR);
+        Movement movement = PlayerSimulation.step(STANDING, JUMP, FLOOR, GameMode.SURVIVAL);
         long highest = movement.y();
         int frames = 1;
         while (!movement.onGround() && frames < 200) {
-            movement = PlayerSimulation.step(movement, PlayerInput.NONE, FLOOR);
+            movement = PlayerSimulation.step(movement, PlayerInput.NONE, FLOOR, GameMode.SURVIVAL);
             highest = Math.max(highest, movement.y());
             ++frames;
         }
@@ -143,11 +158,12 @@ class TestWalking {
     @Test
     void testCeiling() {
         final BlockView low = (x, y, z) -> y < 0 || y == 2;
-        Movement movement = PlayerSimulation.step(STANDING, JUMP, low);
+        Movement movement = PlayerSimulation.step(STANDING, JUMP, low, GameMode.SURVIVAL);
         long highest = movement.y();
         boolean bumped = false;
         for (int i = 0; i < 60; ++i) {
-            final Movement next = PlayerSimulation.step(movement, PlayerInput.NONE, low);
+            final Movement next =
+                    PlayerSimulation.step(movement, PlayerInput.NONE, low, GameMode.SURVIVAL);
             bumped |= movement.vy() > 0 && next.vy() == 0 && !next.onGround();
             movement = next;
             highest = Math.max(highest, movement.y());
@@ -191,12 +207,11 @@ class TestWalking {
         assertTrue(unknown.solid(3, 3, 3));
     }
 
-    /** Flight passes through everything; letting it go starts a fall from rest. */
+    /** Spectators fly through everything; back in survival they fall from rest. */
     @Test
-    void testFlyToggle() {
-        final BlockView solid = BlockView.SOLID;
-        final PlayerInput flyUp = new PlayerInput(PlayerInput.FLY | PlayerInput.UP, 0, 0);
-        Movement movement = run(STANDING, flyUp, 10, solid);
+    void testSpectator() {
+        final PlayerInput up = new PlayerInput(PlayerInput.UP, 0, 0);
+        Movement movement = run(STANDING, up, 10, BlockView.SOLID, GameMode.SPECTATOR);
         assertEquals(MoveMode.FLYING, movement.mode());
         assertEquals(10 * PlayerSimulation.FLY_SPEED, movement.y());
         movement = run(movement, PlayerInput.NONE, 1, FLOOR);
@@ -206,6 +221,69 @@ class TestWalking {
         movement = run(movement, PlayerInput.NONE, 120, FLOOR);
         assertEquals(0, movement.y());
         assertTrue(movement.onGround());
+    }
+
+    /** Survival ignores the flight button. */
+    @Test
+    void testSurvivalCantFly() {
+        final PlayerInput flyUp = new PlayerInput(PlayerInput.FLY | PlayerInput.UP, 0, 0);
+        final Movement movement = run(STANDING, flyUp, 1, FLOOR);
+        assertEquals(MoveMode.WALKING, movement.mode());
+        assertEquals(PlayerSimulation.JUMP_SPEED - PlayerSimulation.GRAVITY, movement.vy());
+    }
+
+    /** Creative flight hovers, rises, stops at ceilings and walls, and lands on the floor. */
+    @Test
+    void testCreativeFlight() {
+        final BlockView room = (x, y, z) -> y < 0 || y >= 4 || z == -3;
+        final int fly = PlayerInput.FLY;
+        Movement movement =
+                run(
+                        STANDING,
+                        new PlayerInput(fly | PlayerInput.UP, 0, 0),
+                        60,
+                        room,
+                        GameMode.CREATIVE);
+        assertEquals(MoveMode.FLYING, movement.mode());
+        // Up to the ceiling at y = 4, the head stopping there
+        assertEquals(4 * Fixed.ONE - PlayerSimulation.HEIGHT, movement.y());
+        // Hovering: no input, no fall
+        final Movement hovering =
+                run(movement, new PlayerInput(fly, 0, 0), 60, room, GameMode.CREATIVE);
+        assertEquals(movement.y(), hovering.y());
+        assertEquals(0, hovering.vy());
+        // Forward into the wall
+        final Movement walled =
+                run(
+                        hovering,
+                        new PlayerInput(fly | PlayerInput.FORWARD, 0, 0),
+                        60,
+                        room,
+                        GameMode.CREATIVE);
+        assertEquals(-2 * Fixed.ONE + PlayerSimulation.HALF_WIDTH, walled.z());
+        // Down onto the floor, which marks it on the ground
+        final Movement landed =
+                run(
+                        walled,
+                        new PlayerInput(fly | PlayerInput.DOWN, 0, 0),
+                        60,
+                        room,
+                        GameMode.CREATIVE);
+        assertEquals(0, landed.y());
+        assertTrue(landed.onGround());
+        // Without the flight button, creative walks
+        final Movement walking = run(landed, PlayerInput.NONE, 1, room, GameMode.CREATIVE);
+        assertEquals(MoveMode.WALKING, walking.mode());
+    }
+
+    /** Game modes read by name, letter and number. */
+    @Test
+    void testGameModeNames() {
+        assertEquals(GameMode.CREATIVE, GameMode.named("creative").orElseThrow());
+        assertEquals(GameMode.SPECTATOR, GameMode.named(" SP").orElseThrow());
+        assertEquals(GameMode.SURVIVAL, GameMode.named("0").orElseThrow());
+        assertEquals(GameMode.SURVIVAL, GameMode.named("s").orElseThrow());
+        assertTrue(GameMode.named("adventure").isEmpty());
     }
 
     /** Diagonal walking is no faster than straight walking, at any yaw. */

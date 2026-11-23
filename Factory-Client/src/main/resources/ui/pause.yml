@@ -1,0 +1,42 @@
+# The pause menu, over the game: Resume, Options and Exit to Main Menu. In single player the world
+# stops while it is open. The handlers and @ text come from GameMenus.java and the plugin's
+# strings.properties.
+surface:
+  id: factory/pause
+  anchors: fill
+  layer: normal
+
+templates:
+  menu-button:
+    params: [id, text, action, focus]
+    node:
+      type: button
+      id: "${id}"
+      text: "${text}"
+      width: 240
+      height: 40
+      autofocus: "${focus}"
+      onClick: "${action}"
+
+content:
+  type: column
+  id: content
+  justify: center
+  align: center
+  gap: 16
+  width: grow
+  height: grow
+  classes: [dialog-backdrop]
+  children:
+    - { type: label, id: title, text: "@MENU_PAUSE_TITLE", classes: [title] }
+    - type: column
+      id: buttons
+      gap: 12
+      align: center
+      children:
+        - use: menu-button
+          with: { id: resume, text: "@MENU_PAUSE_RESUME", action: resume, focus: true }
+        - use: menu-button
+          with: { id: options, text: "@MENU_MAIN_MENU_OPTIONS", action: open-options, focus: false }
+        - use: menu-button
+          with: { id: exit, text: "@MENU_PAUSE_EXIT", action: exit-to-menu, focus: false }

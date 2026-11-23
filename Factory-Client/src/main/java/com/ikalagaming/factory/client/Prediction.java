@@ -5,6 +5,7 @@ import com.ikalagaming.ecs.Snapshot;
 import com.ikalagaming.ecs.World;
 import com.ikalagaming.factory.networking.request.serverbound.PlayerInputs;
 import com.ikalagaming.factory.sim.BlockView;
+import com.ikalagaming.factory.sim.GameMode;
 import com.ikalagaming.factory.sim.Movement;
 import com.ikalagaming.factory.sim.PlayerInput;
 import com.ikalagaming.factory.sim.PlayerSimulation;
@@ -86,12 +87,18 @@ public final class Prediction {
      *
      * @param serverFrame The frame the server runs next, from its answer to joining.
      * @param start The player's movement as the server put it.
+     * @param gameMode The player's game mode.
      * @param blocks The blocks the player moves through: the chunks received, with the rest solid.
      */
-    public Prediction(long serverFrame, @NonNull Movement start, @NonNull BlockView blocks) {
+    public Prediction(
+            long serverFrame,
+            @NonNull Movement start,
+            @NonNull GameMode gameMode,
+            @NonNull BlockView blocks) {
         frame = serverFrame - 1;
         player = world.create();
         world.set(PlayerSimulation.MOVEMENT, player, start);
+        world.set(PlayerSimulation.GAME_MODE, player, gameMode);
         world.set(PlayerSimulation.INPUT, player, PlayerInput.NONE);
         world.set(PlayerSimulation.BLOCKS, player, blocks);
         inputs[slot(frame)] = PlayerInput.NONE;
@@ -140,12 +147,17 @@ public final class Prediction {
      *
      * @param serverFrame The frame the server's state is after.
      * @param state The player's movement after it, on the server.
+     * @param gameMode The player's game mode after it, on the server.
      * @param buffered How many inputs for later frames the server held.
      * @param misses How many frames so far ran with no input from this client.
      * @return True if the prediction changed.
      */
     public boolean onServerState(
-            long serverFrame, @NonNull Movement state, int buffered, long misses) {
+            long serverFrame,
+            @NonNull Movement state,
+            @NonNull GameMode gameMode,
+            int buffered,
+            long misses) {
         if (serverFrame <= acknowledged) {
             // Older than an answer already handled, or from before this client started
             return false;
@@ -159,6 +171,7 @@ public final class Prediction {
             frame = serverFrame;
             inputs[slot(frame)] = PlayerInput.NONE;
             world.set(PlayerSimulation.MOVEMENT, player, state);
+            world.set(PlayerSimulation.GAME_MODE, player, gameMode);
             results[slot(frame)] = world.snapshot();
             return true;
         }
@@ -166,16 +179,19 @@ public final class Prediction {
             // Too old to replay from; take its state as now
             ++mispredicts;
             world.set(PlayerSimulation.MOVEMENT, player, state);
+            world.set(PlayerSimulation.GAME_MODE, player, gameMode);
             results[slot(frame)] = world.snapshot();
             return true;
         }
         final Snapshot predicted = results[slot(serverFrame)];
-        if (state.equals(predicted.get(PlayerSimulation.MOVEMENT, player))) {
+        if (state.equals(predicted.get(PlayerSimulation.MOVEMENT, player))
+                && gameMode == predicted.get(PlayerSimulation.GAME_MODE, player)) {
             return false;
         }
         ++mispredicts;
         world.restore(predicted);
         world.set(PlayerSimulation.MOVEMENT, player, state);
+        world.set(PlayerSimulation.GAME_MODE, player, gameMode);
         results[slot(serverFrame)] = world.snapshot();
         for (long f = serverFrame + 1; f <= frame; ++f) {
             run(f, inputs[slot(f)]);
@@ -219,6 +235,15 @@ public final class Prediction {
         return result == null
                 ? world.get(PlayerSimulation.MOVEMENT, player)
                 : result.get(PlayerSimulation.MOVEMENT, player);
+    }
+
+    /**
+     * The player's game mode as of the latest frame.
+     *
+     * @return The game mode.
+     */
+    public GameMode gameMode() {
+        return world.get(PlayerSimulation.GAME_MODE, player);
     }
 
     /**

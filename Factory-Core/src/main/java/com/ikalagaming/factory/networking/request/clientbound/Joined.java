@@ -46,6 +46,9 @@ public class Joined implements Request {
     /** The command frame the server runs next; the client starts its own frames a little ahead. */
     private long frame;
 
+    /** The player's game mode, as a {@code GameMode} ordinal. */
+    private int gameMode;
+
     @Override
     public void handleUsing(@NonNull ClientBoundRequestHandler handler) {
         handler.handle(this);

@@ -1,6 +1,7 @@
 package com.ikalagaming.factory.server;
 
 import com.ikalagaming.factory.networking.base.Connection;
+import com.ikalagaming.factory.save.Accounts;
 import com.ikalagaming.factory.world.ChunkPos;
 
 import lombok.Getter;
@@ -15,6 +16,22 @@ import java.util.Set;
  * been sent. Only touched on the server's tick thread.
  */
 public final class ServerPlayer {
+
+    /**
+     * The player's account: who they are and their role.
+     *
+     * @return The account.
+     */
+    @Getter private volatile Accounts.Account account;
+
+    /**
+     * Change the player's account, as when an operator changes their role.
+     *
+     * @param changed The account, with the same id.
+     */
+    void setAccount(@NonNull Accounts.Account changed) {
+        account = changed;
+    }
 
     /**
      * The player's id.
@@ -89,23 +106,22 @@ public final class ServerPlayer {
     /**
      * A player.
      *
-     * @param id The player's id.
-     * @param name The name the player joined as.
+     * @param account The player's account. The player's id.
      * @param connection Sends requests to the player's client.
      * @param x The x of the player's feet.
      * @param y The y of the player's feet.
      * @param z The z of the player's feet.
      */
     ServerPlayer(
-            @NonNull String id,
-            @NonNull String name,
+            @NonNull Accounts.Account account,
             @NonNull Connection connection,
             long entity,
             double x,
             double y,
             double z) {
-        this.id = id;
-        this.name = name;
+        this.account = account;
+        this.id = account.id();
+        this.name = account.username();
         this.connection = connection;
         this.entity = entity;
         moveTo(x, y, z);

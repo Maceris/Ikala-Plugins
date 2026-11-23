@@ -1,10 +1,8 @@
 package com.ikalagaming.factory;
 
-import static com.ikalagaming.factory.gui.DefaultWindows.*;
-
 import com.ikalagaming.event.Listener;
+import com.ikalagaming.factory.client.GameControls;
 import com.ikalagaming.factory.gui.*;
-import com.ikalagaming.factory.gui.window.*;
 import com.ikalagaming.factory.lab.LabTool;
 import com.ikalagaming.factory.lab.WorldgenLab;
 import com.ikalagaming.factory.save.Hosting;
@@ -93,19 +91,19 @@ public class FactoryClientPlugin extends Plugin {
             return true;
         }
         UserDataUtil.createUserDataFolder();
+        GameControls.register(graphics);
         guiManager = GraphicsManager.getWindowManager();
-        guiManager.addWindow(graphics, DEBUG.getName(), new Debug());
-        guiManager.addWindow(graphics, NETWORK.getName(), new NetworkStats());
         guiManager.addWindow(graphics, IkGuiDemo.WINDOW_NAME, new IkGuiDemo());
         guiManager.addWindow(graphics, GraphicsDebug.WINDOW_NAME, new GraphicsDebug());
         guiManager.addWindow(graphics, IkScriptDebugger.WINDOW_NAME, new IkScriptDebugger());
         guiManager.addWindow(graphics, ScriptMonitor.WINDOW_NAME, new ScriptMonitor());
         menus = new GameMenus(graphics, SinglePlayerGame::start);
         menus.open();
+        SinglePlayerGame.setMenus(menus);
+        new GameOverlay(graphics).install();
         startTestScript();
         joinServerAtStart();
 
-        guiManager.setToolbar(graphics, new DebugToolbar(guiManager));
         return true;
     }
 
@@ -170,6 +168,7 @@ public class FactoryClientPlugin extends Plugin {
         // Their surfaces are removed with the plugin's graphics
         menus = null;
         SinglePlayerGame.stop();
+        SinglePlayerGame.setMenus(null);
         return true;
     }
 

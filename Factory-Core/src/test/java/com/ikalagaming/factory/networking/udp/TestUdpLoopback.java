@@ -8,8 +8,9 @@ import com.ikalagaming.factory.networking.RequestRegistry;
 import com.ikalagaming.factory.networking.base.Request;
 import com.ikalagaming.factory.networking.request.clientbound.PlayerState;
 import com.ikalagaming.factory.networking.request.clientbound.UpdateTagRegistry;
-import com.ikalagaming.factory.networking.request.serverbound.Join;
+import com.ikalagaming.factory.networking.request.serverbound.Hello;
 import com.ikalagaming.factory.networking.request.serverbound.PlayerInputs;
+import com.ikalagaming.factory.sim.GameMode;
 import com.ikalagaming.factory.sim.MoveMode;
 import com.ikalagaming.factory.sim.Movement;
 import com.ikalagaming.factory.sim.PlayerInput;
@@ -95,10 +96,10 @@ class TestUdpLoopback {
 
             // Reliable, client to server, in order
             for (int i = 0; i < 50; ++i) {
-                client.send(new Join("Player " + i));
+                client.send(new Hello("Player " + i));
             }
             for (int i = 0; i < 50; ++i) {
-                assertEquals("Player " + i, next(atServer, Join.class).getName());
+                assertEquals("Player " + i, next(atServer, Hello.class).getClientNonce());
             }
 
             // A big reliable message, server to client, in many fragments
@@ -117,7 +118,9 @@ class TestUdpLoopback {
             // Unreliable both ways: most arrive
             for (int i = 0; i < 100; ++i) {
                 client.send(PlayerInputs.of(i, List.of(PlayerInput.NONE)));
-                toClient.send(PlayerState.of(i, Movement.at(MoveMode.FLYING, i, 0, 0), 0, 0));
+                toClient.send(
+                        PlayerState.of(
+                                i, Movement.at(MoveMode.FLYING, i, 0, 0), GameMode.SURVIVAL, 0, 0));
                 TimeUnit.MILLISECONDS.sleep(2);
             }
             TimeUnit.MILLISECONDS.sleep(300);

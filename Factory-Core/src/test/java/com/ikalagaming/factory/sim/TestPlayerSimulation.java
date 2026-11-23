@@ -151,7 +151,7 @@ class TestPlayerSimulation {
     void testStateMessage() {
         final Movement movement =
                 new Movement(MoveMode.WALKING, 1, -2, 3, 4, -5, 6, 700, -800, true);
-        final PlayerState state = PlayerState.of(42, movement, 2, 9);
+        final PlayerState state = PlayerState.of(42, movement, GameMode.SURVIVAL, 2, 9);
         assertEquals(movement, state.movement());
         assertEquals(42, state.getFrame());
     }

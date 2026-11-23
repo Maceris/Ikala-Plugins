@@ -21,6 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Draws the chunks the client has, as Graphics sections. Chunks are turned into sections on a
@@ -40,6 +41,9 @@ public final class WorldRenderer implements ClientWorld.Listener, AutoCloseable 
     /** How long {@link #close()} waits for the worker to stop. */
     private static final long CLOSE_WAIT_SECONDS = 5;
 
+    /** How much each build moves the smoothed build time. */
+    private static final double BUILD_SMOOTHING = 0.05;
+
     /** The plugin's graphics. */
     private final GraphicsContext graphics;
 
@@ -57,6 +61,12 @@ public final class WorldRenderer implements ClientWorld.Listener, AutoCloseable 
 
     /** Chunks waiting to be redone, so each is queued once. */
     private final Set<ChunkPos> queued = ConcurrentHashMap.newKeySet();
+
+    /** How many times a chunk has been drawn. */
+    private final AtomicLong built = new AtomicLong();
+
+    /** How long drawing a chunk took lately, smoothed, in milliseconds. */
+    private volatile double buildMillis;
 
     /** Turns chunks into sections, one at a time, in the order they arrive. */
     private final ExecutorService worker =
@@ -116,6 +126,33 @@ public final class WorldRenderer implements ClientWorld.Listener, AutoCloseable 
     }
 
     /**
+     * How many chunks wait to be drawn again.
+     *
+     * @return The count.
+     */
+    public int queuedCount() {
+        return queued.size();
+    }
+
+    /**
+     * How many times a chunk has been drawn, since the renderer started.
+     *
+     * @return The count.
+     */
+    public long builtCount() {
+        return built.get();
+    }
+
+    /**
+     * How long drawing a chunk took lately, smoothed.
+     *
+     * @return The time, in milliseconds.
+     */
+    public double buildMillis() {
+        return buildMillis;
+    }
+
+    /**
      * Redo a chunk's section on the worker, once however often it is asked for before then.
      *
      * @param pos The chunk.
@@ -125,8 +162,13 @@ public final class WorldRenderer implements ClientWorld.Listener, AutoCloseable 
             worker.execute(
                     () -> {
                         queued.remove(pos);
+                        final long start = System.nanoTime();
                         try {
                             compose(pos);
+                            built.incrementAndGet();
+                            buildMillis +=
+                                    ((System.nanoTime() - start) / 1e6 - buildMillis)
+                                            * BUILD_SMOOTHING;
                         } catch (RuntimeException e) {
                             log.warn("Chunk {} couldn't be drawn", pos, e);
                         }

@@ -22,7 +22,13 @@ content:
   id: content
   justify: center
   align: center
+  gap: 16
   children:
+    - type: label
+      id: note
+      text: "{note}"
+      classes: [error-text]
+      visible: "{hasNote}"
     - type: column
       id: buttons
       gap: 12
@@ -34,3 +40,5 @@ content:
           with: { id: multiplayer, text: "@MENU_MAIN_MENU_MULTI_PLAYER", action: open-multiplayer, focus: false }
         - use: menu-button
           with: { id: options, text: "@MENU_MAIN_MENU_OPTIONS", action: open-options, focus: false }
+        - use: menu-button
+          with: { id: quit, text: "@MENU_MAIN_MENU_QUIT", action: quit-game, focus: false }

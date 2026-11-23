@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics;
 
+import com.ikalagaming.graphics.input.InputAction;
+import com.ikalagaming.graphics.overlay.DebugSection;
 import com.ikalagaming.graphics.scene.debug.DebugLabel;
 import com.ikalagaming.graphics.scene.debug.DebugShape;
 import com.ikalagaming.plugins.Plugin;
@@ -288,6 +290,38 @@ public final class GraphicsContext {
         if (!closed) {
             debug.collectLabels(consumer);
         }
+    }
+
+    /**
+     * Add a section to the debug overlay, or get the one this plugin already added with that ID. It
+     * goes when the plugin unloads.
+     *
+     * @param id The section's ID, unique in the overlay.
+     * @param title Its heading.
+     * @param order Where it goes; lower comes first. The Graphics plugin's own sections are at 900
+     *     and up.
+     * @param open Whether it starts expanded.
+     * @return The section, to fill in.
+     * @throws IllegalStateException If the plugin was unloaded.
+     */
+    public DebugSection debugSection(
+            @NonNull String id, @NonNull String title, int order, boolean open) {
+        checkOpen();
+        return GraphicsManager.getDebugOverlay().section(ownerKey, id, title, order, open);
+    }
+
+    /**
+     * Register something players do with a key, so they can rebind it on the Controls screen. Ask
+     * {@link GraphicsManager#getControls()} whether it is held or pressed. Removed when the plugin
+     * unloads; the player's binding for it is kept.
+     *
+     * @param action The action.
+     * @throws IllegalStateException If the plugin was unloaded.
+     * @throws IllegalArgumentException If another plugin registered the same ID.
+     */
+    public void registerAction(@NonNull InputAction action) {
+        checkOpen();
+        GraphicsManager.getControls().register(ownerKey, action);
     }
 
     /**

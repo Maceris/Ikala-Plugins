@@ -23,6 +23,9 @@ public final class ClientClock {
     /** Whether the server has sent the time yet. */
     private boolean known;
 
+    /** The time it stopped at while paused, or NaN when running. */
+    private double pausedAt = Double.NaN;
+
     /**
      * Take the server's time.
      *
@@ -34,6 +37,34 @@ public final class ClientClock {
         ticksPerSecond = newTicksPerSecond;
         receivedNanos = System.nanoTime();
         known = true;
+        if (!Double.isNaN(pausedAt)) {
+            pausedAt = newTicks;
+        }
+    }
+
+    /**
+     * Stop or restart the clock, as while single player is paused.
+     *
+     * @param pause True to stop it where it is, false to carry on from there.
+     */
+    public void setPaused(boolean pause) {
+        if (pause == !Double.isNaN(pausedAt)) {
+            return;
+        }
+        if (pause) {
+            pausedAt = now();
+            return;
+        }
+        // Carry on from where it stopped
+        final double stoppedAt = pausedAt;
+        pausedAt = Double.NaN;
+        ticks = (long) stoppedAt;
+        receivedNanos =
+                System.nanoTime()
+                        - Math.round(
+                                (stoppedAt - ticks)
+                                        / Math.max(1, ticksPerSecond)
+                                        * NANOS_PER_SECOND);
     }
 
     /**
@@ -51,6 +82,9 @@ public final class ClientClock {
      * @return The time, in ticks with a fraction; see {@link WorldTime}.
      */
     public double now() {
+        if (!Double.isNaN(pausedAt)) {
+            return pausedAt;
+        }
         final double seconds = (System.nanoTime() - receivedNanos) / NANOS_PER_SECOND;
         return ticks + seconds * ticksPerSecond;
     }

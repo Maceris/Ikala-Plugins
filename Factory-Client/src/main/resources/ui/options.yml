@@ -1,0 +1,25 @@
+# The Options screen, from the main menu or the pause menu. The handlers and @ text come from
+# GameMenus.java and the plugin's strings.properties.
+surface:
+  id: factory/options
+  anchors: fill
+  layer: normal
+
+content:
+  type: column
+  id: content
+  justify: center
+  align: center
+  gap: 16
+  width: grow
+  height: grow
+  classes: [dialog-backdrop]
+  children:
+    - { type: label, id: title, text: "@MENU_OPTIONS_TITLE", classes: [title] }
+    - type: column
+      id: buttons
+      gap: 12
+      align: center
+      children:
+        - { type: button, id: controls, text: "@MENU_OPTIONS_CONTROLS", width: 240, height: 40, autofocus: true, onClick: open-controls }
+        - { type: button, id: back, text: "@MENU_COMMON_BACK", width: 240, height: 40, onClick: options-back }

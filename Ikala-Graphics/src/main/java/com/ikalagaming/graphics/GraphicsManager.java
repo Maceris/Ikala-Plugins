@@ -14,6 +14,8 @@ import com.ikalagaming.graphics.gui.data.IkIO;
 import com.ikalagaming.graphics.gui.data.Viewport;
 import com.ikalagaming.graphics.gui.enums.MouseButton;
 import com.ikalagaming.graphics.gui.flags.ConfigFlags;
+import com.ikalagaming.graphics.input.Controls;
+import com.ikalagaming.graphics.overlay.DebugOverlay;
 import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugLabel;
@@ -203,6 +205,29 @@ public class GraphicsManager {
      */
     @Getter private static final UiManager uiManager = new UiManager();
 
+    /** The settings file key bindings are saved in, under the Home's settings folder. */
+    public static final String CONTROLS_FILE = "controls.yml";
+
+    /**
+     * The actions players can bind, their bindings, and which are held.
+     *
+     * @return The controls.
+     */
+    @Getter private static final Controls controls = new Controls();
+
+    /**
+     * The debug overlay, which plugins add sections to.
+     *
+     * @return The overlay.
+     */
+    @Getter private static final DebugOverlay debugOverlay = new DebugOverlay();
+
+    /** The action that shows and hides {@link #debugOverlay}. */
+    public static final String DEBUG_OVERLAY_ACTION = "graphics:debug_overlay";
+
+    /** Reads the scene window's keys for {@link #controls}. */
+    private static final GlfwKeyState keyState = new GlfwKeyState();
+
     static {
         windowManager.setUiManager(uiManager);
     }
@@ -260,6 +285,8 @@ public class GraphicsManager {
         scene = new Scene(mainWindow.getWidth(), mainWindow.getHeight());
 
         cameraManager = new CameraManager(scene.getCamera(), GraphicsManager::getSceneWindow);
+        controls.open(AppPaths.settings().resolve(CONTROLS_FILE));
+        GraphicsOverlay.install(forPlugin(GraphicsPlugin.PLUGIN_NAME));
 
         frameTime = (float) (1 / framesPerSecond(settings.targetFPS));
         log.debug("Rendering at most {} frames a second", String.format("%.0f", 1 / frameTime));
@@ -360,6 +387,8 @@ public class GraphicsManager {
         context.close();
         int windows = windowManager.removeAllOwnedBy(context);
         uiManager.removeAllOwnedBy(context);
+        controls.removeAllOwnedBy(context.getOwnerKey());
+        debugOverlay.removeAllOwnedBy(context.getOwnerKey());
         if (windows > 0) {
             log.debug("Removed {} windows owned by {}", windows, context.getOwnerKey());
         }
@@ -897,6 +926,14 @@ public class GraphicsManager {
 
         // Handles the input for every window
         guiBackend.pollEvents();
+        controls.update(keyState);
+        if (controls.wasPressed(DEBUG_OVERLAY_ACTION)) {
+            debugOverlay.toggle();
+        }
+        final GraphicsContext own = contexts.get(GraphicsPlugin.PLUGIN_NAME);
+        if (own != null) {
+            debugOverlay.update(own);
+        }
         closeClosedWindows();
         runMainThreadTasks();
         uiManager.setContentScale(mainWindow.getContentScale());

@@ -8,18 +8,19 @@ import lombok.NoArgsConstructor;
 import lombok.NonNull;
 
 /**
- * A client asks to join the world. Single player joins as the save's owner.
+ * The first thing a client sends: a random nonce the server's proof must cover, so a proof can't be
+ * replayed on another connection. See {@code SignInProof}.
  *
  * <p>Fields have setters and there is a no-argument constructor, so remote connections can
  * serialize it. A local connection passes the object itself, so nothing may change it after it is
- * sent.
+ * sent. Keys, nonces and signatures are Base64 text.
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class Join implements Request {
-    /** The name the player joins as. */
-    private String name;
+public class Hello implements Request {
+    /** The client's random nonce. */
+    private String clientNonce;
 
     @Override
     public void handleUsing(@NonNull ServerBoundRequestHandler handler) {

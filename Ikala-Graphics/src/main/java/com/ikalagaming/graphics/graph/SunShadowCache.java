@@ -519,7 +519,7 @@ public class SunShadowCache {
                 } else {
                     pending.get(i).clear();
                     cascade.redraw = Redraw.ALL;
-                    log.debug("Sun shadow cascade {} drawn again whole", i);
+                    log.trace("Sun shadow cascade {} drawn again whole", i);
                 }
             } else if (!pending.get(i).isEmpty()) {
                 cascade.redraw = Redraw.PART;
