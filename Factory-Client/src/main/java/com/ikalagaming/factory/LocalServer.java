@@ -9,6 +9,7 @@ import lombok.NonNull;
 
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Starts a server in this process, for single player. Factory-Server is only a soft dependency, so
@@ -16,6 +17,12 @@ import java.util.concurrent.CompletableFuture;
  * server classes, and only after checking the plugin is there.
  */
 public final class LocalServer {
+
+    /** Guards {@link #stopping}. */
+    private static final ReentrantLock STOP_LOCK = new ReentrantLock();
+
+    /** The last stop, which the next open waits for. */
+    private static CompletableFuture<Void> stopping = CompletableFuture.completedFuture(null);
 
     /** The server plugin's name, which must match its plugin.yml. */
     public static final String SERVER_PLUGIN = "Factory-Server";
@@ -42,7 +49,15 @@ public final class LocalServer {
             return CompletableFuture.failedFuture(
                     new IllegalStateException(SERVER_PLUGIN + " isn't enabled"));
         }
-        return Starter.open(saveFolder);
+        final CompletableFuture<Void> stopped;
+        STOP_LOCK.lock();
+        try {
+            stopped = stopping;
+        } finally {
+            STOP_LOCK.unlock();
+        }
+        // A stop still under way would otherwise close the world this opens
+        return stopped.exceptionally(error -> null).thenCompose(done -> Starter.open(saveFolder));
     }
 
     /**
@@ -72,10 +87,22 @@ public final class LocalServer {
         return isAvailable() && Starter.setPaused(pause);
     }
 
-    /** Close the world open on the local server, if any, saving it, as when leaving to the menu. */
-    public static void closeWorld() {
-        if (isAvailable()) {
-            Starter.closeWorld();
+    /**
+     * Stop the local server in the background, saving and closing its world, as when leaving to the
+     * main menu. Opening a save afterward waits for it to finish, then starts the server again.
+     *
+     * @return Completes once it has stopped.
+     */
+    public static CompletableFuture<Void> stop() {
+        if (!isAvailable()) {
+            return CompletableFuture.completedFuture(null);
+        }
+        STOP_LOCK.lock();
+        try {
+            stopping = stopping.thenRunAsync(Starter::stop);
+            return stopping;
+        } finally {
+            STOP_LOCK.unlock();
         }
     }
 
@@ -116,9 +143,9 @@ public final class LocalServer {
             return FactoryServerPlugin.getServer().setPaused(pause);
         }
 
-        /** Close the open world. */
-        static void closeWorld() {
-            FactoryServerPlugin.getServer().closeWorld();
+        /** Stop the server, closing its world. */
+        static void stop() {
+            FactoryServerPlugin.getServer().stop();
         }
 
         private Starter() {}

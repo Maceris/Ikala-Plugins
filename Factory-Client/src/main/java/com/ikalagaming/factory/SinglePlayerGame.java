@@ -47,7 +47,6 @@ import lombok.extern.slf4j.Slf4j;
 import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Starts a single player game: opens the save on the local server, joins it, and plays: each
@@ -233,7 +232,7 @@ public final class SinglePlayerGame {
         final boolean wasLocal = local;
         stop();
         if (wasLocal) {
-            CompletableFuture.runAsync(LocalServer::closeWorld);
+            LocalServer.stop();
         }
         if (menus != null) {
             menus.showMainMenu();

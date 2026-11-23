@@ -128,7 +128,7 @@ public class SkyOcclusion {
             SunShadowCache.clear(dirty);
             view.redraw = SunShadowCache.Redraw.ALL;
             fullRedraws += 1;
-            log.debug("Sky occlusion map drawn again whole, moved to {}", placement.center);
+            log.trace("Sky occlusion map drawn again whole, moved to {}", placement.center);
             texelsRedrawn += (long) MAP_SIZE * MAP_SIZE;
         } else if (dirty[2] > dirty[0] && dirty[3] > dirty[1]) {
             view.redraw = SunShadowCache.Redraw.PART;
