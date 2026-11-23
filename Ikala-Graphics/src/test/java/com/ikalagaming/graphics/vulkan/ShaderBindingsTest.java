@@ -64,7 +64,8 @@ class ShaderBindingsTest {
         assertEquals(768, ShaderBindings.Light.ENVIRONMENT_OCCLUSION_OFFSET);
         assertEquals(772, ShaderBindings.Light.WATER_GATE_OFFSET);
         assertEquals(776, ShaderBindings.Light.WATER_MAP_OFFSET);
-        assertEquals(784, ShaderBindings.Light.UNIFORMS_BUFFER_SIZE);
+        assertEquals(784, ShaderBindings.Light.ENVIRONMENT_GLOW_OFFSET);
+        assertEquals(800, ShaderBindings.Light.UNIFORMS_BUFFER_SIZE);
         // The shadow map index takes the first of the light struct's spare words
         assertEquals(56, ShaderBindings.Light.LightStruct.SHADOW_MAP);
     }
@@ -167,7 +168,10 @@ class ShaderBindingsTest {
         assertEquals(160, ShaderBindings.Skybox.SUN_AND_RADIUS_OFFSET);
         assertEquals(176, ShaderBindings.Skybox.SKY_SCALE_OFFSET);
         assertEquals(192, ShaderBindings.Skybox.FOG_ENABLED_OFFSET);
-        assertEquals(208, ShaderBindings.Skybox.UNIFORMS_BUFFER_SIZE);
+        assertEquals(208, ShaderBindings.Skybox.GLOW_OFFSET);
+        assertEquals(224, ShaderBindings.Skybox.STAR_ROTATION_OFFSET);
+        assertEquals(240, ShaderBindings.Skybox.GROUND_GLOW_OFFSET);
+        assertEquals(256, ShaderBindings.Skybox.UNIFORMS_BUFFER_SIZE);
     }
 
     @Test

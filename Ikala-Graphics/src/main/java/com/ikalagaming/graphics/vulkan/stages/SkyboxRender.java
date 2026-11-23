@@ -18,6 +18,7 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4f;
+import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 import org.lwjgl.system.MemoryStack;
@@ -287,6 +288,13 @@ public class SkyboxRender implements RenderStage {
                                     .mul(sun.getIntensity() * physicalSky.getStrength()),
                             1)
                     .get(ShaderBindings.Skybox.SKY_SCALE_OFFSET, uniformData);
+            new Vector4f(physicalSky.getGlow(), physicalSky.getStarIlluminance())
+                    .get(ShaderBindings.Skybox.GLOW_OFFSET, uniformData);
+            final Quaternionf stars = physicalSky.getStarRotation();
+            new Vector4f(stars.x, stars.y, stars.z, stars.w)
+                    .get(ShaderBindings.Skybox.STAR_ROTATION_OFFSET, uniformData);
+            new Vector4f(new Vector3f(physicalSky.getGlow()).mul(physicalSky.getGroundAlbedo()), 0)
+                    .get(ShaderBindings.Skybox.GROUND_GLOW_OFFSET, uniformData);
         }
     }
 

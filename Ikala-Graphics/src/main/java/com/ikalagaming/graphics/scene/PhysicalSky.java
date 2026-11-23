@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.scene;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
+import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
 /**
@@ -49,4 +50,34 @@ public class PhysicalSky {
      * @return The height.
      */
     private double groundHeight;
+
+    /**
+     * The sky's own light, which does not come from the sun: airglow, starlight and twilight. It is
+     * a radiance the same from every direction above the horizon, in the scene's light units and
+     * not scaled by the sun or {@link #strength}; it lights the scene as the sky does and adds to
+     * the sky drawn. 0 by default. Linear.
+     *
+     * @param glow The radiance.
+     * @return The radiance.
+     */
+    @NonNull private Vector3f glow = new Vector3f();
+
+    /**
+     * How bright the stars are: the illuminance a star of magnitude 0 gives, in the scene's light
+     * units, as the sun's intensity is one. Stars are drawn down to about magnitude 6.5, dimmed by
+     * the air they shine through; 0 draws none.
+     *
+     * @param starIlluminance The illuminance.
+     * @return The illuminance.
+     */
+    private float starIlluminance;
+
+    /**
+     * How the stars are turned: the rotation from world directions to directions on the star
+     * sphere, which turns once a day about the celestial pole.
+     *
+     * @param starRotation The rotation.
+     * @return The rotation.
+     */
+    @NonNull private Quaternionf starRotation = new Quaternionf();
 }

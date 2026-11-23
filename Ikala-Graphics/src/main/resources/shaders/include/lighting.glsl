@@ -658,10 +658,11 @@ vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 ren
         float ao = open * material.occlusion;
         float specularVisible = clamp(
             pow(nDotV + ao, exp2(-16.0 * material.roughness - 1.0)) - 1.0 + ao, 0.0, 1.0);
-        ambient = scale * mix(skyLightFloor, 1.0, sky)
-            * (spread * environmentDiffuse(diffuseNormal) * ao
-                + mirrored * environmentSpecular(reflected, material.roughness) * specularVisible
-                    * reflectionVisible);
+        // The sky's own glow, which does not follow the sun, adds to it
+        ambient = mix(skyLightFloor, 1.0, sky)
+            * (spread * (scale * environmentDiffuse(diffuseNormal) + glowDiffuse(diffuseNormal)) * ao
+                + mirrored * (scale * environmentSpecular(reflected, material.roughness)
+                    + glowSpecular(reflected)) * specularVisible * reflectionVisible);
     } else
 #endif
     {

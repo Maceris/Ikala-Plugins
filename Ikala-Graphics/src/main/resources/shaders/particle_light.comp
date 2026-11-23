@@ -84,7 +84,7 @@ void main() {
 
     // The sky, the same from every way, which scattering keeps as it is
     vec3 ambient = environmentEnabled != 0 && environmentScale.w > 0.5
-        ? environmentScale.rgb * environmentAverage()
+        ? environmentScale.rgb * environmentAverage() + glowAverage()
         : ambientLight.color * ambientLight.intensity;
     light += ambient * mix(skyLightFloor, 1.0, sky);
 

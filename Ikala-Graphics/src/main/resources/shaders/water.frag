@@ -465,8 +465,9 @@ void main() {
         vec3 mirrored = reflect(-toEye, normal);
         // Waves tilted far enough mirror the water, not the sky: keep to the sky
         mirrored.y = max(mirrored.y, 0.0);
-        skyReflected = environmentSpecular(normalize(mirrored), surfaceRoughness) * scale;
-        skyAverage = environmentAverage() * scale;
+        skyReflected = environmentSpecular(normalize(mirrored), surfaceRoughness) * scale
+            + glowSpecular(normalize(mirrored));
+        skyAverage = environmentAverage() * scale + glowAverage();
     }
     skyReflected *= sky;
     skyAverage *= sky;

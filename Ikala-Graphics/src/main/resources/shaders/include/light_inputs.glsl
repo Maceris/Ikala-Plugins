@@ -121,7 +121,27 @@ layout(set = 0, binding = 0) uniform Uniforms {
     int waterGateIndex;
     // The water around the camera, see WaterVolume and water_map.glsl, or 0 for none
     uvec2 waterMapAddress;
+    // The physical sky's own glow, see PhysicalSky.getGlow: in rgb its radiance, the same from
+    // every direction above the horizon and not scaled by the sun; in w the albedo of the ground
+    // below the horizon, which sends some of it back up
+    vec4 environmentGlow;
 };
+
+// The irradiance over pi that the sky's glow gives a surface facing a world direction: all of it
+// facing up, what the ground sends back facing down
+vec3 glowDiffuse(vec3 n) {
+    return environmentGlow.rgb * mix(environmentGlow.w, 1.0, 0.5 + 0.5 * n.y);
+}
+
+// The sky's glow seen along a world direction: the sky above the horizon, the ground below
+vec3 glowSpecular(vec3 r) {
+    return environmentGlow.rgb * mix(environmentGlow.w, 1.0, smoothstep(-0.05, 0.05, r.y));
+}
+
+// The sky's glow averaged over every direction
+vec3 glowAverage() {
+    return environmentGlow.rgb * (0.5 + 0.5 * environmentGlow.w);
+}
 
 // One point light shadow cube map: each face's matrix from render space, where it is drawn from in
 // render space with its range, and its first tile and whether it has a layer of what moves

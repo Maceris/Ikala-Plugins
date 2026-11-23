@@ -1495,9 +1495,17 @@ public class ShaderBindings {
         /** The water map's device address, see {@link WaterVolume}, or 0 for none. */
         public static final int WATER_MAP_OFFSET = WATER_GATE_OFFSET + Integer.BYTES;
 
+        /**
+         * The offset into the uniforms for the physical sky's own glow, a vec4: its radiance in
+         * xyz, not scaled by the sun, and the ground's albedo in w, see {@link
+         * com.ikalagaming.graphics.scene.PhysicalSky#getGlow()}. All 0 without a physical sky.
+         */
+        public static final int ENVIRONMENT_GLOW_OFFSET =
+                (int) SharedBuffer.align(WATER_MAP_OFFSET + Long.BYTES);
+
         /** The size of the uniforms buffer, padded out to 16 bytes under std140 rules. */
         public static final int UNIFORMS_BUFFER_SIZE =
-                (int) SharedBuffer.align(WATER_MAP_OFFSET + Long.BYTES);
+                (int) SharedBuffer.align(ENVIRONMENT_GLOW_OFFSET + 4 * Float.BYTES);
 
         /** Uniforms buffer binding. */
         public static final int UNIFORMS_BINDING = 0;
@@ -1803,9 +1811,23 @@ public class ShaderBindings {
         /** The offset of whether the fog is drawn over the sky, 1 if it is. */
         public static final int FOG_ENABLED_OFFSET = SKY_SCALE_OFFSET + 4 * Float.BYTES;
 
+        /**
+         * The offset of the physical sky's own glow, a vec4: its radiance in xyz and in w the
+         * illuminance of a magnitude 0 star, see {@link
+         * com.ikalagaming.graphics.scene.PhysicalSky}.
+         */
+        public static final int GLOW_OFFSET =
+                (int) SharedBuffer.align(FOG_ENABLED_OFFSET + Integer.BYTES);
+
+        /** The offset of the rotation from world directions to the stars', a quaternion vec4. */
+        public static final int STAR_ROTATION_OFFSET = GLOW_OFFSET + 4 * Float.BYTES;
+
+        /** The offset of the glow the ground below the horizon sends back, a vec4. */
+        public static final int GROUND_GLOW_OFFSET = STAR_ROTATION_OFFSET + 4 * Float.BYTES;
+
         /** The size of the uniforms, padded to 16 bytes under std140 rules. */
         public static final int UNIFORMS_BUFFER_SIZE =
-                (int) SharedBuffer.align(FOG_ENABLED_OFFSET + Integer.BYTES);
+                (int) SharedBuffer.align(GROUND_GLOW_OFFSET + 4 * Float.BYTES);
 
         /** Offset in the uniform buffer in bytes for the cameras view matrix. */
         public static final int VIEW_MATRIX_OFFSET = 4 * 4 * Float.BYTES;

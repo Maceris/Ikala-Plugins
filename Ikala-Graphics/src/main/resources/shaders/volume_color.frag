@@ -153,7 +153,7 @@ void main() {
     // The sky's average light, which for the skybox is the ambient light, and for the physical sky
     // follows the sun
     vec3 ambient = environmentEnabled != 0 && environmentScale.w > 0.5
-        ? environmentScale.rgb * environmentAverage()
+        ? environmentScale.rgb * environmentAverage() + glowAverage()
         : ambientLight.color * ambientLight.intensity;
     float shadowDistance = -cascadeShadowSplits[NUM_CASCADES - 1].splitDistance;
 

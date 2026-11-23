@@ -238,7 +238,7 @@ void main() {
     // The sky's average light, which for the skybox is the ambient light, and for the physical sky
     // follows the sun, dimmed under cover
     vec3 ambient = environmentEnabled != 0 && environmentScale.w > 0.5
-        ? environmentScale.rgb * environmentAverage()
+        ? environmentScale.rgb * environmentAverage() + glowAverage()
         : ambientLight.color * ambientLight.intensity;
     ambient *= mix(skyLightFloor, 1.0, sky);
 

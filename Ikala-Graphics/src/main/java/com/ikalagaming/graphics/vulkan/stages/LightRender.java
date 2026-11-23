@@ -495,6 +495,13 @@ public class LightRender implements RenderStage {
                     1);
         }
         environmentScale.get(ShaderBindings.Light.ENVIRONMENT_SCALE_OFFSET, uniformData);
+        // The sky's own glow, which does not follow the sun
+        final Vector4f environmentGlow = new Vector4f(0, 0, 0, 0);
+        if (physicalSky != null) {
+            final Vector3f ground = physicalSky.getGroundAlbedo();
+            environmentGlow.set(physicalSky.getGlow(), (ground.x + ground.y + ground.z) / 3);
+        }
+        environmentGlow.get(ShaderBindings.Light.ENVIRONMENT_GLOW_OFFSET, uniformData);
         uniformData.putInt(
                 ShaderBindings.Light.ENVIRONMENT_OCCLUSION_OFFSET,
                 GraphicsManager.getSettings().environmentOcclusion ? 1 : 0);
