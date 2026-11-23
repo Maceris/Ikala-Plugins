@@ -365,6 +365,10 @@ const float WAVE_WIND_SPEED = 3.5;
 const float WAVE_RIPPLE_SPEED = 0.35;
 const float WAVE_WIND_RECOVERY = 20.0;
 const float WAVE_RIPPLE_LIFETIME = 6.0;
+// How much a ripple spreads sideways per cell it travels, as a diffusion share: a ring's height
+// falls with the square root of its radius as it grows, which each direction's patch carried
+// straight on would never do. See WaveletMath.RIPPLE_SPREADING.
+const float WAVE_RIPPLE_SPREADING = 0.5;
 const float WAVE_REFLECTION = 0.7;
 const float WAVE_ANGULAR_DIFFUSION = 0.5;
 // Amplitudes below this, in meters, are left out of the sums: ripples dying away never reach 0

@@ -322,9 +322,20 @@ void main() {
             if (waterAt(ivec2(floor(upstream))) <= 0.0) {
                 vec2 normal = dot(shore, shore) > 0.0 ? normalize(shore) : -waveDirection(b);
                 moved[b] = WAVE_REFLECTION * lastAt(middle, band, reflectedFrom(b, normal));
+            } else if (band == WAVE_WIND_BAND) {
+                moved[b] = lastAt(upstream, band, b);
             } else {
-                moved[b] = band == WAVE_WIND_BAND
-                    ? lastAt(upstream, band, b) : lastAtSharp(upstream, band, b);
+                moved[b] = lastAtSharp(upstream, band, b);
+                // Spread sideways as it travels, so a growing ring gets lower; not onto land
+                float spread = WAVE_RIPPLE_SPREADING * speed;
+                if (spread > 0.0) {
+                    vec2 side = vec2(-waveDirection(b).y, waveDirection(b).x);
+                    float left = waterAt(ivec2(floor(upstream + side))) > 0.0
+                        ? lastAtSharp(upstream + side, band, b) : moved[b];
+                    float right = waterAt(ivec2(floor(upstream - side))) > 0.0
+                        ? lastAtSharp(upstream - side, band, b) : moved[b];
+                    moved[b] += spread * (left + right - 2.0 * moved[b]);
+                }
             }
         }
         for (int b = 0; b < WAVE_DIRECTIONS; ++b) {

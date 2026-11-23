@@ -53,6 +53,14 @@ public final class WaveletMath {
     /** How long the wind takes to build its waves back behind land, in seconds. */
     public static final double WIND_RECOVERY = 20;
 
+    /**
+     * How much ripples spread sideways per cell they travel, as a diffusion share, so a ring's
+     * height falls with the square root of its radius as it grows, as a real ring's does: each
+     * direction's patch would otherwise keep its height as it goes. Width grows as the square root
+     * of the distance, so the peak falls as one over it.
+     */
+    public static final double RIPPLE_SPREADING = 0.5;
+
     /** How long ripples take to die down to 1 / e, in seconds. */
     public static final double RIPPLE_LIFETIME = 6;
 

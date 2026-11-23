@@ -46,21 +46,21 @@ public final class PlayerSplashes {
     static final float ENTRY_RADIUS = 0.9f;
 
     /** The ripple height of a gentle entry, in meters. */
-    static final float ENTRY_BASE = 0.05f;
+    static final float ENTRY_BASE = 0.02f;
 
     /** How much higher the entry ripples start per meter a second of falling. */
-    static final float ENTRY_PER_SPEED = 0.03f;
+    static final float ENTRY_PER_SPEED = 0.006f;
 
     /** The highest entry splash, in meters. */
-    static final float ENTRY_MAX = 0.6f;
+    static final float ENTRY_MAX = 0.12f;
 
     /** The radius of the ripples while moving, in meters. */
     static final float WAKE_RADIUS = 0.5f;
 
     /** The ripple height while moving, in meters, plus a little per meter a second. */
-    static final float WAKE_BASE = 0.02f;
+    static final float WAKE_BASE = 0.008f;
 
-    static final float WAKE_PER_SPEED = 0.01f;
+    static final float WAKE_PER_SPEED = 0.003f;
 
     /** How slowly the player can move and still leave ripples, in meters a second. */
     static final double WAKE_MIN_SPEED = 0.5;
@@ -69,7 +69,7 @@ public final class PlayerSplashes {
     static final int WAKE_FRAMES = 4;
 
     /** The splash on leaving the water, in meters. */
-    static final float EXIT_STRENGTH = 0.04f;
+    static final float EXIT_STRENGTH = 0.015f;
 
     /** Meters a second per fixed-point unit a frame. */
     private static final double SPEED_SCALE = 1000.0 / Frames.FRAME_MILLIS / Fixed.ONE;
