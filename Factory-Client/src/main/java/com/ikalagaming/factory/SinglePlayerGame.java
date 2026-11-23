@@ -12,8 +12,12 @@ import com.ikalagaming.factory.networking.udp.PacketEndpoint;
 import com.ikalagaming.factory.networking.udp.UdpClient;
 import com.ikalagaming.factory.networking.udp.UdpConnection;
 import com.ikalagaming.factory.networking.udp.UdpServer;
+import com.ikalagaming.factory.render.PlayerSplashes;
 import com.ikalagaming.factory.render.SkyLight;
+import com.ikalagaming.factory.render.WaterRenderer;
 import com.ikalagaming.factory.render.WorldRenderer;
+import com.ikalagaming.factory.render.looks.BlockLooks;
+import com.ikalagaming.factory.render.looks.WaterLooks;
 import com.ikalagaming.factory.save.SaveSummary;
 import com.ikalagaming.factory.saves.SaveUtil;
 import com.ikalagaming.factory.saves.UserDataUtil;
@@ -25,6 +29,7 @@ import com.ikalagaming.factory.sim.Movement;
 import com.ikalagaming.factory.sim.PlayerInput;
 import com.ikalagaming.factory.world.WorldTime;
 import com.ikalagaming.graphics.CameraManager;
+import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.Window;
@@ -40,6 +45,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.InetSocketAddress;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -104,6 +110,12 @@ public final class SinglePlayerGame {
 
     /** Draws the chunks the server sends, or null. */
     private static WorldRenderer renderer;
+
+    /** Ripples and splashes from the player in water. Main thread only. */
+    private static PlayerSplashes splashes = new PlayerSplashes();
+
+    /** Draws the water the server sends, or null. */
+    private static WaterRenderer water;
 
     /** Lights the world by its clock, or null. */
     private static SkyLight sky;
@@ -256,6 +268,13 @@ public final class SinglePlayerGame {
             renderer.close();
             renderer = null;
         }
+        if (water != null) {
+            water.close();
+            water = null;
+        }
+        splashes = new PlayerSplashes();
+        // Its sections are about the game, which is gone
+        GraphicsManager.getDebugOverlay().setVisible(false);
         if (sky != null) {
             sky.restore();
             sky = null;
@@ -367,6 +386,12 @@ public final class SinglePlayerGame {
         joining.setOnChat(chat::add);
         renderer = new WorldRenderer(GraphicsManager.forPlugin(FactoryClientPlugin.PLUGIN_NAME));
         joining.getWorld().addListener(renderer);
+        water =
+                new WaterRenderer(
+                        GraphicsManager.forPlugin(FactoryClientPlugin.PLUGIN_NAME),
+                        renderer::isFluid,
+                        new WaterLooks(BlockLooks.defaultRoots()));
+        joining.getWorld().addListener(water);
         session = joining;
         playStage = Launcher.addMainThreadStage(SinglePlayerGame::play);
         return joining;
@@ -458,7 +483,8 @@ public final class SinglePlayerGame {
         final boolean inMenu =
                 (menus != null && menus.isShowing()) || (chat != null && chat.isOpen());
         for (int i = 0; i < due; ++i) {
-            prediction.step(inMenu ? stillInput() : sampleInput());
+            final long frame = prediction.step(inMenu ? stillInput() : sampleInput());
+            splash(playing, prediction.movement(frame - 1), prediction.movement(frame));
         }
         if (due > 0) {
             playing.sendInputs();
@@ -466,6 +492,41 @@ public final class SinglePlayerGame {
         placeCamera(prediction, clock, now);
         report(playing);
         return 0;
+    }
+
+    /**
+     * Ripple and splash the water where one frame took the player.
+     *
+     * @param playing The session.
+     * @param before The movement before the frame.
+     * @param after The movement after it.
+     */
+    private static void splash(
+            @NonNull ClientSession playing, @NonNull Movement before, @NonNull Movement after) {
+        final WorldRenderer blocks = renderer;
+        if (blocks == null) {
+            return;
+        }
+        final List<PlayerSplashes.Splash> made =
+                splashes.step(
+                        before,
+                        after,
+                        (x, y, z) -> {
+                            final String block = playing.getWorld().blockName(x, y, z);
+                            return block != null && blocks.isFluid(block);
+                        });
+        if (made.isEmpty()) {
+            return;
+        }
+        final GraphicsContext graphics = GraphicsManager.forPlugin(FactoryClientPlugin.PLUGIN_NAME);
+        for (PlayerSplashes.Splash splash : made) {
+            log.trace(
+                    "Splash at {}, {} m across, {} m high",
+                    splash.position(),
+                    splash.radius() * 2,
+                    splash.strength());
+            graphics.water().disturb(splash.position(), splash.radius(), splash.strength());
+        }
     }
 
     /** Open or step back through the pause menu when the pause key is pressed. */
@@ -640,7 +701,8 @@ public final class SinglePlayerGame {
         lastReported = chunks;
         lastReportMillis = nowMillis;
         lastReportedMovement = movement;
-        log.info(
+        // The debug overlay shows these all the time; the log has them for headless checks
+        log.trace(
                 "The client has {} chunks, {} with sections; it is {} o'clock; the player is at"
                         + " {}, {}, {} on frame {}, {} mispredicts, server holds {} inputs and"
                         + " missed {}; round trip {} ms, {} frames ahead, aiming for {}, rate {}%,"
@@ -661,7 +723,7 @@ public final class SinglePlayerGame {
                 String.format("%.1f", playing.getFrameClock().rate() * 100),
                 playing.getFrameClock().getResyncs());
         if (playing.getConnection() instanceof UdpConnection udp) {
-            log.info(
+            log.trace(
                     "UDP traffic: {} B/s up, {} B/s down",
                     Math.round(udp.sendRate()),
                     Math.round(udp.receiveRate()));

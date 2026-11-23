@@ -104,6 +104,16 @@ public final class BlockMeshes implements AutoCloseable {
     }
 
     /**
+     * Whether a block is a fluid by its look, drawn by the water system rather than as a block.
+     *
+     * @param block The block's name.
+     * @return True if its look's model is {@value BlockLook#FLUID}.
+     */
+    public boolean isFluid(@NonNull String block) {
+        return looks.look(block).map(BlockLook::isFluid).orElse(false);
+    }
+
+    /**
      * Make sure every block has a mesh.
      *
      * @param blocks Block names.

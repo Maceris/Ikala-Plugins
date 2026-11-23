@@ -4,6 +4,7 @@ import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.ui.Align;
 import com.ikalagaming.graphics.ui.Anchors;
 import com.ikalagaming.graphics.ui.Button;
+import com.ikalagaming.graphics.ui.Checkbox;
 import com.ikalagaming.graphics.ui.Column;
 import com.ikalagaming.graphics.ui.Immediate;
 import com.ikalagaming.graphics.ui.Label;
@@ -74,8 +75,8 @@ public final class DebugOverlay {
     /** The labels showing lines, to refresh. */
     private final Map<Label, DebugSection.Line> lines = new HashMap<>();
 
-    /** The selectables showing toggles, to refresh. */
-    private final Map<Selectable, DebugSection.Toggle> toggles = new HashMap<>();
+    /** The checkboxes showing toggles, to refresh. */
+    private final Map<Checkbox, DebugSection.Toggle> toggles = new HashMap<>();
 
     /** When the lines were last read. */
     private long lastRefresh;
@@ -290,14 +291,10 @@ public final class DebugOverlay {
                 yield label;
             }
             case DebugSection.Toggle toggle -> {
-                final Selectable selectable = new Selectable(id, "");
-                selectable.onClick(
-                        () -> {
-                            toggle.set().accept(!toggle.get().getAsBoolean());
-                            refreshToggle(selectable, toggle);
-                        });
-                toggles.put(selectable, toggle);
-                yield selectable;
+                final Checkbox checkbox =
+                        new Checkbox(id, toggle.label()).onChange(on -> toggle.set().accept(on));
+                toggles.put(checkbox, toggle);
+                yield checkbox;
             }
             case DebugSection.Action action ->
                     new Button(id, action.label()).onClick(action.action());
@@ -325,13 +322,13 @@ public final class DebugOverlay {
     }
 
     /**
-     * Show a toggle's state.
+     * Show a toggle's state, which may change elsewhere.
      *
-     * @param selectable Its node.
+     * @param checkbox Its node.
      * @param toggle The toggle.
      */
     private static void refreshToggle(
-            @NonNull Selectable selectable, @NonNull DebugSection.Toggle toggle) {
+            @NonNull Checkbox checkbox, @NonNull DebugSection.Toggle toggle) {
         boolean on;
         try {
             on = toggle.get().getAsBoolean();
@@ -339,6 +336,6 @@ public final class DebugOverlay {
             log.debug("A debug overlay toggle failed", e);
             on = false;
         }
-        selectable.text((on ? "[x] " : "[ ] ") + toggle.label()).selected(on);
+        checkbox.checked(on);
     }
 }

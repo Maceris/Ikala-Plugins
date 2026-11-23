@@ -62,6 +62,9 @@ public final class WorldRenderer implements ClientWorld.Listener, AutoCloseable 
     /** Chunks waiting to be redone, so each is queued once. */
     private final Set<ChunkPos> queued = ConcurrentHashMap.newKeySet();
 
+    /** Whether each block, by name, is a fluid. */
+    private final Map<String, Boolean> fluids = new ConcurrentHashMap<>();
+
     /** How many times a chunk has been drawn. */
     private final AtomicLong built = new AtomicLong();
 
@@ -91,8 +94,11 @@ public final class WorldRenderer implements ClientWorld.Listener, AutoCloseable 
     public void chunkAdded(@NonNull ChunkPos pos, @NonNull Chunk chunk) {
         final List<String> names = new ArrayList<>();
         for (Block block : chunk.paletteBlocks()) {
-            // Air has no mesh, so ChunkSections leaves it out
-            if (!World.AIR_NAME.equals(block.getName()) && !meshes.containsKey(block.getName())) {
+            // Air and fluids have no mesh, so ChunkSections leaves them out and shows the faces
+            // beside them; fluids are drawn by the water system
+            if (!World.AIR_NAME.equals(block.getName())
+                    && !meshes.containsKey(block.getName())
+                    && !isFluid(block.getName())) {
                 names.add(block.getName());
             }
         }
@@ -121,6 +127,16 @@ public final class WorldRenderer implements ClientWorld.Listener, AutoCloseable 
      *
      * @return The count.
      */
+    /**
+     * Whether a block is a fluid, drawn by the water system rather than as a block.
+     *
+     * @param block The block's name.
+     * @return True for fluids.
+     */
+    public boolean isFluid(@NonNull String block) {
+        return fluids.computeIfAbsent(block, blockMeshes::isFluid);
+    }
+
     public int sectionCount() {
         return sections.size();
     }

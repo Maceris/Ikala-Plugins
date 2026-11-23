@@ -2,6 +2,7 @@ package com.ikalagaming.factory.client;
 
 import com.ikalagaming.factory.world.Chunk;
 import com.ikalagaming.factory.world.ChunkPos;
+import com.ikalagaming.factory.world.World;
 
 import lombok.NonNull;
 
@@ -58,6 +59,25 @@ public final class ClientWorld {
      */
     public void removeListener(@NonNull Listener listener) {
         listeners.remove(listener);
+    }
+
+    /**
+     * The block at a position, if its chunk is here.
+     *
+     * @param x Its x.
+     * @param y Its y.
+     * @param z Its z.
+     * @return The block's name, or null if its chunk isn't here.
+     */
+    public String blockName(long x, long y, long z) {
+        final Chunk chunk = chunks.get(ChunkPos.containing(x, y, z));
+        return chunk == null
+                ? null
+                : chunk.getBlock(
+                                (int) Math.floorMod(x, World.CHUNK_SIZE),
+                                (int) Math.floorMod(y, World.CHUNK_SIZE),
+                                (int) Math.floorMod(z, World.CHUNK_SIZE))
+                        .getName();
     }
 
     /**
