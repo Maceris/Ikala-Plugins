@@ -66,6 +66,21 @@ public class CameraManager {
     /** The mouse sensitivity. Radians per pixel of mouse movement. */
     private float sensitivity;
 
+    /**
+     * Whether the mouse turns the camera all the time, with the cursor hidden and held in the
+     * window and the GUI ignoring the mouse, as in a game. Off, holding the right button turns it.
+     *
+     * @param mouseLook True for mouse look.
+     * @return True while the mouse looks.
+     */
+    @Getter @Setter private volatile boolean mouseLook;
+
+    /** Where the cursor was at the last update in mouse look, or NaN to start again. */
+    private final double[] lastCursor = {Double.NaN, Double.NaN};
+
+    /** Reused for the cursor's position. */
+    private final double[] cursor = new double[2];
+
     /** Whether the right mouse button was turning the camera the last time it updated. */
     private boolean wasTurning;
 
@@ -117,6 +132,15 @@ public class CameraManager {
      * @param deltaTime The fractional part of a second since the last update.
      */
     public void updateCamera(float deltaTime) {
+        if (mouseLook) {
+            lookByCursor();
+            wasTurning = false;
+            if (moving) {
+                moveByKeys(deltaTime);
+            }
+            return;
+        }
+        lastCursor[0] = Double.NaN;
         IkIO ikIO = IkGui.getIO();
         final boolean turning = !ikIO.wantCaptureMouse && ikIO.getMouseDown(MouseButton.RIGHT);
         if (turning && !wasTurning) {
@@ -139,6 +163,22 @@ public class CameraManager {
             float deltaY = ikIO.mouseDelta.y * sensitivity;
             camera.addRotation(deltaY, deltaX);
         }
+    }
+
+    /** Turn the camera by how far the hidden cursor moved since the last update. */
+    private void lookByCursor() {
+        final Window shown = window.get();
+        if (shown == null) {
+            return;
+        }
+        shown.cursorPosition(cursor);
+        if (!Double.isNaN(lastCursor[0])) {
+            final float deltaX = (float) (cursor[0] - lastCursor[0]) * sensitivity;
+            final float deltaY = (float) (cursor[1] - lastCursor[1]) * sensitivity;
+            camera.addRotation(deltaY, deltaX);
+        }
+        lastCursor[0] = cursor[0];
+        lastCursor[1] = cursor[1];
     }
 
     /**

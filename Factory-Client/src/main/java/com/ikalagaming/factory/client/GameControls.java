@@ -36,6 +36,7 @@ public final class GameControls {
     public static final String CHAT = NAMESPACE + "chat";
     public static final String CHAT_ALTERNATE = NAMESPACE + "chat_alternate";
     public static final String COMMAND = NAMESPACE + "command";
+    public static final String FREE_MOUSE = NAMESPACE + "free_mouse";
 
     /**
      * An action's definition before its text is looked up.
@@ -60,7 +61,8 @@ public final class GameControls {
                     new Definition(PAUSE, INTERFACE, "escape"),
                     new Definition(CHAT, INTERFACE, "t"),
                     new Definition(CHAT_ALTERNATE, INTERFACE, "enter"),
-                    new Definition(COMMAND, INTERFACE, "forward_slash"));
+                    new Definition(COMMAND, INTERFACE, "forward_slash"),
+                    new Definition(FREE_MOUSE, INTERFACE, "left_alt"));
 
     /** Not made. */
     private GameControls() {

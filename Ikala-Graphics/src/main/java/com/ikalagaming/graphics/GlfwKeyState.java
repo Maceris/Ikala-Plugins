@@ -13,6 +13,7 @@ import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.IkIO;
 import com.ikalagaming.graphics.gui.enums.Key;
 import com.ikalagaming.graphics.gui.enums.MouseButton;
+import com.ikalagaming.graphics.gui.flags.ConfigFlags;
 import com.ikalagaming.graphics.input.KeyState;
 
 import lombok.NonNull;
@@ -74,6 +75,11 @@ final class GlfwKeyState implements KeyState {
             return false;
         }
         final IkIO io = IkGui.getIO();
+        if ((io.configFlags & ConfigFlags.NO_MOUSE) != 0) {
+            // Mouse look: the GUI ignores the mouse, so ask GLFW
+            final Window window = GraphicsManager.getSceneWindow();
+            return window != null && window.isMouseButtonPressed(button.index);
+        }
         return !io.wantCaptureMouse && io.getMouseDown(button);
     }
 

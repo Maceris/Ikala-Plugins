@@ -950,7 +950,14 @@ public class GraphicsManager {
             final float elapsedTime = (float) (currentTime - lastUpdateTime);
 
             IkIO ikIO = IkGui.getIO();
-            if (!ikIO.wantCaptureMouse) {
+            if (cameraManager.isMouseLook()) {
+                // The cursor is hidden and held, and the GUI mustn't see it hover or click
+                sceneWindow.disableCursor();
+                ikIO.configFlags |= ConfigFlags.NO_MOUSE;
+            } else if ((ikIO.configFlags & ConfigFlags.NO_MOUSE) != 0) {
+                ikIO.configFlags &= ~ConfigFlags.NO_MOUSE;
+                sceneWindow.enableCursor();
+            } else if (!ikIO.wantCaptureMouse) {
                 // The camera turns in the window that shows the scene
                 if (ikIO.getMouseDown(MouseButton.RIGHT)) {
                     sceneWindow.disableCursor();

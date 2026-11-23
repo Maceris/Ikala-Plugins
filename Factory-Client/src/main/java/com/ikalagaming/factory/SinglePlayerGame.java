@@ -253,6 +253,7 @@ public final class SinglePlayerGame {
         final CameraManager cameras = GraphicsManager.getCameraManager();
         if (cameras != null) {
             cameras.setMoving(true);
+            cameras.setMouseLook(false);
         }
         if (session != null) {
             session.close();
@@ -474,13 +475,14 @@ public final class SinglePlayerGame {
         final Prediction prediction = playing.getPrediction();
         final FrameClock clock = playing.getFrameClock();
         final long now = System.nanoTime();
+        final boolean inMenu =
+                (menus != null && menus.isShowing()) || (chat != null && chat.isOpen());
+        updateMouseLook(inMenu);
         if (paused) {
             placeCamera(prediction, clock, clock.frameStartNanos() + clock.getFrameNanos());
             return 0;
         }
         final int due = clock.due(now, MAX_FRAMES_PER_UPDATE);
-        final boolean inMenu =
-                (menus != null && menus.isShowing()) || (chat != null && chat.isOpen());
         for (int i = 0; i < due; ++i) {
             final long frame = prediction.step(inMenu ? stillInput() : sampleInput());
             splash(playing, prediction.movement(frame - 1), prediction.movement(frame));
@@ -525,6 +527,20 @@ public final class SinglePlayerGame {
                     splash.radius() * 2,
                     splash.strength());
             graphics.water().disturb(splash.position(), splash.radius(), splash.strength());
+        }
+    }
+
+    /**
+     * Hold the mouse for looking around while playing, and let it go for menus and the chat, or
+     * while the free-mouse key is held, to click the debug overlay or a tool window.
+     *
+     * @param inMenu Whether a menu or the chat is open.
+     */
+    private static void updateMouseLook(boolean inMenu) {
+        final CameraManager cameras = GraphicsManager.getCameraManager();
+        if (cameras != null) {
+            cameras.setMouseLook(
+                    !inMenu && !GraphicsManager.getControls().isDown(GameControls.FREE_MOUSE));
         }
     }
 

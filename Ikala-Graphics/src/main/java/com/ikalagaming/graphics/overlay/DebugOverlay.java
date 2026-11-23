@@ -242,7 +242,7 @@ public final class DebugOverlay {
     private Surface build(@NonNull GraphicsContext graphics) {
         lines.clear();
         toggles.clear();
-        final Column content = new Column("sections").gap(2).align(Align.STRETCH);
+        final Column content = new Column("sections").gap(2).align(Align.START);
         int sectionIndex = 0;
         for (DebugSection section : sections()) {
             final String prefix = "s" + sectionIndex++;

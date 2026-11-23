@@ -187,6 +187,11 @@ public class Window {
      *
      * @see #enableCursor()
      */
+    /** Reused for cursor positions. */
+    private final double[] cursorX = new double[1];
+
+    private final double[] cursorY = new double[1];
+
     public void disableCursor() {
         glfwSetInputMode(windowHandle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     }
@@ -201,6 +206,28 @@ public class Window {
         glfwDestroyWindow(windowHandle);
         windowHandle = NULL;
         log.debug("Window destroyed");
+    }
+
+    /**
+     * Where the cursor is in the window, in screen pixels; unbounded while it is disabled, so its
+     * movement can turn a camera.
+     *
+     * @param out Gets x and y.
+     */
+    public void cursorPosition(double @NonNull [] out) {
+        glfwGetCursorPos(windowHandle, cursorX, cursorY);
+        out[0] = cursorX[0];
+        out[1] = cursorY[0];
+    }
+
+    /**
+     * Whether a mouse button is held, straight from GLFW, whatever the GUI thinks of the mouse.
+     *
+     * @param button The GLFW button, like {@code GLFW_MOUSE_BUTTON_LEFT}.
+     * @return True if held.
+     */
+    public boolean isMouseButtonPressed(int button) {
+        return glfwGetMouseButton(windowHandle, button) == GLFW_PRESS;
     }
 
     /**
