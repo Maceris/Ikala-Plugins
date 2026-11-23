@@ -1,6 +1,8 @@
 package com.ikalagaming.graphics.ui;
 
 import com.ikalagaming.graphics.gui.IkGui;
+import com.ikalagaming.graphics.gui.callback.GuiInputTextCallback;
+import com.ikalagaming.graphics.gui.data.GuiInputTextCallbackData;
 import com.ikalagaming.graphics.gui.data.IkString;
 import com.ikalagaming.graphics.gui.enums.Key;
 import com.ikalagaming.graphics.gui.flags.InputTextFlags;
@@ -34,6 +36,27 @@ public class TextInput extends Node<TextInput> {
 
     /** Whether the field takes the keyboard the next time it is drawn. */
     private boolean focusNext;
+
+    /**
+     * Whether the cursor goes to the end once the field is active. Focusing a field from code
+     * selects all of its text, so the first key typed would replace text it opened with, like the
+     * {@code /} of a chat command.
+     */
+    private boolean cursorToEnd;
+
+    /** Moves the cursor to the end, once, on the first frame the field is active after focus. */
+    private final GuiInputTextCallback toEnd =
+            new GuiInputTextCallback() {
+                @Override
+                public void accept(GuiInputTextCallbackData data) {
+                    if (cursorToEnd) {
+                        final int length = data.getBufTextLen();
+                        data.setCursorPos(length);
+                        data.setSelection(length, length);
+                        cursorToEnd = false;
+                    }
+                }
+            };
 
     /**
      * The text last handed to {@link #onSubmit}, so leaving the field after Enter doesn't repeat.
@@ -113,12 +136,14 @@ public class TextInput extends Node<TextInput> {
     }
 
     /**
-     * Take the keyboard the next time the field is drawn, so typing goes straight into it.
+     * Take the keyboard the next time the field is drawn, so typing goes straight into it after any
+     * text it already has.
      *
      * @return This field.
      */
     public TextInput focus() {
         focusNext = true;
+        cursorToEnd = true;
         return this;
     }
 
@@ -149,7 +174,13 @@ public class TextInput extends Node<TextInput> {
             IkGui.setKeyboardFocusHere();
             focusNext = false;
         }
-        boolean entered = IkGui.inputText("##input", buffer, InputTextFlags.ENTER_RETURNS_TRUE);
+        boolean entered =
+                IkGui.inputText(
+                        "##input",
+                        buffer,
+                        InputTextFlags.ENTER_RETURNS_TRUE
+                                | (cursorToEnd ? InputTextFlags.CALLBACK_ALWAYS : 0),
+                        toEnd);
         recordItem(IkGui.getItemID());
         // Escape ends editing inside inputText, so the field may already be inactive
         if (onCancel != null

@@ -137,6 +137,16 @@ public final class ScriptAutomation {
     }
 
     /**
+     * Type characters into whatever has the keyboard, without clicking or selecting first.
+     *
+     * @param text The characters.
+     * @return The tag to await.
+     */
+    public String chars(@NonNull String text) {
+        return start(steps -> steps.chars(text));
+    }
+
+    /**
      * Scroll a node into view.
      *
      * @param selector Picks out the node.

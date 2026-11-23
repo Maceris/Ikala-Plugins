@@ -476,9 +476,6 @@ public final class SinglePlayerGame {
         }
         final Controls controls = GraphicsManager.getControls();
         if (controls.wasPressed(GameControls.PAUSE)) {
-            if (chat != null && chat.justClosed()) {
-                return;
-            }
             if (menus.isShowing()) {
                 menus.back();
             } else {

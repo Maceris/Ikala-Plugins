@@ -61,6 +61,12 @@ public final class Controls {
 
     private final Map<String, Boolean> released = new HashMap<>();
 
+    /**
+     * Whether the keyboard was taken at the last update. A key still held when it comes back, like
+     * the Enter that sent a chat line, isn't a new press.
+     */
+    private boolean wasBlocked;
+
     /** Whether every action reads as up, as while the Controls screen waits for a key. */
     private boolean suspended;
 
@@ -290,9 +296,10 @@ public final class Controls {
                 final boolean now =
                         binding != null && binding.modifierCount() == most.get(binding.key());
                 final boolean before = Boolean.TRUE.equals(down.put(id, now));
-                pressed.put(id, now && !before);
+                pressed.put(id, now && !before && !wasBlocked);
                 released.put(id, !now && before);
             }
+            wasBlocked = keys.keyboardBlocked();
         } finally {
             lock.unlock();
         }

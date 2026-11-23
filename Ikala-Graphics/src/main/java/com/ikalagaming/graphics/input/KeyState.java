@@ -19,4 +19,13 @@ public interface KeyState {
      * @return True if it is down.
      */
     boolean isDown(@NonNull Key key);
+
+    /**
+     * Whether a text field has the keyboard, so keyboard keys read as up.
+     *
+     * @return True while the keyboard is taken.
+     */
+    default boolean keyboardBlocked() {
+        return false;
+    }
 }

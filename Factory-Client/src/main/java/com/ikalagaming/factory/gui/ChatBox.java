@@ -92,9 +92,6 @@ public final class ChatBox {
     /** How many lines showed when it was last built, to rebuild when one expires. */
     private int shownCount = -1;
 
-    /** The tick the box last closed on, so the key that closed it does nothing else. */
-    private long closedTick = Long.MIN_VALUE / 2;
-
     /** How many times the box has ticked, once per drawn frame. */
     private long ticks;
 
@@ -164,7 +161,6 @@ public final class ChatBox {
     public void close() {
         if (open) {
             open = false;
-            closedTick = ticks;
             input = null;
             dirty = true;
         }
@@ -177,16 +173,6 @@ public final class ChatBox {
      */
     public boolean isOpen() {
         return open;
-    }
-
-    /**
-     * Whether the box closed in the last moment, so the key that closed it (Escape) shouldn't also
-     * open the pause menu.
-     *
-     * @return True within two frames of closing.
-     */
-    public boolean justClosed() {
-        return ticks - closedTick <= 2;
     }
 
     /** Forget every line and close, as when leaving a game. */
@@ -285,8 +271,9 @@ public final class ChatBox {
             content.add(row);
         }
         if (open) {
+            // A new line arriving rebuilds the box; keep what the player has typed so far
             input =
-                    new TextInput(INPUT_ID, typed)
+                    new TextInput(INPUT_ID, input == null ? typed : input.text())
                             .submitOnEnterOnly(true)
                             .onSubmit(this::submit)
                             .onCancel(this::close);

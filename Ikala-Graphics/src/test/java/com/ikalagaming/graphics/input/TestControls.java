@@ -92,6 +92,37 @@ class TestControls {
         assertFalse(controls.isDown(CHUNKS.id()));
     }
 
+    /**
+     * A key still held when a text field gives the keyboard back, like the Enter that sent a chat
+     * line, isn't a new press; pressing it again is.
+     */
+    @Test
+    void testHeldAcrossKeyboardCapture() {
+        final InputAction chat =
+                new InputAction("test:chat", "Interface", "Chat", KeyBinding.of(Key.ENTER));
+        final Controls controls = new Controls();
+        controls.register(OWNER, chat);
+        final KeyState typing =
+                new KeyState() {
+                    @Override
+                    public boolean isDown(Key key) {
+                        return false;
+                    }
+
+                    @Override
+                    public boolean keyboardBlocked() {
+                        return true;
+                    }
+                };
+        controls.update(typing);
+        controls.update(holding(Key.ENTER));
+        assertTrue(controls.isDown(chat.id()));
+        assertFalse(controls.wasPressed(chat.id()));
+        controls.update(holding());
+        controls.update(holding(Key.ENTER));
+        assertTrue(controls.wasPressed(chat.id()));
+    }
+
     /** Suspended controls read as up. */
     @Test
     void testSuspended() {

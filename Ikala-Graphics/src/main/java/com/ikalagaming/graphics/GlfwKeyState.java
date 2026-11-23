@@ -58,6 +58,11 @@ final class GlfwKeyState implements KeyState {
         };
     }
 
+    @Override
+    public boolean keyboardBlocked() {
+        return IkGui.getContext() != null && IkGui.getIO().wantCaptureKeyboard;
+    }
+
     /**
      * Whether a mouse button is down in the scene, not over the GUI.
      *

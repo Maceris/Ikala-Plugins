@@ -146,6 +146,18 @@ public final class Steps {
     }
 
     /**
+     * Type characters into whatever has the keyboard, without clicking or selecting anything first,
+     * as a player keeps typing after a field opens with text in it.
+     *
+     * @param text The characters.
+     * @return These steps.
+     */
+    public Steps chars(@NonNull String text) {
+        list.add(new Chars(text));
+        return this;
+    }
+
+    /**
      * Scroll a node into view, if it is inside a scroll or a canvas.
      *
      * @param selector Picks out the node.
@@ -919,6 +931,40 @@ public final class Steps {
     }
 
     /** Presses and releases a key. */
+    /** Types characters into whatever has the keyboard. */
+    private static final class Chars implements Step {
+        /** The characters. */
+        private final String text;
+
+        /** Whether they have been sent. */
+        private boolean sent;
+
+        /**
+         * Create the step.
+         *
+         * @param text The characters.
+         */
+        Chars(String text) {
+            this.text = text;
+        }
+
+        @Override
+        public boolean advance(Run run) {
+            if (!sent) {
+                run.io().addInputCharacters(text);
+                sent = true;
+                return false;
+            }
+            // A frame has taken them
+            return true;
+        }
+
+        @Override
+        public String describe() {
+            return "chars(" + text + ")";
+        }
+    }
+
     private static final class Press implements Step {
         /** The key. */
         private final Key key;
