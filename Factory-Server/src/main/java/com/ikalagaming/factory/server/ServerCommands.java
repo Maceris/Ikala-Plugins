@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
+import java.util.function.LongUnaryOperator;
 
 /**
  * The commands players type in chat after {@code /}, and the server console runs without it. Each
@@ -32,6 +34,7 @@ public final class ServerCommands {
     public static final String DEOP = "lotomation.command.deop";
     public static final String ACCEPT = "lotomation.command.accept";
     public static final String SAY = "lotomation.command.say";
+    public static final String TIME = "lotomation.command.time";
 
     /** What a command does. */
     @FunctionalInterface
@@ -104,6 +107,13 @@ public final class ServerCommands {
                         "/say <message>",
                         "Speak to everyone as the server",
                         this::say));
+        add(
+                new Command(
+                        "time",
+                        TIME,
+                        "/time [set <noon|sunset|HH:MM|hour> | add <ticks|hours h|days d>]",
+                        "Show or change the time of day",
+                        this::time));
     }
 
     /**
@@ -296,6 +306,56 @@ public final class ServerCommands {
             return;
         }
         world.broadcast(ChatText.of("[Server] " + String.join(" ", args), ChatText.GOLD));
+    }
+
+    /**
+     * Show the time, set the time of day keeping the day, or move the clock on or back. Moving it
+     * by days changes the moon's phase; setting it doesn't.
+     *
+     * @param sender Who asked.
+     * @param args Nothing, {@code set <time of day>} or {@code add <length>}.
+     */
+    private void time(@NonNull CommandSender sender, @NonNull List<String> args) {
+        final long now = world.getTime();
+        if (args.isEmpty()) {
+            sender.reply(ChatText.of(TimeArguments.describe(now), ChatText.GREY));
+            return;
+        }
+        if (args.size() != 2) {
+            usage(sender, "time");
+            return;
+        }
+        final OptionalLong changed =
+                switch (args.get(0).toLowerCase(Locale.ROOT)) {
+                    case "set" ->
+                            mapped(
+                                    TimeArguments.timeOfDay(args.get(1)),
+                                    ofDay -> TimeArguments.sameDay(now, ofDay));
+                    case "add" -> mapped(TimeArguments.length(args.get(1)), step -> now + step);
+                    default -> OptionalLong.empty();
+                };
+        if (changed.isEmpty()) {
+            usage(sender, "time");
+            return;
+        }
+        final long time = Math.max(0, changed.getAsLong());
+        world.setTime(time);
+        world.broadcast(
+                ChatText.of(
+                        sender.name() + " set the time to " + TimeArguments.describe(time) + ".",
+                        ChatText.GREY));
+    }
+
+    /**
+     * Change an optional time.
+     *
+     * @param value The time, or empty.
+     * @param change What to make of it.
+     * @return The changed time, or empty.
+     */
+    private static OptionalLong mapped(
+            @NonNull OptionalLong value, @NonNull LongUnaryOperator change) {
+        return value.isPresent() ? OptionalLong.of(change.applyAsLong(value.getAsLong())) : value;
     }
 
     /**

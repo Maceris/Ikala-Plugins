@@ -382,6 +382,18 @@ public final class ServerWorld implements AutoCloseable {
     }
 
     /**
+     * Set the world's clock, telling every player at once. Tick thread only.
+     *
+     * @param newTime The time, in ticks; see {@link WorldTime}.
+     */
+    public void setTime(long newTime) {
+        time.set(newTime);
+        for (ServerPlayer player : players.values()) {
+            player.getConnection().send(new TimeUpdate(newTime, Server.TICKS_PER_SECOND));
+        }
+    }
+
+    /**
      * How many ticks have run.
      *
      * @return The tick count.

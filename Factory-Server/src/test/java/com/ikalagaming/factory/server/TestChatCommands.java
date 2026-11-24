@@ -158,6 +158,15 @@ class TestChatCommands {
             assertTrue(bobClient.chat().contains("/help - List the commands you can use"));
             assertFalse(bobClient.chat().stream().anyMatch(line -> line.startsWith("/op")));
 
+            say(world, bob, "/time set noon", bobClient);
+            assertEquals("You don't have permission to do that.", bobClient.last().plain());
+            say(world, owner, "/time set 18:30", ownerClient);
+            assertEquals("Owner set the time to Day 1, 18:30.", bobClient.last().plain());
+            say(world, owner, "/time add 1d", ownerClient);
+            assertEquals("Day 2, 18:30", say(world, owner, "/time", ownerClient).plain());
+            say(world, owner, "/time set teatime", ownerClient);
+            assertTrue(ownerClient.last().plain().startsWith("Usage"), ownerClient.last().plain());
+
             world.post(() -> world.commands().dispatch(consoleSender(), "say Hello"));
             world.tick();
             assertEquals("[Server] Hello", bobClient.last().plain());

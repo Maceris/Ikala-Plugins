@@ -23,6 +23,9 @@ lotomation.command.accept:
 lotomation.command.say:
   description: Send a message to everyone as the server
   default: op
+lotomation.command.time:
+  description: Show or change the time of day
+  default: op
 lotomation.admin:
   description: Everything an operator can do
   default: op
@@ -33,3 +36,4 @@ lotomation.admin:
     lotomation.command.deop: true
     lotomation.command.accept: true
     lotomation.command.say: true
+    lotomation.command.time: true
