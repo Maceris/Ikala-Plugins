@@ -3,6 +3,7 @@ package com.ikalagaming.factory.server;
 import com.ikalagaming.event.EventHandler;
 import com.ikalagaming.event.Listener;
 import com.ikalagaming.event.Order;
+import com.ikalagaming.factory.registry.ContentFolders;
 import com.ikalagaming.factory.registry.DefinitionLoader;
 import com.ikalagaming.factory.registry.events.*;
 import com.ikalagaming.factory.server.events.ServerLoaded;
@@ -18,7 +19,7 @@ public class ServerListener implements Listener {
     public void handleLoadingBlocks(LoadingBlocks event) {
         var registries = server.getRegistries();
         DefinitionLoader.loadBlocks(
-                DefinitionLoader.dataFolder(),
+                ContentFolders.installed(),
                 registries.getBlockRegistry(),
                 registries.getItemRegistry());
         new LoadingBlocksCompleted().fire();
@@ -28,7 +29,7 @@ public class ServerListener implements Listener {
     @EventHandler(order = Order.EARLY)
     public void handleLoadingItems(LoadingItems event) {
         DefinitionLoader.loadItems(
-                DefinitionLoader.dataFolder(), server.getRegistries().getItemRegistry());
+                ContentFolders.installed(), server.getRegistries().getItemRegistry());
         new LoadingItemsCompleted().fire();
         new ServerLoaded().fire();
     }
@@ -36,7 +37,7 @@ public class ServerListener implements Listener {
     @EventHandler(order = Order.EARLY)
     public void handleLoadingMaterials(LoadingMaterials event) {
         DefinitionLoader.loadMaterials(
-                DefinitionLoader.dataFolder(), server.getRegistries().getMaterialRegistry());
+                ContentFolders.installed(), server.getRegistries().getMaterialRegistry());
         new LoadingMaterialsCompleted().fire();
         new LoadingBlocks().fire();
     }
@@ -44,7 +45,7 @@ public class ServerListener implements Listener {
     @EventHandler(order = Order.EARLY)
     public void handleLoadingTags(LoadingTags event) {
         DefinitionLoader.loadTags(
-                DefinitionLoader.dataFolder(), server.getRegistries().getTagRegistry());
+                ContentFolders.installed(), server.getRegistries().getTagRegistry());
         new LoadingTagsCompleted().fire();
         new LoadingMaterials().fire();
     }

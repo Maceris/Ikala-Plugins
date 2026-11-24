@@ -61,9 +61,6 @@ dependencies {
 	compileOnly project(':Ikala-Core')
 	compileOnly project(':Random')
 	compileOnly project(':EntityComponentSystem')
-	implementation "com.opencsv:opencsv:${openCSVVersion}"
-	// The definition loader reads CSV at runtime, from the shared libraries, see collectLibraries
-	library "com.opencsv:opencsv:${openCSVVersion}"
 	provided "io.netty:netty-all:${nettyVersion}"
 	provided "com.google.guava:guava:${guavaVersion}"
 

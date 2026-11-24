@@ -139,11 +139,12 @@ class TestWaterTiles {
      * Water looks read real units and the fetch, fall back to the default look, then to a built-in
      * body.
      *
-     * @param folder A scratch data folder.
+     * @param base A scratch folder, holding the Lotomation plugin's folder.
      */
     @Test
-    void testLooks(@TempDir Path folder) throws Exception {
-        final Path looks = folder.resolve("assets/lotomation/looks/water");
+    void testLooks(@TempDir Path base) throws Exception {
+        final Path folder = base.resolve("Lotomation/data");
+        final Path looks = folder.resolve("looks/water");
         Files.createDirectories(looks);
         Files.writeString(
                 looks.resolve("river.kvt"),

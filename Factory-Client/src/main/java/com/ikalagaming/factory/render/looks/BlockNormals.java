@@ -25,8 +25,8 @@ import javax.imageio.ImageIO;
  * write the map again.
  *
  * <p>Run with {@code ./gradlew :Factory-Client:blockNormals --args="[--force] <data folder>"},
- * where the data folder holds {@code assets}, such as Lotomation's {@code
- * plugins/Factory-Client/data}; relative paths are from Factory-Client's project folder.
+ * where the data folder is a content plugin's, such as Lotomation's {@code
+ * plugins/Lotomation/data}; relative paths are from Factory-Client's project folder.
  */
 public final class BlockNormals {
 
@@ -68,13 +68,7 @@ public final class BlockNormals {
     private static final String FORCE = "--force";
 
     /** Where the block textures are, under the data folder. */
-    private static final String BLOCK_TEXTURES =
-            BlockLooks.ASSETS_FOLDER
-                    + "/"
-                    + BlockLooks.DEFAULT_NAMESPACE
-                    + "/"
-                    + BlockLooks.TEXTURES_FOLDER
-                    + "/block";
+    private static final String BLOCK_TEXTURES = BlockLooks.TEXTURES_FOLDER + "/block";
 
     /** Bits to shift for red, green and alpha in a packed color. */
     private static final int RED_SHIFT = 16;

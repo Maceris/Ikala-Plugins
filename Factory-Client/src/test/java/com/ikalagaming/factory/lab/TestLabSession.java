@@ -32,12 +32,12 @@ class TestLabSession {
     /**
      * Write a small world: a flat surface at y = 0.
      *
-     * @param folder The data folder.
+     * @param folder The content folder, a plugin named {@code T}'s data folder.
      * @return The terrain file, for editing.
      * @throws IOException If the files can't be written.
      */
     private static Path writeWorld(Path folder) throws IOException {
-        final Path worldgen = folder.resolve("mods/t/worldgen");
+        final Path worldgen = folder.resolve("worldgen");
         Files.createDirectories(worldgen.resolve("density"));
         Files.createDirectories(worldgen.resolve("biome"));
         Files.createDirectories(worldgen.resolve("world_type"));
@@ -67,11 +67,12 @@ class TestLabSession {
     /**
      * Edits reload, and a broken edit keeps the last good world, marked stale.
      *
-     * @param folder A temporary data folder.
+     * @param base A temporary folder.
      * @throws IOException If the files can't be written.
      */
     @Test
-    void testHotReload(@TempDir Path folder) throws IOException {
+    void testHotReload(@TempDir Path base) throws IOException {
+        final Path folder = base.resolve("T/data");
         final Path terrain = writeWorld(folder);
         List<LabSession.State> told = new ArrayList<>();
         LabSession session = new LabSession(told::add);
@@ -111,11 +112,12 @@ class TestLabSession {
     /**
      * A broken world with nothing good to fall back on shows nothing.
      *
-     * @param folder A temporary data folder.
+     * @param base A temporary folder.
      * @throws IOException If the files can't be written.
      */
     @Test
-    void testNothingToKeep(@TempDir Path folder) throws IOException {
+    void testNothingToKeep(@TempDir Path base) throws IOException {
+        final Path folder = base.resolve("T/data");
         writeWorld(folder);
         LabSession session = new LabSession(state -> {});
         final LabSession.State state =

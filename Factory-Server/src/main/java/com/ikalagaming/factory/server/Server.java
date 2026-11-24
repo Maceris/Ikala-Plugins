@@ -11,6 +11,7 @@ import com.ikalagaming.factory.networking.request.serverbound.ServerBoundRequest
 import com.ikalagaming.factory.networking.udp.PacketEndpoint;
 import com.ikalagaming.factory.networking.udp.UdpConnection;
 import com.ikalagaming.factory.networking.udp.UdpServer;
+import com.ikalagaming.factory.registry.ContentFolders;
 import com.ikalagaming.factory.registry.DefinitionLoader;
 import com.ikalagaming.factory.registry.Registries;
 import com.ikalagaming.factory.registry.events.LoadingTags;
@@ -564,12 +565,10 @@ public class Server {
      */
     private static WorldGenerator generator(@NonNull String worldType, long seed)
             throws IOException {
-        final Path dataFolder = DefinitionLoader.dataFolder();
+        final List<Path> folders = ContentFolders.installed();
         final WorldgenCompiler compiler =
                 new WorldgenCompiler(
-                        WorldgenData.load(List.of(dataFolder)),
-                        seed,
-                        DefinitionLoader.blockIds(dataFolder));
+                        WorldgenData.load(folders), seed, DefinitionLoader.blockIds(folders));
         final WorldType type =
                 compiler.worldType(worldType, null)
                         .orElseThrow(

@@ -16,7 +16,6 @@ import lombok.NonNull;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import javax.imageio.ImageIO;
@@ -35,7 +34,7 @@ public final class WorldgenTool {
             Usage: worldgen <command> [options]
               check <dataFolder>...
                   Check data for errors. Exits non-zero if there are any. Blocks are checked
-                  against the blocks.csv in the data folders, when there is one.
+                  against the blocks the data folders define, when they define any.
               render --data <folder> [--data ...] --world <id> --target <target> --out <file.png>
                   [--seed N] [--plane xz|xy|zy] [--origin x,y,z] [--size w,h] [--scale blocks]
                   [--colormap diverging|sequential|categorical] [--channel name] [--range r]
@@ -77,7 +76,7 @@ public final class WorldgenTool {
      * @return The exit code: 0 for success.
      */
     public static int run(@NonNull List<String> args, @NonNull PrintStream out) {
-        return run(args, out, null);
+        return run(args, out, List.of());
     }
 
     /**
@@ -85,18 +84,20 @@ public final class WorldgenTool {
      *
      * @param args The command and its options.
      * @param out Where to print.
-     * @param defaultFolder The data folder used when the command names none, or null for none.
+     * @param defaultFolders The content folders used when the command names none; empty for none.
      * @return The exit code: 0 for success.
      */
     public static int run(
-            @NonNull List<String> args, @NonNull PrintStream out, Path defaultFolder) {
+            @NonNull List<String> args,
+            @NonNull PrintStream out,
+            @NonNull List<Path> defaultFolders) {
         if (args.isEmpty()) {
             out.println(USAGE);
             return 1;
         }
         final Options options;
         try {
-            options = new Options(args.subList(1, args.size()), defaultFolder);
+            options = new Options(args.subList(1, args.size()), defaultFolders);
         } catch (IllegalArgumentException e) {
             out.println(e.getMessage());
             out.println(USAGE);
@@ -130,16 +131,16 @@ public final class WorldgenTool {
         private final Map<String, List<String>> named = new HashMap<>();
 
         /** The data folder used when none is given, or null. */
-        private final Path defaultFolder;
+        private final List<Path> defaultFolders;
 
         /**
          * Parse options.
          *
          * @param args The arguments after the command.
-         * @param defaultFolder The data folder used when none is given, or null.
+         * @param defaultFolders The content folders used when none is given; empty for none.
          */
-        Options(@NonNull List<String> args, Path defaultFolder) {
-            this.defaultFolder = defaultFolder;
+        Options(@NonNull List<String> args, @NonNull List<Path> defaultFolders) {
+            this.defaultFolders = List.copyOf(defaultFolders);
             for (int i = 0; i < args.size(); ++i) {
                 final String arg = args.get(i);
                 if (arg.startsWith("--")) {
@@ -210,8 +211,8 @@ public final class WorldgenTool {
          */
         List<Path> dataFolders() {
             final List<String> folders = all("data").isEmpty() ? positional : all("data");
-            if (folders.isEmpty() && defaultFolder != null) {
-                return List.of(defaultFolder);
+            if (folders.isEmpty() && !defaultFolders.isEmpty()) {
+                return defaultFolders;
             }
             if (folders.isEmpty()) {
                 throw new IllegalArgumentException("Give at least one data folder");
@@ -229,20 +230,13 @@ public final class WorldgenTool {
         }
 
         /**
-         * The blocks the data folders define, in their {@code blocks.csv} files.
+         * The blocks the data folders define.
          *
          * @return The block IDs, or null if no folder defines blocks, to only check their format.
          */
         Set<String> blocks() {
-            Set<String> ids = new TreeSet<>();
-            boolean any = false;
-            for (Path folder : dataFolders()) {
-                if (Files.isRegularFile(folder.resolve(DefinitionLoader.BLOCKS_FILE))) {
-                    any = true;
-                    ids.addAll(DefinitionLoader.blockIds(folder));
-                }
-            }
-            return any ? ids : null;
+            final Set<String> ids = DefinitionLoader.blockIds(dataFolders());
+            return ids.isEmpty() ? null : ids;
         }
 
         /**

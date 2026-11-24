@@ -188,8 +188,9 @@ class TestWorldgenData {
      */
     @Test
     void testOverrideOrder(@TempDir Path base) throws IOException {
-        final Path first = base.resolve("first/mods/m/worldgen/density/sub");
-        final Path second = base.resolve("second/mods/m/worldgen/density/sub");
+        // The M plugin's own file, then another plugin's override of it
+        final Path first = base.resolve("M/data/worldgen/density/sub");
+        final Path second = base.resolve("Other/data/overrides/m/worldgen/density/sub");
         Files.createDirectories(first);
         Files.createDirectories(second);
         Files.writeString(first.resolve("value.kvt"), "1.0");
@@ -197,7 +198,8 @@ class TestWorldgenData {
         Files.writeString(second.resolve("value.kvt"), "{type:\"constant\", value:2.0}");
         WorldgenCompiler compiler =
                 new WorldgenCompiler(
-                        WorldgenData.load(List.of(base.resolve("first"), base.resolve("second"))),
+                        WorldgenData.load(
+                                List.of(base.resolve("M/data"), base.resolve("Other/data"))),
                         WorldgenFixtures.SEED,
                         null);
         assertEquals(2.0, compiler.density("m:sub/value", null).orElseThrow().value(0, 0, 0, null));

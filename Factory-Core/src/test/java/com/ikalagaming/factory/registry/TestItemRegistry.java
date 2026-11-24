@@ -68,7 +68,7 @@ class TestItemRegistry {
 
     @BeforeEach
     void setup() {
-        modName = "mod_name-complicated.1";
+        modName = "mod_name-complicated1";
         itemName = "item_name-complicated.1";
         combinedName = RegistryConstants.combineName(modName, itemName);
         attribute = new ItemDefinition.Attribute("charge", NodeType.LONG);

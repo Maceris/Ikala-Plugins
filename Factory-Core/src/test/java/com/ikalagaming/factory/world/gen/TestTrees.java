@@ -44,7 +44,7 @@ class TestTrees {
     private static WorldGenerator generator() {
         final Path trees;
         try {
-            trees = Path.of(TestTrees.class.getResource("/worldgen/trees").toURI());
+            trees = Path.of(TestTrees.class.getResource("/worldgen/trees/Trees/data").toURI());
         } catch (URISyntaxException e) {
             throw new IllegalStateException(e);
         }

@@ -1,5 +1,6 @@
 package com.ikalagaming.factory.client;
 
+import com.ikalagaming.factory.registry.ContentFolders;
 import com.ikalagaming.factory.registry.DefinitionLoader;
 import com.ikalagaming.factory.registry.Registries;
 import com.ikalagaming.factory.world.ChunkBlockView;
@@ -58,7 +59,7 @@ final class BlockCollisions {
     private static Map<String, Boolean> load() {
         try {
             final Registries registries = new Registries();
-            DefinitionLoader.loadAll(DefinitionLoader.dataFolder(), registries);
+            DefinitionLoader.loadAll(ContentFolders.installed(), registries);
             return ChunkBlockView.solidByName(registries.getBlockRegistry());
         } catch (RuntimeException e) {
             log.warn("Could not read the block definitions; every block will be solid", e);

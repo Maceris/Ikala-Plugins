@@ -47,22 +47,19 @@ class TestBlockLook {
                 IllegalArgumentException.class, () -> BlockLook.parse("{texture:{all:\"a\"}}"));
     }
 
-    /** Names become paths in the asset layout, and names that could leave it don't. */
+    /**
+     * Names get the default namespace when they have none, and names that could leave a folder are
+     * refused.
+     */
     @Test
-    void testRelativePath() {
-        assertEquals(
-                "assets/lotomation/looks/block/stone.kvt",
-                BlockLooks.relativePath("lotomation:stone", "looks/block", ".kvt"));
-        assertEquals(
-                "assets/lotomation/textures/block/grass_top.png",
-                BlockLooks.relativePath("block/grass_top", "textures", ".png"));
-        assertEquals(
-                "assets/mymod/textures/block/x.png",
-                BlockLooks.relativePath("mymod:block/x", "textures", ".png"));
-        assertNull(BlockLooks.relativePath("lotomation:../secret", "textures", ".png"));
-        assertNull(BlockLooks.relativePath("lotomation:/abs", "textures", ".png"));
-        assertNull(BlockLooks.relativePath("Lotomation:stone", "textures", ".png"));
-        assertNull(BlockLooks.relativePath(":stone", "textures", ".png"));
+    void testQualified() {
+        assertEquals("lotomation:stone", BlockLooks.qualified("lotomation:stone"));
+        assertEquals("lotomation:block/grass", BlockLooks.qualified("block/grass"));
+        assertEquals("mymod:block/x", BlockLooks.qualified("mymod:block/x"));
+        assertNull(BlockLooks.qualified("lotomation:../secret"));
+        assertNull(BlockLooks.qualified("lotomation:/abs"));
+        assertNull(BlockLooks.qualified("Lotomation:stone"));
+        assertNull(BlockLooks.qualified(":stone"));
     }
 
     /** The starter textures survive a trip through an image, and strips put tiles side by side. */

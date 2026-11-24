@@ -49,17 +49,18 @@ class TestRegistryConstants {
                 Arguments.of("K^"),
                 Arguments.of("a#"),
                 Arguments.of("*"),
-                Arguments.of("thisnamehasthirty-threecharacters"));
+                Arguments.of("thisnamehasthirty-threecharacters"),
+                // Namespaces are plugin names in lower case, which have no dots or leading digits
+                Arguments.of("foo.bar"),
+                Arguments.of("3ty1"));
     }
 
     private static Stream<Arguments> modNameValidProvider() {
         return Stream.of(
                 Arguments.of("simple"),
-                Arguments.of("foo.bar"),
                 Arguments.of("abcd1234"),
                 Arguments.of("a-1"),
                 Arguments.of("a_1"),
-                Arguments.of("3ty1"),
                 Arguments.of("thisnamehasthirtytwocharactersin"));
     }
 

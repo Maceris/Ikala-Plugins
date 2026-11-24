@@ -42,7 +42,8 @@ class TestFeatures {
     private static WorldGenerator generator() {
         final Path features;
         try {
-            features = Path.of(TestFeatures.class.getResource("/worldgen/features").toURI());
+            features =
+                    Path.of(TestFeatures.class.getResource("/worldgen/features/Feat/data").toURI());
         } catch (URISyntaxException e) {
             throw new IllegalStateException(e);
         }

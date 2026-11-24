@@ -18,9 +18,9 @@ java -jar antlr-4.13.2-complete.jar -Dlanguage=Java KVTLexer.g4 KVTParser.g4
 
 ## World generation
 
-World generation is data driven: KVT files under `mods/<mod>/worldgen/<kind>/` in a data folder,
-where the ID comes from the path (`mods/lotomation/worldgen/density/overworld/terrain.kvt` is
-`lotomation:overworld/terrain`). The kinds are `noise`, `density`, `parameter`, `biome`,
+World generation is data driven: KVT files under `worldgen/<kind>/` in a content folder (see
+Content below), where the ID comes from the path (`worldgen/density/overworld/terrain.kvt` in the
+Lotomation plugin's data folder is `lotomation:overworld/terrain`). The kinds are `noise`, `density`, `parameter`, `biome`,
 `block_rules`, `fluids` and `world_type`; types are defined in code (`WorldgenTypes`) and data
 configures and combines them. KVT accepts `/* ... */` comments. Chunks are cubic, 16^3, and
 generation is a pure function of the seed, the chunk position and the data.
@@ -28,22 +28,36 @@ generation is a pure function of the seed, the chunk position and the data.
 The tools run the same code the game generates with. From this folder:
 
 ```bash
-./gradlew worldgen --args="check <dataFolder>"
+./gradlew worldgen --args="check ../../Lotomation/plugins/Lotomation/data"
 ./gradlew worldgen --args="render --data <dataFolder> --world lotomation:overworld --target lotomation:overworld/terrain --plane xy --origin -256,64,0 --size 512,256 --out side.png"
 ```
 
 Commands: `check` (errors with file and field), `render` (a PNG slice of any noise, density,
 parameter, `id#path` node, `biome` or `blocks`), `hash` (chunk content hashes), `trace` (every
 node's value at a point), `biome` (why a point has its biome) and `bounds` (every node's range over
-a box). Relative paths are from this folder. Blocks are checked against the data folder's
-`blocks.csv`. The same commands work in the running game's console as `worldgen <command> ...`,
-where the data folder defaults to Factory-Core's.
+a box). Relative paths are from this folder. Blocks are checked against the blocks the data folders
+define. The same commands work in the running game's console as `worldgen <command> ...`, where
+the data folders default to the installed plugins' content folders.
 
-## Definitions
+## Content
 
-The game's definitions live in Factory-Core's data folder, next to the world generation data that
-names them: `tags.yml`, `materials.yml`, `blocks.csv` and `items.csv`, loaded in that order by
-`DefinitionLoader`. The server, the client and the tools all read them from there.
+Factory-Core is the engine and ships no content. Content comes from the data folders of the
+plugins that depend on it, such as the base game's `Lotomation` plugin (`ContentFolders`): a
+plugin's namespace is its name in lower case, its own files sit directly in its data folder by
+kind, and `overrides/<namespace>/` replaces another plugin's files. Folders load in dependency
+order, and a later file with the same ID wins.
+
+The definitions are one KVT file each, loaded in this order by `DefinitionLoader`:
+
+- `tags/<name>.kvt`: `{parent:"cold"}`, or `{}`
+- `materials/<name>.kvt`: `{parent:"metal"}` or `{tags:[T;"solid"]}`
+- `blocks/<id>.kvt`: `{material:"wood", tags:[T;"solid"], item:true, collision:"full"}`, every key
+  optional (`item` defaults to true, `collision` to `full`)
+- `items/<id>.kvt`: `{material:"bronze", tags:[T;...]}`
+
+Blocks and items are namespaced, `lotomation:stone`. Tag and gameplay material names are shared by
+every plugin, so mods agree on what `solid` means. The server, the client and the tools all read
+them the same way.
 
 The determinism tests compare a fixed set of chunks against
 `src/test/resources/worldgen/golden-hashes.txt`. When generation changes on purpose, regenerate it

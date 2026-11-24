@@ -5,8 +5,11 @@ import lombok.NonNull;
 /** Constants used by the various registries. */
 public class RegistryConstants {
 
-    /** The regex pattern that matches valid mod names. */
-    public static final String MOD_NAME_FORMAT = "[a-z0-9][a-z0-9_.-]{0,31}";
+    /**
+     * The regex pattern that matches valid mod names, which are namespaces: a plugin's name in
+     * lower case.
+     */
+    public static final String MOD_NAME_FORMAT = "[a-z][a-z0-9_-]{0,31}";
 
     /** The regex pattern that matches valid resource (block, item) names. */
     public static final String RESOURCE_NAME_FORMAT = "[a-z0-9][a-z0-9_.-]{0,63}";

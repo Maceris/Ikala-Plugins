@@ -64,7 +64,7 @@ class TestBlockRegistry {
 
     @BeforeEach
     void setup() {
-        modName = "mod_name-complicated.1";
+        modName = "mod_name-complicated1";
         blockName = "block_name-complicated.1";
         combinedName = RegistryConstants.combineName(modName, blockName);
         material = "wood";

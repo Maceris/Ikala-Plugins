@@ -1,9 +1,0 @@
-mod_name,identifier,material,tags,register_item,collision
-test,stone,,solid,FALSE,full
-test,grass,,solid,FALSE,full
-test,dirt,,solid,FALSE,full
-test,moss,,,FALSE,full
-test,sand,,solid,FALSE,full
-test,basalt,,solid,FALSE,full
-test,deepstone,,solid,FALSE,full
-test,water,,liquid,FALSE,none

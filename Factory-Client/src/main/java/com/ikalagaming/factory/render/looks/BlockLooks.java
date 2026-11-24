@@ -1,6 +1,6 @@
 package com.ikalagaming.factory.render.looks;
 
-import com.ikalagaming.factory.FactoryClientPlugin;
+import com.ikalagaming.factory.registry.ContentFolders;
 import com.ikalagaming.graphics.Format;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.TextureFilter;
@@ -13,7 +13,6 @@ import com.ikalagaming.graphics.asset.MeshSection;
 import com.ikalagaming.graphics.asset.Section;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MeshData;
-import com.ikalagaming.launcher.PluginFolder;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -25,7 +24,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,12 +31,12 @@ import java.util.Optional;
 import javax.imageio.ImageIO;
 
 /**
- * Finds block looks, their models and textures in the namespaced asset layout: {@code
- * assets/<namespace>/looks/block/<id>.kvt}, {@code assets/<namespace>/models/<path>.ika} (meshes
- * exported from the asset editor, see {@link MeshSection}), {@code
- * assets/<namespace>/materials/<path>.ika} (see {@link MaterialSection}) and {@code
- * assets/<namespace>/textures/<path>.png}. Folders are searched in order and the first that has a
- * file wins, so resource packs can go in front of the base game later.
+ * Finds block looks, their models and textures in plugins' content folders ({@link
+ * ContentFolders}): {@code looks/block/<id>.kvt}, {@code models/<path>.ika} (meshes exported from
+ * the asset editor, see {@link MeshSection}), {@code render_materials/<path>.ika} (see {@link
+ * MaterialSection}) and {@code textures/<path>.png}, each in the folder of the plugin whose
+ * namespace the name has. A later plugin's {@code overrides/<namespace>/} wins over the plugin's
+ * own file, and resource packs will go in front of them later.
  *
  * <p>Textures are pixel art, sampled so their pixels stay sharp up close, of any size: a model's
  * texture coordinates decide which part of it each face shows. Render thread only.
@@ -46,25 +44,25 @@ import javax.imageio.ImageIO;
 @Slf4j
 public final class BlockLooks implements AutoCloseable {
 
-    /** The folder under each root holding the namespaces. */
-    public static final String ASSETS_FOLDER = "assets";
-
-    /** The folder under a namespace holding block looks. */
+    /** The folder under a content folder holding block looks. */
     public static final String LOOKS_FOLDER = "looks/block";
 
-    /** The folder under a namespace holding models. */
+    /** The folder under a content folder holding models. */
     public static final String MODELS_FOLDER = "models";
 
     /** The extension of models. */
     public static final String MODEL_EXTENSION = AssetFormat.EXTENSION;
 
-    /** The folder under a namespace holding materials. */
-    public static final String MATERIALS_FOLDER = "materials";
+    /**
+     * The folder under a content folder holding render materials: how surfaces reflect light, as
+     * opposed to the gameplay materials in {@code materials}.
+     */
+    public static final String MATERIALS_FOLDER = "render_materials";
 
     /** The extension of materials. */
     public static final String MATERIAL_EXTENSION = AssetFormat.EXTENSION;
 
-    /** The folder under a namespace holding textures. */
+    /** The folder under a content folder holding textures. */
     public static final String TEXTURES_FOLDER = "textures";
 
     /** The extension of look files. */
@@ -91,7 +89,7 @@ public final class BlockLooks implements AutoCloseable {
     /** The graphics to load textures with, or null to only read looks. */
     private final GraphicsContext graphics;
 
-    /** The folders searched, in order. */
+    /** The content folders searched, in load order. */
     private final List<Path> roots;
 
     /** Looks by block name; empty for blocks that have none. */
@@ -116,7 +114,7 @@ public final class BlockLooks implements AutoCloseable {
      * Looks from some folders.
      *
      * @param graphics The graphics to load textures with.
-     * @param roots The folders to search, in order, each holding an {@value #ASSETS_FOLDER} folder.
+     * @param roots The content folders to search, in load order.
      */
     public BlockLooks(@NonNull GraphicsContext graphics, @NonNull List<Path> roots) {
         this.graphics = graphics;
@@ -124,17 +122,12 @@ public final class BlockLooks implements AutoCloseable {
     }
 
     /**
-     * The folders the game's looks are in: Factory-Client's data folder.
+     * The folders the game's looks are in: the installed plugins' content folders.
      *
-     * @return The folders, in search order.
+     * @return The folders, in load order.
      */
     public static List<Path> defaultRoots() {
-        final List<Path> out = new ArrayList<>();
-        out.add(
-                PluginFolder.getResource(
-                                FactoryClientPlugin.PLUGIN_NAME, PluginFolder.ResourceType.DATA, "")
-                        .toPath());
-        return out;
+        return ContentFolders.installed();
     }
 
     /**
@@ -379,51 +372,53 @@ public final class BlockLooks implements AutoCloseable {
     }
 
     /**
-     * Find a namespaced file in the first folder that has it.
+     * Find a namespaced file in this one's folders.
      *
      * @param name The name, such as {@code lotomation:stone}; with no namespace, {@value
      *     #DEFAULT_NAMESPACE}.
-     * @param folder The folder under the namespace.
+     * @param folder The kind's folder.
      * @param extension The file's extension.
      * @return The file, or empty if no folder has it.
      */
     private Optional<Path> find(
             @NonNull String name, @NonNull String folder, @NonNull String extension) {
-        final String relative = relativePath(name, folder, extension);
-        if (relative == null) {
-            log.warn("{} isn't a valid name", name);
-            return Optional.empty();
-        }
-        for (Path root : roots) {
-            final Path file = root.resolve(relative);
-            if (Files.isRegularFile(file)) {
-                return Optional.of(file);
-            }
-        }
-        return Optional.empty();
+        return find(roots, name, folder, extension);
     }
 
     /**
-     * Where a namespaced file is, under a root.
+     * Find a namespaced file in some content folders: the last override of it, or else the file in
+     * its own plugin's folder.
+     *
+     * @param roots The content folders, in load order.
+     * @param name The name, such as {@code lotomation:stone}; with no namespace, {@value
+     *     #DEFAULT_NAMESPACE}.
+     * @param folder The kind's folder.
+     * @param extension The file's extension.
+     * @return The file, or empty if no folder has it or the name isn't valid, which is logged.
+     */
+    static Optional<Path> find(
+            @NonNull List<Path> roots,
+            @NonNull String name,
+            @NonNull String folder,
+            @NonNull String extension) {
+        final String id = qualified(name);
+        if (id == null) {
+            log.warn("{} isn't a valid name", name);
+            return Optional.empty();
+        }
+        return ContentFolders.find(roots, folder, id, extension);
+    }
+
+    /**
+     * A name with its namespace.
      *
      * @param name The name, with or without a namespace.
-     * @param folder The folder under the namespace.
-     * @param extension The file's extension.
-     * @return The path, with forward slashes, or null if the name could leave the folder.
+     * @return The name with {@value #DEFAULT_NAMESPACE} if it gave none, or null if it isn't a
+     *     valid name, such as one that could leave its folder.
      */
-    static String relativePath(
-            @NonNull String name, @NonNull String folder, @NonNull String extension) {
-        final int colon = name.indexOf(':');
-        final String namespace = colon < 0 ? DEFAULT_NAMESPACE : name.substring(0, colon);
-        final String path = name.substring(colon + 1);
-        if (namespace.isEmpty()
-                || path.isEmpty()
-                || !namespace.matches("[a-z0-9_.-]+")
-                || !path.matches("[a-z0-9_.-]+(/[a-z0-9_.-]+)*")
-                || path.contains("..")) {
-            return null;
-        }
-        return ASSETS_FOLDER + "/" + namespace + "/" + folder + "/" + path + extension;
+    static String qualified(@NonNull String name) {
+        final String id = name.indexOf(':') < 0 ? DEFAULT_NAMESPACE + ":" + name : name;
+        return ContentFolders.isValidId(id) && !id.contains("..") ? id : null;
     }
 
     /** Release every texture. */

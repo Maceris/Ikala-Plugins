@@ -152,15 +152,8 @@ public final class LabSession {
      * @return The block IDs, or null if no folder defines blocks.
      */
     private static Set<String> blocks(@NonNull Settings settings) {
-        Set<String> ids = new TreeSet<>();
-        boolean any = false;
-        for (Path folder : settings.dataFolders()) {
-            if (Files.isRegularFile(folder.resolve(DefinitionLoader.BLOCKS_FILE))) {
-                any = true;
-                ids.addAll(DefinitionLoader.blockIds(folder));
-            }
-        }
-        return any ? ids : null;
+        final Set<String> ids = DefinitionLoader.blockIds(settings.dataFolders());
+        return ids.isEmpty() ? null : ids;
     }
 
     /**

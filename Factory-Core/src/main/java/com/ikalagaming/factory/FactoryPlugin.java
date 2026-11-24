@@ -2,7 +2,7 @@ package com.ikalagaming.factory;
 
 import com.ikalagaming.event.Listener;
 import com.ikalagaming.factory.networking.RequestRegistry;
-import com.ikalagaming.factory.registry.DefinitionLoader;
+import com.ikalagaming.factory.registry.ContentFolders;
 import com.ikalagaming.factory.world.gen.debug.WorldgenTool;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
@@ -76,7 +76,7 @@ public class FactoryPlugin extends Plugin {
         PluginManager.getInstance()
                 .registerCommand(
                         WORLDGEN_COMMAND,
-                        args -> WorldgenTool.run(args, System.out, DefinitionLoader.dataFolder()),
+                        args -> WorldgenTool.run(args, System.out, ContentFolders.installed()),
                         PLUGIN_NAME);
         return true;
     }

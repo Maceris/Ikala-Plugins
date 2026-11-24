@@ -17,12 +17,12 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * How water looks in each biome, from {@code assets/<namespace>/looks/water/<biome>.kvt}: what it
+ * How water looks in each biome, from {@code looks/water/<biome>.kvt} in content folders: what it
  * holds, in real units, and how far the wind has blown over it. Biomes without a file use {@code
  * lotomation:default}. The wind itself is one for the whole world until there is weather.
  *
  * <pre>
- * /* assets/lotomation/looks/water/ocean.kvt *&#47;
+ * /* looks/water/ocean.kvt in the Lotomation plugin's data folder *&#47;
  * {chlorophyll:0.05F, cdom:0.01F, sediment:0.0F}
  * </pre>
  *
@@ -32,7 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public final class WaterLooks {
 
-    /** The folder under a namespace holding water looks. */
+    /** The folder under a content folder holding water looks. */
     public static final String FOLDER = "looks/water";
 
     /** The look for biomes that don't have one. */
@@ -63,7 +63,7 @@ public final class WaterLooks {
     /**
      * Water looks from some folders.
      *
-     * @param roots The folders, each holding an {@value BlockLooks#ASSETS_FOLDER} folder, in order.
+     * @param roots The content folders, in load order.
      */
     public WaterLooks(@NonNull List<Path> roots) {
         this.roots = List.copyOf(roots);
@@ -88,15 +88,10 @@ public final class WaterLooks {
      * @return Its body, or empty if it has no file or the file is broken, which is logged.
      */
     private Optional<WaterBody> read(@NonNull String biome) {
-        final String relative = BlockLooks.relativePath(biome, FOLDER, BlockLooks.LOOK_EXTENSION);
-        if (relative == null) {
-            return Optional.empty();
-        }
-        for (Path root : roots) {
-            final Path file = root.resolve(relative);
-            if (!Files.isRegularFile(file)) {
-                continue;
-            }
+        final Optional<Path> found =
+                BlockLooks.find(roots, biome, FOLDER, BlockLooks.LOOK_EXTENSION);
+        if (found.isPresent()) {
+            final Path file = found.get();
             try {
                 final Optional<Node> tree =
                         TreeStringSerialization.fromString(

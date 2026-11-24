@@ -23,8 +23,7 @@ import javax.imageio.ImageIO;
  * its file and run this.
  *
  * <p>Run with {@code ./gradlew :Factory-Client:starterTextures --args="<data folder>"}, where the
- * data folder is the one holding {@code assets}, such as Lotomation's {@code
- * plugins/Factory-Client/data}.
+ * data folder is a content plugin's, such as Lotomation's {@code plugins/Lotomation/data}.
  */
 public final class StarterTextures {
 
@@ -38,13 +37,7 @@ public final class StarterTextures {
     private static final int CHANNEL_MAX = 255;
 
     /** Where the block textures go, under the data folder. */
-    private static final String BLOCK_TEXTURES =
-            BlockLooks.ASSETS_FOLDER
-                    + "/"
-                    + BlockLooks.DEFAULT_NAMESPACE
-                    + "/"
-                    + BlockLooks.TEXTURES_FOLDER
-                    + "/block";
+    private static final String BLOCK_TEXTURES = BlockLooks.TEXTURES_FOLDER + "/block";
 
     /** How see-through glass is, as alpha. */
     private static final double GLASS_ALPHA = 0.25;

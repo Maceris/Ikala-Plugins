@@ -1,7 +1,7 @@
 package com.ikalagaming.factory.lab;
 
 import com.ikalagaming.factory.FactoryClientPlugin;
-import com.ikalagaming.factory.registry.DefinitionLoader;
+import com.ikalagaming.factory.registry.ContentFolders;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.launcher.AppPaths;
 import com.ikalagaming.plugins.config.ConfigManager;
@@ -63,7 +63,7 @@ public final class LabTool implements AutoCloseable {
         final PluginConfig config = ConfigManager.loadConfig(FactoryClientPlugin.PLUGIN_NAME);
         List<Path> folders = config.getStringList(DATA_FOLDERS_KEY).stream().map(Path::of).toList();
         if (folders.isEmpty()) {
-            folders = List.of(DefinitionLoader.dataFolder());
+            folders = ContentFolders.installed();
         }
         final String worldType = config.getOrDefault(WORLD_TYPE_KEY, DEFAULT_WORLD_TYPE);
         final Number seed = config.getOrDefault(SEED_KEY, 0L);

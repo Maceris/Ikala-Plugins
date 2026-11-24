@@ -34,13 +34,14 @@ public final class WorldgenFixtures {
                     "test:water");
 
     /**
-     * The fixture's data folder.
+     * The fixture's content folder, as if it were the data folder of a plugin named {@code Test}.
      *
-     * @return The folder holding {@code mods/test/worldgen}.
+     * @return The folder holding {@code worldgen} and {@code blocks}.
      */
     public static Path folder() {
         try {
-            return Path.of(WorldgenFixtures.class.getResource("/worldgen/fixture").toURI());
+            return Path.of(
+                    WorldgenFixtures.class.getResource("/worldgen/fixture/Test/data").toURI());
         } catch (URISyntaxException e) {
             throw new IllegalStateException(e);
         }

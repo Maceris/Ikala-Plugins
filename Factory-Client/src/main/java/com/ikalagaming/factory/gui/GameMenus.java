@@ -2,7 +2,7 @@ package com.ikalagaming.factory.gui;
 
 import com.ikalagaming.factory.FactoryClientPlugin;
 import com.ikalagaming.factory.FactoryPlugin;
-import com.ikalagaming.factory.registry.DefinitionLoader;
+import com.ikalagaming.factory.registry.ContentFolders;
 import com.ikalagaming.factory.save.NewGame;
 import com.ikalagaming.factory.save.SaveSummary;
 import com.ikalagaming.factory.save.Saves;
@@ -432,7 +432,7 @@ public class GameMenus {
     private void loadWorldTypes() {
         String chosen = worldTypes.isEmpty() ? null : worldTypes.get(worldTypeIndex);
         worldTypes.clear();
-        WorldgenData.load(List.of(DefinitionLoader.dataFolder()))
+        WorldgenData.load(ContentFolders.installed())
                 .all(Kind.WORLD_TYPE)
                 .forEach(file -> worldTypes.add(file.id()));
         int found = chosen == null ? -1 : worldTypes.indexOf(chosen);
