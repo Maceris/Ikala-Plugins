@@ -9,3 +9,7 @@ include ':Ikala-Graphics'
 project(':Ikala-Graphics').projectDir = new File('../Ikala-Graphics')
 include ':Random'
 project(':Random').projectDir = new File('../Random')
+include ':Ikala-Permissions'
+project(':Ikala-Permissions').projectDir = new File('../Ikala-Permissions')
+include ':EntityComponentSystem'
+project(':EntityComponentSystem').projectDir = new File('../EntityComponentSystem')
