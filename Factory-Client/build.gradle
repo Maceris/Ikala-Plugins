@@ -167,3 +167,12 @@ tasks.register('starterTextures', JavaExec) {
 	classpath = sourceSets.main.runtimeClasspath + configurations.compileClasspath
 	mainClass = 'com.ikalagaming.factory.render.looks.StarterTextures'
 }
+
+// ./gradlew :Factory-Client:blockNormals --args="[--force] <data folder>". Writes <name>.normal.png beside each block
+// texture that lacks one, from its brightness or its <name>.height.png. Relative paths are from this project's folder.
+tasks.register('blockNormals', JavaExec) {
+	description = 'Writes plausible normal maps for the block textures'
+	group = 'application'
+	classpath = sourceSets.main.runtimeClasspath + configurations.compileClasspath
+	mainClass = 'com.ikalagaming.factory.render.looks.BlockNormals'
+}

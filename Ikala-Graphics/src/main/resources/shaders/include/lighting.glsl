@@ -41,6 +41,8 @@ const float DIELECTRIC_SPECULAR_SCALE = 0.08;
 const float CLEARCOAT_SPECULAR = 0.04;
 // The smallest N.V used for ambient light, so surfaces seen edge on don't divide by nothing
 const float MIN_N_DOT_V = 1e-4;
+// How squarely a shading normal must at least face the eye, see lightSurface
+const float MIN_FACING = 0.02;
 // The average of Schlick's Fresnel over the hemisphere is F0 + (1 - F0) / 21
 const float FRESNEL_AVERAGE_DIVISOR = 21.0;
 // The roughness from which a reflection's ray through the occupancy volume no longer counts, the
@@ -538,6 +540,13 @@ vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 ren
     vec3 normal, vec3 geometricNormal, vec3 tangent, vec3 bitangent, vec2 screen,
     out uint clusterLights)
 {
+    // A bumped normal can lean away from the eye on a surface seen at a slant, which the BRDF reads
+    // as unlit; turn it toward the eye until it faces it, as the bump's slope would hide its back
+    vec3 toView = normalize(-viewPosition);
+    float facing = dot(normal, toView);
+    if (facing < MIN_FACING) {
+        normal = normalize(normal + (MIN_FACING - facing) * toView);
+    }
     // Only the directional light casts shadows, and in full shadow none of it arrives
     vec3 renderNormal = normalize((invViewMatrix * vec4(normal, 0)).xyz);
     float sunVisible = sunVisibility(viewPosition, renderPosition, renderNormal);
