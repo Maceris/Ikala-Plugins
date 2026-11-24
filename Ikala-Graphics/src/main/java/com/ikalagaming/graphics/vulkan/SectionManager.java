@@ -897,7 +897,11 @@ public class SectionManager {
                 return null;
             }
             final float[] out = new float[MaterialAverages.VALUES];
-            if (found.getTexture() != null) {
+            if (found.getAverageColor() != null) {
+                out[MaterialAverages.RED] = found.getAverageColor().x;
+                out[MaterialAverages.RED + 1] = found.getAverageColor().y;
+                out[MaterialAverages.RED + 2] = found.getAverageColor().z;
+            } else if (found.getTexture() != null) {
                 final float[] texture = state.textureRegistry.average(found.getTexture());
                 if (texture == null) {
                     return null;

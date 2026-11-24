@@ -29,9 +29,11 @@ import com.ikalagaming.graphics.gui.data.IkBoolean;
 import com.ikalagaming.graphics.gui.data.IkInt;
 import com.ikalagaming.graphics.gui.data.Viewport;
 import com.ikalagaming.graphics.gui.enums.Condition;
+import com.ikalagaming.graphics.gui.flags.SliderFlags;
 import com.ikalagaming.graphics.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.gui.util.Alignment;
 import com.ikalagaming.graphics.lod.LodPanel;
+import com.ikalagaming.graphics.scene.LightUnits;
 import com.ikalagaming.graphics.scene.MediumRegistry;
 import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
@@ -66,7 +68,7 @@ public class GraphicsDebug extends GuiWindow {
     private static final double TEXELS_PER_MEGA = 1e6;
 
     /** The brightest the ambient light slider goes, in cd/m^2. */
-    private static final float MAX_AMBIENT_INTENSITY = 2;
+    private static final float MAX_AMBIENT_INTENSITY = 100_000;
 
     /** The ambient light intensity slider's value. */
     private final float[] ambientIntensity = new float[1];
@@ -149,8 +151,13 @@ public class GraphicsDebug extends GuiWindow {
     /** How many torches the benchmark scatters over its world. */
     private final int[] benchmarkLights = {0};
 
-    /** The highest exposure the slider offers, two stops brighter. */
-    private static final float MAX_EXPOSURE = 4;
+    /** The exposure values the slider offers, in EV100: from a dim night to a snowfield in sun. */
+    private static final float MIN_EV = -4;
+
+    private static final float MAX_EV = 18;
+
+    /** The strongest sun the slider offers, in lux. */
+    private static final float MAX_SUN_LUX = 200_000;
 
     /** The most torches the benchmark slider offers. */
     private static final int MAX_BENCHMARK_LIGHTS = 8000;
@@ -253,10 +260,10 @@ public class GraphicsDebug extends GuiWindow {
     private static final float LOD_CAMERA_PITCH = 0.5f;
 
     /** The sun's intensity while the level of detail world is shown. */
-    private static final float LOD_SUN_INTENSITY = 3;
+    private static final float LOD_SUN_INTENSITY = LightUnits.physical(3);
 
     /** The ambient light's intensity while the level of detail world is shown. */
-    private static final float LOD_AMBIENT_INTENSITY = 0.25f;
+    private static final float LOD_AMBIENT_INTENSITY = LightUnits.physical(0.25f);
 
     /** The level of detail panel, while one is shown. */
     private LodPanel lodPanel;
@@ -310,11 +317,11 @@ public class GraphicsDebug extends GuiWindow {
         fogBase = new Slider("Fog base height (m)", 0, MIN_FOG_BASE, MAX_FOG_BASE);
         fogAnisotropy = new Slider("Fog anisotropy", 0, -MAX_FOG_ANISOTROPY, MAX_FOG_ANISOTROPY);
         fogHaze = new Checkbox("Atmosphere haze", false);
-        exposure = new Slider("Exposure", 1, 0, MAX_EXPOSURE);
+        exposure = new Slider("Exposure (EV100)", LightUnits.DEFAULT_EV100, MIN_EV, MAX_EV);
         directionalLightX = new Slider("Directional Light X", 0, -1, 1);
         directionalLightY = new Slider("Directional Light Y", 0, -1, 1);
         directionalLightZ = new Slider("Directional Light Z", 0, -1, 1);
-        directionalLightIntensity = new Slider("Directional Light Intensity", 0, 0, 4f);
+        directionalLightIntensity = new Slider("Sun (lux)", 0, 0, MAX_SUN_LUX);
         FilterView[] views = FilterView.values();
         filterViewNames = new String[views.length];
         for (int i = 0; i < views.length; ++i) {
@@ -694,7 +701,7 @@ public class GraphicsDebug extends GuiWindow {
             scene.getFog().setAnisotropy(fogAnisotropy.getValue());
         }
         if (exposure.checkResult()) {
-            scene.setExposure(exposure.getValue());
+            scene.setExposureValue(exposure.getValue());
         }
         if (directionalLightX.checkResult()) {
             directionalLightDir.setComponent(0, directionalLightX.getValue());
@@ -730,7 +737,7 @@ public class GraphicsDebug extends GuiWindow {
         fogFalloff.setValue(scene.getFog().getHeightFalloff());
         fogBase.setValue(scene.getFog().getBaseHeight());
         fogAnisotropy.setValue(scene.getFog().getAnisotropy());
-        exposure.setValue(scene.getExposure());
+        exposure.setValue(scene.getExposureValue());
         directionalLightX.setValue(directionalLightDir.x());
         directionalLightY.setValue(directionalLightDir.y());
         directionalLightZ.setValue(directionalLightDir.z());
@@ -1221,7 +1228,13 @@ public class GraphicsDebug extends GuiWindow {
         }
         final AmbientLight ambient = scene.getSceneLights().getAmbientLight();
         ambientIntensity[0] = ambient.getIntensity();
-        if (IkGui.sliderFloat("Ambient intensity", ambientIntensity, 0, MAX_AMBIENT_INTENSITY)) {
+        if (IkGui.sliderFloat(
+                "Sky (cd/m^2)",
+                ambientIntensity,
+                0,
+                MAX_AMBIENT_INTENSITY,
+                "%.0f",
+                SliderFlags.LOGARITHMIC)) {
             ambient.setIntensity(ambientIntensity[0]);
         }
         IkGui.setItemTooltip(

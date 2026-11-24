@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.graph;
 import com.ikalagaming.graphics.TextureHandle;
 
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
@@ -88,8 +89,9 @@ public class Material {
     private TextureHandle emissiveMap;
 
     /**
-     * The light the surface gives off, in linear light, in the scene's light units: the color times
-     * its strength. Multiplies the emissive map if there is one. Black for none.
+     * The light the surface gives off, in linear light, in cd/m^2 (see {@link
+     * com.ikalagaming.graphics.scene.LightUnits}): the color times its luminance, such as 500 for a
+     * screen. Multiplies the emissive map if there is one. Black for none.
      */
     private final Vector3f emissive;
 
@@ -141,6 +143,14 @@ public class Material {
     private boolean triplanar;
 
     /**
+     * What the surface looks like averaged over it, linear red, green and blue, as far stand-ins
+     * draw it, or null to average its texture. Set where the part of a shared texture a surface
+     * shows differs from the whole, as a grass block's top and bottom variants show different parts
+     * of its one texture: each says the color of its own part.
+     */
+    private Vector3f averageColor;
+
+    /**
      * The material baked faces pointing up in the world are drawn with instead, such as a grass
      * block's top, or null to use this one. It must be in the material cache too.
      */
@@ -174,6 +184,34 @@ public class Material {
         transparency = Transparency.OPAQUE;
         top = null;
         bottom = null;
+    }
+
+    /**
+     * Take another material's values: its colors, BRDF factors, transparency and flags, as a
+     * material file stores them. Textures, the top and bottom variants and the level of detail bake
+     * flags stay as they are.
+     *
+     * @param source The material to copy from.
+     * @return This material.
+     */
+    public Material setValues(@NonNull Material source) {
+        baseColor.set(source.baseColor);
+        emissive.set(source.emissive);
+        anisotropic = source.anisotropic;
+        clearcoat = source.clearcoat;
+        clearcoatGloss = source.clearcoatGloss;
+        metallic = source.metallic;
+        roughness = source.roughness;
+        sheen = source.sheen;
+        sheenTint = source.sheenTint;
+        specular = source.specular;
+        specularTint = source.specularTint;
+        subsurface = source.subsurface;
+        transparency = source.transparency;
+        normalGreenDown = source.normalGreenDown;
+        packedOcclusion = source.packedOcclusion;
+        triplanar = source.triplanar;
+        return this;
     }
 
     /**

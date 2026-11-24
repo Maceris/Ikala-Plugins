@@ -287,9 +287,10 @@ void main() {
     if (!averaged) {
         if (material.emissiveIndex > 0) {
             vec4 emissionTexel = sampleTexture(material.emissiveIndex);
-            // A bake's emission page holds the light itself, see encodeEmission
+            // A bake's emission page holds the light at the reference pre-exposure, see
+            // encodeEmission, and the page's emission brings it to the current one
             emission = (material.flags & MATERIAL_FLAG_BAKED_DATA) != 0
-                ? decodeEmission(emissionTexel)
+                ? emission * decodeEmission(emissionTexel)
                 : emission * emissionTexel.rgb;
         }
         if (material.occlusionRoughnessMetalIndex > 0) {

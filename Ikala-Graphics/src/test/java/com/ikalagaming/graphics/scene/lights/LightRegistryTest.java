@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.ikalagaming.graphics.LightHandle;
+import com.ikalagaming.graphics.scene.LightUnits;
 
 import org.joml.Vector3d;
 import org.joml.Vector3f;
@@ -24,7 +25,8 @@ class LightRegistryTest {
     private static final Vector3f WHITE = new Vector3f(1, 1, 1);
 
     private static LightHandle point(LightRegistry registry, String owner, double x) {
-        return registry.addPoint(owner, new Vector3d(x, 0, 0), WHITE, 1, Float.NaN);
+        return registry.addPoint(
+                owner, new Vector3d(x, 0, 0), WHITE, LightUnits.physical(1), Float.NaN);
     }
 
     @Test
@@ -145,10 +147,10 @@ class LightRegistryTest {
         LightRegistry registry = new LightRegistry();
         LightHandle light = point(registry, OWNER, 0);
         assertEquals(10, registry.getRange(light), 1e-5);
-        registry.setIntensity(OWNER, light, 4);
+        registry.setIntensity(OWNER, light, LightUnits.physical(4));
         assertEquals(20, registry.getRange(light), 1e-5);
         registry.setRange(OWNER, light, 12);
-        registry.setIntensity(OWNER, light, 1);
+        registry.setIntensity(OWNER, light, LightUnits.physical(1));
         assertEquals(12, registry.getRange(light), "Set ranges stay");
         registry.setRange(OWNER, light, Float.NaN);
         assertEquals(10, registry.getRange(light), 1e-5, "Following the intensity again");

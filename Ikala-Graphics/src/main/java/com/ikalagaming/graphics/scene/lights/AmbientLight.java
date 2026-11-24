@@ -20,8 +20,8 @@ public class AmbientLight {
     @NonNull private Vector3f color;
 
     /**
-     * How bright the ambient light is, measured in candela per square meter (cd/m^2). This is
-     * visually like adding emissivity to everything in the scene.
+     * How bright the ambient light is, as the luminance of a sky the same in every direction, in
+     * cd/m^2: an overcast day's is a few thousand. A surface facing it gets pi times this in lux.
      *
      * @param intensity The ambient light intensity.
      * @return The ambient light intensity.

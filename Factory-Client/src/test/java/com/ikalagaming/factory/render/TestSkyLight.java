@@ -79,10 +79,10 @@ class TestSkyLight {
     /** By day nothing is pre-exposed, so the day looks as it did. */
     @Test
     void testNoPreExposureByDay() {
-        assertEquals(1, SkyLight.preExposure(SkyLight.SUN_INTENSITY), EPSILON);
+        assertEquals(1, SkyLight.preExposure(SkyLight.SUN_LUX), EPSILON);
         assertEquals(1, SkyLight.compensation(1), EPSILON);
         // A moonlit night is pre-exposed a lot, and shows darker than day all the same
-        final float moonlit = SkyLight.luxToScene(SkyLight.FULL_MOON_LUX);
+        final float moonlit = SkyLight.FULL_MOON_LUX;
         final float preExposure = SkyLight.preExposure(moonlit);
         assertTrue(preExposure > 1000, "pre-exposure " + preExposure);
         assertTrue(SkyLight.compensation(preExposure) < 1);

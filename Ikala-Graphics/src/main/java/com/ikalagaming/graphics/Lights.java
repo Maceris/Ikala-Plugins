@@ -19,13 +19,14 @@ import javax.annotation.Nullable;
  * is ignored with a warning. The sun and the ambient light are scene-wide, set through {@link
  * com.ikalagaming.graphics.scene.lights.SceneLights}.
  *
- * <p>A light reaches a limited distance, its range. Without one given, the range follows the
- * intensity, so a light of intensity 1 reaches 10 m; see {@link LightRange}.
+ * <p>Intensities are luminous intensity in candela: a candle is 1, a 60 W bulb about 70. A light
+ * reaches a limited distance, its range. Without one given, the range follows the intensity, so a
+ * light of 33,000 candela reaches 10 m; see {@link LightRange}.
  *
  * <p>Everything here is safe from any thread, and changes show from the next frame.
  *
  * <pre>
- * LightHandle torch = graphics.lights().point(position, warmWhite, 1);
+ * LightHandle torch = graphics.lights().point(position, warmWhite, 100, 8);
  * graphics.lights().move(torch, 1, 2, 3);
  * graphics.lights().remove(torch);
  * </pre>
@@ -52,7 +53,7 @@ public final class Lights {
      *
      * @param position The world position.
      * @param color The color.
-     * @param intensity The intensity.
+     * @param intensity The intensity, in candela.
      * @return The handle.
      * @throws IllegalStateException If the plugin was unloaded, or graphics isn't running.
      */
@@ -66,7 +67,7 @@ public final class Lights {
      *
      * @param position The world position.
      * @param color The color.
-     * @param intensity The intensity.
+     * @param intensity The intensity, in candela.
      * @param range How far it reaches in meters, or NaN to follow the intensity.
      * @return The handle.
      * @throws IllegalStateException If the plugin was unloaded, or graphics isn't running.
@@ -84,7 +85,7 @@ public final class Lights {
      * @param position The world position.
      * @param direction Which way it points.
      * @param color The color.
-     * @param intensity The intensity.
+     * @param intensity The intensity, in candela.
      * @param outerAngle The angle from the axis where the light ends, in degrees.
      * @return The handle.
      * @throws IllegalArgumentException If the direction is zero or the angle out of range.
@@ -106,7 +107,7 @@ public final class Lights {
      * @param position The world position.
      * @param direction Which way it points.
      * @param color The color.
-     * @param intensity The intensity.
+     * @param intensity The intensity, in candela.
      * @param innerAngle The angle from the axis where the light starts to fade, in degrees.
      * @param outerAngle The angle from the axis where the light ends, in degrees.
      * @param range How far it reaches in meters, or NaN to follow the intensity.
@@ -192,7 +193,7 @@ public final class Lights {
      * to match.
      *
      * @param light The light.
-     * @param intensity The new intensity.
+     * @param intensity The new intensity, in candela.
      */
     public void setIntensity(@Nullable LightHandle light, float intensity) {
         LightRegistry registry = registryOrNull();

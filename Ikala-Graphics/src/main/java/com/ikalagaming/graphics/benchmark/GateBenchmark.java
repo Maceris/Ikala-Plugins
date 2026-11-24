@@ -12,6 +12,7 @@ import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.ThreadStops;
 import com.ikalagaming.graphics.bake.BakeSource;
 import com.ikalagaming.graphics.graph.SunShadowCache;
+import com.ikalagaming.graphics.scene.LightUnits;
 import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
@@ -197,13 +198,13 @@ public final class GateBenchmark {
     private volatile Vector3d cameraPosition;
 
     /** How bright the benchmark's sun is. */
-    private static final float SUN_INTENSITY = 3;
+    private static final float SUN_INTENSITY = LightUnits.physical(3);
 
     /** How bright the benchmark's ambient light is. */
-    private static final float AMBIENT_INTENSITY = 0.25f;
+    private static final float AMBIENT_INTENSITY = LightUnits.physical(0.25f);
 
     /** How bright the ambient light is at night, from the startup property. */
-    private static final float NIGHT_AMBIENT_INTENSITY = 0.01f;
+    private static final float NIGHT_AMBIENT_INTENSITY = LightUnits.physical(0.01f);
 
     /** How fast the camera walks along x while it turns, in meters a second, 0 to stand still. */
     private double walkSpeed;

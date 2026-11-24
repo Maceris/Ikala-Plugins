@@ -7,6 +7,7 @@ import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
+import com.ikalagaming.graphics.scene.LightUnits;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
@@ -46,10 +47,10 @@ public final class CharacterStage {
     private static final Vector3f SUN_DIRECTION = new Vector3f(-0.35f, -0.8f, -0.5f);
 
     /** The sun's strength, as the workbench uses. */
-    private static final float SUN_INTENSITY = 3;
+    private static final float SUN_INTENSITY = LightUnits.physical(3);
 
     /** The sky light's strength. */
-    private static final float AMBIENT_INTENSITY = 0.3f;
+    private static final float AMBIENT_INTENSITY = LightUnits.physical(0.3f);
 
     /** The floor's model ID. */
     private static final String FLOOR_ID = "characters/editor-floor";

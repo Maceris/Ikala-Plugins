@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.benchmark;
 
 import com.ikalagaming.graphics.EmitterHandle;
 import com.ikalagaming.graphics.Particles;
+import com.ikalagaming.graphics.scene.LightUnits;
 import com.ikalagaming.graphics.scene.ParticleEffect;
 
 import lombok.NonNull;
@@ -49,7 +50,7 @@ public final class FxTest {
                     .speed(0, 0)
                     .size(0.06f, 0.01f)
                     .colors(new Vector4f(0.4f, 0.7f, 1, 0.8f), new Vector4f(0.2f, 0.4f, 1, 0))
-                    .emissive(4)
+                    .emissive(LightUnits.physical(4))
                     .lit(false)
                     .build();
 
@@ -63,7 +64,7 @@ public final class FxTest {
                     .acceleration(GRAVITY)
                     .size(0.04f, 0.01f)
                     .colors(new Vector4f(1, 0.6f, 0.2f, 1), new Vector4f(1, 0.2f, 0.05f, 0.5f))
-                    .emissive(6)
+                    .emissive(LightUnits.physical(6))
                     .lit(false)
                     .stretch(0.02f)
                     .inheritVelocity(1)
@@ -79,7 +80,7 @@ public final class FxTest {
                     .spawnRadius(0.4f)
                     .size(0.08f, 0)
                     .colors(new Vector4f(0.7f, 0.3f, 1, 0.9f), new Vector4f(0.5f, 0.2f, 1, 0))
-                    .emissive(3)
+                    .emissive(LightUnits.physical(3))
                     .lit(false)
                     .follow(1)
                     .build();
@@ -95,7 +96,7 @@ public final class FxTest {
                     .spawnBox(new Vector3f(1.5f, 0.05f, 0.05f))
                     .size(0.05f, 0.02f)
                     .colors(new Vector4f(0.3f, 1, 0.4f, 0.9f), new Vector4f(0.1f, 1, 0.2f, 0))
-                    .emissive(3)
+                    .emissive(LightUnits.physical(3))
                     .lit(false)
                     .build();
 

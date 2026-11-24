@@ -8,6 +8,7 @@ import com.ikalagaming.converter.scene.ScenePlacement;
 import com.ikalagaming.graphics.ColorSpace;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.TextureFilter;
 import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.TextureWrap;
 import com.ikalagaming.graphics.UI;
@@ -36,6 +37,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
@@ -43,6 +45,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import javax.annotation.Nullable;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 
 /**
  * The asset workbench: browse for raw assets and open them. Images, DDS textures included, show in
@@ -173,6 +178,7 @@ public class Workbench {
                 new SceneView(
                         graphics,
                         new MaterialEditor(
+                                graphics.ui(),
                                 this::loadTexture,
                                 () -> viewer.getImage() == null ? null : viewer.getImage().path()));
         browser = new FileBrowser(Path.of(""));
@@ -581,7 +587,12 @@ public class Workbench {
                         final TextureHandle texture =
                                 name.endsWith(".dds")
                                         ? graphics.textures().load(DdsFile.read(file), colorSpace)
-                                        : graphics.textures().load(file.toString(), colorSpace);
+                                        : graphics.textures()
+                                                .load(
+                                                        file.toString(),
+                                                        colorSpace,
+                                                        TextureWrap.REPEAT,
+                                                        filterFor(file));
                         post(
                                 () -> {
                                     loaded.accept(texture);
@@ -593,6 +604,38 @@ public class Workbench {
                     }
                 });
     }
+
+    /**
+     * How to sample an image: small ones are pixel art, like 16x16 block textures, and stay sharp
+     * up close; larger ones blend, as painted and photographed textures expect.
+     *
+     * @param file The image.
+     * @return The filter; smooth if its size can't be read.
+     */
+    static TextureFilter filterFor(@NonNull Path file) {
+        try (ImageInputStream in = ImageIO.createImageInputStream(file.toFile())) {
+            if (in == null) {
+                return TextureFilter.SMOOTH;
+            }
+            final Iterator<ImageReader> readers = ImageIO.getImageReaders(in);
+            if (!readers.hasNext()) {
+                return TextureFilter.SMOOTH;
+            }
+            final ImageReader reader = readers.next();
+            try {
+                reader.setInput(in);
+                final int longest = Math.max(reader.getWidth(0), reader.getHeight(0));
+                return longest <= PIXEL_ART_MAX ? TextureFilter.PIXELS : TextureFilter.SMOOTH;
+            } finally {
+                reader.dispose();
+            }
+        } catch (IOException | RuntimeException e) {
+            return TextureFilter.SMOOTH;
+        }
+    }
+
+    /** The longest side, in pixels, of an image taken for pixel art. */
+    static final int PIXEL_ART_MAX = 128;
 
     /**
      * Read a model and work out how to place it. On the loader thread.

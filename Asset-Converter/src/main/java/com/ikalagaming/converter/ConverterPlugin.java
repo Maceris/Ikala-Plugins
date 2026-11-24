@@ -148,7 +148,15 @@ public class ConverterPlugin extends Plugin {
                         sampleCount)
                 .open();
         // Shown once so later toggles only change its visibility, and keep its state
-        ui.show(new AssetInspectorWindow(ui, sampleCount).build());
+        ui.show(
+                new AssetInspectorWindow(
+                                ui,
+                                sampleCount,
+                                () -> {
+                                    setInspectorVisible(false);
+                                    ui.setVisible(MainMenu.SURFACE_ID, true);
+                                })
+                        .build());
         ui.setVisible(AssetInspectorWindow.SURFACE_ID, false);
 
         guiManager.setToolbar(graphics, new DebugToolbar(guiManager));

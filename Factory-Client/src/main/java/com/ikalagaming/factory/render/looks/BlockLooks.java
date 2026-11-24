@@ -3,13 +3,15 @@ package com.ikalagaming.factory.render.looks;
 import com.ikalagaming.factory.FactoryClientPlugin;
 import com.ikalagaming.graphics.Format;
 import com.ikalagaming.graphics.GraphicsContext;
+import com.ikalagaming.graphics.TextureFilter;
 import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.TextureWrap;
 import com.ikalagaming.graphics.asset.AssetFile;
 import com.ikalagaming.graphics.asset.AssetFormat;
+import com.ikalagaming.graphics.asset.MaterialSection;
 import com.ikalagaming.graphics.asset.MeshSection;
 import com.ikalagaming.graphics.asset.Section;
-import com.ikalagaming.graphics.benchmark.BlockTextures;
+import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.launcher.PluginFolder;
 
@@ -33,12 +35,13 @@ import javax.imageio.ImageIO;
 /**
  * Finds block looks, their models and textures in the namespaced asset layout: {@code
  * assets/<namespace>/looks/block/<id>.kvt}, {@code assets/<namespace>/models/<path>.ika} (meshes
- * exported from the asset editor, see {@link MeshSection}) and {@code
+ * exported from the asset editor, see {@link MeshSection}), {@code
+ * assets/<namespace>/materials/<path>.ika} (see {@link MaterialSection}) and {@code
  * assets/<namespace>/textures/<path>.png}. Folders are searched in order and the first that has a
  * file wins, so resource packs can go in front of the base game later.
  *
- * <p>Textures are pixel art, sampled linearly for now, so each is enlarged {@value #SCALE} times on
- * load to keep its pixels sharp. Render thread only.
+ * <p>Textures are pixel art, sampled so their pixels stay sharp up close, of any size: a model's
+ * texture coordinates decide which part of it each face shows. Render thread only.
  */
 @Slf4j
 public final class BlockLooks implements AutoCloseable {
@@ -55,6 +58,12 @@ public final class BlockLooks implements AutoCloseable {
     /** The extension of models. */
     public static final String MODEL_EXTENSION = AssetFormat.EXTENSION;
 
+    /** The folder under a namespace holding materials. */
+    public static final String MATERIALS_FOLDER = "materials";
+
+    /** The extension of materials. */
+    public static final String MATERIAL_EXTENSION = AssetFormat.EXTENSION;
+
     /** The folder under a namespace holding textures. */
     public static final String TEXTURES_FOLDER = "textures";
 
@@ -66,9 +75,6 @@ public final class BlockLooks implements AutoCloseable {
 
     /** The namespace of names that don't give one. */
     public static final String DEFAULT_NAMESPACE = "lotomation";
-
-    /** How many times each texture is enlarged on load. */
-    static final int SCALE = 4;
 
     /** Bytes per pixel. */
     private static final int CHANNELS = 4;
@@ -94,8 +100,17 @@ public final class BlockLooks implements AutoCloseable {
     /** Models by name; null for ones that couldn't be loaded. */
     private final Map<String, MeshData> models = new HashMap<>();
 
+    /** Materials by name; null for ones that couldn't be read. */
+    private final Map<String, Material> materials = new HashMap<>();
+
     /** Textures by name; null for ones that couldn't be loaded. */
     private final Map<String, TextureHandle> textures = new HashMap<>();
+
+    /** Normal maps by their texture's name; null for textures that have none. */
+    private final Map<String, TextureHandle> normalMaps = new HashMap<>();
+
+    /** The images textures were loaded from, by name, for working out what parts of them show. */
+    private final Map<String, BufferedImage> images = new HashMap<>();
 
     /**
      * Looks from some folders.
@@ -202,6 +217,44 @@ public final class BlockLooks implements AutoCloseable {
     }
 
     /**
+     * A material, read the first time it is asked for. Callers copy its values into their own
+     * materials, since each face has its own texture.
+     *
+     * @param name The material's name, such as {@code lotomation:block/stone}.
+     * @return The material, with no textures, or null if it is missing or can't be read, which is
+     *     logged once.
+     */
+    public Material material(@NonNull String name) {
+        if (materials.containsKey(name)) {
+            return materials.get(name);
+        }
+        final Material material = readMaterial(name);
+        materials.put(name, material);
+        return material;
+    }
+
+    /**
+     * Read a material file. Its texture names aren't used yet: a look's textures give each face its
+     * base color.
+     *
+     * @param name The material's name.
+     * @return The material, or null.
+     */
+    private Material readMaterial(@NonNull String name) {
+        final Optional<Path> file = find(name, MATERIALS_FOLDER, MATERIAL_EXTENSION);
+        if (file.isEmpty()) {
+            log.warn("The material {} wasn't found", name);
+            return null;
+        }
+        try {
+            return MaterialSection.read(AssetFile.open(file.get())).material();
+        } catch (RuntimeException e) {
+            log.warn("Couldn't read the material {}", file.get(), e);
+            return null;
+        }
+    }
+
+    /**
      * A texture, loaded the first time it is asked for.
      *
      * @param name The texture's name, such as {@code lotomation:block/stone}.
@@ -217,12 +270,54 @@ public final class BlockLooks implements AutoCloseable {
     }
 
     /**
+     * A texture's normal map, {@code <name>.normal.png} beside it, loaded the first time it is
+     * asked for. See {@link BlockNormals} for making them.
+     *
+     * @param name The texture's name, such as {@code lotomation:block/stone}.
+     * @return The normal map, or null if the texture has none or it can't be read.
+     */
+    public TextureHandle normalMap(@NonNull String name) {
+        if (normalMaps.containsKey(name)) {
+            return normalMaps.get(name);
+        }
+        final String mapName = name + BlockNormals.NORMAL_SUFFIX;
+        TextureHandle map = null;
+        if (find(mapName, TEXTURES_FOLDER, TEXTURE_EXTENSION).isPresent()) {
+            map = loadImage(mapName, Format.R8G8B8A8_UNORM);
+        }
+        normalMaps.put(name, map);
+        return map;
+    }
+
+    /**
+     * The image a texture was loaded from, loading the texture if it hasn't been.
+     *
+     * @param name The texture's name.
+     * @return The image, or null if it is missing or can't be read.
+     */
+    public BufferedImage image(@NonNull String name) {
+        texture(name);
+        return images.get(name);
+    }
+
+    /**
      * Load a texture.
      *
      * @param name The texture's name.
      * @return The texture, or null.
      */
     private TextureHandle loadTexture(@NonNull String name) {
+        return loadImage(name, Format.R8G8B8A8_SRGB);
+    }
+
+    /**
+     * Load an image from the textures folder, pixel-sharp.
+     *
+     * @param name The image's name, without the extension.
+     * @param format How its values are read: sRGB for colors, UNORM for data like normals.
+     * @return The texture, or null.
+     */
+    private TextureHandle loadImage(@NonNull String name, @NonNull Format format) {
         final Optional<Path> file = find(name, TEXTURES_FOLDER, TEXTURE_EXTENSION);
         if (file.isEmpty()) {
             log.warn("The texture {} wasn't found", name);
@@ -235,22 +330,26 @@ public final class BlockLooks implements AutoCloseable {
             log.warn("Couldn't read the texture {}", file.get(), e);
             return null;
         }
-        if (image == null || image.getWidth() != image.getHeight()) {
-            log.warn("The texture {} must be a square image", file.get());
+        if (image == null) {
+            log.warn("The texture {} isn't an image", file.get());
             return null;
         }
-        final int size = image.getWidth();
-        final byte[] pixels = BlockTextures.enlarge(rgba(image), size, SCALE);
+        if (format == Format.R8G8B8A8_SRGB) {
+            images.put(name, image);
+        }
+        final byte[] pixels = rgba(image);
         final ByteBuffer buffer = MemoryUtil.memAlloc(pixels.length);
         try {
             buffer.put(pixels).flip();
+            // Clamped, since a model's faces take parts of it that don't wrap into each other
             return graphics.textures()
                     .load(
                             buffer,
-                            Format.R8G8B8A8_SRGB,
-                            size * SCALE,
-                            size * SCALE,
-                            TextureWrap.REPEAT);
+                            format,
+                            image.getWidth(),
+                            image.getHeight(),
+                            TextureWrap.CLAMP,
+                            TextureFilter.PIXELS);
         } finally {
             MemoryUtil.memFree(buffer);
         }
@@ -332,9 +431,13 @@ public final class BlockLooks implements AutoCloseable {
     public void close() {
         if (!graphics.isClosed()) {
             textures.values().forEach(graphics.textures()::release);
+            normalMaps.values().forEach(graphics.textures()::release);
         }
         textures.clear();
+        normalMaps.clear();
+        images.clear();
         models.clear();
+        materials.clear();
         looks.clear();
     }
 }

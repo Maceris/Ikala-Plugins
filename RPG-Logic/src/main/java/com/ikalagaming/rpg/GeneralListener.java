@@ -1,5 +1,6 @@
 package com.ikalagaming.rpg;
 
+import com.ikalagaming.graphics.scene.LightUnits;
 import com.ikalagaming.event.EventHandler;
 import com.ikalagaming.event.Listener;
 import com.ikalagaming.graphics.GraphicsManager;
@@ -80,7 +81,8 @@ public class GeneralListener implements Listener {
 
         Vector3f direction = GeneralListener.toVector3f(dirLightTemp.getMember("Direction"));
 
-        float intensity = dirLightTemp.getFloat("Intensity");
+        // Saved at the scale the renderer was tuned at, where full sun is 3
+        float intensity = LightUnits.physical(dirLightTemp.getFloat("Intensity"));
 
         DirectionalLight dirLight = new DirectionalLight(color, direction, intensity);
         GraphicsManager.getScene().getSceneLights().setDirLight(dirLight);

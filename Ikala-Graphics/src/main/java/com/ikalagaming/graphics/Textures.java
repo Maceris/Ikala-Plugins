@@ -85,10 +85,30 @@ public final class Textures {
             @NonNull String texturePath,
             @NonNull ColorSpace colorSpace,
             @NonNull TextureWrap wrap) {
+        return load(texturePath, colorSpace, wrap, TextureFilter.SMOOTH);
+    }
+
+    /**
+     * Start loading a texture from an image file, with a chosen wrap and filter, such as pixel art
+     * that should stay sharp up close. DDS files are always smooth.
+     *
+     * @param texturePath The full path to the image.
+     * @param colorSpace The color space its values are in.
+     * @param wrap What it shows outside its texture coordinates.
+     * @param filter How it is sampled when magnified.
+     * @return The handle for the new texture, which becomes resident once uploaded.
+     * @throws TextureException If the image can't be read, or the texture can't be created.
+     * @throws IllegalStateException If the plugin was unloaded, or the renderer isn't running.
+     */
+    public TextureHandle load(
+            @NonNull String texturePath,
+            @NonNull ColorSpace colorSpace,
+            @NonNull TextureWrap wrap,
+            @NonNull TextureFilter filter) {
         context.checkOpen();
         return renderer()
                 .getTextureLoader()
-                .load(context.getOwnerKey(), texturePath, colorSpace, wrap);
+                .load(context.getOwnerKey(), texturePath, colorSpace, wrap, filter);
     }
 
     /**
@@ -197,10 +217,34 @@ public final class Textures {
             int width,
             int height,
             @NonNull TextureWrap wrap) {
+        return load(buffer, format, width, height, wrap, TextureFilter.SMOOTH);
+    }
+
+    /**
+     * Start loading a texture from raw pixel data, with a chosen wrap and filter, such as pixel art
+     * that should stay sharp up close.
+     *
+     * @param buffer The tightly packed pixel data, from its position to its limit, or null.
+     * @param format The format of the pixel data.
+     * @param width The width in pixels.
+     * @param height The height in pixels.
+     * @param wrap What it shows outside its texture coordinates.
+     * @param filter How it is sampled when magnified.
+     * @return The handle for the new texture, which becomes resident once uploaded.
+     * @throws TextureException If the format isn't supported, or the texture can't be created.
+     * @throws IllegalStateException If the plugin was unloaded, or the renderer isn't running.
+     */
+    public TextureHandle load(
+            @Nullable ByteBuffer buffer,
+            @NonNull Format format,
+            int width,
+            int height,
+            @NonNull TextureWrap wrap,
+            @NonNull TextureFilter filter) {
         context.checkOpen();
         return renderer()
                 .getTextureLoader()
-                .load(context.getOwnerKey(), buffer, format, width, height, wrap);
+                .load(context.getOwnerKey(), buffer, format, width, height, wrap, filter);
     }
 
     /**

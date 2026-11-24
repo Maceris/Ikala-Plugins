@@ -1,5 +1,6 @@
 package com.ikalagaming.rpg.windows;
 
+import com.ikalagaming.graphics.scene.LightUnits;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.data.IkBoolean;
@@ -69,13 +70,14 @@ public class SceneControls implements GUIWindow {
             // we haven't been set up yet
             return;
         }
-        ambientLight.setIntensity(ambientFactor[0]);
+        // The sliders are at the scale the renderer was tuned at, where full sun is 3
+        ambientLight.setIntensity(LightUnits.physical(ambientFactor[0]));
         ambientLight.getColor().set(ambientColor[0], ambientColor[1], ambientColor[2]);
 
         DirectionalLight dirLight = sceneLights.getDirLight();
         dirLight.getDirection().set(dirLightX[0], dirLightY[0], dirLightZ[0]);
         dirLight.getColor().set(dirLightColor[0], dirLightColor[1], dirLightColor[2]);
-        dirLight.setIntensity(dirLightIntensity[0]);
+        dirLight.setIntensity(LightUnits.physical(dirLightIntensity[0]));
 
         Fog fog = scene.getFog();
         fog.setActive(fogEnabled.get());
@@ -89,7 +91,7 @@ public class SceneControls implements GUIWindow {
         AmbientLight ambientLight = sceneLights.getAmbientLight();
         Vector3f color = ambientLight.getColor();
 
-        ambientFactor = new float[] {ambientLight.getIntensity()};
+        ambientFactor = new float[] {LightUnits.reference(ambientLight.getIntensity())};
         ambientColor = new float[] {color.x, color.y, color.z};
 
         DirectionalLight dirLight = sceneLights.getDirLight();
@@ -99,7 +101,7 @@ public class SceneControls implements GUIWindow {
         dirLightX = new float[] {pos.x};
         dirLightY = new float[] {pos.y};
         dirLightZ = new float[] {pos.z};
-        dirLightIntensity = new float[] {dirLight.getIntensity()};
+        dirLightIntensity = new float[] {LightUnits.reference(dirLight.getIntensity())};
 
         Fog fog = scene.getFog();
         fogColor = new float[] {fog.getColor().x, fog.getColor().y, fog.getColor().z};

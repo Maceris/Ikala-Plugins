@@ -441,7 +441,8 @@ public class FogRender {
                             camera,
                             viewDistance,
                             particles,
-                            waterAddress(state, scene, camera)));
+                            waterAddress(state, scene, camera),
+                            scene.getPreExposure()));
             vkCmdPushConstants(commandBuffer, injectLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, inject);
             vkCmdDispatch(commandBuffer, groupsX, groupsY, VoxelOitMath.SLICES);
 
@@ -519,6 +520,7 @@ public class FogRender {
      * @param viewDistance The view distance.
      * @param particles Whether volumetric particles were splatted into the froxels.
      * @param water The water map's address, see {@link WaterVolume}, or 0 for none.
+     * @param preExposure What media's emission is multiplied by, see LightUnits.
      * @return The buffer's device address.
      */
     private long writeMedia(
@@ -527,7 +529,8 @@ public class FogRender {
             @NonNull Vector3d camera,
             double viewDistance,
             boolean particles,
-            long water) {
+            long water,
+            float preExposure) {
         registry.snapshot(media);
         SharedBuffer buffer = mediaBuffers[state.frameIndex];
         final long bytes = MEDIA_HEADER_SIZE + (long) media.size() * MEDIUM_SIZE;
@@ -567,9 +570,9 @@ public class FogRender {
                 volume.albedo().y(),
                 volume.albedo().z(),
                 volume.density(),
-                volume.emission().x(),
-                volume.emission().y(),
-                volume.emission().z(),
+                volume.emission().x() * preExposure,
+                volume.emission().y() * preExposure,
+                volume.emission().z() * preExposure,
                 volume.noiseScale(),
                 (float) (volume.wind().x() * seconds),
                 (float) (volume.wind().y() * seconds),

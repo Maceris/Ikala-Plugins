@@ -21,7 +21,9 @@ public final class KnownSections {
                             SectionTag.META,
                             Set.of(AssetMetadata.VERSION),
                             MeshSection.TAG,
-                            Set.of(MeshSection.VERSION)));
+                            Set.of(MeshSection.VERSION),
+                            MaterialSection.TAG,
+                            Set.of(MaterialSection.VERSION)));
 
     /** Supported versions of each known tag. */
     private final Map<Integer, Set<Integer>> versions;

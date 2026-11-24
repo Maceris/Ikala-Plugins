@@ -21,6 +21,7 @@ import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.TextureWrap;
 import com.ikalagaming.graphics.Textures;
 import com.ikalagaming.graphics.graph.Material;
+import com.ikalagaming.graphics.scene.LightUnits;
 import com.ikalagaming.plugins.PluginThreads;
 
 import lombok.Getter;
@@ -618,7 +619,10 @@ public final class ShownCharacter implements AutoCloseable {
         material.setPackedOcclusion(data.packedOcclusion());
         material.setEmissiveMap(image(imageTextures, data.emissiveImage()));
         float[] emissive = data.emissive();
-        material.getEmissive().set(emissive[0], emissive[1], emissive[2]);
+        // Parts give emission at the scale the renderer was tuned at, as imported models do
+        material.getEmissive()
+                .set(emissive[0], emissive[1], emissive[2])
+                .mul(LightUnits.physical(1));
         return material;
     }
 

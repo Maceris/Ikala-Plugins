@@ -103,7 +103,11 @@ public class SceneRender implements RenderStage {
                         materialCount * MATERIAL_SIZE);
 
         for (int i = 0; i < materialCount; ++i) {
-            writeMaterial(materialData, cache.getMaterial(i), state.textureRegistry);
+            writeMaterial(
+                    materialData,
+                    cache.getMaterial(i),
+                    state.textureRegistry,
+                    scene.getPreExposure());
         }
     }
 
@@ -114,11 +118,13 @@ public class SceneRender implements RenderStage {
      * @param materialData Where to write it.
      * @param material The material.
      * @param textures The texture registry, for the textures' bindless slots.
+     * @param preExposure What its emission, in cd/m^2, is multiplied by, see LightUnits.
      */
     public static void writeMaterial(
             @NonNull ByteBuffer materialData,
             @NonNull Material material,
-            @NonNull TextureRegistry textures) {
+            @NonNull TextureRegistry textures,
+            float preExposure) {
         Vector4f baseColor = material.getBaseColor();
         materialData.putFloat(baseColor.x);
         materialData.putFloat(baseColor.y);
@@ -141,9 +147,9 @@ public class SceneRender implements RenderStage {
         materialData.putInt(textures.slotOrDefault(material.getTexture()));
 
         final Vector3f emissive = material.getEmissive();
-        materialData.putFloat(emissive.x);
-        materialData.putFloat(emissive.y);
-        materialData.putFloat(emissive.z);
+        materialData.putFloat(emissive.x * preExposure);
+        materialData.putFloat(emissive.y * preExposure);
+        materialData.putFloat(emissive.z * preExposure);
         // Full ambient light, unless a pixel's occlusion texture says less
         materialData.putFloat(1.0f);
         materialData.putInt(textures.slotOrDefault(material.getOcclusionRoughnessMetal()));
@@ -175,11 +181,18 @@ public class SceneRender implements RenderStage {
                 packed != null
                         ? packed[PACKED_METALLIC]
                         : packedUnknown ? UNKNOWN : material.getMetallic());
+        final Vector3f stated = material.getAverageColor();
         for (int c = 0; c < COLORS; ++c) {
-            materialData.putFloat(
-                    texture != null
-                            ? texture[c]
-                            : colorUnknown ? UNKNOWN : ToneMapMath.decode(baseColor.get(c)));
+            final float color;
+            if (stated != null) {
+                // The part of a shared texture this surface shows
+                color = stated.get(c);
+            } else if (texture != null) {
+                color = texture[c];
+            } else {
+                color = colorUnknown ? UNKNOWN : ToneMapMath.decode(baseColor.get(c));
+            }
+            materialData.putFloat(color);
         }
         materialData.putFloat(
                 packed != null

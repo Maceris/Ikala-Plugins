@@ -7,6 +7,7 @@ import static org.lwjgl.vulkan.VK13.*;
 import com.ikalagaming.graphics.ColorSpace;
 import com.ikalagaming.graphics.Format;
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.TextureFilter;
 import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.TextureWrap;
 import com.ikalagaming.graphics.exceptions.TextureException;
@@ -70,6 +71,15 @@ public class TextureLoaderVulkan {
 
     /** Sampler shared by textures that don't tile. Linear, anisotropic, clamped to the edge. */
     private long clampSampler;
+
+    /**
+     * Sampler shared by pixel art that tiles: nearest when magnified, else as {@link
+     * #repeatSampler}.
+     */
+    private long repeatPixelSampler;
+
+    /** Sampler shared by pixel art that doesn't tile: nearest when magnified, clamped. */
+    private long clampPixelSampler;
 
     /** A 1x1 white texture that lives in the default bindless slot. */
     private TextureInfoVulkan defaultTexture;
@@ -187,8 +197,10 @@ public class TextureLoaderVulkan {
      */
     public TextureLoaderVulkan(@NonNull VulkanState state) {
         this.state = state;
-        repeatSampler = createSampler(VK_SAMPLER_ADDRESS_MODE_REPEAT);
-        clampSampler = createSampler(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+        repeatSampler = createSampler(VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_FILTER_LINEAR);
+        clampSampler = createSampler(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_FILTER_LINEAR);
+        repeatPixelSampler = createSampler(VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_FILTER_NEAREST);
+        clampPixelSampler = createSampler(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_FILTER_NEAREST);
 
         ByteBuffer white = MemoryUtil.memAlloc(4);
         try {
@@ -216,8 +228,12 @@ public class TextureLoaderVulkan {
         defaultTexture = null;
         vkDestroySampler(state.device.logical, repeatSampler, null);
         vkDestroySampler(state.device.logical, clampSampler, null);
+        vkDestroySampler(state.device.logical, repeatPixelSampler, null);
+        vkDestroySampler(state.device.logical, clampPixelSampler, null);
         repeatSampler = VK_NULL_HANDLE;
         clampSampler = VK_NULL_HANDLE;
+        repeatPixelSampler = VK_NULL_HANDLE;
+        clampPixelSampler = VK_NULL_HANDLE;
     }
 
     /** The most anisotropic filtering the shared samplers ask for. */
@@ -227,14 +243,15 @@ public class TextureLoaderVulkan {
      * Create a sampler shared by the textures we load.
      *
      * @param addressMode The VkSamplerAddressMode for every axis.
+     * @param magFilter The VkFilter when magnified; minified, mip levels always blend.
      * @return The VkSampler.
      */
-    private long createSampler(int addressMode) {
+    private long createSampler(int addressMode, int magFilter) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkSamplerCreateInfo samplerCreateInfo =
                     VkSamplerCreateInfo.calloc(stack)
                             .sType$Default()
-                            .magFilter(VK_FILTER_LINEAR)
+                            .magFilter(magFilter)
                             .minFilter(VK_FILTER_LINEAR)
                             .mipmapMode(VK_SAMPLER_MIPMAP_MODE_LINEAR)
                             .addressModeU(addressMode)
@@ -261,12 +278,16 @@ public class TextureLoaderVulkan {
     }
 
     /**
-     * The shared sampler for a wrap.
+     * The shared sampler for a wrap and filter.
      *
      * @param wrap The wrap.
+     * @param filter How it is magnified.
      * @return The VkSampler.
      */
-    private long sampler(@NonNull TextureWrap wrap) {
+    private long sampler(@NonNull TextureWrap wrap, @NonNull TextureFilter filter) {
+        if (filter == TextureFilter.PIXELS) {
+            return wrap == TextureWrap.REPEAT ? repeatPixelSampler : clampPixelSampler;
+        }
         return wrap == TextureWrap.REPEAT ? repeatSampler : clampSampler;
     }
 
@@ -295,9 +316,37 @@ public class TextureLoaderVulkan {
             int width,
             int height,
             @NonNull TextureWrap wrap) {
+        return load(owner, buffer, format, width, height, wrap, TextureFilter.SMOOTH);
+    }
+
+    /**
+     * Start loading a texture from a byte buffer, as {@link #load(String, ByteBuffer, Format, int,
+     * int, TextureWrap)} does, with a chosen filter.
+     *
+     * @param owner The owner key the texture is tracked under.
+     * @param buffer The data to load, from its position to its limit, or null.
+     * @param format The format of the image data.
+     * @param width The width of the texture, in pixels.
+     * @param height The height of the texture, in pixels.
+     * @param wrap What it shows outside its texture coordinates.
+     * @param filter How it is sampled when magnified.
+     * @return The handle for the texture, pending until uploaded.
+     * @throws TextureException If the format is not supported, or there are no bindless slots left.
+     * @throws IllegalArgumentException If the size isn't positive, or the buffer holds fewer bytes
+     *     than an image of that size and format takes.
+     */
+    public TextureHandle load(
+            @NonNull String owner,
+            ByteBuffer buffer,
+            @NonNull Format format,
+            int width,
+            int height,
+            @NonNull TextureWrap wrap,
+            @NonNull TextureFilter filter) {
         checkData(buffer, format, width, height);
         final int mipLevels = mipLevels(buffer != null, format, width, height);
-        TextureInfoVulkan info = createImage(format, width, height, mipLevels, mipLevels > 1, wrap);
+        TextureInfoVulkan info =
+                createImage(format, width, height, mipLevels, mipLevels > 1, wrap, filter);
         final float[] average = buffer == null ? null : average(buffer, format);
         return queue(owner, info, buffer, format, width, height, average, null);
     }
@@ -368,7 +417,14 @@ public class TextureLoaderVulkan {
         }
         final float[] average = average(dds, ColorSpace.of(format));
         TextureInfoVulkan info =
-                createImage(format, width, height, dds.getMipLevels(), false, wrap);
+                createImage(
+                        format,
+                        width,
+                        height,
+                        dds.getMipLevels(),
+                        false,
+                        wrap,
+                        TextureFilter.SMOOTH);
         return queue(owner, info, dds.getData(), format, width, height, average, offsets);
     }
 
@@ -717,7 +773,14 @@ public class TextureLoaderVulkan {
         final int mipLevels = mipLevels(buffer != null, format, width, height);
         // Used whole, like the GUI's font atlas, so never tiled
         TextureInfoVulkan info =
-                createImage(format, width, height, mipLevels, mipLevels > 1, TextureWrap.CLAMP);
+                createImage(
+                        format,
+                        width,
+                        height,
+                        mipLevels,
+                        mipLevels > 1,
+                        TextureWrap.CLAMP,
+                        TextureFilter.SMOOTH);
 
         try {
             if (buffer != null) {
@@ -746,6 +809,8 @@ public class TextureLoaderVulkan {
      * @param height The height in pixels.
      * @param mipLevels The number of mip levels.
      * @param generateMips Whether we will blit to generate mips, which needs transfer source usage.
+     * @param wrap What it shows outside its texture coordinates.
+     * @param filter How it is sampled when magnified.
      * @return The texture info with the handles filled out.
      */
     private TextureInfoVulkan createImage(
@@ -754,7 +819,8 @@ public class TextureLoaderVulkan {
             int height,
             int mipLevels,
             boolean generateMips,
-            @NonNull TextureWrap wrap) {
+            @NonNull TextureWrap wrap,
+            @NonNull TextureFilter filter) {
         final int vkFormat = format.getVkFormat();
         final Format twin = ColorSpace.twin(format);
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -822,7 +888,7 @@ public class TextureLoaderVulkan {
                             .texture(image)
                             .textureAllocation(allocation)
                             .view(longOutput.get(0))
-                            .sampler(sampler(wrap));
+                            .sampler(sampler(wrap, filter));
             info.format = format;
             info.mipLevels = mipLevels;
             return info;
@@ -1053,6 +1119,27 @@ public class TextureLoaderVulkan {
             @NonNull String texturePath,
             @NonNull ColorSpace colorSpace,
             @NonNull TextureWrap wrap) {
+        return load(owner, texturePath, colorSpace, wrap, TextureFilter.SMOOTH);
+    }
+
+    /**
+     * Start loading a texture from an image file, as {@link #load(String, String, ColorSpace,
+     * TextureWrap)} does, with a chosen filter. DDS files are always smooth.
+     *
+     * @param owner The owner key the texture is tracked under.
+     * @param texturePath The full path to the texture.
+     * @param colorSpace The color space to read it in.
+     * @param wrap What it shows outside its texture coordinates.
+     * @param filter How it is sampled when magnified.
+     * @return The handle for the texture, pending until uploaded.
+     * @throws TextureException If the image can't be read, or the texture can't be created.
+     */
+    public TextureHandle load(
+            @NonNull String owner,
+            @NonNull String texturePath,
+            @NonNull ColorSpace colorSpace,
+            @NonNull TextureWrap wrap,
+            @NonNull TextureFilter filter) {
         if (texturePath.toLowerCase(Locale.ROOT).endsWith(".dds")) {
             final DdsFile dds;
             try {
@@ -1091,7 +1178,8 @@ public class TextureLoaderVulkan {
                                 colorSpace.apply(Format.R8G8B8A8_UNORM),
                                 width.get(0),
                                 height.get(0),
-                                wrap);
+                                wrap,
+                                filter);
             } finally {
                 STBImage.stbi_image_free(buffer);
             }

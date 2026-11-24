@@ -12,53 +12,39 @@ import java.awt.image.BufferedImage;
 /** Tests for reading look files and finding their files. */
 class TestBlockLook {
 
-    /** A look with only {@code all} puts it on every face, with the default surface. */
+    /** A look names its model, texture and material; a missing model is the plain cube. */
     @Test
-    void testAllFaces() {
-        BlockLook look =
-                BlockLook.parse("{textures:{all:\"lotomation:block/stone\"}}").orElseThrow();
-        assertEquals(BlockLook.DEFAULT_MODEL, look.model());
-        assertEquals("lotomation:block/stone", look.side());
-        assertEquals("lotomation:block/stone", look.top());
-        assertEquals("lotomation:block/stone", look.bottom());
-        assertEquals(BlockLook.DEFAULT_ROUGHNESS, look.roughness());
-        assertEquals(0, look.metallic());
-        assertEquals(BlockLook.Transparency.OPAQUE, look.transparency());
-    }
-
-    /** Top, side and bottom override all, and surface values are read. */
-    @Test
-    void testFacesAndSurface() {
+    void testNames() {
         BlockLook look =
                 BlockLook.parse(
-                                "{textures:{all:\"a\", top:\"t\", bottom:\"b\"},"
-                                        + " roughness:0.3F, metallic:1.0F, emission:2.0F,"
-                                        + " transparency:\"cutout\"}")
+                                "{model:\"lotomation:block/cube_bottom_top\","
+                                        + " texture:\"lotomation:block/grass\","
+                                        + " material:\"lotomation:block/grass\"}")
                         .orElseThrow();
-        assertEquals("a", look.side());
-        assertEquals("t", look.top());
-        assertEquals("b", look.bottom());
-        assertEquals(0.3f, look.roughness(), 1e-6);
-        assertEquals(1f, look.metallic(), 1e-6);
-        assertEquals(2f, look.emission(), 1e-6);
-        assertEquals(BlockLook.Transparency.CUTOUT, look.transparency());
+        assertEquals("lotomation:block/cube_bottom_top", look.model());
+        assertEquals("lotomation:block/grass", look.texture());
+        assertEquals("lotomation:block/grass", look.material());
+        BlockLook bare = BlockLook.parse("{}").orElseThrow();
+        assertEquals(BlockLook.DEFAULT_MODEL, bare.model());
+        assertNull(bare.texture());
+        assertNull(bare.material());
     }
 
-    /** Fluids are translucent unless they say otherwise, and a look with no textures has none. */
+    /** A fluid's model is recognized. */
     @Test
     void testFluid() {
-        BlockLook look = BlockLook.parse("{model:\"fluid\"}").orElseThrow();
-        assertTrue(look.isFluid());
-        assertEquals(BlockLook.Transparency.TRANSLUCENT, look.transparency());
-        assertNull(look.side());
+        assertTrue(BlockLook.parse("{model:\"fluid\"}").orElseThrow().isFluid());
     }
 
-    /** Unknown models and values of the wrong kind are errors. */
+    /** Values of the wrong kind are errors. */
     @Test
     void testBadValues() {
         assertThrows(IllegalArgumentException.class, () -> BlockLook.parse("{model:1}"));
-        assertThrows(IllegalArgumentException.class, () -> BlockLook.parse("{roughness:\"x\"}"));
-        assertThrows(IllegalArgumentException.class, () -> BlockLook.parse("{textures:\"x\"}"));
+        assertThrows(IllegalArgumentException.class, () -> BlockLook.parse("{material:1}"));
+        assertThrows(
+                IllegalArgumentException.class, () -> BlockLook.parse("{material:{all:\"a\"}}"));
+        assertThrows(
+                IllegalArgumentException.class, () -> BlockLook.parse("{texture:{all:\"a\"}}"));
     }
 
     /** Names become paths in the asset layout, and names that could leave it don't. */
@@ -79,14 +65,23 @@ class TestBlockLook {
         assertNull(BlockLooks.relativePath(":stone", "textures", ".png"));
     }
 
-    /** The starter textures survive a trip through an image. */
+    /** The starter textures survive a trip through an image, and strips put tiles side by side. */
     @Test
     void testImageRoundTrip() {
         byte[] art =
                 com.ikalagaming.graphics.benchmark.BlockTextures.art(
                         com.ikalagaming.graphics.benchmark.BlockTextures.Tile.LEAVES);
-        BufferedImage image = StarterTextures.image(art);
+        BufferedImage image = StarterTextures.image(java.util.List.of(art));
         assertEquals(
                 java.util.Arrays.toString(art), java.util.Arrays.toString(BlockLooks.rgba(image)));
+        byte[] dirt =
+                com.ikalagaming.graphics.benchmark.BlockTextures.art(
+                        com.ikalagaming.graphics.benchmark.BlockTextures.Tile.DIRT);
+        BufferedImage strip = StarterTextures.image(java.util.List.of(art, dirt));
+        assertEquals(2 * image.getWidth(), strip.getWidth());
+        assertEquals(image.getRGB(3, 5), strip.getRGB(3, 5));
+        assertEquals(
+                StarterTextures.image(java.util.List.of(dirt)).getRGB(3, 5),
+                strip.getRGB(image.getWidth() + 3, 5));
     }
 }

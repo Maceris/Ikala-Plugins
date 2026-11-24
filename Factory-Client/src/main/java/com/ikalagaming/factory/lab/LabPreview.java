@@ -20,6 +20,7 @@ import com.ikalagaming.graphics.gui.component.GuiWindow;
 import com.ikalagaming.graphics.gui.data.IkInt;
 import com.ikalagaming.graphics.gui.enums.Condition;
 import com.ikalagaming.graphics.gui.flags.WindowFlags;
+import com.ikalagaming.graphics.scene.LightUnits;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
@@ -82,10 +83,10 @@ final class LabPreview implements AutoCloseable {
     private static final Vector3f SUN_DIRECTION = new Vector3f(0.4f, -0.8f, 0.45f);
 
     /** The sun's intensity while looking. */
-    private static final float SUN_INTENSITY = 3;
+    private static final float SUN_INTENSITY = LightUnits.physical(3);
 
     /** The ambient light's intensity while looking. */
-    private static final float AMBIENT_INTENSITY = 0.3f;
+    private static final float AMBIENT_INTENSITY = LightUnits.physical(0.3f);
 
     /** How far the look window starts from the left edge, in pixels. */
     private static final float LOOK_MARGIN = 16;

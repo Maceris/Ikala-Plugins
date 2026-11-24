@@ -9,15 +9,18 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 import javax.imageio.ImageIO;
 
 /**
- * Writes the first block textures, drawn in code, as 16x16 PNGs in the asset layout, as a start to
- * repaint by hand. Graphics' test art gives stone, dirt, grass, leaves and water; the rest are
- * drawn here. Only missing files are written: files that already exist are always kept, since they
- * may have been painted over. To start a texture again, delete its file and run this.
+ * Writes the first block textures, drawn in code, as PNGs in the asset layout, as a start to
+ * repaint by hand: 16x16 tiles, side by side in a strip where a block's model shows different parts
+ * on different faces, as grass's side, top and bottom. Graphics' test art gives stone, dirt, grass,
+ * leaves and water; the rest are drawn here. Only missing files are written: files that already
+ * exist are always kept, since they may have been painted over. To start a texture again, delete
+ * its file and run this.
  *
  * <p>Run with {@code ./gradlew :Factory-Client:starterTextures --args="<data folder>"}, where the
  * data folder is the one holding {@code assets}, such as Lotomation's {@code
@@ -49,8 +52,8 @@ public final class StarterTextures {
     /** How many rings an end grain has. */
     private static final double LOG_RINGS = 2.2;
 
-    /** Each texture's art, by file name without the extension. */
-    private static final Map<String, Supplier<byte[]>> TEXTURES = textures();
+    /** Each texture's tiles, left to right, by file name without the extension. */
+    private static final Map<String, List<Supplier<byte[]>>> TEXTURES = textures();
 
     /**
      * Write the textures.
@@ -66,38 +69,49 @@ public final class StarterTextures {
         }
         final Path folder = Path.of(args[0]).resolve(BLOCK_TEXTURES);
         Files.createDirectories(folder);
-        for (Map.Entry<String, Supplier<byte[]>> texture : TEXTURES.entrySet()) {
+        for (Map.Entry<String, List<Supplier<byte[]>>> texture : TEXTURES.entrySet()) {
             final Path file = folder.resolve(texture.getKey() + BlockLooks.TEXTURE_EXTENSION);
             if (Files.exists(file)) {
                 System.out.println("Kept " + file);
                 continue;
             }
-            ImageIO.write(image(texture.getValue().get()), "png", file.toFile());
+            ImageIO.write(
+                    image(texture.getValue().stream().map(Supplier::get).toList()),
+                    "png",
+                    file.toFile());
             System.out.println("Wrote " + file);
         }
     }
 
     /**
-     * Every texture's art.
+     * Every texture's tiles. Strips follow the cube models: {@code cube_bottom_top} shows side, top
+     * and bottom left to right, and {@code cube_column} side and end.
      *
-     * @return The art by file name, in a fixed order.
+     * @return The tiles by file name, in a fixed order.
      */
-    private static Map<String, Supplier<byte[]>> textures() {
-        final Map<String, Supplier<byte[]>> out = new LinkedHashMap<>();
-        out.put("stone", () -> BlockTextures.art(BlockTextures.Tile.STONE));
-        out.put("dirt", () -> BlockTextures.art(BlockTextures.Tile.DIRT));
-        out.put("grass_top", () -> BlockTextures.art(BlockTextures.Tile.GRASS_TOP));
-        out.put("grass_side", () -> BlockTextures.art(BlockTextures.Tile.GRASS_SIDE));
-        out.put("oak_leaves", () -> BlockTextures.art(BlockTextures.Tile.LEAVES));
-        out.put("water", () -> BlockTextures.art(BlockTextures.Tile.WATER));
-        out.put("sand", () -> draw(1, StarterTextures::sand));
-        out.put("oak_log", () -> draw(2, StarterTextures::bark));
-        out.put("oak_log_top", () -> draw(3, StarterTextures::endGrain));
-        out.put("concrete", () -> draw(4, StarterTextures::concrete));
-        out.put("steel", () -> draw(5, StarterTextures::steel));
-        out.put("bronze", () -> draw(6, StarterTextures::bronze));
-        out.put("glass", () -> draw(7, StarterTextures::glass));
-        out.put("grass_tuft", () -> draw(8, StarterTextures::tuft));
+    private static Map<String, List<Supplier<byte[]>>> textures() {
+        final Map<String, List<Supplier<byte[]>>> out = new LinkedHashMap<>();
+        out.put("stone", List.of(() -> BlockTextures.art(BlockTextures.Tile.STONE)));
+        out.put("dirt", List.of(() -> BlockTextures.art(BlockTextures.Tile.DIRT)));
+        out.put(
+                "grass",
+                List.of(
+                        () -> BlockTextures.art(BlockTextures.Tile.GRASS_SIDE),
+                        () -> BlockTextures.art(BlockTextures.Tile.GRASS_TOP),
+                        () -> BlockTextures.art(BlockTextures.Tile.DIRT)));
+        out.put("oak_leaves", List.of(() -> BlockTextures.art(BlockTextures.Tile.LEAVES)));
+        out.put("water", List.of(() -> BlockTextures.art(BlockTextures.Tile.WATER)));
+        out.put("sand", List.of(() -> draw(1, StarterTextures::sand)));
+        out.put(
+                "oak_log",
+                List.of(
+                        () -> draw(2, StarterTextures::bark),
+                        () -> draw(3, StarterTextures::endGrain)));
+        out.put("concrete", List.of(() -> draw(4, StarterTextures::concrete)));
+        out.put("steel", List.of(() -> draw(5, StarterTextures::steel)));
+        out.put("bronze", List.of(() -> draw(6, StarterTextures::bronze)));
+        out.put("glass", List.of(() -> draw(7, StarterTextures::glass)));
+        out.put("grass_tuft", List.of(() -> draw(8, StarterTextures::tuft)));
         return out;
     }
 
@@ -240,11 +254,26 @@ public final class StarterTextures {
     /**
      * Pixels as an image.
      *
-     * @param pixels The pixels, rows from the top, red, green, blue and alpha bytes each.
-     * @return The image.
+     * @param tiles Each tile's pixels, rows from the top, red, green, blue and alpha bytes each.
+     * @return The image, the tiles side by side.
      */
-    static BufferedImage image(byte @NonNull [] pixels) {
-        final BufferedImage image = new BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_ARGB);
+    static BufferedImage image(@NonNull List<byte[]> tiles) {
+        final BufferedImage image =
+                new BufferedImage(SIZE * tiles.size(), SIZE, BufferedImage.TYPE_INT_ARGB);
+        for (int tile = 0; tile < tiles.size(); ++tile) {
+            drawTile(image, tile * SIZE, tiles.get(tile));
+        }
+        return image;
+    }
+
+    /**
+     * Put one tile into an image.
+     *
+     * @param image The image.
+     * @param left The tile's left column.
+     * @param pixels The tile's pixels, rows from the top, red, green, blue and alpha bytes each.
+     */
+    private static void drawTile(@NonNull BufferedImage image, int left, byte @NonNull [] pixels) {
         for (int y = 0; y < SIZE; ++y) {
             for (int x = 0; x < SIZE; ++x) {
                 final int at = (y * SIZE + x) * CHANNELS;
@@ -253,10 +282,9 @@ public final class StarterTextures {
                                 | (pixels[at] & CHANNEL_MAX) << 16
                                 | (pixels[at + 1] & CHANNEL_MAX) << 8
                                 | pixels[at + 2] & CHANNEL_MAX;
-                image.setRGB(x, y, argb);
+                image.setRGB(left + x, y, argb);
             }
         }
-        return image;
     }
 
     /** Private constructor so this class is not instantiated. */

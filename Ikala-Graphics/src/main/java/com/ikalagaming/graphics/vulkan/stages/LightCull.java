@@ -230,7 +230,8 @@ public class LightCull implements RenderStage {
                                 viewMatrix,
                                 origin,
                                 scratch,
-                                state.pointShadows);
+                                state.pointShadows,
+                                scene.getPreExposure());
                         written[0] += 1;
                     }
                 });
@@ -248,6 +249,7 @@ public class LightCull implements RenderStage {
      * @param origin The world position of the render space origin, the camera position.
      * @param scratch A vector to do math in, so we don't allocate one per light.
      * @param shadows Which point shadow map each light uses this frame.
+     * @param preExposure What the light's intensity is multiplied by, see LightUnits.
      */
     private static void putLight(
             @NonNull ByteBuffer buffer,
@@ -256,7 +258,8 @@ public class LightCull implements RenderStage {
             @NonNull Matrix4f viewMatrix,
             @NonNull Vector3dc origin,
             @NonNull Vector4f scratch,
-            @NonNull PointShadows shadows) {
+            @NonNull PointShadows shadows,
+            float preExposure) {
         // Relative to the camera in double precision first, so it stays exact far from the origin
         final Vector3dc position = light.position();
         scratch.set(
@@ -268,7 +271,9 @@ public class LightCull implements RenderStage {
         putVector(buffer, offset + ShaderBindings.Light.LightStruct.POSITION, scratch);
         buffer.putFloat(offset + ShaderBindings.Light.LightStruct.RANGE, light.range());
         light.color().get(offset + ShaderBindings.Light.LightStruct.COLOR, buffer);
-        buffer.putFloat(offset + ShaderBindings.Light.LightStruct.INTENSITY, light.intensity());
+        buffer.putFloat(
+                offset + ShaderBindings.Light.LightStruct.INTENSITY,
+                light.intensity() * preExposure);
 
         // A direction, so w is 0 and the camera translation (none in render space) never applies
         scratch.set(light.direction(), 0);

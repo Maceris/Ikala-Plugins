@@ -17,6 +17,7 @@ import com.ikalagaming.graphics.gui.enums.Condition;
 import com.ikalagaming.graphics.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.lod.LodMesh;
 import com.ikalagaming.graphics.lod.LodPanel;
+import com.ikalagaming.graphics.scene.LightUnits;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
@@ -86,10 +87,10 @@ public final class LodPrototype {
     private static final Vector3fc SUN_DIRECTION = new Vector3f(0.4f, -0.8f, 0.45f);
 
     /** The sun's intensity. */
-    private static final float SUN_INTENSITY = 3;
+    private static final float SUN_INTENSITY = LightUnits.physical(3);
 
     /** The ambient light's intensity. */
-    private static final float AMBIENT_INTENSITY = 0.3f;
+    private static final float AMBIENT_INTENSITY = LightUnits.physical(0.3f);
 
     /** How rough the model's materials are. */
     private static final float ROUGHNESS = 0.5f;

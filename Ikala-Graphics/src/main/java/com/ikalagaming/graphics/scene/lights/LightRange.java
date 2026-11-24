@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.scene.lights;
 
 import com.ikalagaming.graphics.Sections;
+import com.ikalagaming.graphics.scene.LightUnits;
 
 /**
  * How far point and spot lights reach.
@@ -14,11 +15,11 @@ import com.ikalagaming.graphics.Sections;
 public final class LightRange {
 
     /**
-     * The light level where a light's default range ends. With this, a light of intensity 1 reaches
-     * 10 m, the distance every light reached before ranges were per light, and one of intensity 4
-     * reaches 20 m.
+     * The illuminance where a light's default range ends, in lux: 0.01 at the reference
+     * pre-exposure (see LightUnits), where a light of that scale's intensity 1, about 33,000
+     * candela, reaches 10 m, the distance every light reached before ranges were per light.
      */
-    public static final float CUTOFF = 0.01f;
+    public static final float CUTOFF = LightUnits.physical(0.01f);
 
     /** The shortest a light can reach, in meters: one block. */
     public static final float MIN_RANGE = 1;
@@ -32,7 +33,7 @@ public final class LightRange {
     /**
      * The range of a light given only its intensity.
      *
-     * @param intensity The light's intensity.
+     * @param intensity The light's intensity, in candela.
      * @return How far it reaches, in meters.
      */
     public static float defaultRange(float intensity) {

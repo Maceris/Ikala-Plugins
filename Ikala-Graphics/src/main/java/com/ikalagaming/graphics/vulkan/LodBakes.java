@@ -13,6 +13,7 @@ import com.ikalagaming.graphics.lod.Attributes;
 import com.ikalagaming.graphics.lod.BakeTexels;
 import com.ikalagaming.graphics.lod.ClusterMeshes;
 import com.ikalagaming.graphics.lod.LodDag;
+import com.ikalagaming.graphics.scene.LightUnits;
 import com.ikalagaming.graphics.vulkan.stages.SceneRender;
 
 import lombok.NonNull;
@@ -679,8 +680,9 @@ public final class LodBakes {
         material.setBakedData(true);
         material.setIndexedBake(indexed);
         if (emissive) {
-            // The emission page holds the light itself, see decodeEmission in material.glsl
-            material.getEmissive().set(1, 1, 1);
+            // The emission page holds the light at the reference pre-exposure, see
+            // decodeEmission in material.glsl, so the page's emission brings it to the current one
+            material.getEmissive().set(1 / LightUnits.REFERENCE_PRE_EXPOSURE);
         }
         final Page page =
                 new Page(pages.size(), material, cache.addMaterial(material), emissive, indexed);
@@ -1702,7 +1704,10 @@ public final class LodBakes {
             final Job job = batch.get(i);
             data.position((int) offsets[i * OFFSETS]);
             for (Material material : job.baked().sources()) {
-                SceneRender.writeMaterial(data, material, state.textureRegistry);
+                // At the reference scale, so a bake stays right whatever the pre-exposure
+                // later; its page's material scales it back, see the page below
+                SceneRender.writeMaterial(
+                        data, material, state.textureRegistry, LightUnits.REFERENCE_PRE_EXPOSURE);
             }
             data.position((int) offsets[i * OFFSETS + 1]);
             data.put(job.baked().records().duplicate().clear());

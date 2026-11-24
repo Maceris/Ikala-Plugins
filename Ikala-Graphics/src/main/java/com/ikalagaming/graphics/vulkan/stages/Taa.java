@@ -258,7 +258,7 @@ public class Taa implements RenderStage {
                 constants.putFloat(
                         ShaderBindings.Taa.PUSH_CONSTANT_SCREEN_SIZE_OFFSET + Float.BYTES, height);
                 constants.putFloat(
-                        ShaderBindings.Taa.PUSH_CONSTANT_EXPOSURE_OFFSET, scene.getExposure());
+                        ShaderBindings.Taa.PUSH_CONSTANT_EXPOSURE_OFFSET, scene.displayExposure());
                 vkCmdPushConstants(
                         commandBuffer, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, constants);
                 FullScreenPass.draw(commandBuffer, quadMesh, width, height, stack);

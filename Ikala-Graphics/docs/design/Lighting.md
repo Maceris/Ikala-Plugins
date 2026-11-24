@@ -3,6 +3,20 @@
 Direct lighting is fully dynamic, with nothing baked into blocks. Lighting stays physically based: caves come out
 very dark, and that is accepted as what reaches them. Artistic touches come only at the end.
 
+## Physical units, pre-exposed
+
+Light is given in physical units: the sun, moon and stars in lux (full sun 100,000), point and spot lights in candela,
+and emitting surfaces, particles, media, the ambient sky and the sky's glow in cd/m^2 (a screen a few hundred).
+Exposure is a camera's, in EV100 (a sunny day about 14.8), or stops of compensation while it adapts.
+
+Half floats can't hold daylight and moonlight in the same units, so every light is multiplied by the scene's
+pre-exposure as it is uploaded, and the exposure divides it back out (`LightUnits`, `Scene.preExposure`). At the
+reference pre-exposure, 3/100,000, full sun comes to 3 on the GPU, the scale the shaders were tuned at; a game raises it
+for a night lit by the moon. Things kept across frames are stored at the reference scale and scaled when drawn: a level
+of detail bake's emission page is multiplied by its page material's emission, which is itself pre-exposed. Particles
+take their light when they spawn. Light ranges and their cutoff are measured at the reference scale, so a light reaches
+as far whatever the pre-exposure.
+
 ## Many lights: clustered culling
 
 Players will place hundreds of torches, lamps and glowing machines. The view frustum is split into a 3D grid of
@@ -76,4 +90,4 @@ front one. 32-bit moments, because 16-bit needs the optimized quantization; abou
 ## Conventions
 
 y is flipped in the projection and depth runs 0 to 1. Colors are authored in sRGB and decoded exactly; lighting is
-linear HDR, tone mapped once, with partial auto-exposure.
+linear HDR in physical units, pre-exposed on upload, tone mapped once, with partial auto-exposure.

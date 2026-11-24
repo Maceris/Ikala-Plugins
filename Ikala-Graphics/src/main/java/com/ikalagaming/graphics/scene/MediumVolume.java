@@ -24,8 +24,8 @@ import org.joml.Vector3fc;
  * @param density How much light it stops per meter inside its edge, its extinction.
  * @param albedo How much of each channel of the light it stops it scatters, 0 to 1; the rest is
  *     absorbed, which makes it dark like soot.
- * @param emission The light it gives off per unit of density, in linear light, like a glowing cloud
- *     over a fire.
+ * @param emission The light it gives off per unit of density, in linear light, in cd/m^2 per meter
+ *     at density 1, like a glowing cloud over a fire.
  * @param edge How wide its soft edge is, in meters, inside its shape.
  * @param noiseScale How large the noise's features are, in meters.
  * @param noiseStrength How much the noise takes from its density, 0 for none to 1 for patches of

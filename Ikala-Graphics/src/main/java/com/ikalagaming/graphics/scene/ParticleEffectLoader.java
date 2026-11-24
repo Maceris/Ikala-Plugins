@@ -44,7 +44,7 @@ import java.util.Set;
  * color:                     # linear red, green, blue and opacity; one color or start and end
  *   start: [1, 0.6, 0.2, 1]
  *   end: [1, 0.2, 0.05, 0]
- * emissive: 6                # light given off, times the color
+ * emissive: 200000           # light given off, cd/m^2 per unit of the color
  * lit: false                 # true for lit by the sun, sky and lights, the color their albedo
  * anisotropy: 0.2            # which way lit ones scatter, -1 back to 1 onward
  * collision: bounce          # none, bounce, stick or die, on hitting the world near the camera

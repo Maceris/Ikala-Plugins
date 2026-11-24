@@ -1,6 +1,7 @@
 package com.ikalagaming.factory.render;
 
 import com.ikalagaming.factory.world.WorldTime;
+import com.ikalagaming.graphics.scene.LightUnits;
 import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
@@ -15,28 +16,24 @@ import org.joml.Vector3f;
  * time of day, a moon that goes through its phases, the night sky's own glow and stars, and auto
  * exposure so the eye adapts from noon to midnight. Main thread only.
  *
- * <p>Light is kept in proportion to the real thing: the sun's {@value #SUN_INTENSITY} stands for
- * {@value #SUN_LUX} lux, a full moon gives {@value #FULL_MOON_LUX} lux, twilight follows measured
- * sky illuminance by the sun's depth below the horizon, and a moonless night gets {@value
- * #NIGHT_LUX} lux of starlight and airglow. The scene has one directional light, which casts the
- * cascaded shadows: it is the sun by day, and is handed to the moon once the sun has set.
+ * <p>Light is physical, as Graphics takes it (see {@link LightUnits}): the sun gives {@value
+ * #SUN_LUX} lux, a full moon {@value #FULL_MOON_LUX} lux, twilight follows measured sky illuminance
+ * by the sun's depth below the horizon, and a moonless night gets {@value #NIGHT_LUX} lux of
+ * starlight and airglow. The scene has one directional light, which casts the cascaded shadows: it
+ * is the sun by day, and is handed to the moon once the sun has set.
  *
- * <p>Night is millions of times darker than day, below what half floats hold well, so the sky's
- * lights are drawn brighter by a pre-exposure at dusk and the scene's exposure takes that back out,
- * less the part the eye would have adapted to anyway, see {@link #compensation}. Light the scene
- * gives off itself, such as glowing blocks, is not pre-exposed and so shows dimmer at night than it
- * should.
+ * <p>Night is millions of times darker than day, below what half floats hold well, so the scene's
+ * pre-exposure rises at dusk and the exposure compensation takes that back out, less the part the
+ * eye would have adapted to anyway, see {@link #compensation}. Graphics pre-exposes every light,
+ * glowing blocks included, so they keep their brightness against the night.
  */
 public final class SkyLight {
 
     /** The sun's color. The physical sky reddens it near the horizon. */
     private static final Vector3f SUN_COLOR = new Vector3f(1, 1, 1);
 
-    /** The sun's intensity when it is well above the horizon. */
-    static final float SUN_INTENSITY = 3;
-
-    /** The illuminance the sun's intensity stands for, in lux. */
-    static final float SUN_LUX = 100_000;
+    /** The sun's illuminance when it is well above the horizon, in lux. */
+    static final float SUN_LUX = LightUnits.DAYLIGHT_LUX;
 
     /** How high the sun is, as the up part of its direction, when its light starts to show. */
     static final float FADE_START = -0.02f;
@@ -84,10 +81,10 @@ public final class SkyLight {
     static final float MAGNITUDE_ZERO_LUX = 2.54e-6f;
 
     /**
-     * The sky's light, in the scene's units, below which the pre-exposure starts: a sun this weak
-     * is a few degrees above the horizon, so the day is drawn as it always was.
+     * The sky's light, in lux, below which the pre-exposure rises: a sun this weak is a few degrees
+     * above the horizon, so the day is drawn at the reference pre-exposure.
      */
-    static final float PRE_EXPOSURE_LEVEL = 0.3f;
+    static final float PRE_EXPOSURE_LUX = SUN_LUX / 10;
 
     /** How far the sun's path leans, about which the sky turns. */
     private static final double TILT = Math.toRadians(WorldTime.SUN_TILT_DEGREES);
@@ -107,7 +104,8 @@ public final class SkyLight {
 
     private final DirectionalLight previousSun;
     private final boolean previousAutoExposure;
-    private final float previousExposure;
+    private final float previousCompensation;
+    private final float previousPreExposure;
 
     /**
      * Light a scene by the world's clock.
@@ -119,7 +117,8 @@ public final class SkyLight {
         previousSky = scene.getPhysicalSky();
         previousSun = scene.getSceneLights().getDirLight();
         previousAutoExposure = scene.isAutoExposure();
-        previousExposure = scene.getExposure();
+        previousCompensation = scene.getExposureCompensation();
+        previousPreExposure = scene.getPreExposure();
         scene.setPhysicalSky(sky);
         scene.getSceneLights().setDirLight(light);
         scene.setAutoExposure(true);
@@ -133,39 +132,39 @@ public final class SkyLight {
     public void update(double ticks) {
         final double[] towardSun = WorldTime.towardSun(ticks);
         final float sunUp = (float) towardSun[1];
-        final float sunLight = SUN_INTENSITY * fade(sunUp);
+        final float sunLight = SUN_LUX * fade(sunUp);
 
         final double[] towardMoon = towardMoon(ticks);
-        final float moonLight =
-                luxToScene(moonLux(ticks)) * fade((float) towardMoon[1]) * handover(sunUp);
+        final float moonLight = moonLux(ticks) * fade((float) towardMoon[1]) * handover(sunUp);
 
         // The glow: twilight while the sun's own sky fades, then the night's airglow and stars
-        final float twilight = luxToScene(twilightLux(sunUp)) * (1 - fade(sunUp));
-        final float night = luxToScene(NIGHT_LUX);
+        final float twilight = twilightLux(sunUp) * (1 - fade(sunUp));
 
-        final float preExposure = preExposure(sunLight + moonLight + twilight + night);
+        final float preExposure = preExposure(sunLight + moonLight + twilight + NIGHT_LUX);
 
         final double[] toward;
         if (sunLight > 0) {
             toward = towardSun;
             light.getColor().set(SUN_COLOR);
-            light.setIntensity(sunLight * preExposure);
+            light.setIntensity(sunLight);
         } else {
             toward = towardMoon;
             light.getColor().set(MOON_COLOR);
-            light.setIntensity(moonLight * preExposure);
+            light.setIntensity(moonLight);
         }
         // The light travels away from the sun or moon
         light.getDirection().set((float) -toward[0], (float) -toward[1], (float) -toward[2]);
 
-        // Uniform radiance L lights the ground with pi L
+        // Uniform luminance L lights the ground with pi L
         final Vector3f glow = sky.getGlow();
         glow.set(TWILIGHT_COLOR).mul(twilight);
-        glow.fma(night, NIGHT_COLOR).mul(preExposure / (float) Math.PI);
-        sky.setStarIlluminance(luxToScene(MAGNITUDE_ZERO_LUX) * preExposure);
+        glow.fma(NIGHT_LUX, NIGHT_COLOR).div((float) Math.PI);
+        sky.setStarIlluminance(MAGNITUDE_ZERO_LUX);
         starRotation(ticks, sky.getStarRotation());
 
-        scene.setExposure(previousExposure * compensation(preExposure));
+        scene.setPreExposure(LightUnits.REFERENCE_PRE_EXPOSURE * preExposure);
+        scene.setExposureCompensation(
+                previousCompensation + (float) (Math.log(compensation(preExposure)) / Math.log(2)));
     }
 
     /**
@@ -269,13 +268,13 @@ public final class SkyLight {
     }
 
     /**
-     * How much the sky's lights are drawn brighter than they are.
+     * How much brighter than the reference pre-exposure the scene's lights are drawn.
      *
-     * @param level The sky's light, in the scene's units.
+     * @param lux The sky's light, in lux.
      * @return 1 by day, more as it gets dark.
      */
-    static float preExposure(float level) {
-        return Math.max(PRE_EXPOSURE_LEVEL / Math.max(level, Float.MIN_NORMAL), 1);
+    static float preExposure(float lux) {
+        return Math.max(PRE_EXPOSURE_LUX / Math.max(lux, Float.MIN_NORMAL), 1);
     }
 
     /**
@@ -289,16 +288,6 @@ public final class SkyLight {
      */
     static float compensation(float preExposure) {
         return (float) Math.pow(preExposure, -(1 - ExposureMath.ADAPTATION));
-    }
-
-    /**
-     * Turn lux into the scene's light units.
-     *
-     * @param lux The illuminance.
-     * @return The same in the scene's units.
-     */
-    static float luxToScene(float lux) {
-        return lux * SUN_INTENSITY / SUN_LUX;
     }
 
     /**
@@ -316,6 +305,7 @@ public final class SkyLight {
         scene.setPhysicalSky(previousSky);
         scene.getSceneLights().setDirLight(previousSun);
         scene.setAutoExposure(previousAutoExposure);
-        scene.setExposure(previousExposure);
+        scene.setExposureCompensation(previousCompensation);
+        scene.setPreExposure(previousPreExposure);
     }
 }

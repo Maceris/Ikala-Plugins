@@ -18,10 +18,12 @@ import com.ikalagaming.graphics.gui.data.IkIO;
 import com.ikalagaming.graphics.gui.data.IkString;
 import com.ikalagaming.graphics.gui.data.ListClipper;
 import com.ikalagaming.graphics.gui.enums.MouseButton;
+import com.ikalagaming.graphics.gui.flags.SliderFlags;
 import com.ikalagaming.graphics.gui.flags.TableFlags;
 import com.ikalagaming.graphics.gui.flags.TreeNodeFlags;
 import com.ikalagaming.graphics.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.gui.util.Color;
+import com.ikalagaming.graphics.scene.LightUnits;
 import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.SkyboxLayout;
@@ -63,11 +65,11 @@ public class SceneView {
     /** The sun's direction. */
     private static final Vector3fc SUN_DIRECTION = new Vector3f(0.4f, -0.8f, 0.45f);
 
-    /** The sun's intensity. */
-    private static final float SUN_INTENSITY = 3;
+    /** The sun's illuminance, in lux: full daylight. */
+    private static final float SUN_INTENSITY = LightUnits.DAYLIGHT_LUX;
 
-    /** The ambient light's intensity. */
-    private static final float AMBIENT_INTENSITY = 0.3f;
+    /** The ambient light's luminance, in cd/m^2: a bright overcast sky. */
+    private static final float AMBIENT_INTENSITY = LightUnits.physical(0.3f);
 
     /** The selected node's outline. */
     private static final int HIGHLIGHT = Color.rgba(1.0f, 0.75f, 0.2f, 1.0f);
@@ -78,14 +80,19 @@ public class SceneView {
     /** How far the mouse may move between press and release for it to count as a click. */
     private static final float CLICK_SLOP = 4;
 
-    /** The strongest sun the slider offers. */
-    private static final float MAX_SUN = 20;
+    /** The strongest sun the slider offers, in lux: beyond noon on a mountain. */
+    private static final float MAX_SUN = 200_000;
 
-    /** The strongest ambient light the slider offers. */
-    private static final float MAX_AMBIENT = 3;
+    /** The brightest ambient sky the slider offers, in cd/m^2. */
+    private static final float MAX_AMBIENT = 100_000;
 
-    /** The brightest exposure the slider offers. */
-    private static final float MAX_EXPOSURE = 8;
+    /** The exposure values the slider offers: from a dim night to a snowfield in sun. */
+    private static final float MIN_EV = -4;
+
+    private static final float MAX_EV = 18;
+
+    /** The most exposure compensation the slider offers, in stops either way. */
+    private static final float MAX_COMPENSATION = 6;
 
     /** The most the imported lights' strength can be scaled by. */
     private static final float MAX_LIGHT_SCALE = 20;
@@ -106,7 +113,10 @@ public class SceneView {
     private int selectedMesh = -1;
 
     /** The exposure before entering. */
-    private float previousExposure = 1;
+    private float previousExposure = LightUnits.DEFAULT_EV100;
+
+    /** The exposure compensation before the scene was shown. */
+    private float previousCompensation;
 
     /** Scratch for sliders. */
     private final float[] value = new float[1];
@@ -316,7 +326,8 @@ public class SceneView {
         previousPipeline = GraphicsManager.getPipelineConfig();
         previousSun = scene.getSceneLights().getDirLight();
         previousAmbient = scene.getSceneLights().getAmbientLight();
-        previousExposure = scene.getExposure();
+        previousExposure = scene.getExposureValue();
+        previousCompensation = scene.getExposureCompensation();
         previousPhysicalSky = scene.getPhysicalSky();
         previousAutoExposure = scene.isAutoExposure();
         previousSkybox = scene.getSkyboxTexture();
@@ -354,7 +365,8 @@ public class SceneView {
         }
         scene.getSceneLights().setDirLight(previousSun);
         scene.getSceneLights().setAmbientLight(previousAmbient);
-        scene.setExposure(previousExposure);
+        scene.setExposureValue(previousExposure);
+        scene.setExposureCompensation(previousCompensation);
         scene.setPhysicalSky(previousPhysicalSky);
         scene.setAutoExposure(previousAutoExposure);
         scene.setSkyboxTexture(previousSkybox, previousSkyboxLayout);
@@ -731,7 +743,7 @@ public class SceneView {
             sun.getColor().set(color3[0], color3[1], color3[2]);
         }
         value[0] = sun.getIntensity();
-        if (IkGui.sliderFloat("Sun strength", value, 0, MAX_SUN, "%.2f")) {
+        if (IkGui.sliderFloat("Sun (lux)", value, 0, MAX_SUN, "%.0f", SliderFlags.LOGARITHMIC)) {
             sun.setIntensity(value[0]);
         }
         if (shown.sun() != null) {
@@ -748,12 +760,21 @@ public class SceneView {
             ambient.getColor().set(color3[0], color3[1], color3[2]);
         }
         value[0] = ambient.getIntensity();
-        if (IkGui.sliderFloat("Ambient strength", value, 0, MAX_AMBIENT, "%.2f")) {
+        if (IkGui.sliderFloat(
+                "Sky (cd/m^2)", value, 0, MAX_AMBIENT, "%.0f", SliderFlags.LOGARITHMIC)) {
             ambient.setIntensity(value[0]);
         }
-        value[0] = scene.getExposure();
-        if (IkGui.sliderFloat("Exposure", value, 0.05f, MAX_EXPOSURE, "%.2f")) {
-            scene.setExposure(value[0]);
+        if (scene.isAutoExposure()) {
+            value[0] = scene.getExposureCompensation();
+            if (IkGui.sliderFloat(
+                    "Compensation (stops)", value, -MAX_COMPENSATION, MAX_COMPENSATION, "%+.1f")) {
+                scene.setExposureCompensation(value[0]);
+            }
+        } else {
+            value[0] = scene.getExposureValue();
+            if (IkGui.sliderFloat("Exposure (EV100)", value, MIN_EV, MAX_EV, "%.1f")) {
+                scene.setExposureValue(value[0]);
+            }
         }
         if (IkGui.checkbox("Physical sky", scene.getPhysicalSky() != null)) {
             scene.setPhysicalSky(scene.getPhysicalSky() == null ? new PhysicalSky() : null);
@@ -999,10 +1020,14 @@ public class SceneView {
         }
         final IkIO io = IkGui.getIO();
         final var camera = GraphicsManager.getScene().getCamera();
+        // With viewports on, mouse positions are on the desktop, so measure from the window's
+        // corner: a window moved off the desktop's origin, as onto another monitor, would
+        // otherwise pick by where the mouse is on the desktop
+        final Vector2f corner = IkGui.getMainViewport().position;
         final Vector3d direction =
                 rayDirection(
-                        x / io.displaySize.x,
-                        y / io.displaySize.y,
+                        (x - corner.x) / io.displaySize.x,
+                        (y - corner.y) / io.displaySize.y,
                         io.displaySize.x / Math.max(1, io.displaySize.y),
                         camera.getRotation().x,
                         camera.getRotation().y);

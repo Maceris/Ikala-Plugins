@@ -5,6 +5,7 @@ import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MediumHandle;
 import com.ikalagaming.graphics.scene.Fog;
+import com.ikalagaming.graphics.scene.LightUnits;
 import com.ikalagaming.graphics.scene.MediumVolume;
 import com.ikalagaming.graphics.scene.ParticleEffect;
 import com.ikalagaming.graphics.scene.ParticleSamples;
@@ -87,7 +88,8 @@ public final class GateEffects {
     private static final float GLOW_RADIUS = 6;
 
     /** The glowing sphere's light per unit of density: an orange glow, as over a fire. */
-    private static final Vector3fc GLOW_EMISSION = new Vector3f(4, 1.5f, 0.3f);
+    private static final Vector3fc GLOW_EMISSION =
+            new Vector3f(4, 1.5f, 0.3f).mul(LightUnits.physical(1));
 
     /** How fast the glowing sphere's noise rises, in meters a second. */
     private static final Vector3fc GLOW_DRIFT = new Vector3f(0, 1, 0);

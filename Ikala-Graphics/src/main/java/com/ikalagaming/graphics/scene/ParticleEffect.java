@@ -97,7 +97,7 @@ public class ParticleEffect {
     /** Its color and opacity when it dies, changing evenly over its life. */
     @Builder.Default @NonNull Vector4fc colorEnd = new Vector4f(1, 1, 1, 0);
 
-    /** How much light it gives off, times its color: 0 for none. */
+    /** How much light it gives off, in cd/m^2 per unit of its color: 0 for none. */
     @Builder.Default float emissive = 0;
 
     /**

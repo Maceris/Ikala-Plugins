@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.ikalagaming.graphics.LightHandle;
+import com.ikalagaming.graphics.scene.LightUnits;
 import com.ikalagaming.graphics.scene.lights.LightRegistry;
 
 import org.joml.Matrix4f;
@@ -31,7 +32,8 @@ class PointShadowsTest {
 
     private static LightHandle torch(LightRegistry registry, double x, double y, double z) {
         final LightHandle handle =
-                registry.addPoint(OWNER, new Vector3d(x, y, z), WARM, 1, Float.NaN);
+                registry.addPoint(
+                        OWNER, new Vector3d(x, y, z), WARM, LightUnits.physical(1), Float.NaN);
         registry.setCastsShadows(OWNER, handle, true);
         return handle;
     }
@@ -69,7 +71,7 @@ class PointShadowsTest {
     @Test
     void lightsThatCastNoShadowsGetNoMap() {
         final LightRegistry registry = new LightRegistry();
-        registry.addPoint(OWNER, new Vector3d(5, 2, 0), WARM, 1, Float.NaN);
+        registry.addPoint(OWNER, new Vector3d(5, 2, 0), WARM, LightUnits.physical(1), Float.NaN);
         final PointShadows points = new PointShadows();
         plan(points, registry, 4);
         assertEquals(0, points.getMapCount());

@@ -10,10 +10,12 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.InstanceHandle;
 import com.ikalagaming.graphics.LightHandle;
 import com.ikalagaming.graphics.TextureHandle;
+import com.ikalagaming.graphics.asset.MaterialText;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
+import com.ikalagaming.graphics.scene.LightUnits;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.texture.DdsFile;
 
@@ -458,11 +460,15 @@ public final class ScenePlacement {
         material.getBaseColor().set(source.color());
         material.setRoughness(Float.isNaN(source.roughness()) ? 0.5f : source.roughness());
         material.setMetallic(Float.isNaN(source.metallic()) ? 0 : source.metallic());
-        material.getEmissive().set(source.emissive());
+        // Files don't say, and most non-metals reflect 4% head on; Graphics' own default is none
+        material.setSpecular(MaterialText.DEFAULT_SPECULAR);
+        // Files give emission without units; it was always taken at the scale the renderer was
+        // tuned at, where full sun is 3
+        material.getEmissive().set(source.emissive()).mul(LightUnits.physical(1));
         if (source.textures().containsKey(TextureSlot.EMISSIVE)
                 && source.emissive().lengthSquared() == 0) {
             // A texture with no color to scale it by glows as the texture shows
-            material.getEmissive().set(1);
+            material.getEmissive().set(LightUnits.physical(1));
         }
         if (source.color().w < 1) {
             material.setTransparency(Material.Transparency.TRANSLUCENT);
@@ -537,14 +543,15 @@ public final class ScenePlacement {
                                         .point(
                                                 light.position(),
                                                 light.color(),
-                                                light.intensity() * lightScale);
+                                                LightUnits.physical(
+                                                        light.intensity() * lightScale));
                         case SPOT ->
                                 graphics.lights()
                                         .spot(
                                                 light.position(),
                                                 light.direction(),
                                                 light.color(),
-                                                light.intensity() * lightScale,
+                                                LightUnits.physical(light.intensity() * lightScale),
                                                 light.innerAngle(),
                                                 Math.max(light.outerAngle(), 1),
                                                 Float.NaN);
@@ -588,7 +595,10 @@ public final class ScenePlacement {
     public void setLightScale(float scale) {
         lightScale = scale;
         for (int i = 0; i < lights.size(); ++i) {
-            graphics.lights().setIntensity(lights.get(i), lightSources.get(i).intensity() * scale);
+            graphics.lights()
+                    .setIntensity(
+                            lights.get(i),
+                            LightUnits.physical(lightSources.get(i).intensity() * scale));
         }
     }
 

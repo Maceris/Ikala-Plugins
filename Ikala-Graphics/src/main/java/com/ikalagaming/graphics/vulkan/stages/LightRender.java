@@ -301,11 +301,14 @@ public class LightRender implements RenderStage {
                 .getInvViewMatrix()
                 .get(ShaderBindings.Light.INVERSE_VIEW_MATRIX_OFFSET, uniformData);
 
+        // Lights are physical; the GPU gets them pre-exposed, see LightUnits
+        final float preExposure = scene.getPreExposure();
         AmbientLight ambientLight = scene.getSceneLights().getAmbientLight();
         int offset = ShaderBindings.Light.AMBIENT_LIGHT_OFFSET;
         ambientLight.getColor().get(offset + ShaderBindings.Light.AmbientLight.COLOR, uniformData);
         uniformData.putFloat(
-                offset + ShaderBindings.Light.AmbientLight.INTENSITY, ambientLight.getIntensity());
+                offset + ShaderBindings.Light.AmbientLight.INTENSITY,
+                ambientLight.getIntensity() * preExposure);
 
         // The light direction is in view space, like the other lights and the normals
         DirectionalLight dirLight = scene.getSceneLights().getDirLight();
@@ -328,7 +331,8 @@ public class LightRender implements RenderStage {
         new Vector3f(auxDir.x, auxDir.y, auxDir.z)
                 .get(offset + ShaderBindings.Light.DirectionalLight.DIRECTION, uniformData);
         uniformData.putFloat(
-                offset + ShaderBindings.Light.DirectionalLight.INTENSITY, dirLight.getIntensity());
+                offset + ShaderBindings.Light.DirectionalLight.INTENSITY,
+                dirLight.getIntensity() * preExposure);
 
         uniformData.putInt(ShaderBindings.Light.LIGHT_COUNT_OFFSET, lightCount);
         uniformData.putInt(
@@ -491,7 +495,7 @@ public class LightRender implements RenderStage {
             final DirectionalLight sun = scene.getSceneLights().getDirLight();
             environmentScale.set(
                     new Vector3f(sun.getColor())
-                            .mul(sun.getIntensity() * physicalSky.getStrength()),
+                            .mul(sun.getIntensity() * physicalSky.getStrength() * preExposure),
                     1);
         }
         environmentScale.get(ShaderBindings.Light.ENVIRONMENT_SCALE_OFFSET, uniformData);
@@ -499,7 +503,9 @@ public class LightRender implements RenderStage {
         final Vector4f environmentGlow = new Vector4f(0, 0, 0, 0);
         if (physicalSky != null) {
             final Vector3f ground = physicalSky.getGroundAlbedo();
-            environmentGlow.set(physicalSky.getGlow(), (ground.x + ground.y + ground.z) / 3);
+            environmentGlow.set(
+                    new Vector3f(physicalSky.getGlow()).mul(preExposure),
+                    (ground.x + ground.y + ground.z) / 3);
         }
         environmentGlow.get(ShaderBindings.Light.ENVIRONMENT_GLOW_OFFSET, uniformData);
         uniformData.putInt(

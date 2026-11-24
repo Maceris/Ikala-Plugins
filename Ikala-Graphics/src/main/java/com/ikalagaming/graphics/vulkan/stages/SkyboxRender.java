@@ -269,10 +269,15 @@ public class SkyboxRender implements RenderStage {
         // The fog volume is filled before the sky is drawn, see LightRender
         uniformData.putInt(ShaderBindings.Skybox.FOG_ENABLED_OFFSET, frameData.fogFilled ? 1 : 0);
         uniformData.putInt(ShaderBindings.Skybox.LAYOUT_OFFSET, scene.getSkyboxLayout().ordinal());
+        // Lights are physical; the GPU gets them pre-exposed, see LightUnits
+        final float preExposure = scene.getPreExposure();
         if (physicalSky == null) {
             // An environment map is drawn as bright as it lights, scaled to the ambient light
             final AmbientLight ambient = scene.getSceneLights().getAmbientLight();
-            new Vector4f(new Vector3f(ambient.getColor()).mul(ambient.getIntensity()), 2)
+            new Vector4f(
+                            new Vector3f(ambient.getColor())
+                                    .mul(ambient.getIntensity() * preExposure),
+                            2)
                     .get(ShaderBindings.Skybox.SKY_SCALE_OFFSET, uniformData);
         }
         if (physicalSky != null) {
@@ -285,15 +290,24 @@ public class SkyboxRender implements RenderStage {
                     .get(ShaderBindings.Skybox.SUN_AND_RADIUS_OFFSET, uniformData);
             new Vector4f(
                             new Vector3f(sun.getColor())
-                                    .mul(sun.getIntensity() * physicalSky.getStrength()),
+                                    .mul(
+                                            sun.getIntensity()
+                                                    * physicalSky.getStrength()
+                                                    * preExposure),
                             1)
                     .get(ShaderBindings.Skybox.SKY_SCALE_OFFSET, uniformData);
-            new Vector4f(physicalSky.getGlow(), physicalSky.getStarIlluminance())
+            new Vector4f(
+                            new Vector3f(physicalSky.getGlow()).mul(preExposure),
+                            physicalSky.getStarIlluminance() * preExposure)
                     .get(ShaderBindings.Skybox.GLOW_OFFSET, uniformData);
             final Quaternionf stars = physicalSky.getStarRotation();
             new Vector4f(stars.x, stars.y, stars.z, stars.w)
                     .get(ShaderBindings.Skybox.STAR_ROTATION_OFFSET, uniformData);
-            new Vector4f(new Vector3f(physicalSky.getGlow()).mul(physicalSky.getGroundAlbedo()), 0)
+            new Vector4f(
+                            new Vector3f(physicalSky.getGlow())
+                                    .mul(physicalSky.getGroundAlbedo())
+                                    .mul(preExposure),
+                            0)
                     .get(ShaderBindings.Skybox.GROUND_GLOW_OFFSET, uniformData);
         }
     }

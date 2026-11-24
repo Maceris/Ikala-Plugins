@@ -193,7 +193,8 @@ public class ToneMap implements RenderStage {
                         ShaderBindings.ToneMap.PUSH_CONSTANT_SCENE_COLOR_INDEX_OFFSET,
                         source.bindlessIndex);
                 constants.putFloat(
-                        ShaderBindings.ToneMap.PUSH_CONSTANT_EXPOSURE_OFFSET, scene.getExposure());
+                        ShaderBindings.ToneMap.PUSH_CONSTANT_EXPOSURE_OFFSET,
+                        scene.displayExposure());
                 constants.putLong(
                         ShaderBindings.ToneMap.PUSH_CONSTANT_EXPOSURE_STATE_OFFSET,
                         autoExposure.getStateAddress());

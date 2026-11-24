@@ -13,6 +13,7 @@ import com.ikalagaming.graphics.Textures;
 import com.ikalagaming.graphics.UI;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.Model;
+import com.ikalagaming.graphics.scene.LightUnits;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
@@ -86,7 +87,7 @@ public class MainMenu {
      * The demo's ambient light intensity: the sky's light, as the workbench uses, so metals reflect
      * the skybox rather than black.
      */
-    private static final float AMBIENT_INTENSITY = 0.3f;
+    private static final float AMBIENT_INTENSITY = LightUnits.physical(0.3f);
 
     /** The startup property that opens the sphere demo as soon as the menu opens. */
     private static final String SPHERE_DEMO_PROPERTY = "ikala.test.sphereDemo";
@@ -386,7 +387,7 @@ public class MainMenu {
                         new DirectionalLight(
                                 new Vector3f(1.0f, 1.0f, 1.0f),
                                 new Vector3f(0.247f, -0.848f, 0.785f),
-                                4f));
+                                LightUnits.physical(4)));
         scene.getSceneLights()
                 .setAmbientLight(new AmbientLight(new Vector3f(1, 1, 1), AMBIENT_INTENSITY));
 
@@ -397,13 +398,13 @@ public class MainMenu {
                 lights.point(
                         new Vector3d(8.5, 2.0, 7.5),
                         new Vector3f(1.0f, 0.1f, 0.1f),
-                        4f,
+                        LightUnits.physical(4),
                         lightRange);
         final LightHandle blue =
                 lights.point(
                         new Vector3d(1.7, 2.0, 7.5),
                         new Vector3f(0.1f, 0.1f, 1.0f),
-                        4f,
+                        LightUnits.physical(4),
                         lightRange);
 
         GraphicsManager.swapPipeline(RenderConfig.WORLD);

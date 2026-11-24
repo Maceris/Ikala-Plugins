@@ -140,9 +140,9 @@ public class Scene {
     @Setter private volatile PhysicalSky physicalSky;
 
     /**
-     * Whether the exposure adapts to the scene, as an eye does, with {@link #getExposure()}
-     * compensating it, rather than being the exposure itself. -- GETTER -- Whether the exposure
-     * adapts. -- SETTER -- Make the exposure adapt or not.
+     * Whether the exposure adapts to the scene, as an eye does, with {@link
+     * #getExposureCompensation()} shifting it, rather than being {@link #getExposureValue()}. --
+     * GETTER -- Whether the exposure adapts. -- SETTER -- Make the exposure adapt or not.
      *
      * @param autoExposure Whether it adapts.
      * @return Whether it adapts.
@@ -173,13 +173,35 @@ public class Scene {
     private volatile double viewDistance;
 
     /**
-     * What the lit scene is multiplied by before tone mapping, like a camera's exposure: above 1
-     * brightens, below 1 darkens.
+     * The camera's exposure while it doesn't adapt, in EV100: lower is brighter. {@link
+     * LightUnits#DEFAULT_EV100}, about 14.8, suits a sunny day; an evening indoors is about 7. --
+     * GETTER -- The exposure. -- SETTER -- Set the exposure.
      *
-     * @param exposure The new exposure.
-     * @return The exposure.
+     * @param exposureValue The exposure value.
+     * @return The exposure value.
      */
-    @Setter private volatile float exposure;
+    @Setter private volatile float exposureValue;
+
+    /**
+     * How much brighter than the adapted exposure the scene is shown while the exposure adapts, in
+     * stops: 1 is twice as bright, -1 half. -- GETTER -- The compensation. -- SETTER -- Set the
+     * compensation.
+     *
+     * @param exposureCompensation The compensation, in stops.
+     * @return The compensation, in stops.
+     */
+    @Setter private volatile float exposureCompensation;
+
+    /**
+     * What every light is multiplied by as it is uploaded, so the GPU's half floats hold the
+     * scene's light at any brightness; the exposure takes it back out, so it changes nothing shown.
+     * See {@link LightUnits}. -- GETTER -- The pre-exposure. -- SETTER -- Set the pre-exposure,
+     * above 0, such as higher for a night lit only by the moon.
+     *
+     * @param preExposure The pre-exposure.
+     * @return The pre-exposure.
+     */
+    @Setter private volatile float preExposure;
 
     /** The observer while it is frozen, or null while it follows the camera. */
     @Getter(AccessLevel.NONE)
@@ -203,12 +225,28 @@ public class Scene {
         particleClock = new ParticleClock();
         effectLibrary = new EffectLibrary();
         viewDistance = DEFAULT_VIEW_DISTANCE;
-        exposure = 1;
+        exposureValue = LightUnits.DEFAULT_EV100;
+        exposureCompensation = 0;
+        preExposure = LightUnits.REFERENCE_PRE_EXPOSURE;
         camera = new Camera();
         fog = new Fog();
         skyboxDiffuse = new Vector4f(0.65f, 0.65f, 0.65f, 1f);
         debugVisualizers = new DebugVisualizers();
         frozenObserver = null;
+    }
+
+    /**
+     * What the drawn scene color is multiplied by before tone mapping. Without adapting, the
+     * exposure value's multiplier with the pre-exposure taken back out; while adapting, only the
+     * compensation, since the adapted exposure is measured from the pre-exposed color itself.
+     *
+     * @return The multiplier.
+     */
+    public float displayExposure() {
+        if (autoExposure) {
+            return (float) Math.pow(2, exposureCompensation);
+        }
+        return LightUnits.exposure(exposureValue) / preExposure;
     }
 
     /**

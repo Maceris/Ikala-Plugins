@@ -27,7 +27,8 @@ public class DirectionalLight {
     @NonNull private final Vector3f direction;
 
     /**
-     * The intensity of the light, measured in candela per square meter (cd/m^2).
+     * How much light it gives a surface facing it, its illuminance, in lux: full sun is 100,000, a
+     * full moon 0.25.
      *
      * @param intensity The new intensity of the light.
      * @return The intensity of the light.

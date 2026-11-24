@@ -99,14 +99,20 @@ public class AssetInspectorWindow {
     /** The count of problems, or a reason nothing is open. */
     private final Label status;
 
+    /** Hides the inspector and goes back to where it was opened from. */
+    private final Runnable back;
+
     /**
      * Create the inspector, browsing the working directory.
      *
      * @param ui The UI to show the window through.
      * @param sampleCount Updated when samples are written, for the main menu.
+     * @param back Hides the inspector and goes back to where it was opened from.
      */
-    public AssetInspectorWindow(@NonNull UI ui, @NonNull Observable<Integer> sampleCount) {
+    public AssetInspectorWindow(
+            @NonNull UI ui, @NonNull Observable<Integer> sampleCount, @NonNull Runnable back) {
         this.ui = ui;
+        this.back = back;
         this.sampleCount = sampleCount;
         inspector = new AssetInspector(Path.of(""));
         path = new TextInput("path", "").onSubmit(this::openPath);
@@ -143,6 +149,7 @@ public class AssetInspectorWindow {
                 new Row("toolbar")
                         .gap(8)
                         .add(
+                                new Button("back", "Back").onClick(back),
                                 path,
                                 new Button("up", "Up").onClick(this::up),
                                 new Button("open", "Open").onClick(() -> openPath(path.text())),

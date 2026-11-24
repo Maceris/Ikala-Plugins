@@ -14,6 +14,7 @@ import com.ikalagaming.graphics.bake.SectionBaker;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.lod.LodStore;
+import com.ikalagaming.graphics.scene.LightUnits;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.util.IntArrayList;
 
@@ -52,7 +53,7 @@ final class GateWorld {
     private static final Vector3f TORCH_COLOR = new Vector3f(1, 0.85f, 0.6f);
 
     /** How bright each torch is, which with the default range reaches 10 m. */
-    private static final float TORCH_INTENSITY = 1;
+    private static final float TORCH_INTENSITY = LightUnits.physical(1);
 
     /** How high above the ground each torch is, in meters. */
     private static final double TORCH_HEIGHT = 1.5;

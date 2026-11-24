@@ -1,20 +1,29 @@
 package com.ikalagaming.converter.workbench;
 
+import com.ikalagaming.converter.AssetConvert;
 import com.ikalagaming.converter.scene.ImportedScene.Node;
 import com.ikalagaming.converter.scene.ScenePlacement;
 import com.ikalagaming.graphics.ColorSpace;
 import com.ikalagaming.graphics.TextureHandle;
+import com.ikalagaming.graphics.UI;
+import com.ikalagaming.graphics.asset.AssetFormat;
+import com.ikalagaming.graphics.asset.MaterialSection;
+import com.ikalagaming.graphics.asset.MaterialText;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.IkString;
+import com.ikalagaming.graphics.gui.flags.SliderFlags;
 import com.ikalagaming.graphics.ui.UiFrame;
 
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -23,12 +32,20 @@ import javax.annotation.Nullable;
 /**
  * Edits the materials of a scene in the workbench: pick one, or make a new one or a copy, change
  * its colors and factors, put textures in its slots from the image last opened, and put it on the
- * selected mesh. Changes show at once, since materials are written to the GPU every frame. Render
- * thread only.
+ * selected mesh. Changes show at once, since materials are written to the GPU every frame.
+ * Materials open from and save to files of their own, binary ({@code .ika}) or text ({@code
+ * .material.yml}), naming their textures by paths relative to the file. Render thread only.
  */
+@Slf4j
 public class MaterialEditor {
-    /** The strongest emission the slider offers. */
-    private static final float MAX_EMISSION = 50;
+    /**
+     * The brightest emission the slider offers, in cd/m^2: about a bare filament. A phone screen is
+     * a few hundred, a frosted bulb some tens of thousands.
+     */
+    private static final float MAX_EMISSION = 2_000_000;
+
+    /** The extension the file dialogs list for a material's text form. */
+    private static final String TEXT_EXTENSION = "yml";
 
     /** The size of a texture slot's thumbnail. */
     private static final float THUMBNAIL = 48;
@@ -91,6 +108,18 @@ public class MaterialEditor {
     /** Loads textures for the slots. */
     private final TextureLoader loader;
 
+    /** Shows file dialogs. */
+    private final UI ui;
+
+    /** Where each texture loaded here came from, to name it relative to a saved material. */
+    private final Map<TextureHandle, Path> texturePaths = new HashMap<>();
+
+    /** The file each material was opened from or saved to, to save to again. */
+    private final Map<Material, Path> materialFiles = new HashMap<>();
+
+    /** How the last open or save went, or empty. */
+    private String fileStatus = "";
+
     /** The image the workbench opened last, which slots can take. */
     private final Supplier<Path> openImage;
 
@@ -115,10 +144,13 @@ public class MaterialEditor {
     /**
      * Set up the editor.
      *
+     * @param ui Shows file dialogs.
      * @param loader Loads textures for the slots.
      * @param openImage The image the workbench opened last, or null if none.
      */
-    public MaterialEditor(@NonNull TextureLoader loader, @NonNull Supplier<Path> openImage) {
+    public MaterialEditor(
+            @NonNull UI ui, @NonNull TextureLoader loader, @NonNull Supplier<Path> openImage) {
+        this.ui = ui;
         this.loader = loader;
         this.openImage = openImage;
     }
@@ -136,6 +168,9 @@ public class MaterialEditor {
     public void clear() {
         selected = -1;
         named = -1;
+        texturePaths.clear();
+        materialFiles.clear();
+        fileStatus = "";
     }
 
     /**
@@ -198,6 +233,7 @@ public class MaterialEditor {
             Material material = new Material();
             material.getBaseColor().set(0.8f, 0.8f, 0.8f, 1);
             material.setRoughness(0.5f);
+            material.setSpecular(MaterialText.DEFAULT_SPECULAR);
             material.setNormalGreenDown(placement.isNormalGreenDown());
             selected = placement.addMaterial("Material " + (count + 1), material);
         }
@@ -208,6 +244,7 @@ public class MaterialEditor {
                             placement.nameOf(selected) + " copy",
                             copy(placement.getMaterials().get(selected)));
         }
+        drawFiles(placement);
 
         if (node != null && sceneMesh >= 0) {
             drawAssignment(placement, node, sceneMesh);
@@ -340,7 +377,15 @@ public class MaterialEditor {
         }
         boolean changed = IkGui.colorEdit3("Emission color", color3);
         value[0] = strength;
-        changed |= IkGui.sliderFloat("Emission strength", value, 0, MAX_EMISSION, "%.2f");
+        // Logarithmic, since screens are hundreds of cd/m^2 and lamps hundreds of thousands
+        changed |=
+                IkGui.sliderFloat(
+                        "Emission (cd/m^2)",
+                        value,
+                        0,
+                        MAX_EMISSION,
+                        "%.0f",
+                        SliderFlags.LOGARITHMIC);
         if (changed) {
             emissive.set(color3[0], color3[1], color3[2]).mul(value[0]);
         }
@@ -383,6 +428,7 @@ public class MaterialEditor {
                         slot.colorSpace,
                         loaded -> {
                             placement.adoptTexture(loaded, image.getFileName().toString());
+                            texturePaths.put(loaded, image.toAbsolutePath());
                             slot.setter.accept(material, loaded);
                             if (slot == Slot.BASE_COLOR) {
                                 material.getBaseColor().set(1, 1, 1, material.getBaseColor().w);
@@ -392,6 +438,154 @@ public class MaterialEditor {
         }
         IkGui.endGroup();
         IkGui.popID();
+    }
+
+    /**
+     * Draw the buttons to open a material file and save the selected one, and how it went.
+     *
+     * @param placement The scene.
+     */
+    private void drawFiles(@NonNull ScenePlacement placement) {
+        final String[] extensions = {AssetFormat.EXTENSION.substring(1), TEXT_EXTENSION};
+        if (IkGui.button("Open file...")) {
+            ui.openFile(
+                    "Open material",
+                    null,
+                    file -> {
+                        if (file != null) {
+                            open(placement, file);
+                        }
+                    },
+                    extensions);
+        }
+        if (selected >= 0) {
+            IkGui.sameLine();
+            if (IkGui.button("Save file...")) {
+                final Material material = placement.getMaterials().get(selected);
+                final Path last = materialFiles.get(material);
+                ui.saveFile(
+                        "Save material",
+                        last == null ? null : last.getParent(),
+                        last == null
+                                ? placement.nameOf(selected) + AssetFormat.EXTENSION
+                                : last.getFileName().toString(),
+                        file -> {
+                            if (file != null) {
+                                save(placement, material, file);
+                            }
+                        },
+                        extensions);
+            }
+        }
+        if (!fileStatus.isEmpty()) {
+            IkGui.textWrapped(fileStatus);
+        }
+    }
+
+    /**
+     * Open a material file as a new material in the scene, loading its textures from paths relative
+     * to it.
+     *
+     * @param placement The scene.
+     * @param file The file, binary or text.
+     */
+    void open(@NonNull ScenePlacement placement, @NonNull Path file) {
+        final MaterialSection.Stored stored;
+        try {
+            stored = AssetConvert.readMaterial(file);
+        } catch (RuntimeException e) {
+            log.warn("Couldn't open the material {}", file, e);
+            fileStatus = "Couldn't open " + file.getFileName() + ": " + e.getMessage();
+            return;
+        }
+        final Material material = new Material().setValues(stored.material());
+        selected = placement.addMaterial(materialName(file), material);
+        materialFiles.put(material, file.toAbsolutePath());
+        final String[] names = {
+            stored.textures().baseColor(),
+            stored.textures().normal(),
+            stored.textures().packed(),
+            stored.textures().emissive()
+        };
+        final Slot[] slots = Slot.values();
+        for (int i = 0; i < slots.length; ++i) {
+            if (names[i] == null) {
+                continue;
+            }
+            final Slot slot = slots[i];
+            final Path image = file.toAbsolutePath().resolveSibling(names[i]).normalize();
+            loader.load(
+                    image,
+                    slot.colorSpace,
+                    loaded -> {
+                        placement.adoptTexture(loaded, image.getFileName().toString());
+                        texturePaths.put(loaded, image);
+                        slot.setter.accept(material, loaded);
+                    });
+        }
+        fileStatus = "Opened " + file.getFileName();
+    }
+
+    /**
+     * Save a material to a file, binary or text by its ending, naming its textures by their paths
+     * relative to it.
+     *
+     * @param placement The scene, for the names of textures that didn't come from a file here.
+     * @param material The material.
+     * @param file The file.
+     */
+    void save(@NonNull ScenePlacement placement, @NonNull Material material, @NonNull Path file) {
+        final Path folder = file.toAbsolutePath().getParent();
+        final Slot[] slots = Slot.values();
+        final String[] names = new String[slots.length];
+        boolean guessed = false;
+        for (int i = 0; i < slots.length; ++i) {
+            final TextureHandle texture = slots[i].getter.apply(material);
+            if (texture == null) {
+                continue;
+            }
+            final Path source = texturePaths.get(texture);
+            if (source != null && source.getRoot().equals(folder.getRoot())) {
+                names[i] = folder.relativize(source).toString().replace('\\', '/');
+            } else {
+                // From an imported scene, which only knows its name
+                names[i] = placement.textureName(texture);
+                guessed = true;
+            }
+        }
+        try {
+            AssetConvert.writeMaterial(
+                    file,
+                    material,
+                    new MaterialSection.Textures(names[0], names[1], names[2], names[3]),
+                    null);
+        } catch (RuntimeException e) {
+            log.warn("Couldn't save the material to {}", file, e);
+            fileStatus = "Couldn't save " + file.getFileName() + ": " + e.getMessage();
+            return;
+        }
+        materialFiles.put(material, file.toAbsolutePath());
+        fileStatus =
+                "Saved "
+                        + file.getFileName()
+                        + (guessed
+                                ? "; textures from the imported scene are named by file name only"
+                                : "");
+    }
+
+    /**
+     * A material's name from its file: the file name without its ending.
+     *
+     * @param file The file.
+     * @return The name.
+     */
+    private static String materialName(@NonNull Path file) {
+        final String name = file.getFileName().toString();
+        if (name.toLowerCase(Locale.ROOT).endsWith(AssetConvert.MATERIAL_TEXT)) {
+            return name.substring(0, name.length() - AssetConvert.MATERIAL_TEXT.length());
+        }
+        final int dot = name.lastIndexOf('.');
+        return dot > 0 ? name.substring(0, dot) : name;
     }
 
     /**

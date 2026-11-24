@@ -2,11 +2,13 @@ package com.ikalagaming.factory.render;
 
 import com.ikalagaming.factory.render.looks.BlockLook;
 import com.ikalagaming.factory.render.looks.BlockLooks;
+import com.ikalagaming.factory.render.looks.FaceAverages;
 import com.ikalagaming.factory.world.gen.debug.Colormaps;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.TextureHandle;
+import com.ikalagaming.graphics.asset.MaterialText;
 import com.ikalagaming.graphics.bake.BakeSource;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MeshData;
@@ -15,6 +17,7 @@ import com.ikalagaming.graphics.scene.Scene;
 import lombok.NonNull;
 import org.joml.Vector3f;
 
+import java.awt.image.BufferedImage;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -48,6 +51,9 @@ public final class BlockMeshes implements AutoCloseable {
 
     /** How rough fluids are: smooth, for a highlight. */
     private static final float FLUID_ROUGHNESS = 0.1f;
+
+    /** How strongly fluids reflect head on: 2%, as water does. */
+    private static final float FLUID_SPECULAR = 0.25f;
 
     /** Bits to shift for the red channel of a packed color. */
     private static final int RED_SHIFT = 16;
@@ -152,6 +158,9 @@ public final class BlockMeshes implements AutoCloseable {
         final Material material =
                 look == null ? placeholderMaterial(block, fluid) : lookMaterial(look);
         final MeshData shape = look == null || look.isFluid() ? null : looks.model(look.model());
+        if (shape != null && look.texture() != null) {
+            faceVariants(material, shape, look.texture());
+        }
         final MeshData mesh;
         if (shape == null) {
             mesh =
@@ -181,6 +190,58 @@ public final class BlockMeshes implements AutoCloseable {
     }
 
     /**
+     * Give a material top and bottom variants where its model shows a different part of its texture
+     * on faces pointing up or down, as grass shows its top and its dirt bottom. They draw the same
+     * up close, since the model's texture coordinates choose the part; far away, where a block is
+     * flat colors by direction, each is the color of its own part.
+     *
+     * @param material The material, its sides'.
+     * @param shape The model.
+     * @param texture The texture's name.
+     */
+    private void faceVariants(
+            @NonNull Material material, @NonNull MeshData shape, @NonNull String texture) {
+        final BufferedImage image = looks.image(texture);
+        if (image == null) {
+            return;
+        }
+        final FaceAverages averages = FaceAverages.of(shape, image);
+        final Vector3f side = averages.side();
+        final boolean upDiffers = averages.up() != null && !FaceAverages.same(averages.up(), side);
+        final boolean downDiffers =
+                averages.down() != null && !FaceAverages.same(averages.down(), side);
+        if (!upDiffers && !downDiffers) {
+            return;
+        }
+        if (side != null) {
+            material.setAverageColor(side);
+        }
+        if (upDiffers) {
+            material.setTop(variant(material, averages.up()));
+        }
+        if (downDiffers) {
+            material.setBottom(variant(material, averages.down()));
+        }
+    }
+
+    /**
+     * A copy of a material, its textures too, that averages to another color far away.
+     *
+     * @param material The material.
+     * @param average The color, linear.
+     * @return The copy.
+     */
+    private static Material variant(@NonNull Material material, @NonNull Vector3f average) {
+        final Material out = new Material().setValues(material);
+        out.setTexture(material.getTexture());
+        out.setEmissiveMap(material.getEmissiveMap());
+        out.setNormalMap(material.getNormalMap());
+        out.setOcclusionRoughnessMetal(material.getOcclusionRoughnessMetal());
+        out.setAverageColor(new Vector3f(average));
+        return out;
+    }
+
+    /**
      * A material and its top and bottom variants, if it has them.
      *
      * @param material The material.
@@ -199,53 +260,51 @@ public final class BlockMeshes implements AutoCloseable {
     }
 
     /**
-     * The material for a look: its sides', with top and bottom variants where their textures
-     * differ.
+     * The material for a look: its material's values under its texture, which the model's texture
+     * coordinates map onto its faces.
      *
      * @param look The look.
      * @return The material.
      */
     private Material lookMaterial(@NonNull BlockLook look) {
-        final Material side = surface(look, look.side());
-        if (!Objects.equals(look.top(), look.side())) {
-            side.setTop(surface(look, look.top()));
-        }
-        if (!Objects.equals(look.bottom(), look.side())) {
-            side.setBottom(surface(look, look.bottom()));
-        }
-        return side;
+        return surface(look.texture(), look.material(), look.isFluid());
     }
 
     /**
-     * One face's material for a look.
+     * One face's material: the named material's values under the face's texture.
      *
-     * @param look The look, for its surface values.
      * @param texture The face's texture name, or null for none.
-     * @return The material: white under its texture, or a plain light gray without one, or if the
-     *     texture is missing.
+     * @param named The face's material name, or null for the default.
+     * @param fluid Whether the block is a fluid, which is see-through without a material.
+     * @return The material: the material file's base color without a texture, or a plain light gray
+     *     if the texture is missing.
      */
-    private Material surface(@NonNull BlockLook look, String texture) {
+    private Material surface(String texture, String named, boolean fluid) {
+        final Material values = named == null ? null : looks.material(named);
         final Material material = new Material();
-        final TextureHandle handle = texture == null ? null : looks.texture(texture);
-        if (handle != null) {
-            material.setTexture(handle);
-            material.getBaseColor().set(Material.DEFAULT_COLOR);
+        if (values != null) {
+            material.setValues(values);
         } else {
-            material.getBaseColor().set(MISSING_GRAY, MISSING_GRAY, MISSING_GRAY, 1);
+            material.setValues(MaterialText.defaults());
+            if (fluid) {
+                material.setTransparency(Material.Transparency.TRANSLUCENT);
+            }
         }
-        material.setRoughness(look.roughness());
-        material.setMetallic(look.metallic());
-        if (look.emission() > 0) {
+        if (texture != null) {
+            final TextureHandle handle = looks.texture(texture);
+            if (handle != null) {
+                material.setTexture(handle);
+                material.setNormalMap(looks.normalMap(texture));
+                material.getBaseColor().set(Material.DEFAULT_COLOR);
+            } else {
+                material.getBaseColor().set(MISSING_GRAY, MISSING_GRAY, MISSING_GRAY, 1);
+            }
+        }
+        final Vector3f glow = material.getEmissive();
+        if (glow.x > 0 || glow.y > 0 || glow.z > 0) {
             // Glows in its own color: the texture's, if it has one
-            material.setEmissiveMap(handle);
-            material.getEmissive().set(look.emission());
+            material.setEmissiveMap(material.getTexture());
         }
-        material.setTransparency(
-                switch (look.transparency()) {
-                    case OPAQUE -> Material.Transparency.OPAQUE;
-                    case CUTOUT -> Material.Transparency.CUTOUT;
-                    case TRANSLUCENT -> Material.Transparency.TRANSLUCENT;
-                });
         return material;
     }
 
@@ -266,6 +325,7 @@ public final class BlockMeshes implements AutoCloseable {
                         (rgb & CHANNEL_MASK) / CHANNEL_MAX,
                         fluid ? FLUID_OPACITY : 1);
         material.setRoughness(fluid ? FLUID_ROUGHNESS : ROUGHNESS);
+        material.setSpecular(fluid ? FLUID_SPECULAR : MaterialText.DEFAULT_SPECULAR);
         material.setTransparency(
                 fluid ? Material.Transparency.TRANSLUCENT : Material.Transparency.OPAQUE);
         return material;

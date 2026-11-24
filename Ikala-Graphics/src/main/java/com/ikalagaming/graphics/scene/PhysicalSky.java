@@ -53,9 +53,9 @@ public class PhysicalSky {
 
     /**
      * The sky's own light, which does not come from the sun: airglow, starlight and twilight. It is
-     * a radiance the same from every direction above the horizon, in the scene's light units and
-     * not scaled by the sun or {@link #strength}; it lights the scene as the sky does and adds to
-     * the sky drawn. 0 by default. Linear.
+     * a luminance the same from every direction above the horizon, in cd/m^2, and not scaled by the
+     * sun or {@link #strength}; it lights the scene as the sky does and adds to the sky drawn. 0 by
+     * default. Linear.
      *
      * @param glow The radiance.
      * @return The radiance.
@@ -63,9 +63,9 @@ public class PhysicalSky {
     @NonNull private Vector3f glow = new Vector3f();
 
     /**
-     * How bright the stars are: the illuminance a star of magnitude 0 gives, in the scene's light
-     * units, as the sun's intensity is one. Stars are drawn down to about magnitude 6.5, dimmed by
-     * the air they shine through; 0 draws none.
+     * How bright the stars are: the illuminance a star of magnitude 0 gives, in lux, about 2.5e-6.
+     * Stars are drawn down to about magnitude 6.5, dimmed by the air they shine through; 0 draws
+     * none.
      *
      * @param starIlluminance The illuminance.
      * @return The illuminance.

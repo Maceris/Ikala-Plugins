@@ -7,6 +7,7 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.graph.OccupancyClipmap;
 import com.ikalagaming.graphics.scene.EmitterRegistry;
+import com.ikalagaming.graphics.scene.LightUnits;
 import com.ikalagaming.graphics.scene.ParticleClock;
 import com.ikalagaming.graphics.scene.ParticleEffect;
 import com.ikalagaming.graphics.scene.ParticleEffectLoader;
@@ -55,6 +56,9 @@ import java.util.List;
  */
 @Slf4j
 public class ParticleUpdate implements RenderStage {
+
+    /** The scene's pre-exposure this frame, see LightUnits. */
+    private float preExposure = LightUnits.REFERENCE_PRE_EXPOSURE;
 
     /** Nanoseconds in a second. */
     private static final double NANOS_PER_SECOND = 1e9;
@@ -204,6 +208,7 @@ public class ParticleUpdate implements RenderStage {
         if (scene == null || pool == null) {
             return;
         }
+        preExposure = scene.getPreExposure();
         final long now = System.nanoTime();
         final double realSeconds = lastNanos == 0 ? 0 : (now - lastNanos) / NANOS_PER_SECOND;
         lastNanos = now;
@@ -526,7 +531,8 @@ public class ParticleUpdate implements RenderStage {
                     first,
                     count,
                     frames * SEED_STEP + written,
-                    spawn.link());
+                    spawn.link(),
+                    preExposure);
             putPath(at, spawn);
             first += count;
             ++written;
@@ -601,7 +607,7 @@ public class ParticleUpdate implements RenderStage {
             MemoryUtil.memPutInt(
                     at + ParticleMath.LINK_SPLASH_COUNT,
                     Math.min(effect.getBurst(), ParticleMath.MAX_SPLASH_COUNT));
-            putEmitter(at + ParticleMath.LINK_SPLASH, effect, origin, 0, 0, 0, 0);
+            putEmitter(at + ParticleMath.LINK_SPLASH, effect, origin, 0, 0, 0, 0, preExposure);
             putStill(at + ParticleMath.LINK_SPLASH);
             // The simulation records drops into the water this frame for the splash pass
             if (ParticleMath.WATER_LINK_SPRAY + i == ParticleMath.WATER_LINK_DROP
@@ -638,7 +644,7 @@ public class ParticleUpdate implements RenderStage {
             MemoryUtil.memPutInt(at + ParticleMath.LINK_SPLASH_COUNT, splashCount);
             if (splashCount > 0) {
                 splashes = true;
-                putEmitter(at + ParticleMath.LINK_SPLASH, splash, origin, 0, 0, 0, 0);
+                putEmitter(at + ParticleMath.LINK_SPLASH, splash, origin, 0, 0, 0, 0, preExposure);
                 putStill(at + ParticleMath.LINK_SPLASH);
             }
             final float follow = Math.clamp(effect.getFollow(), 0, 1);
@@ -677,6 +683,8 @@ public class ParticleUpdate implements RenderStage {
      * @param count How many it spawns.
      * @param seed Its random seed.
      * @param link Its link, or 0 for none.
+     * @param preExposure What its light is multiplied by, see LightUnits: its emission, in cd/m^2
+     *     per unit of color, and an unlit effect's color, which is light at the reference scale.
      */
     private static void putEmitter(
             long at,
@@ -685,7 +693,10 @@ public class ParticleUpdate implements RenderStage {
             int first,
             int count,
             int seed,
-            int link) {
+            int link,
+            float preExposure) {
+        // An unlit particle shows its color as light, in the units the effects were made in
+        final float unlit = effect.isLit() ? 1 : preExposure / LightUnits.REFERENCE_PRE_EXPOSURE;
         putVector(
                 at + ParticleMath.EMITTER_POSITION,
                 (float) position.x,
@@ -718,21 +729,21 @@ public class ParticleUpdate implements RenderStage {
                 effect.getSpeedMax());
         putFloats(
                 at + ParticleMath.EMITTER_COLOR_START,
-                effect.getColorStart().x(),
-                effect.getColorStart().y(),
-                effect.getColorStart().z(),
+                effect.getColorStart().x() * unlit,
+                effect.getColorStart().y() * unlit,
+                effect.getColorStart().z() * unlit,
                 effect.getColorStart().w());
         putFloats(
                 at + ParticleMath.EMITTER_COLOR_END,
-                effect.getColorEnd().x(),
-                effect.getColorEnd().y(),
-                effect.getColorEnd().z(),
+                effect.getColorEnd().x() * unlit,
+                effect.getColorEnd().y() * unlit,
+                effect.getColorEnd().z() * unlit,
                 effect.getColorEnd().w());
         putFloats(
                 at + ParticleMath.EMITTER_SIZES,
                 Math.max(0, effect.getSizeStart()),
                 Math.max(0, effect.getSizeEnd()),
-                Math.max(0, effect.getEmissive()),
+                Math.max(0, effect.getEmissive()) * preExposure,
                 Math.max(0, effect.getSpawnRadius()));
         MemoryUtil.memPutInt(at + ParticleMath.EMITTER_COUNT, count);
         MemoryUtil.memPutInt(at + ParticleMath.EMITTER_COUNT + Integer.BYTES, seed);
