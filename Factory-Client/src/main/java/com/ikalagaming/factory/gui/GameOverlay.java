@@ -14,6 +14,7 @@ import com.ikalagaming.factory.sim.Fixed;
 import com.ikalagaming.factory.sim.Frames;
 import com.ikalagaming.factory.sim.Movement;
 import com.ikalagaming.factory.sim.PlayerSimulation;
+import com.ikalagaming.factory.sim.WorldClock;
 import com.ikalagaming.factory.world.ChunkPos;
 import com.ikalagaming.factory.world.World;
 import com.ikalagaming.factory.world.WorldTime;
@@ -189,13 +190,24 @@ public final class GameOverlay {
         final double hour = WorldTime.hour(ticks);
         final int whole = (int) hour;
         final int minute = (int) ((hour - whole) * 60);
+        final int rate = session.getClock().getTicksPerSecond();
+        final String state;
+        if (SinglePlayerGame.isPaused()) {
+            state = " (paused)";
+        } else if (rate == 0) {
+            state = " (world frozen)";
+        } else if (rate != WorldClock.NORMAL_RATE) {
+            state = " (" + rate + " ticks/s)";
+        } else {
+            state = "";
+        }
         return String.format(
                 Locale.ROOT,
                 "Day %d, %02d:%02d%s",
                 WorldTime.day((long) ticks),
                 whole,
                 minute,
-                SinglePlayerGame.isPaused() ? " (paused)" : "");
+                state);
     }
 
     /**

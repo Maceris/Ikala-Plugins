@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.lod;
 
 import com.ikalagaming.util.IntArrayList;
+import com.ikalagaming.util.LongIntMap;
 
 import lombok.NonNull;
 

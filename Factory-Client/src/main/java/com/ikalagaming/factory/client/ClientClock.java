@@ -68,6 +68,15 @@ public final class ClientClock {
     }
 
     /**
+     * How many world ticks pass each second, as the server last said.
+     *
+     * @return The rate: 20 normally, 0 while the world is frozen or sprinting.
+     */
+    public int getTicksPerSecond() {
+        return ticksPerSecond;
+    }
+
+    /**
      * Whether the server has sent the time yet.
      *
      * @return True once it has.

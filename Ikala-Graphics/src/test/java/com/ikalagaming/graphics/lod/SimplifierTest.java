@@ -3,6 +3,8 @@ package com.ikalagaming.graphics.lod;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.ikalagaming.util.LongIntMap;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;

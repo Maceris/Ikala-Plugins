@@ -6,10 +6,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.ikalagaming.factory.networking.base.Connection;
 import com.ikalagaming.factory.networking.base.Request;
+import com.ikalagaming.factory.networking.request.clientbound.BlockChanges;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkData;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkUnload;
 import com.ikalagaming.factory.networking.request.clientbound.Joined;
 import com.ikalagaming.factory.networking.request.clientbound.TimeUpdate;
+import com.ikalagaming.factory.sim.GameMode;
+import com.ikalagaming.factory.world.Block;
 import com.ikalagaming.factory.world.Chunk;
 import com.ikalagaming.factory.world.ChunkPos;
 import com.ikalagaming.factory.world.World;
@@ -74,8 +77,13 @@ class TestServerWorld {
             assertFalse(world.loadedChunk(below).isPresent());
             assertFalse(world.unload(below));
 
+            // The first world tick runs in the fourth world frame, 8 ticks in every 25
             long time = world.getTime();
-            world.tick();
+            for (int i = 0; i < 3; ++i) {
+                world.frame();
+            }
+            assertEquals(0, world.getTicks());
+            world.frame();
             assertEquals(1, world.getTicks());
             assertEquals(time + 1, world.getTime());
         }
@@ -117,7 +125,7 @@ class TestServerWorld {
             if (System.nanoTime() > deadline) {
                 throw new AssertionError("Timed out");
             }
-            world.tick();
+            world.frame();
             Thread.sleep(1);
         }
     }
@@ -128,7 +136,8 @@ class TestServerWorld {
         try (ServerWorld world =
                 new ServerWorld(Path.of("save"), "world", emptyWorld(), spawn, 4, 0)) {
             Recorder client = new Recorder();
-            world.post(() -> world.join("Tester", client));
+            // A spectator hovers, so the player stays in the chunk they started in
+            world.post(() -> world.setGameMode(world.join("Tester", client), GameMode.SPECTATOR));
             int all =
                     (2 * ServerWorld.VIEW_RADIUS + 1)
                             * (2 * ServerWorld.VIEW_RADIUS + 1)
@@ -158,13 +167,58 @@ class TestServerWorld {
 
             // Move 10 chunks east: the chunks more than a chunk past the view behind are dropped
             ServerPlayer player = world.players().iterator().next();
-            world.post(() -> player.moveTo(160.5, 64, 0.5));
+            world.post(() -> world.teleport(player, 160.5, 64, 0.5));
             int width = 2 * ServerWorld.VIEW_RADIUS + 1;
             int height = 2 * ServerWorld.VERTICAL_RADIUS + 1;
             int dropped = (10 - ServerWorld.DROP_MARGIN) * width * height;
             tickUntil(world, () -> client.count(ChunkUnload.class) >= dropped);
-            world.tick();
+            world.frame();
             assertEquals(dropped, client.count(ChunkUnload.class));
+        }
+    }
+
+    /**
+     * A block changed between frames goes to the players who have its chunk, stamped with the frame
+     * before, since the next frame's movement already sees it.
+     */
+    @Test
+    void testBlockChangesStamped() throws Exception {
+        SpawnFinder.Spawn spawn = new SpawnFinder.Spawn(0, 64, 0, false);
+        try (ServerWorld world =
+                new ServerWorld(Path.of("save"), "world", emptyWorld(), spawn, 2, 0)) {
+            Recorder client = new Recorder();
+            world.post(() -> world.setGameMode(world.join("Tester", client), GameMode.SPECTATOR));
+            ChunkPos below = ChunkPos.containing(0, 63, 0);
+            tickUntil(
+                    world,
+                    () ->
+                            client.sent.stream()
+                                    .anyMatch(
+                                            r ->
+                                                    r instanceof ChunkData data
+                                                            && data.getX() == below.x()
+                                                            && data.getY() == below.y()
+                                                            && data.getZ() == below.z()));
+            final Block stone = new Block("t:stone", null);
+            final boolean[] changed = {false};
+            world.post(() -> changed[0] = world.setBlock(0, 63, 0, stone));
+            final long frame = world.getFrames();
+            world.frame();
+            assertTrue(changed[0]);
+            assertEquals(stone, world.loadedChunk(below).orElseThrow().getBlock(0, 63 & 15, 0));
+            BlockChanges changes =
+                    (BlockChanges)
+                            client.sent.stream()
+                                    .filter(BlockChanges.class::isInstance)
+                                    .findFirst()
+                                    .orElseThrow();
+            assertEquals(frame - 1, changes.getFrame());
+            assertEquals(List.of(0, 63, 0), changes.getPositions());
+            assertEquals(List.of("t:stone"), changes.getBlocks());
+            // A block in a chunk that isn't loaded can't change
+            world.post(() -> changed[0] = world.setBlock(100_000, 0, 0, stone));
+            world.frame();
+            assertFalse(changed[0]);
         }
     }
 }

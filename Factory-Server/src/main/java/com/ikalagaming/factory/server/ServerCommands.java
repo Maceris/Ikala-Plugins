@@ -3,6 +3,8 @@ package com.ikalagaming.factory.server;
 import com.ikalagaming.factory.chat.ChatText;
 import com.ikalagaming.factory.save.Accounts;
 import com.ikalagaming.factory.sim.GameMode;
+import com.ikalagaming.factory.sim.WorldClock;
+import com.ikalagaming.factory.world.Block;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +37,14 @@ public final class ServerCommands {
     public static final String ACCEPT = "lotomation.command.accept";
     public static final String SAY = "lotomation.command.say";
     public static final String TIME = "lotomation.command.time";
+    public static final String TICK = "lotomation.command.tick";
+    public static final String SETBLOCK = "lotomation.command.setblock";
+
+    /** What relative coordinates start with. */
+    private static final String RELATIVE = "~";
+
+    /** Nanoseconds in a millisecond, for showing times. */
+    private static final double NANOS_PER_MILLI = 1e6;
 
     /** What a command does. */
     @FunctionalInterface
@@ -114,6 +124,21 @@ public final class ServerCommands {
                         "/time [set <noon|sunset|HH:MM|hour> | add <ticks|hours h|days d>]",
                         "Show or change the time of day",
                         this::time));
+        add(
+                new Command(
+                        "tick",
+                        TICK,
+                        "/tick [rate <ticks a second> | freeze | unfreeze | step [ticks] | sprint"
+                                + " <ticks|stop>]",
+                        "Show or change how fast the world runs; players keep moving",
+                        this::tick));
+        add(
+                new Command(
+                        "setblock",
+                        SETBLOCK,
+                        "/setblock <x> <y> <z> <block>",
+                        "Change one block; ~ is relative to you",
+                        this::setBlock));
     }
 
     /**
@@ -344,6 +369,201 @@ public final class ServerCommands {
                 ChatText.of(
                         sender.name() + " set the time to " + TimeArguments.describe(time) + ".",
                         ChatText.GREY));
+    }
+
+    /**
+     * Show how fast the world runs, or change it. Players keep moving whatever the world does. Only
+     * single player may run it faster than normal.
+     *
+     * @param sender Who asked.
+     * @param args Nothing, {@code rate <n>}, {@code freeze}, {@code unfreeze}, {@code step [n]} or
+     *     {@code sprint <n|stop>}.
+     */
+    private void tick(@NonNull CommandSender sender, @NonNull List<String> args) {
+        final WorldClock clock = world.clock();
+        if (args.isEmpty()) {
+            sender.reply(ChatText.of(describe(clock), ChatText.GREY));
+            return;
+        }
+        final String action = args.get(0).toLowerCase(Locale.ROOT);
+        final String what;
+        WorldClock changed;
+        switch (action) {
+            case "rate" -> {
+                final OptionalLong rate =
+                        args.size() == 2 ? whole(args.get(1)) : OptionalLong.empty();
+                if (rate.isEmpty()
+                        || rate.getAsLong() < 1
+                        || rate.getAsLong() > WorldClock.MAX_RATE) {
+                    usage(sender, "tick");
+                    return;
+                }
+                if (rate.getAsLong() > WorldClock.NORMAL_RATE && !world.isSpeedUpAllowed()) {
+                    sender.reply(
+                            ChatText.of(
+                                    "The world can only run faster than normal in single player.",
+                                    ChatText.RED));
+                    return;
+                }
+                changed = clock.withRate((int) rate.getAsLong());
+                what = "set the world to " + rate.getAsLong() + " ticks a second";
+            }
+            case "freeze" -> {
+                changed = clock.withFrozen(true);
+                what = "froze the world";
+            }
+            case "unfreeze" -> {
+                changed = clock.withFrozen(false);
+                what = "unfroze the world";
+            }
+            case "step" -> {
+                final OptionalLong ticks =
+                        args.size() == 1 ? OptionalLong.of(1) : whole(args.get(1));
+                if (args.size() > 2 || ticks.isEmpty() || ticks.getAsLong() < 1) {
+                    usage(sender, "tick");
+                    return;
+                }
+                changed = clock.stepping(ticks.getAsLong());
+                what = "stepped the world " + ticks.getAsLong() + " ticks";
+            }
+            case "sprint" -> {
+                if (args.size() != 2) {
+                    usage(sender, "tick");
+                    return;
+                }
+                if ("stop".equalsIgnoreCase(args.get(1))) {
+                    changed = clock.sprinting(0);
+                    what = "stopped the world sprinting";
+                } else {
+                    final OptionalLong ticks = whole(args.get(1));
+                    if (ticks.isEmpty() || ticks.getAsLong() < 1) {
+                        usage(sender, "tick");
+                        return;
+                    }
+                    if (!world.isSpeedUpAllowed()) {
+                        sender.reply(
+                                ChatText.of(
+                                        "The world can only sprint in single player.",
+                                        ChatText.RED));
+                        return;
+                    }
+                    changed = clock.sprinting(ticks.getAsLong());
+                    what = "set the world sprinting through " + ticks.getAsLong() + " ticks";
+                }
+            }
+            default -> {
+                usage(sender, "tick");
+                return;
+            }
+        }
+        world.setClock(changed);
+        world.broadcast(ChatText.of(sender.name() + " " + what + ".", ChatText.GREY));
+    }
+
+    /**
+     * How fast the world runs and how far it has run, for {@code /tick}.
+     *
+     * @param clock The clock.
+     * @return The text.
+     */
+    private String describe(@NonNull WorldClock clock) {
+        final String state;
+        if (clock.isSprinting()) {
+            state = "sprinting, " + clock.sprintTicks() + " ticks to go";
+        } else if (clock.frozen()) {
+            state =
+                    clock.stepTicks() > 0
+                            ? "frozen, stepping " + clock.stepTicks() + " more ticks"
+                            : "frozen";
+        } else {
+            state = clock.rate() + " ticks a second";
+        }
+        return String.format(
+                Locale.ROOT,
+                "World: %s; %d world frames, %d ticks; the last world tick took %.2f ms.",
+                state,
+                clock.worldFrames(),
+                clock.worldTicks(),
+                world.getWorldTickNanos() / NANOS_PER_MILLI);
+    }
+
+    /**
+     * Change one block, which must be in a loaded chunk.
+     *
+     * @param sender Who asked.
+     * @param args The x, y and z, each a whole number or {@code ~} with an optional offset from the
+     *     sender, then the block.
+     */
+    private void setBlock(@NonNull CommandSender sender, @NonNull List<String> args) {
+        if (args.size() != 4) {
+            usage(sender, "setblock");
+            return;
+        }
+        final ServerPlayer player = sender.player();
+        final OptionalLong x = coordinate(args.get(0), player == null ? null : player.getX());
+        final OptionalLong y = coordinate(args.get(1), player == null ? null : player.getY());
+        final OptionalLong z = coordinate(args.get(2), player == null ? null : player.getZ());
+        if (x.isEmpty() || y.isEmpty() || z.isEmpty()) {
+            usage(sender, "setblock");
+            return;
+        }
+        final Optional<String> block = world.blockNamed(args.get(3));
+        if (block.isEmpty()) {
+            sender.reply(ChatText.of("There's no block named " + args.get(3) + ".", ChatText.RED));
+            return;
+        }
+        if (!world.setBlock(
+                (int) x.getAsLong(),
+                (int) y.getAsLong(),
+                (int) z.getAsLong(),
+                new Block(block.get(), null))) {
+            sender.reply(ChatText.of("That block isn't loaded.", ChatText.RED));
+            return;
+        }
+        sender.reply(
+                ChatText.of(
+                        String.format(
+                                Locale.ROOT,
+                                "Set %d, %d, %d to %s.",
+                                x.getAsLong(),
+                                y.getAsLong(),
+                                z.getAsLong(),
+                                block.get()),
+                        ChatText.GREY));
+    }
+
+    /**
+     * A block coordinate: a whole number, or {@code ~} and an optional whole offset from where the
+     * sender stands.
+     *
+     * @param text What was typed.
+     * @param here Where the sender is along the axis, or null for the console.
+     * @return The coordinate, or empty if it isn't one.
+     */
+    static OptionalLong coordinate(@NonNull String text, Double here) {
+        if (!text.startsWith(RELATIVE)) {
+            return whole(text);
+        }
+        if (here == null) {
+            return OptionalLong.empty();
+        }
+        final String offset = text.substring(RELATIVE.length());
+        final OptionalLong by = offset.isEmpty() ? OptionalLong.of(0) : whole(offset);
+        return by.isEmpty() ? by : OptionalLong.of((long) Math.floor(here) + by.getAsLong());
+    }
+
+    /**
+     * A whole number within the range of an {@code int}.
+     *
+     * @param text What was typed.
+     * @return The number, or empty if it isn't one.
+     */
+    static OptionalLong whole(@NonNull String text) {
+        try {
+            return OptionalLong.of(Integer.parseInt(text.strip()));
+        } catch (NumberFormatException e) {
+            return OptionalLong.empty();
+        }
     }
 
     /**

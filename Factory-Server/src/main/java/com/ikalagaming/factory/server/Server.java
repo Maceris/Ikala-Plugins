@@ -53,14 +53,14 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * The game server: loads the definitions, opens a save's world, and runs it: command frames every
- * 16 ms and world ticks {@value #TICKS_PER_SECOND} times a second, on one thread (see {@link
- * ServerLoop}). Single player runs one in the same process. See the Starting a Game and Command
- * Frames design docs.
+ * 16 ms, with world frames and {@value #TICKS_PER_SECOND} world ticks a second of world time inside
+ * them, on one thread (see {@link ServerLoop}). Single player runs one in the same process. See the
+ * Starting a Game and Command Frames design docs.
  */
 @Slf4j
 public class Server {
 
-    /** How many times a second the world ticks. */
+    /** How many times a second of world time the world ticks, and the server does its upkeep. */
     public static final int TICKS_PER_SECOND = 20;
 
     /** The tag that marks blocks that are fluids. */
@@ -264,7 +264,6 @@ public class Server {
             loop =
                     new ServerLoop(
                             () -> frameSafely(opened),
-                            () -> tickSafely(opened),
                             System.nanoTime(),
                             Boolean.getBoolean(ServerLoop.PRECISE_PROPERTY));
             loop.whilePaused(opened::runTasks, () -> opened.playerCount() <= 1);
@@ -335,6 +334,8 @@ public class Server {
         if (hosting.listen() == Hosting.Listen.OFF) {
             return;
         }
+        // Others can join, so the world can't run faster than normal
+        opened.setSpeedUpAllowed(false);
         final InetSocketAddress bind =
                 hosting.bind().isEmpty()
                         ? new InetSocketAddress(hosting.port())
@@ -410,19 +411,6 @@ public class Server {
             opened.frame();
         } catch (RuntimeException e) {
             log.warn("A server frame failed", e);
-        }
-    }
-
-    /**
-     * Run a tick, keeping the loop alive if it throws.
-     *
-     * @param opened The world to tick.
-     */
-    private static void tickSafely(@NonNull ServerWorld opened) {
-        try {
-            opened.tick();
-        } catch (RuntimeException e) {
-            log.warn("A server tick failed", e);
         }
     }
 

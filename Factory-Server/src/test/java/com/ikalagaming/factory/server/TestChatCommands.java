@@ -121,7 +121,7 @@ class TestChatCommands {
                         players[0] = world.join(ownerAccount, ownerClient);
                         players[1] = world.join(bobAccount, bobClient);
                     });
-            world.tick();
+            world.frame();
             final ServerPlayer owner = players[0];
             final ServerPlayer bob = players[1];
             assertTrue(ownerClient.chat().contains("Bob joined the game"));
@@ -167,8 +167,38 @@ class TestChatCommands {
             say(world, owner, "/time set teatime", ownerClient);
             assertTrue(ownerClient.last().plain().startsWith("Usage"), ownerClient.last().plain());
 
+            // The world's clock: players' frames go on, the world's stop
+            say(world, bob, "/tick freeze", bobClient);
+            assertEquals("You don't have permission to do that.", bobClient.last().plain());
+            say(world, owner, "/tick freeze", ownerClient);
+            assertEquals("Owner froze the world.", bobClient.last().plain());
+            final long frozenAt = world.getTime();
+            for (int i = 0; i < 10; ++i) {
+                world.frame();
+            }
+            assertEquals(frozenAt, world.getTime());
+            say(world, owner, "/tick step 2", ownerClient);
+            for (int i = 0; i < 10; ++i) {
+                world.frame();
+            }
+            assertEquals(frozenAt + 2, world.getTime());
+            say(world, owner, "/tick unfreeze", ownerClient);
+            world.setSpeedUpAllowed(false);
+            say(world, owner, "/tick rate 40", ownerClient);
+            assertEquals(
+                    "The world can only run faster than normal in single player.",
+                    ownerClient.last().plain());
+            say(world, owner, "/tick sprint 100", ownerClient);
+            assertEquals("The world can only sprint in single player.", ownerClient.last().plain());
+            say(world, owner, "/tick rate 10", ownerClient);
+            assertEquals("Owner set the world to 10 ticks a second.", bobClient.last().plain());
+            assertTrue(
+                    say(world, owner, "/tick", ownerClient).plain().startsWith("World: 10 ticks"));
+            say(world, owner, "/tick rate 0", ownerClient);
+            assertTrue(ownerClient.last().plain().startsWith("Usage"), ownerClient.last().plain());
+
             world.post(() -> world.commands().dispatch(consoleSender(), "say Hello"));
-            world.tick();
+            world.frame();
             assertEquals("[Server] Hello", bobClient.last().plain());
         }
     }
@@ -196,7 +226,7 @@ class TestChatCommands {
      */
     private static void run(ServerWorld world, Runnable task) {
         world.post(task);
-        world.tick();
+        world.frame();
     }
 
     /**

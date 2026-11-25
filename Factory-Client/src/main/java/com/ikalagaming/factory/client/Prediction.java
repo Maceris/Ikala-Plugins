@@ -4,6 +4,7 @@ import com.ikalagaming.ecs.Schedule;
 import com.ikalagaming.ecs.Snapshot;
 import com.ikalagaming.ecs.World;
 import com.ikalagaming.factory.networking.request.serverbound.PlayerInputs;
+import com.ikalagaming.factory.sim.BlockHistory;
 import com.ikalagaming.factory.sim.BlockView;
 import com.ikalagaming.factory.sim.GameMode;
 import com.ikalagaming.factory.sim.Movement;
@@ -47,6 +48,12 @@ public final class Prediction {
     /** The world after each frame, by slot. */
     private final Snapshot[] results = new Snapshot[RING];
 
+    /** The block changes the frames in the ring may need to step against as they were. */
+    private final BlockHistory blockHistory = new BlockHistory();
+
+    /** The blocks as the frame being stepped saw them. */
+    private final BlockHistory.AtFrame blocksAtFrame;
+
     /**
      * The last frame stepped.
      *
@@ -88,7 +95,9 @@ public final class Prediction {
      * @param serverFrame The frame the server runs next, from its answer to joining.
      * @param start The player's movement as the server put it.
      * @param gameMode The player's game mode.
-     * @param blocks The blocks the player moves through: the chunks received, with the rest solid.
+     * @param blocks The blocks the player moves through as they are now: the chunks received, with
+     *     the rest solid. Each frame steps against them as they were then, from the block changes
+     *     recorded with {@link #blockChanged}.
      */
     public Prediction(
             long serverFrame,
@@ -100,7 +109,8 @@ public final class Prediction {
         world.set(PlayerSimulation.MOVEMENT, player, start);
         world.set(PlayerSimulation.GAME_MODE, player, gameMode);
         world.set(PlayerSimulation.INPUT, player, PlayerInput.NONE);
-        world.set(PlayerSimulation.BLOCKS, player, blocks);
+        blocksAtFrame = new BlockHistory.AtFrame(blocks, blockHistory);
+        world.set(PlayerSimulation.BLOCKS, player, blocksAtFrame);
         inputs[slot(frame)] = PlayerInput.NONE;
         results[slot(frame)] = world.snapshot();
         // The server runs the frames before this client's first input with no input, which isn't
@@ -121,6 +131,29 @@ public final class Prediction {
         ++frame;
         run(frame, input);
         return frame;
+    }
+
+    /**
+     * Keep a block change from the server, before it is applied, so replaying the frames before it
+     * steps against the block as it was.
+     *
+     * @param x The block's x.
+     * @param y The block's y.
+     * @param z The block's z.
+     * @param changedFrame The command frame it happened in.
+     * @param wasSolid Whether the block was solid before.
+     */
+    public void blockChanged(int x, int y, int z, long changedFrame, boolean wasSolid) {
+        blockHistory.record(x, y, z, changedFrame, wasSolid);
+    }
+
+    /**
+     * How many block changes are kept for replaying.
+     *
+     * @return The count.
+     */
+    public int keptBlockChanges() {
+        return blockHistory.size();
     }
 
     /**
@@ -165,6 +198,8 @@ public final class Prediction {
         acknowledged = serverFrame;
         serverBuffered = buffered;
         serverMisses = misses;
+        // Replaying starts after the newest frame answered, so older changes aren't needed
+        blockHistory.forgetBefore(serverFrame + 1);
         if (serverFrame > frame) {
             // The server is ahead of the client, so every input has been late; take its state
             ++mispredicts;
@@ -254,6 +289,7 @@ public final class Prediction {
      */
     private void run(long f, PlayerInput input) {
         inputs[slot(f)] = input;
+        blocksAtFrame.setFrame(f);
         world.set(PlayerSimulation.INPUT, player, input);
         schedule.run(world);
         results[slot(f)] = world.snapshot();

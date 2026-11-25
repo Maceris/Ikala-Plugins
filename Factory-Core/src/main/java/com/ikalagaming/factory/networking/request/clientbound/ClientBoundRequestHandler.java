@@ -66,4 +66,11 @@ public interface ClientBoundRequestHandler extends RequestHandler {
      * @param request The request.
      */
     void handle(@NonNull ChatMessage request);
+
+    /**
+     * Blocks changed in one command frame.
+     *
+     * @param request The request.
+     */
+    void handle(@NonNull BlockChanges request);
 }

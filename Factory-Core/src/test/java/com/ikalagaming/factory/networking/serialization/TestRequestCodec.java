@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.ikalagaming.factory.networking.RequestRegistry;
 import com.ikalagaming.factory.networking.SimpleRequest;
 import com.ikalagaming.factory.networking.base.RequestDirection;
+import com.ikalagaming.factory.networking.request.clientbound.BlockChanges;
 import com.ikalagaming.factory.networking.request.clientbound.UpdateTagRegistry;
 
 import io.netty.buffer.ByteBuf;
@@ -74,6 +75,21 @@ class TestRequestCodec {
         receiver.writeInbound(Unpooled.wrappedBuffer(wire()));
         assertEquals(request(), receiver.readInbound());
         assertTrue(receiver.isOpen());
+    }
+
+    /** Block changes, with negative positions, arrive as they were sent. */
+    @Test
+    void blockChangesRoundTrip() {
+        final BlockChanges changes = new BlockChanges(123_456_789_012L);
+        changes.add(-5, 63, 1_000_000, "lotomation:bronze");
+        changes.add(0, -64, -1, "factory:air");
+        EmbeddedChannel sender = channel();
+        assertTrue(sender.writeOutbound(changes));
+        EmbeddedChannel receiver = channel();
+        for (Object part; (part = sender.readOutbound()) != null; ) {
+            receiver.writeInbound(part);
+        }
+        assertEquals(changes, receiver.readInbound());
     }
 
     @Test

@@ -213,4 +213,47 @@ class TestPrediction {
         assertEquals(far, prediction.movement(prediction.getFrame()));
         assertEquals(1, prediction.getMispredicts());
     }
+
+    /**
+     * Replaying after a mispredict steps each frame against the blocks as they were then: the floor
+     * removed after frame C still holds the player up through C, and drops them from C + 1.
+     */
+    @Test
+    void testReplayAgainstOldBlocks() {
+        final boolean[] removed = {false};
+        final BlockView floor = (x, y, z) -> y < 60 && !(removed[0] && y == 59);
+        final Prediction prediction = new Prediction(JOIN_FRAME, START, GameMode.SURVIVAL, floor);
+        for (int i = 0; i < 120; ++i) {
+            prediction.step(PlayerInput.NONE);
+        }
+        final long now = prediction.getFrame();
+        assertTrue(prediction.movement(now).onGround());
+        // The server removed the blocks under the player after frame C's movement
+        final long changed = now - 3;
+        for (int x = 4; x <= 5; ++x) {
+            for (int z = -1; z <= 0; ++z) {
+                prediction.blockChanged(x, 59, z, changed, true);
+            }
+        }
+        removed[0] = true;
+        // An answer for a frame before that differs a little, so the client replays from there
+        final Movement was = prediction.movement(changed - 2);
+        final Movement nudged =
+                new Movement(
+                        was.mode(),
+                        was.x() + 1,
+                        was.y(),
+                        was.z(),
+                        was.vx(),
+                        was.vy(),
+                        was.vz(),
+                        was.yaw(),
+                        was.pitch(),
+                        was.onGround());
+        assertTrue(prediction.onServerState(changed - 2, nudged, GameMode.SURVIVAL, 0, 0));
+        assertTrue(prediction.movement(changed).onGround(), "fell before the floor went");
+        assertEquals(Fixed.ofMeters(60), prediction.movement(changed).y());
+        assertTrue(prediction.movement(changed + 1).y() < Fixed.ofMeters(60), "didn't fall");
+        assertFalse(prediction.movement(now).onGround());
+    }
 }

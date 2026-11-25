@@ -8,6 +8,7 @@ import com.ikalagaming.factory.auth.SignInProof;
 import com.ikalagaming.factory.chat.ChatText;
 import com.ikalagaming.factory.kvt.Node;
 import com.ikalagaming.factory.networking.base.Connection;
+import com.ikalagaming.factory.networking.request.clientbound.BlockChanges;
 import com.ikalagaming.factory.networking.request.clientbound.ChatMessage;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkData;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkUnload;
@@ -25,6 +26,7 @@ import com.ikalagaming.factory.sim.MoveMode;
 import com.ikalagaming.factory.sim.Movement;
 import com.ikalagaming.factory.sim.PlayerInput;
 import com.ikalagaming.factory.sim.PlayerSimulation;
+import com.ikalagaming.factory.sim.WorldClock;
 import com.ikalagaming.factory.world.Block;
 import com.ikalagaming.factory.world.Chunk;
 import com.ikalagaming.factory.world.ChunkBlockView;
@@ -51,11 +53,13 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
@@ -97,14 +101,24 @@ public final class ServerWorld implements AutoCloseable {
     /** How many chunks each player may be waiting on at once, so the nearest come first. */
     static final int MAX_PENDING = 32;
 
-    /** How long a chunk no player needs stays loaded, in ticks. */
+    /**
+     * How long a chunk no player needs stays loaded, in upkeeps: the server's own work, such as
+     * sending chunks, which runs {@value Server#TICKS_PER_SECOND} times a second of real time
+     * whatever the world's rate.
+     */
     static final long IDLE_TICKS = 30L * Server.TICKS_PER_SECOND;
 
-    /** How often players are sent the time, in ticks. */
+    /** How often players are sent the time, in upkeeps. */
     static final long TIME_EVERY_TICKS = 5L * Server.TICKS_PER_SECOND;
 
-    /** How often idle chunks are dropped, in ticks. */
+    /** How often idle chunks are dropped, in upkeeps. */
     static final long UNLOAD_EVERY_TICKS = Server.TICKS_PER_SECOND;
+
+    /**
+     * How long a command frame may spend on extra world frames while sprinting, in nanoseconds,
+     * leaving the rest of the frame for the players.
+     */
+    static final long SPRINT_BUDGET_NANOS = TimeUnit.MILLISECONDS.toNanos(10);
 
     /**
      * The save the world is in.
@@ -143,8 +157,50 @@ public final class ServerWorld implements AutoCloseable {
     /** Generates chunks at low priority, so the client's frames stay smooth. */
     private final ExecutorService generation;
 
-    /** Ticks run so far. */
+    /** Upkeeps run so far: the server's own work, {@value Server#TICKS_PER_SECOND} a second. */
+    private final AtomicLong upkeeps = new AtomicLong();
+
+    /** World ticks run so far, for other threads; the clock in {@link #sim} is the truth. */
     private final AtomicLong ticks = new AtomicLong();
+
+    /** The entity in {@link #sim} that holds the {@link WorldClock}. */
+    private final long worldEntity;
+
+    /**
+     * The frame block changes are stamped with: the frame before the one running until its players
+     * have moved, since movement in a frame sees only changes stamped before it.
+     */
+    private long blockStamp = -1;
+
+    /** Block changes not yet sent, for the frame {@link #pendingStamp}, by chunk. */
+    private final Map<ChunkPos, List<int[]>> pendingChanges = new LinkedHashMap<>();
+
+    /** The frame the pending block changes are stamped with. */
+    private long pendingStamp = -1;
+
+    /** The block names of {@link #pendingChanges}, in the same order. */
+    private final Map<ChunkPos, List<String>> pendingNames = new HashMap<>();
+
+    /**
+     * Chunks changed since they were generated, which are kept loaded until changes can be saved,
+     * since generating them again would lose the changes. Tick thread only.
+     */
+    private final Set<ChunkPos> edited = new HashSet<>();
+
+    /** Chunks copied since generating, so the generation threads never see a change. */
+    private final Set<ChunkPos> owned = new HashSet<>();
+
+    /**
+     * Whether the world may run faster than normal: only when no one else can join, as in single
+     * player. Speeding up costs the server, and every player on it, more.
+     */
+    private volatile boolean speedUpAllowed = true;
+
+    /** How long the last world frame took, in nanoseconds. */
+    private volatile long worldFrameNanos;
+
+    /** How long the last world tick took, in nanoseconds. */
+    private volatile long worldTickNanos;
 
     /** Command frames run so far; the next frame's number. */
     private final AtomicLong frames = new AtomicLong();
@@ -291,6 +347,8 @@ public final class ServerWorld implements AutoCloseable {
             @NonNull Map<String, Boolean> solidByName) {
         this.solidByName = solidByName;
         this.time = new AtomicLong(time);
+        worldEntity = sim.create();
+        sim.set(WorldClock.COMPONENT, worldEntity, WorldClock.START);
         this.saveFolder = saveFolder;
         this.worldFolder = worldFolder;
         this.generator = generator;
@@ -360,6 +418,8 @@ public final class ServerWorld implements AutoCloseable {
             return false;
         }
         chunk.cancel(false);
+        edited.remove(pos);
+        owned.remove(pos);
         return true;
     }
 
@@ -388,18 +448,180 @@ public final class ServerWorld implements AutoCloseable {
      */
     public void setTime(long newTime) {
         time.set(newTime);
+        sendTime();
+    }
+
+    /** Send every player the world's clock and how fast it runs. Tick thread only. */
+    private void sendTime() {
+        final TimeUpdate update = timeUpdate();
         for (ServerPlayer player : players.values()) {
-            player.getConnection().send(new TimeUpdate(newTime, Server.TICKS_PER_SECOND));
+            player.getConnection().send(update);
         }
     }
 
     /**
-     * How many ticks have run.
+     * The world's clock and how fast it runs, for a client. Tick thread only.
+     *
+     * @return The update.
+     */
+    private TimeUpdate timeUpdate() {
+        return new TimeUpdate(time.get(), clock().effectiveRate());
+    }
+
+    /**
+     * How many world ticks have run.
      *
      * @return The tick count.
      */
     public long getTicks() {
         return ticks.get();
+    }
+
+    /**
+     * How fast the world runs and how far it has run. Tick thread only.
+     *
+     * @return The clock.
+     */
+    public WorldClock clock() {
+        return sim.get(WorldClock.COMPONENT, worldEntity);
+    }
+
+    /**
+     * Change how fast the world runs, from the next command frame, and tell every player. Tick
+     * thread only.
+     *
+     * @param newClock The clock.
+     */
+    public void setClock(@NonNull WorldClock newClock) {
+        sim.set(WorldClock.COMPONENT, worldEntity, newClock);
+        sendTime();
+    }
+
+    /**
+     * Whether the world may run faster than normal, as only single player may.
+     *
+     * @return True if it may.
+     */
+    public boolean isSpeedUpAllowed() {
+        return speedUpAllowed;
+    }
+
+    /**
+     * Allow or forbid running the world faster than normal. The server forbids it once others can
+     * join.
+     *
+     * @param allowed True to allow it.
+     */
+    public void setSpeedUpAllowed(boolean allowed) {
+        speedUpAllowed = allowed;
+    }
+
+    /**
+     * How long the last world frame took, without its tick.
+     *
+     * @return The time, in nanoseconds.
+     */
+    public long getWorldFrameNanos() {
+        return worldFrameNanos;
+    }
+
+    /**
+     * How long the last world tick took.
+     *
+     * @return The time, in nanoseconds.
+     */
+    public long getWorldTickNanos() {
+        return worldTickNanos;
+    }
+
+    /**
+     * Change a block in a loaded chunk, and tell the players who have that chunk at the end of the
+     * frame. Changes made before a frame's players move are stamped with the frame before, since
+     * that movement already sees them. Tick thread only.
+     *
+     * @param x The block's x.
+     * @param y The block's y.
+     * @param z The block's z.
+     * @param block The new block.
+     * @return False if the chunk isn't loaded, so nothing changed.
+     */
+    public boolean setBlock(int x, int y, int z, @NonNull Block block) {
+        final ChunkPos pos = ChunkPos.containing(x, y, z);
+        final Optional<Chunk> loaded = loadedChunk(pos);
+        if (loaded.isEmpty()) {
+            return false;
+        }
+        Chunk chunk = loaded.get();
+        final int inX = Math.floorMod(x, com.ikalagaming.factory.world.World.CHUNK_SIZE);
+        final int inY = Math.floorMod(y, com.ikalagaming.factory.world.World.CHUNK_SIZE);
+        final int inZ = Math.floorMod(z, com.ikalagaming.factory.world.World.CHUNK_SIZE);
+        if (chunk.getBlock(inX, inY, inZ).equals(block)) {
+            return true;
+        }
+        if (owned.add(pos)) {
+            // The generation thread that made it may still be encoding it, so change a copy
+            chunk = chunk.copy();
+            chunks.put(pos, CompletableFuture.completedFuture(chunk));
+        }
+        chunk.setBlock(inX, inY, inZ, block);
+        edited.add(pos);
+        if (blockStamp != pendingStamp) {
+            flushBlockChanges();
+            pendingStamp = blockStamp;
+        }
+        pendingChanges.computeIfAbsent(pos, key -> new ArrayList<>()).add(new int[] {x, y, z});
+        pendingNames.computeIfAbsent(pos, key -> new ArrayList<>()).add(block.getName());
+        return true;
+    }
+
+    /**
+     * The block a name means: a block's full name, or the part after its namespace when only one
+     * block has it, such as {@code stone}; {@code air} is air.
+     *
+     * @param name What was typed.
+     * @return The block's full name, or empty if no block has it.
+     */
+    public Optional<String> blockNamed(@NonNull String name) {
+        final String wanted = name.strip().toLowerCase(java.util.Locale.ROOT);
+        if (solidByName.containsKey(wanted)) {
+            return Optional.of(wanted);
+        }
+        if (wanted.contains(":")) {
+            return Optional.empty();
+        }
+        final List<String> matches =
+                solidByName.keySet().stream()
+                        .filter(full -> full.substring(full.indexOf(':') + 1).equals(wanted))
+                        .toList();
+        return matches.size() == 1 ? Optional.of(matches.getFirst()) : Optional.empty();
+    }
+
+    /** Send each player the pending block changes in chunks they have. Tick thread only. */
+    private void flushBlockChanges() {
+        if (pendingChanges.isEmpty()) {
+            return;
+        }
+        for (ServerPlayer player : players.values()) {
+            BlockChanges message = null;
+            for (Map.Entry<ChunkPos, List<int[]>> entry : pendingChanges.entrySet()) {
+                if (!player.sent.contains(entry.getKey())) {
+                    continue;
+                }
+                if (message == null) {
+                    message = new BlockChanges(pendingStamp);
+                }
+                final List<String> names = pendingNames.get(entry.getKey());
+                for (int i = 0; i < entry.getValue().size(); ++i) {
+                    final int[] at = entry.getValue().get(i);
+                    message.add(at[0], at[1], at[2], names.get(i));
+                }
+            }
+            if (message != null) {
+                player.getConnection().send(message);
+            }
+        }
+        pendingChanges.clear();
+        pendingNames.clear();
     }
 
     /**
@@ -631,7 +853,7 @@ public final class ServerWorld implements AutoCloseable {
                         VERTICAL_RADIUS,
                         frames.get(),
                         gameMode.ordinal()));
-        connection.send(new TimeUpdate(time.get(), Server.TICKS_PER_SECOND));
+        connection.send(timeUpdate());
         broadcast(ChatText.of(account.username() + " joined the game", ChatText.YELLOW));
         log.info(
                 "{} joined at {}, {}, {}",
@@ -730,6 +952,28 @@ public final class ServerWorld implements AutoCloseable {
     }
 
     /**
+     * Move a player somewhere at once, standing still. Their client learns it from the next state
+     * it gets. Tick thread only.
+     *
+     * @param player The player.
+     * @param x Where, in meters.
+     * @param y Where, in meters.
+     * @param z Where, in meters.
+     */
+    public void teleport(@NonNull ServerPlayer player, double x, double y, double z) {
+        final Movement movement = sim.get(PlayerSimulation.MOVEMENT, player.getEntity());
+        sim.set(
+                PlayerSimulation.MOVEMENT,
+                player.getEntity(),
+                Movement.at(
+                        movement == null ? MoveMode.WALKING : movement.mode(),
+                        Math.round(x * Fixed.ONE),
+                        Math.round(y * Fixed.ONE),
+                        Math.round(z * Fixed.ONE)));
+        player.moveTo(x, y, z);
+    }
+
+    /**
      * The players in the world. Tick thread only.
      *
      * @return The players.
@@ -761,16 +1005,25 @@ public final class ServerWorld implements AutoCloseable {
     }
 
     /**
-     * Run one command frame. Called every {@value Frames#FRAME_MILLIS} ms by the server, on the
-     * same thread as {@link #tick()}.
+     * Run one command frame, every {@value Frames#FRAME_MILLIS} ms, in the order the Command Frames
+     * design doc gives: the players, what they did to the world, the world frames and ticks due,
+     * the server's own upkeep, then what each player is sent. Server thread only.
      */
     void frame() {
-        runTasks();
         final long frame = frames.get();
+        // Work posted between frames, such as commands, happened after the last frame's movement
+        blockStamp = frame - 1;
+        runTasks();
         for (ServerPlayer player : players.values()) {
             sim.set(PlayerSimulation.INPUT, player.getEntity(), player.inputs.take(frame));
         }
         schedule.run(sim);
+        blockStamp = frame;
+        runWorld();
+        if (WorldClock.ticksBy(frame + 1) > WorldClock.ticksBy(frame)) {
+            upkeep();
+        }
+        flushBlockChanges();
         for (ServerPlayer player : players.values()) {
             final Movement movement = sim.get(PlayerSimulation.MOVEMENT, player.getEntity());
             player.moveTo(
@@ -793,18 +1046,69 @@ public final class ServerWorld implements AutoCloseable {
         frames.incrementAndGet();
     }
 
-    /** Run one tick. Called {@value Server#TICKS_PER_SECOND} times a second by the server. */
-    void tick() {
-        final long now = ticks.incrementAndGet();
-        final long clock = time.incrementAndGet();
+    /**
+     * Run the world frames this command frame is due, and while sprinting as many more as fit in
+     * {@link #SPRINT_BUDGET_NANOS}. Server thread only.
+     */
+    private void runWorld() {
+        WorldClock clock = clock();
+        final int due = clock.framesDue();
+        clock = clock.afterCommandFrame();
+        for (int i = 0; i < due; ++i) {
+            clock = worldFrame(clock);
+        }
+        if (clock.isSprinting()) {
+            final long start = System.nanoTime();
+            do {
+                clock = worldFrame(clock);
+            } while (clock.isSprinting() && System.nanoTime() - start < SPRINT_BUDGET_NANOS);
+            if (!clock.isSprinting()) {
+                sim.set(WorldClock.COMPONENT, worldEntity, clock);
+                sendTime();
+                return;
+            }
+        }
+        sim.set(WorldClock.COMPONENT, worldEntity, clock);
+    }
+
+    /**
+     * Run one world frame: everything that moves and isn't a player, which is nothing yet, then the
+     * world tick if one is due.
+     *
+     * @param clock The clock before it.
+     * @return The clock after it.
+     */
+    private WorldClock worldFrame(@NonNull WorldClock clock) {
+        final long start = System.nanoTime();
+        final boolean tickDue = clock.tickDue();
+        final long frameEnd = System.nanoTime();
+        worldFrameNanos = frameEnd - start;
+        if (tickDue) {
+            tick();
+            worldTickNanos = System.nanoTime() - frameEnd;
+        }
+        return clock.afterWorldFrame();
+    }
+
+    /** Run one world tick: the day clock, and later blocks and machines. Server thread only. */
+    private void tick() {
+        ticks.incrementAndGet();
+        time.incrementAndGet();
+    }
+
+    /**
+     * The server's own work, {@value Server#TICKS_PER_SECOND} times a second of real time whatever
+     * the world's rate, so a frozen world still sends players the chunks they walk to. Server
+     * thread only.
+     */
+    void upkeep() {
+        final long now = upkeeps.incrementAndGet();
         runTasks();
         for (ServerPlayer player : players.values()) {
             stream(player);
         }
-        if (now % TIME_EVERY_TICKS == 0) {
-            for (ServerPlayer player : players.values()) {
-                player.getConnection().send(new TimeUpdate(clock, Server.TICKS_PER_SECOND));
-            }
+        if (now % TIME_EVERY_TICKS == 0 || clock().isSprinting()) {
+            sendTime();
         }
         if (now % UNLOAD_EVERY_TICKS == 0) {
             unloadIdle(now);
@@ -845,8 +1149,9 @@ public final class ServerWorld implements AutoCloseable {
             }
             player.pending.add(pos);
             chunk(pos)
-                    .thenApply(ChunkCodec::encode)
-                    .whenComplete((node, error) -> post(() -> deliver(player, pos, node, error)));
+                    .thenApply(chunk -> new Encoded(chunk, ChunkCodec.encode(chunk)))
+                    .whenComplete(
+                            (encoded, error) -> post(() -> deliver(player, pos, encoded, error)));
         }
     }
 
@@ -855,13 +1160,13 @@ public final class ServerWorld implements AutoCloseable {
      *
      * @param player The player it was for.
      * @param pos The chunk.
-     * @param node The encoded chunk, or null if it failed.
+     * @param encoded The chunk and its encoding, or null if it failed.
      * @param error Why it failed, or null.
      */
     private void deliver(
-            @NonNull ServerPlayer player, @NonNull ChunkPos pos, Node node, Throwable error) {
+            @NonNull ServerPlayer player, @NonNull ChunkPos pos, Encoded encoded, Throwable error) {
         player.pending.remove(pos);
-        if (error != null || node == null) {
+        if (error != null || encoded == null) {
             if (!(error instanceof CancellationException)
                     && !(error != null && error.getCause() instanceof CancellationException)) {
                 log.warn("Chunk {} couldn't be made", pos, error);
@@ -871,9 +1176,20 @@ public final class ServerWorld implements AutoCloseable {
         if (!players.containsKey(player.getId()) || !isNear(player.chunk(), pos, 0)) {
             return;
         }
+        // A block changed since it was encoded, so the encoding is out of date
+        final Chunk current = loadedChunk(pos).orElse(encoded.chunk());
+        final Node node = current == encoded.chunk() ? encoded.node() : ChunkCodec.encode(current);
         player.sent.add(pos);
         player.getConnection().send(new ChunkData(pos.x(), pos.y(), pos.z(), node));
     }
+
+    /**
+     * A chunk and its encoding.
+     *
+     * @param chunk The chunk that was encoded.
+     * @param node Its encoding.
+     */
+    private record Encoded(@NonNull Chunk chunk, @NonNull Node node) {}
 
     /**
      * Drop chunks no player has been near for {@value #IDLE_TICKS} ticks.
@@ -888,7 +1204,7 @@ public final class ServerWorld implements AutoCloseable {
         }
         for (ChunkPos pos : List.copyOf(chunks.keySet())) {
             final long wanted = lastWanted.getOrDefault(pos, 0L);
-            if (now - wanted > IDLE_TICKS) {
+            if (now - wanted > IDLE_TICKS && !edited.contains(pos)) {
                 unload(pos);
                 lastWanted.remove(pos);
             }

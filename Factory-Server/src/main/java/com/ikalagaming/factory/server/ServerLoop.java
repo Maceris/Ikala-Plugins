@@ -10,13 +10,13 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.function.BooleanSupplier;
 
 /**
- * The server's thread: runs command frames every {@value Frames#FRAME_MILLIS} ms and world ticks
- * {@value Server#TICKS_PER_SECOND} times a second, two clocks that don't line up, on one thread so
- * the world never changes under a frame.
+ * The server's thread: runs a command frame every {@value Frames#FRAME_MILLIS} ms, on one thread so
+ * the world never changes under a frame. World frames and world ticks run inside command frames, on
+ * the world's own clock (see {@code WorldClock}).
  *
  * <ul>
- *   <li><b>Catching up:</b> a clock that falls behind runs back to back, up to {@value
- *       #MAX_CATCH_UP} steps; anything further behind is dropped and logged.
+ *   <li><b>Catching up:</b> frames that fall behind run back to back, up to {@value #MAX_CATCH_UP};
+ *       anything further behind is dropped and logged.
  *   <li><b>Waiting:</b> the loop parks until the next deadline. Parking on Windows wakes about 2 to
  *       3.5 ms late, so steps start that late, but deadlines stay on the clock, so the rates are
  *       exact. A late frame never starves a client: its input has had longer to arrive.
@@ -29,10 +29,7 @@ import java.util.function.BooleanSupplier;
 @Slf4j
 final class ServerLoop implements Runnable {
 
-    /** How long a world tick lasts, in nanoseconds. */
-    static final long TICK_NANOS = TimeUnit.SECONDS.toNanos(1) / Server.TICKS_PER_SECOND;
-
-    /** The most steps of one clock run back to back to catch up. */
+    /** The most frames run back to back to catch up. */
     static final int MAX_CATCH_UP = 5;
 
     /** The margin before a deadline to stop parking at, before the loop has seen any lateness. */
@@ -53,14 +50,8 @@ final class ServerLoop implements Runnable {
     /** Runs a command frame. */
     private final Runnable frame;
 
-    /** Runs a world tick. */
-    private final Runnable tick;
-
     /** When the next frame is due, from {@link System#nanoTime()}. */
     private long nextFrame;
-
-    /** When the next tick is due. */
-    private long nextTick;
 
     /** The system property that turns on precise waiting. */
     static final String PRECISE_PROPERTY = "ikala.server.preciseFrames";
@@ -74,9 +65,6 @@ final class ServerLoop implements Runnable {
     /** Frames dropped because the loop fell too far behind. */
     private volatile long droppedFrames;
 
-    /** Ticks dropped because the loop fell too far behind. */
-    private volatile long droppedTicks;
-
     /** Set to end the loop. */
     private volatile boolean stopped;
 
@@ -89,7 +77,7 @@ final class ServerLoop implements Runnable {
     /** The thread running the loop, to wake from a pause. */
     private volatile Thread owner;
 
-    /** Set to stop running frames and ticks until cleared, as while single player is paused. */
+    /** Set to stop running frames until cleared, as while single player is paused. */
     private volatile boolean paused;
 
     /** How long a paused loop parks between checks. */
@@ -99,16 +87,13 @@ final class ServerLoop implements Runnable {
      * A loop.
      *
      * @param frame Runs a command frame; it should not throw.
-     * @param tick Runs a world tick; it should not throw.
-     * @param start When the first frame and tick are due, from {@link System#nanoTime()}.
+     * @param start When the first frame is due, from {@link System#nanoTime()}.
      * @param precise Whether to yield until each deadline rather than only parking.
      */
-    ServerLoop(@NonNull Runnable frame, @NonNull Runnable tick, long start, boolean precise) {
+    ServerLoop(@NonNull Runnable frame, long start, boolean precise) {
         this.frame = frame;
-        this.tick = tick;
         this.precise = precise;
         nextFrame = start;
-        nextTick = start;
     }
 
     @Override
@@ -124,8 +109,8 @@ final class ServerLoop implements Runnable {
     }
 
     /**
-     * Stop or restart running frames and ticks. Paused time is skipped, not caught up on, so the
-     * frame and tick numbers carry on from where they stopped.
+     * Stop or restart running frames. Paused time is skipped, not caught up on, so the frame
+     * numbers carry on from where they stopped.
      *
      * @param pause True to pause, false to carry on.
      */
@@ -172,13 +157,12 @@ final class ServerLoop implements Runnable {
     }
 
     /**
-     * Move both deadlines later, as after a pause.
+     * Move the deadline later, as after a pause.
      *
      * @param nanos How far.
      */
     void shift(long nanos) {
         nextFrame += nanos;
-        nextTick += nanos;
     }
 
     /** End the loop after the step it is on. */
@@ -187,13 +171,12 @@ final class ServerLoop implements Runnable {
     }
 
     /**
-     * Run every frame and tick that is due.
+     * Run every frame that is due.
      *
      * @param now The time, from {@link System#nanoTime()}.
-     * @return When the next frame or tick is due.
+     * @return When the next frame is due.
      */
     long runDue(long now) {
-        long behind = 0;
         int run = 0;
         while (now - nextFrame >= 0 && run < MAX_CATCH_UP) {
             frame.run();
@@ -201,24 +184,12 @@ final class ServerLoop implements Runnable {
             ++run;
         }
         if (now - nextFrame >= 0) {
-            behind = (now - nextFrame) / Frames.FRAME_NANOS + 1;
+            final long behind = (now - nextFrame) / Frames.FRAME_NANOS + 1;
             nextFrame += behind * Frames.FRAME_NANOS;
             droppedFrames += behind;
             log.warn("The server fell behind and skipped {} command frames", behind);
         }
-        run = 0;
-        while (now - nextTick >= 0 && run < MAX_CATCH_UP) {
-            tick.run();
-            nextTick += TICK_NANOS;
-            ++run;
-        }
-        if (now - nextTick >= 0) {
-            behind = (now - nextTick) / TICK_NANOS + 1;
-            nextTick += behind * TICK_NANOS;
-            droppedTicks += behind;
-            log.warn("The server fell behind and skipped {} world ticks", behind);
-        }
-        return nextFrame - nextTick < 0 ? nextFrame : nextTick;
+        return nextFrame;
     }
 
     /**
@@ -259,14 +230,5 @@ final class ServerLoop implements Runnable {
      */
     long getDroppedFrames() {
         return droppedFrames;
-    }
-
-    /**
-     * How many ticks were dropped because the loop fell too far behind.
-     *
-     * @return The count.
-     */
-    long getDroppedTicks() {
-        return droppedTicks;
     }
 }

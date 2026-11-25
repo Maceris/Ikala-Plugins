@@ -1,7 +1,7 @@
 package com.ikalagaming.graphics.vulkan;
 
-import com.ikalagaming.graphics.lod.LongIntMap;
 import com.ikalagaming.graphics.scene.WaterTile;
+import com.ikalagaming.util.LongIntMap;
 
 import lombok.NonNull;
 

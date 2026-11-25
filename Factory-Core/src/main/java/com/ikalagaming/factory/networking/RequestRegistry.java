@@ -3,6 +3,7 @@ package com.ikalagaming.factory.networking;
 import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.factory.networking.base.Request;
 import com.ikalagaming.factory.networking.base.RequestDirection;
+import com.ikalagaming.factory.networking.request.clientbound.BlockChanges;
 import com.ikalagaming.factory.networking.request.clientbound.ChatMessage;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkData;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkUnload;
@@ -131,6 +132,7 @@ public class RequestRegistry {
         registerClientBound(ServerHello.class);
         registerClientBound(Disconnect.class);
         registerClientBound(ChatMessage.class);
+        registerClientBound(BlockChanges.class);
         registerServerBound(Hello.class);
         registerServerBound(SignIn.class);
         registerServerBound(ChatSend.class);

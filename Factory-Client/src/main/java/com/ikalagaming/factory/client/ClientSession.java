@@ -7,6 +7,7 @@ import com.ikalagaming.factory.auth.SignInProof;
 import com.ikalagaming.factory.chat.ChatText;
 import com.ikalagaming.factory.networking.base.Connection;
 import com.ikalagaming.factory.networking.base.Request;
+import com.ikalagaming.factory.networking.request.clientbound.BlockChanges;
 import com.ikalagaming.factory.networking.request.clientbound.ChatMessage;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkData;
 import com.ikalagaming.factory.networking.request.clientbound.ChunkUnload;
@@ -21,13 +22,17 @@ import com.ikalagaming.factory.networking.request.serverbound.ChatSend;
 import com.ikalagaming.factory.networking.request.serverbound.Hello;
 import com.ikalagaming.factory.networking.request.serverbound.PlayerInputs;
 import com.ikalagaming.factory.networking.request.serverbound.SignIn;
+import com.ikalagaming.factory.sim.BlockView;
 import com.ikalagaming.factory.sim.Fixed;
 import com.ikalagaming.factory.sim.GameMode;
 import com.ikalagaming.factory.sim.MoveMode;
 import com.ikalagaming.factory.sim.Movement;
+import com.ikalagaming.factory.world.Block;
+import com.ikalagaming.factory.world.Chunk;
 import com.ikalagaming.factory.world.ChunkBlockView;
 import com.ikalagaming.factory.world.ChunkCodec;
 import com.ikalagaming.factory.world.ChunkPos;
+import com.ikalagaming.factory.world.World;
 
 import lombok.Getter;
 import lombok.NonNull;
@@ -37,6 +42,9 @@ import java.security.KeyPair;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
@@ -318,9 +326,7 @@ public final class ClientSession implements ClientBoundRequestHandler {
                                 Math.round(request.getY() * Fixed.ONE),
                                 Math.round(request.getZ() * Fixed.ONE)),
                         GameMode.byOrdinal(request.getGameMode()),
-                        new ChunkBlockView(
-                                pos -> world.chunk(pos).orElse(null),
-                                BlockCollisions.solidByName()));
+                        blocksNow());
         frameClock = new FrameClock();
         frameClock.start(System.nanoTime());
         onJoined.accept(request);
@@ -375,6 +381,53 @@ public final class ClientSession implements ClientBoundRequestHandler {
                     request.getFrame());
             prediction.resync(resync);
         }
+    }
+
+    @Override
+    public void handle(@NonNull BlockChanges request) {
+        final int count = request.size();
+        if (request.getPositions().size() != count * 3) {
+            log.warn("The server sent block changes this can't read");
+            return;
+        }
+        // Kept first, as the blocks were, so frames before the change replay without it
+        final BlockView before = blocksNow();
+        final Map<ChunkPos, Chunk> changed = new LinkedHashMap<>();
+        for (int i = 0; i < count; ++i) {
+            final int x = request.getPositions().get(3 * i);
+            final int y = request.getPositions().get(3 * i + 1);
+            final int z = request.getPositions().get(3 * i + 2);
+            final ChunkPos pos = ChunkPos.containing(x, y, z);
+            Chunk chunk = changed.get(pos);
+            if (chunk == null) {
+                final Optional<Chunk> held = world.chunk(pos);
+                if (held.isEmpty()) {
+                    continue;
+                }
+                // A copy, since the renderer may be reading the one it has
+                chunk = held.get().copy();
+                changed.put(pos, chunk);
+            }
+            if (prediction != null) {
+                prediction.blockChanged(x, y, z, request.getFrame(), before.solid(x, y, z));
+            }
+            chunk.setBlock(
+                    Math.floorMod(x, World.CHUNK_SIZE),
+                    Math.floorMod(y, World.CHUNK_SIZE),
+                    Math.floorMod(z, World.CHUNK_SIZE),
+                    new Block(request.getBlocks().get(i), null));
+        }
+        changed.forEach(world::put);
+    }
+
+    /**
+     * Movement's view of the blocks this client has now.
+     *
+     * @return The view.
+     */
+    private BlockView blocksNow() {
+        return new ChunkBlockView(
+                pos -> world.chunk(pos).orElse(null), BlockCollisions.solidByName());
     }
 
     @Override

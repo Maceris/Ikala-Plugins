@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.lod;
 
+import com.ikalagaming.util.LongIntMap;
+
 import lombok.NonNull;
 
 import java.util.Arrays;

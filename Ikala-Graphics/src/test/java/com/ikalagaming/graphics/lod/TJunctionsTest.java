@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.ikalagaming.util.IntArrayList;
+import com.ikalagaming.util.LongIntMap;
 
 import org.junit.jupiter.api.Test;
 

@@ -26,6 +26,12 @@ lotomation.command.say:
 lotomation.command.time:
   description: Show or change the time of day
   default: op
+lotomation.command.tick:
+  description: Show or change how fast the world runs
+  default: op
+lotomation.command.setblock:
+  description: Change a block
+  default: op
 lotomation.admin:
   description: Everything an operator can do
   default: op
@@ -37,3 +43,5 @@ lotomation.admin:
     lotomation.command.accept: true
     lotomation.command.say: true
     lotomation.command.time: true
+    lotomation.command.tick: true
+    lotomation.command.setblock: true
