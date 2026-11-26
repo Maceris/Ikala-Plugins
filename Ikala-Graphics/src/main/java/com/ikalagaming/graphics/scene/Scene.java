@@ -52,6 +52,14 @@ public class Scene {
      */
     private final MaterialCache materialCache;
 
+    /**
+     * The view whose instances this scene draws, 0 for the world. -- GETTER -- The view this scene
+     * draws.
+     *
+     * @return The view ID, 0 for the world.
+     */
+    private final int viewID;
+
     /** The list of models, mapped by ID. */
     private final Map<String, Model> modelMap;
 
@@ -214,9 +222,23 @@ public class Scene {
      * @param height The screen height, in pixels.
      */
     public Scene(int width, int height) {
+        this(width, height, new MaterialCache(), 0);
+    }
+
+    /**
+     * Set up a scene that one view draws, like a preview, sharing another scene's materials so the
+     * GPU's material list covers both.
+     *
+     * @param width The width it is drawn at, in pixels.
+     * @param height The height it is drawn at, in pixels.
+     * @param materials The material cache to share.
+     * @param viewID The view whose instances it draws, 0 for the world.
+     */
+    public Scene(int width, int height, @NonNull MaterialCache materials, int viewID) {
+        this.viewID = viewID;
         modelMap = new ConcurrentHashMap<>();
         projection = new Projection(width, height);
-        materialCache = new MaterialCache();
+        materialCache = materials;
         sceneLights = new SceneLights();
         lightRegistry = new LightRegistry();
         mediumRegistry = new MediumRegistry();

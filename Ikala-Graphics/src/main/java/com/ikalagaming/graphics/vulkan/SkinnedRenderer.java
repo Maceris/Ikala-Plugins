@@ -197,6 +197,15 @@ public final class SkinnedRenderer {
     }
 
     /**
+     * Draw no skinned instances in a frame, as for a preview, which has none of its own.
+     *
+     * @param frameIndex The frame in flight.
+     */
+    public void skipFrame(int frameIndex) {
+        counts[frameIndex] = SkinnedPacker.Counts.NONE;
+    }
+
+    /**
      * Whether this frame draws any skinned instance into the scene.
      *
      * @param frameIndex The frame in flight.

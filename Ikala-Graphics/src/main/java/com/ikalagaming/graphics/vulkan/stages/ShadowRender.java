@@ -421,7 +421,10 @@ public class ShadowRender implements RenderStage {
             // The sky occlusion map, what doesn't move from straight above, when it is due:
             // instances that stay put too, which culling leaves out while they move
             final CascadeShadowSplit sky = frameData.skyView;
-            if (frameData.skyMap != null && sky.getRedraw() != SunShadowCache.Redraw.NONE) {
+            // The sky map is the world's, kept where its camera is
+            if (!renderConfig.preview()
+                    && frameData.skyMap != null
+                    && sky.getRedraw() != SunShadowCache.Redraw.NONE) {
                 sky.getProjViewMatrix()
                         .get(
                                 ShaderBindings.Shadow.PUSH_CONSTANT_PROJECTION_VIEW_MATRIX_OFFSET,

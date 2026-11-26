@@ -120,6 +120,7 @@ public class ShaderBindings {
 
         /*
          * The occlusion view (std430): mat4 projectionView; ivec2 size; int levels; uint flags;
+         * uint viewID;
          */
 
         /** The pyramid's projection × view matrix, moved into render space. */
@@ -134,8 +135,11 @@ public class ShaderBindings {
         /** The flags, {@link #FLAG_OCCLUSION} and {@link #FLAG_PYRAMID_VALID}. */
         public static final int VIEW_FLAGS_OFFSET = VIEW_LEVELS_OFFSET + Integer.BYTES;
 
+        /** The view being drawn, whose instances are the only ones kept. */
+        public static final int VIEW_ID_OFFSET = VIEW_FLAGS_OFFSET + Integer.BYTES;
+
         /** The size of the occlusion view in bytes. */
-        public static final int VIEW_SIZE = VIEW_FLAGS_OFFSET + Integer.BYTES;
+        public static final int VIEW_SIZE = VIEW_ID_OFFSET + Integer.BYTES;
 
         /** Set in the view flags when the scene is culled by occlusion. */
         public static final int FLAG_OCCLUSION = 1;

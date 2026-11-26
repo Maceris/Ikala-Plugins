@@ -37,6 +37,7 @@ import com.ikalagaming.graphics.ui.style.Style;
 import com.ikalagaming.graphics.ui.style.StyleKey;
 import com.ikalagaming.launcher.PluginFolder;
 
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
@@ -86,9 +87,19 @@ public class Workbench {
     /** The ID of the image panel. */
     static final String IMAGE_ID = "converter/workbench-image";
 
+    /** The ID of the panel of preview views. */
+    static final String PREVIEWS_ID = "converter/workbench-previews";
+
     /** Every surface and panel, for showing and hiding them together. */
     private static final List<String> SURFACES =
-            List.of(SURFACE_ID, DOCK_ID, FILES_ID, OUTLINER_ID, PROPERTIES_ID, IMAGE_ID);
+            List.of(
+                    SURFACE_ID,
+                    DOCK_ID,
+                    FILES_ID,
+                    OUTLINER_ID,
+                    PROPERTIES_ID,
+                    IMAGE_ID,
+                    PREVIEWS_ID);
 
     /** The height of the top bar. */
     private static final float TOP_HEIGHT = 74;
@@ -102,10 +113,18 @@ public class Workbench {
                     .split(DockLayout.Side.LEFT, 0.17f, FILES_ID)
                     .splitPrevious(DockLayout.Side.BOTTOM, 0.35f, OUTLINER_ID)
                     .split(DockLayout.Side.RIGHT, 0.25f, PROPERTIES_ID)
-                    .center(IMAGE_ID);
+                    .center(IMAGE_ID, PREVIEWS_ID);
 
     /** The dock space the panels dock into. */
     private final DockSpace dockSpace = new DockSpace("dock", LAYOUT);
+
+    /**
+     * Preview views of shapes, drawn by the renderer into their own textures. -- GETTER -- The
+     * preview panel.
+     *
+     * @return The panel's logic.
+     */
+    @Getter private final PreviewPanel previewPanel;
 
     /** What the middle of the screen shows. */
     enum Mode {
@@ -189,6 +208,7 @@ public class Workbench {
         this.ui = ui;
         this.back = back;
         viewer = new ImageViewer(graphics.textures(), this::useAsSky);
+        previewPanel = new PreviewPanel(graphics);
         sceneView =
                 new SceneView(
                         graphics,
@@ -320,6 +340,7 @@ public class Workbench {
                 new Column("middle")
                         .align(Align.STRETCH)
                         .add(new Immediate("view", viewer::drawView)));
+        panel(PREVIEWS_ID, "Previews", previewPanel.content());
         for (String surface : SURFACES) {
             ui.setVisible(surface, false);
         }
@@ -332,7 +353,10 @@ public class Workbench {
      */
     public void setVisible(boolean visible) {
         showing = visible;
-        if (!visible) {
+        if (visible) {
+            previewPanel.open();
+        } else {
+            previewPanel.close();
             scenes.incrementAndGet();
             sceneView.close();
             if (mode == Mode.SCENE) {
@@ -357,6 +381,7 @@ public class Workbench {
         ui.setVisible(PROPERTIES_ID, showing);
         // A hidden image leaves the middle of the dock empty, so the scene shows through it
         ui.setVisible(IMAGE_ID, showing && mode != Mode.SCENE);
+        ui.setVisible(PREVIEWS_ID, showing && mode != Mode.SCENE);
     }
 
     /**

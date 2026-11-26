@@ -15,6 +15,7 @@ import static org.lwjgl.vulkan.VK13.*;
 import com.ikalagaming.graphics.*;
 import com.ikalagaming.graphics.BufferHolder;
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.PreviewView;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.bake.BakeSources;
@@ -291,6 +292,10 @@ public class VulkanInstance {
     private boolean headless;
 
     private RenderConfig renderConfig;
+
+    /** The preview views, drawn one a frame when the world isn't. */
+    private final PreviewRenderer previews = new PreviewRenderer();
+
     private PipelineVulkan pipeline;
     private TextureLoaderVulkan textureLoader;
     private ShaderMap shaderMap;
@@ -406,6 +411,7 @@ public class VulkanInstance {
         state.textureUploads.clear(state);
         // Bake pages are the graphics plugin's own, and go before the rest
         state.lodBakes.cleanup(state);
+        previews.cleanup(state);
         state.textureRegistry.removeAll().forEach(textureLoader::delete);
         state.geometry.cleanup(state);
         state.bakedGeometry.cleanup(state);
@@ -1957,6 +1963,15 @@ public class VulkanInstance {
     }
 
     /**
+     * The preview views, small scenes drawn into their own textures.
+     *
+     * @return The previews.
+     */
+    public PreviewRenderer getPreviews() {
+        return previews;
+    }
+
+    /**
      * Recreate a window's swapchain to match it, and for the scene window grow the render targets
      * if needed.
      *
@@ -2001,6 +2016,7 @@ public class VulkanInstance {
         // The GPU is done with this frame index, so nothing can be using these anymore
         state.runDeferredFrees(state.frameIndex);
         state.frameCapture.collect(state.frameIndex);
+        previews.collect(state.frameIndex);
         // What only some scenes need, once a frame needed it
         pipelineManager.createWhenNeeded(state);
         // More room for volume bricks, before this frame records anything with their set: changing
@@ -2048,12 +2064,19 @@ public class VulkanInstance {
         // Resources freed from here until the next frame starts may be used by this frame
         state.recordingFrame = true;
 
-        if (drawScene) {
+        // A frame without the world draws a preview instead, if one wants a frame
+        final PreviewView preview =
+                drawScene && !renderConfig.world() ? previews.next(state) : null;
+        if (preview != null) {
+            recordPreview(preview, commandBuffer);
+        } else if (drawScene) {
             final Window window = sceneTarget.getWindow();
             recordScene(
                     scene,
                     new SceneTarget(window.getWidth(), window.getHeight(), sceneTarget),
-                    commandBuffer);
+                    commandBuffer,
+                    pipeline,
+                    false);
         }
         final boolean sceneCopied =
                 drawScene && PipelineManagerVulkan.drawsFinalImage(renderConfig);
@@ -2113,7 +2136,9 @@ public class VulkanInstance {
             recordScene(
                     scene,
                     new SceneTarget(sceneWindow.getWidth(), sceneWindow.getHeight(), null),
-                    commandBuffer);
+                    commandBuffer,
+                    pipeline,
+                    false);
             final TextureInfoVulkan image = state.perFrameData[state.frameIndex].headlessImage;
             if (image != null) {
                 final int width = Math.min(sceneWindow.getWidth(), state.realSize.width());
@@ -2158,11 +2183,16 @@ public class VulkanInstance {
      * @param scene The scene to render.
      * @param target Where the scene goes and how big.
      * @param commandBuffer The frame's command buffer.
+     * @param toRun The pipeline to record.
+     * @param preview Whether the scene is a preview, which leaves the world's streaming, level of
+     *     detail and skinned instances alone.
      */
     private void recordScene(
             @NonNull Scene scene,
             @NonNull SceneTarget target,
-            @NonNull VkCommandBuffer commandBuffer) {
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull PipelineVulkan toRun,
+            boolean preview) {
         state.frameTimings.begin(commandBuffer, state.frameIndex, state);
 
         // Before anything that could sample the textures or draw the meshes
@@ -2182,30 +2212,57 @@ public class VulkanInstance {
         } else {
             scene.getProjection().setJitter(0, 0);
         }
-        state.sections.update(state, scene.getObserver());
+        if (!preview) {
+            state.sections.update(state, scene.getObserver());
+        }
         // Instances first, so the mesh table recorded after covers every mesh they point at
         state.instances.record(state, commandBuffer, scene.getMaterialCache());
         state.geometry.record(state, commandBuffer);
         state.lods.record(state, commandBuffer);
         state.skins.record(state, commandBuffer);
-        // Before the shadows, the first to draw them
-        state.lods.prepare(
-                state,
-                state.perFrameData[state.frameIndex],
-                scene.getCamera().getPosition(),
-                scene.getObserver(),
-                target.height(),
-                scene.getDebugVisualizers().getLodColors());
-        // Before the shadows too, and cheap: skinned instances are culled on the CPU
-        state.skins.prepare(
-                state,
-                scene.getCamera().getPosition(),
-                scene.getObserver(),
-                scene.getMaterialCache());
+        if (preview) {
+            // The world's clusters and skinned instances aren't in a preview
+            state.perFrameData[state.frameIndex].lodWorldCount = 0;
+            state.skins.skipFrame(state.frameIndex);
+            state.perFrameData[state.frameIndex].waterGated = false;
+        } else {
+            // Before the shadows, the first to draw them
+            state.lods.prepare(
+                    state,
+                    state.perFrameData[state.frameIndex],
+                    scene.getCamera().getPosition(),
+                    scene.getObserver(),
+                    target.height(),
+                    scene.getDebugVisualizers().getLodColors());
+            // Before the shadows too, and cheap: skinned instances are culled on the CPU
+            state.skins.prepare(
+                    state,
+                    scene.getCamera().getPosition(),
+                    scene.getObserver(),
+                    scene.getMaterialCache());
+        }
         state.frameTimings.mark(commandBuffer, state.frameIndex, "Uploads");
 
         // This will record the command buffer
-        pipeline.render(scene, target, state);
+        toRun.render(scene, target, state);
+    }
+
+    /**
+     * Record a preview's frame through the preview pipeline, then copy it into its texture.
+     *
+     * @param view The preview.
+     * @param commandBuffer The frame's command buffer.
+     */
+    private void recordPreview(@NonNull PreviewView view, @NonNull VkCommandBuffer commandBuffer) {
+        final int width = Math.min(view.getWidth(), state.realSize.width());
+        final int height = Math.min(view.getHeight(), state.realSize.height());
+        recordScene(
+                view.getScene(),
+                new SceneTarget(width, height, null),
+                commandBuffer,
+                pipelineManager.getPipeline(RenderConfig.PREVIEW),
+                true);
+        previews.copy(commandBuffer, state, pipelineManager, view, width, height);
     }
 
     /**

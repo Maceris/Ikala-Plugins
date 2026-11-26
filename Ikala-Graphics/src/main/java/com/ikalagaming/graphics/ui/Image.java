@@ -10,6 +10,8 @@ import com.ikalagaming.graphics.gui.util.RectFloat;
 
 import lombok.NonNull;
 
+import java.util.function.Supplier;
+
 /**
  * A texture drawn in the node's rectangle. With no size set, the node measures the size it was
  * given, so it can be laid out like any other leaf. It submits an item, so it can have a tooltip, a
@@ -30,6 +32,9 @@ public class Image extends Node<Image> {
 
     /** The texture, or null to draw nothing. */
     private TextureHandle texture;
+
+    /** Gives the texture each frame, or null to use {@link #texture}. */
+    private Supplier<TextureHandle> source;
 
     /** The texture's width over its height, for {@link Fit#CONTAIN}. */
     private float aspect = 1;
@@ -74,7 +79,21 @@ public class Image extends Node<Image> {
      */
     public Image texture(TextureHandle handle, int width, int height) {
         texture = handle;
+        source = null;
         aspect = width > 0 && height > 0 ? (float) width / height : 1;
+        return self();
+    }
+
+    /**
+     * Show whatever texture a source gives each frame, like a preview's, which appears after its
+     * first frame and changes when it is resized. Its shape comes from the texture's size.
+     *
+     * @param textures Gives the texture, or null to show nothing that frame.
+     * @return This node.
+     */
+    public Image texture(@NonNull Supplier<TextureHandle> textures) {
+        source = textures;
+        texture = null;
         return self();
     }
 
@@ -151,9 +170,14 @@ public class Image extends Node<Image> {
         if (pressed && onClick != null) {
             frame.fire(onClick);
         }
-        if (texture == null) {
+        final TextureHandle shown = source == null ? texture : source.get();
+        if (shown == null) {
             return;
         }
+        final float shape =
+                source == null || shown.height() <= 0
+                        ? aspect
+                        : (float) shown.width() / shown.height();
         float minX = bounds.getLeft();
         float minY = bounds.getTop();
         float maxX = bounds.getRight();
@@ -161,8 +185,8 @@ public class Image extends Node<Image> {
         if (fit == Fit.CONTAIN) {
             final float width = bounds.getWidth();
             final float height = bounds.getHeight();
-            final float shownWidth = Math.min(width, height * aspect);
-            final float shownHeight = shownWidth / aspect;
+            final float shownWidth = Math.min(width, height * shape);
+            final float shownHeight = shownWidth / shape;
             minX += (width - shownWidth) / 2;
             minY += (height - shownHeight) / 2;
             maxX = minX + shownWidth;
@@ -170,9 +194,9 @@ public class Image extends Node<Image> {
         }
         final DrawList drawList = IkGui.getWindowDrawList();
         if (pixelSharp) {
-            drawList.addImageView(texture, minX, minY, maxX, maxY, 0, 0, 1, 1, NEAREST);
+            drawList.addImageView(shown, minX, minY, maxX, maxY, 0, 0, 1, 1, NEAREST);
         } else {
-            drawList.addImage(texture, minX, minY, maxX, maxY);
+            drawList.addImage(shown, minX, minY, maxX, maxY);
         }
     }
 }

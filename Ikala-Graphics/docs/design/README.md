@@ -13,6 +13,7 @@ way, so later work doesn't undo a choice without knowing what it was for. Plans 
 | [Particles](Particles.md) | GPU particles, lighting once per particle, volumetric smoke, weather, moving emitters |
 | [Water](Water.md) | Water tiles, the bio-optical model, waves, flow, sides, underwater, spray and rain rings |
 | [Retained UI](Retained%20UI.md) | The retained layer over IkGui, layout, themes, specs, scripting, ownership |
+| [Preview Views](Preview%20Views.md) | Small scenes drawn into textures, one a frame, and what they leave alone |
 | [Performance](Performance.md) | Frame pacing, GPU memory, garbage collection, streaming, and the rules each found |
 
 Every note keeps to Graphics' own rule: Graphics knows nothing about blocks, items or other game concepts, so a

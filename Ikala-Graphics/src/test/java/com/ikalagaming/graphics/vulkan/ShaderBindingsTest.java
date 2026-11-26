@@ -136,7 +136,8 @@ class ShaderBindingsTest {
         assertEquals(64, ShaderBindings.Cull.VIEW_DEPTH_SIZE_OFFSET);
         assertEquals(72, ShaderBindings.Cull.VIEW_LEVELS_OFFSET);
         assertEquals(76, ShaderBindings.Cull.VIEW_FLAGS_OFFSET);
-        assertEquals(80, ShaderBindings.Cull.VIEW_SIZE);
+        assertEquals(80, ShaderBindings.Cull.VIEW_ID_OFFSET);
+        assertEquals(84, ShaderBindings.Cull.VIEW_SIZE);
     }
 
     @Test

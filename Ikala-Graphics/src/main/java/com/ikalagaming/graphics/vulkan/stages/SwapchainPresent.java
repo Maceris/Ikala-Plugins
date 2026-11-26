@@ -54,8 +54,11 @@ public class SwapchainPresent implements RenderStage {
         if (presentation == null && headlessImage == null) {
             // No window and no stand-in for one: only frame captures read the image
             readyToCopy(commandBuffer, sourceImage);
-            vulkanState.frameCapture.record(
-                    commandBuffer, vulkanState, sourceImage, renderWidth, renderHeight);
+            // A preview is copied into its own texture and saved through its own captures
+            if (!renderConfig.preview()) {
+                vulkanState.frameCapture.record(
+                        commandBuffer, vulkanState, sourceImage, renderWidth, renderHeight);
+            }
             return;
         }
         // Headless, the stand-in for the window's swapchain image takes the scene, and the GUI

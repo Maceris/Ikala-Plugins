@@ -89,6 +89,9 @@ public class Taa implements RenderStage {
     /** Whether the history view was on last frame. */
     private boolean viewShownBefore;
 
+    /** The view the history was drawn from, 0 for the world: another view's can't be blended. */
+    private int previousViewID;
+
     /**
      * Set up the stage.
      *
@@ -169,6 +172,7 @@ public class Taa implements RenderStage {
                         && width == previousWidth
                         && height == previousHeight
                         && showView == viewShownBefore
+                        && scene.getViewID() == previousViewID
                         && cameraMove.length() <= MAX_CAMERA_MOVE;
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -271,6 +275,7 @@ public class Taa implements RenderStage {
         previousWidth = width;
         previousHeight = height;
         viewShownBefore = showView;
+        previousViewID = scene.getViewID();
         previousProjection.set(projection);
         previousView.set(view);
         previousCamera.set(camera);

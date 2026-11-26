@@ -206,6 +206,9 @@ public class PipelineManagerVulkan {
 
     private final TransparencyChain transparency;
 
+    /** The transparent stages for preview scenes, without the world's volume bricks. */
+    private final TransparencyChain previewTransparency;
+
     private final SwapchainPresent stageSwapchainPresent;
 
     private final LongBuffer longOutput = MemoryUtil.memAllocLong(1);
@@ -388,6 +391,16 @@ public class PipelineManagerVulkan {
                         stageOitResolve);
         transparencyBehindWater = new TransparencyChain(chain, true);
         transparency = new TransparencyChain(chain, false);
+        // Previews have no volume bricks: those are the world's distant blocks
+        previewTransparency =
+                new TransparencyChain(
+                        List.of(
+                                stageOitSplat,
+                                stageOitIntegrate,
+                                stageOitCullDepth,
+                                stageTranslucentRender,
+                                stageOitResolve),
+                        false);
         stageAnimationRender = new AnimationRender(shaders.getShader(RenderStage.Type.ANIMATION));
         stageAnimationRender.initialize(state);
         Map<FilterView, ShaderVulkan> filterShaders = new EnumMap<>(FilterView.class);
@@ -433,9 +446,47 @@ public class PipelineManagerVulkan {
      * @return The pipeline.
      */
     private PipelineVulkan buildPipeline(@NonNull RenderConfig configuration) {
+        return new PipelineVulkan(
+                stageList(configuration).toArray(new RenderStage[0]), configuration);
+    }
+
+    /**
+     * Add the stages that draw a preview scene: the world's, less what streams, caches or simulates
+     * the game world, see {@link RenderConfig#preview()}.
+     *
+     * @param stages The list to add to.
+     */
+    private void addPreviewStages(@NonNull List<RenderStage> stages) {
+        stages.add(stageInstanceDrawUpdate);
+        stages.add(stageInstanceTransform);
+        stages.add(stageInstanceCull);
+        stages.add(stageAnimationRender);
+        stages.add(stageShadowRender);
+        stages.add(stageSceneRender);
+        stages.add(stageDepthPyramidBuild);
+        stages.add(stageInstanceCullLate);
+        stages.add(stageSceneRender.getLate());
+        stages.add(stageLightCull);
+        stages.add(stageEnvironmentUpdate);
+        stages.add(stageLightRender);
+        stages.add(stageSkyboxRender);
+        stages.add(previewTransparency);
+        stages.add(stageTaa);
+        stages.add(stageToneMap);
+    }
+
+    /**
+     * The stages a configuration runs, in order.
+     *
+     * @param configuration What to draw.
+     * @return The stages.
+     */
+    List<RenderStage> stageList(@NonNull RenderConfig configuration) {
         List<RenderStage> stages = new ArrayList<>();
         final boolean world = configuration.world();
-        if (world) {
+        if (world && configuration.preview()) {
+            addPreviewStages(stages);
+        } else if (world) {
             // Bakes first, so what they write is drawn this frame
             // Particles first, when waiting on what came before costs nearly nothing: last
             // frame's draws are done by then, where later this frame's would hold them up
@@ -490,8 +541,7 @@ public class PipelineManagerVulkan {
             // The GUI is drawn over it in the scene window afterward, see GuiRender
             stages.add(stageSwapchainPresent);
         }
-
-        return new PipelineVulkan(stages.toArray(new RenderStage[0]), configuration);
+        return stages;
     }
 
     /**
@@ -507,7 +557,7 @@ public class PipelineManagerVulkan {
      * @param addressMode The VkSamplerAddressMode for the sampler.
      * @return The texture, in the undefined layout.
      */
-    private TextureInfoVulkan createRenderTarget(
+    TextureInfoVulkan createRenderTarget(
             @NonNull VulkanState state,
             int width,
             int height,

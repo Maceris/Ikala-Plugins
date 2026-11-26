@@ -9,6 +9,7 @@ import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.InstanceHandle;
 import com.ikalagaming.graphics.LightHandle;
+import com.ikalagaming.graphics.PreviewView;
 import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.asset.MaterialText;
 import com.ikalagaming.graphics.graph.Material;
@@ -44,6 +45,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import javax.annotation.Nullable;
@@ -503,6 +505,40 @@ public final class ScenePlacement {
      * an instance for every node. Render thread only.
      */
     public void place() {
+        place(
+                (model, transform) ->
+                        graphics.instances()
+                                .place(
+                                        model,
+                                        transform.position(),
+                                        transform.rotation(),
+                                        transform.scale()));
+        placeLights();
+    }
+
+    /**
+     * Put the scene in a preview instead of the world: materials into the shared cache, meshes
+     * registered and models added, and an instance for every node in the preview's view. The
+     * scene's own lights aren't placed: they would light the world. Render thread only.
+     *
+     * @param preview The preview to place it in.
+     */
+    public void placeIn(@NonNull PreviewView preview) {
+        place(
+                (model, transform) ->
+                        preview.place(
+                                model,
+                                transform.position(),
+                                transform.rotation(),
+                                transform.scale()));
+    }
+
+    /**
+     * Put the materials and models in the world scene and place every node's instance.
+     *
+     * @param placer Places one instance.
+     */
+    private void place(@NonNull BiFunction<Model, Transform, InstanceHandle> placer) {
         final Scene scene = GraphicsManager.getScene();
         final MaterialCache cache = scene.getMaterialCache();
         for (Material material : materials) {
@@ -515,13 +551,7 @@ public final class ScenePlacement {
             }
             scene.addModel(placed.model());
             for (Transform transform : placed.transforms()) {
-                final InstanceHandle handle =
-                        graphics.instances()
-                                .place(
-                                        placed.model(),
-                                        transform.position(),
-                                        transform.rotation(),
-                                        transform.scale());
+                final InstanceHandle handle = placer.apply(placed.model(), transform);
                 instances.computeIfAbsent(transform.node(), node -> new ArrayList<>()).add(handle);
                 final List<MeshSlot> slots =
                         meshSlots.computeIfAbsent(transform.node(), node -> new ArrayList<>());
@@ -530,7 +560,6 @@ public final class ScenePlacement {
                 }
             }
         }
-        placeLights();
     }
 
     /** Place the scene's point and spot lights. Directional lights are left for the sun. */

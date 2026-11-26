@@ -55,6 +55,26 @@ class InstanceRegistryTest {
         return model;
     }
 
+    @Test
+    void viewsAreHandedOver() {
+        place("p", ball, 0);
+        registry.place("p", cube, new Vector3d(), new Quaternionf(), 1, 3);
+        Recorded recorded = new Recorded();
+        registry.takeChanges(recorded);
+        assertEquals(InstanceRegistry.WORLD_VIEW, recorded.views.get(0));
+        assertEquals(3, recorded.views.get(1));
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        registry.place(
+                                "p",
+                                cube,
+                                new Vector3d(),
+                                new Quaternionf(),
+                                1,
+                                InstanceRegistry.MAX_VIEW + 1));
+    }
+
     @BeforeEach
     void setUp() {
         registry = new InstanceRegistry();
@@ -74,6 +94,7 @@ class InstanceRegistryTest {
         final Map<Integer, Material> overrides = new LinkedHashMap<>();
         final Map<Model, Integer> models = new LinkedHashMap<>();
         final Map<Integer, Boolean> movingSlots = new LinkedHashMap<>();
+        final Map<Integer, Integer> views = new LinkedHashMap<>();
         InstanceRegistry.Capacities capacities;
 
         @Override
@@ -87,9 +108,11 @@ class InstanceRegistryTest {
                 int meshCount,
                 int overrideFirst,
                 Model model,
-                boolean moving) {
+                boolean moving,
+                int view) {
             instances.add(new Change(slot, alive, new Vector3d(position), scale));
             movingSlots.put(slot, moving);
+            views.put(slot, view);
             instanceLists.add(new int[] {meshFirst, meshCount, overrideFirst});
         }
 

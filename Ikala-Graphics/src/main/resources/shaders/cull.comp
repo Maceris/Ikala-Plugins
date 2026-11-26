@@ -107,6 +107,8 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Vi
     int levels;
     // FLAG_OCCLUSION and FLAG_PYRAMID_VALID
     uint flags;
+    // The view being drawn: only its instances are kept, 0 for the world
+    uint viewID;
 };
 
 // Every level of the depth pyramid, the farthest depth under each texel
@@ -176,6 +178,9 @@ const uint COUNTER_OCCLUDED = LIST_COUNT;
 // The standard kind, in the main mesh table; every other kind is baked. Must match MeshKind.
 const uint KIND_STANDARD = 0;
 const uint KIND_BAKED_TRANSLUCENT = 3;
+
+// Where the view that draws an instance starts in its flags, see InstanceTable
+const uint VIEW_SHIFT = 16;
 
 // Set in the view flags when the scene is culled by occlusion
 const uint FLAG_OCCLUSION = 1;
@@ -290,7 +295,7 @@ void main()
         return;
     }
     Instance instance = table.instances[slot];
-    if ((instance.info.x & FLAG_ALIVE) == 0) {
+    if ((instance.info.x & FLAG_ALIVE) == 0 || (instance.info.x >> VIEW_SHIFT) != view.viewID) {
         return;
     }
     mat4 model = matrices.matrices[slot];

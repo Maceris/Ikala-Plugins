@@ -165,10 +165,11 @@ public class LightRender implements RenderStage {
                 scene.getFog().isActive()
                         || scene.getMediumRegistry().getCount() > 0
                         || scene.getWaterRegistry().getCount() > 0
-                        || vulkanState.particlePool != null
+                        || !renderConfig.preview()
+                                && vulkanState.particlePool != null
                                 && vulkanState.particlePool.readVolumetricCount() > 0;
         // The light cull stage wrote the lights and sorted them into clusters
-        updateUniforms(scene, vulkanState, frameData, frameData.lightCount);
+        updateUniforms(scene, vulkanState, frameData, frameData.lightCount, renderConfig.preview());
         SceneRender.writeStorageBindings(
                 vulkanState,
                 descriptorSets[vulkanState.frameIndex],
@@ -283,12 +284,15 @@ public class LightRender implements RenderStage {
      * @param vulkanState The Vulkan state.
      * @param frameData The data for the current frame.
      * @param lightCount How many lights are in the lights buffer.
+     * @param preview Whether a preview scene is drawn, which the world's sky map and occupancy
+     *     volume don't cover.
      */
     private static void updateUniforms(
             @NonNull Scene scene,
             @NonNull VulkanState vulkanState,
             @NonNull PerFrameData frameData,
-            int lightCount) {
+            int lightCount,
+            boolean preview) {
         ByteBuffer uniformData =
                 MemoryUtil.memByteBuffer(
                         frameData.lightUniforms.allocationInfo.pMappedData(),
@@ -347,7 +351,7 @@ public class LightRender implements RenderStage {
                 .get(ShaderBindings.Light.SKY_PROJECTION_VIEW_MATRIX_OFFSET, uniformData);
         uniformData.putInt(
                 ShaderBindings.Light.SKY_MAP_INDEX_OFFSET,
-                GraphicsManager.getSettings().skyOcclusion && frameData.skyMap != null
+                !preview && GraphicsManager.getSettings().skyOcclusion && frameData.skyMap != null
                         ? frameData.skyMap.bindlessIndex
                         : -1);
         uniformData.putFloat(ShaderBindings.Light.SKY_DEPTH_RANGE_OFFSET, sky.getDepthRange());
@@ -360,7 +364,7 @@ public class LightRender implements RenderStage {
         // The occupancy levels, from render space
         final OccupancyClipmap clipmap = vulkanState.occupancy.getClipmap();
         final Vector3dc camera = scene.getCamera().getPosition();
-        boolean occupancyReady = GraphicsManager.getSettings().occupancy;
+        boolean occupancyReady = !preview && GraphicsManager.getSettings().occupancy;
         for (int level = 0; level < OccupancyClipmap.LEVELS; ++level) {
             final long[] origin = clipmap.origin(level);
             final int size = OccupancyClipmap.VOXEL_SIZES[level];

@@ -63,6 +63,9 @@ public final class GraphicsContext {
     /** Placing models in the scene for this context. */
     private final Instances instances;
 
+    /** Preview views for this context. */
+    private final Previews previews;
+
     /** Places point lights and spotlights for this plugin. */
     private final Lights lights;
 
@@ -112,6 +115,7 @@ public final class GraphicsContext {
         textures = new Textures(this);
         meshes = new Meshes(this);
         instances = new Instances(this);
+        previews = new Previews(this);
         lights = new Lights(this);
         media = new Media(this);
         particles = new Particles(this);
@@ -156,6 +160,17 @@ public final class GraphicsContext {
     public Instances instances() {
         checkOpen();
         return instances;
+    }
+
+    /**
+     * Make preview views, small scenes drawn into their own textures, owned by this plugin.
+     *
+     * @return The previews API for this plugin.
+     * @throws IllegalStateException If the plugin was unloaded.
+     */
+    public Previews previews() {
+        checkOpen();
+        return previews;
     }
 
     /**

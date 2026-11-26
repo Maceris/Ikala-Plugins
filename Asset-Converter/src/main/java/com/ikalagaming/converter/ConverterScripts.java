@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.function.Consumer;
 
@@ -179,6 +180,39 @@ public final class ConverterScripts {
                     showMenu(false);
                     workbench.setVisible(true);
                     workbench.openNamed(what);
+                });
+    }
+
+    /**
+     * Save the workbench's preview views to PNG files once they settle, logging "Script: Saved the
+     * previews" when done, for checks of preview rendering.
+     *
+     * @param folder Where to save them.
+     * @param label The folder inside it to save them in, made if missing, like "before".
+     */
+    public static void savePreviews(String folder, String label) {
+        onWorkbench(
+                workbench -> {
+                    final Path target = Path.of(folder, label);
+                    try {
+                        Files.createDirectories(target);
+                    } catch (IOException e) {
+                        log.warn("Script: can't make {}: {}", target, e.getMessage());
+                        return;
+                    }
+                    workbench
+                            .getPreviewPanel()
+                            .save(target)
+                            .whenComplete(
+                                    (done, error) -> {
+                                        if (error == null) {
+                                            log.info("Script: Saved the previews to {}", target);
+                                        } else {
+                                            log.warn(
+                                                    "Script: saving the previews failed: {}",
+                                                    error.getMessage());
+                                        }
+                                    });
                 });
     }
 

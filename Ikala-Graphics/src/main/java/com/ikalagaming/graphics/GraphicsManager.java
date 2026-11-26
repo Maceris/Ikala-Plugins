@@ -425,6 +425,11 @@ public class GraphicsManager {
                 log.debug("Removed {} sections owned by {}", sections, context.getOwnerKey());
             }
         }
+        // Before the instances, which closing a preview removes its own of
+        int previews = renderInstance.getPreviews().removeAllOwnedBy(context.getOwnerKey());
+        if (previews > 0) {
+            log.debug("Closed {} previews owned by {}", previews, context.getOwnerKey());
+        }
         InstanceTable instances = renderInstance.getState().instances;
         if (instances != null) {
             var removed = instances.getRegistry().removeAllOwnedBy(context.getOwnerKey());

@@ -454,9 +454,12 @@ public class InstanceDrawUpdate implements RenderStage {
                 scene.getCamera().getPosition(),
                 scene.getSceneLights().getDirLight().getDirection(),
                 CascadeShadowSplit.shadowDistance(scene),
-                GraphicsManager.getSettings().sunShadowCache);
-        vulkanState.skyOcclusion.plan(
-                frameData.skyView, scene.getCamera().getPosition(), scene.getViewDistance());
+                // A preview's sun is drawn whole: the cache follows the world's camera
+                !renderConfig.preview() && GraphicsManager.getSettings().sunShadowCache);
+        if (!renderConfig.preview()) {
+            vulkanState.skyOcclusion.plan(
+                    frameData.skyView, scene.getCamera().getPosition(), scene.getViewDistance());
+        }
 
         // Which point lights get shadow maps, from what the observer can see
         final Observer pointObserver = scene.getObserver();
@@ -1077,6 +1080,8 @@ public class InstanceDrawUpdate implements RenderStage {
             @NonNull PerFrameData frameData,
             @NonNull DebugVisualizers visualizers) {
         final DepthPyramid pyramid = state.depthPyramid;
+        // A pyramid built from another view's depth would hide what this view can see
+        final boolean ownPyramid = pyramid.getViewID() == scene.getViewID();
         frameData.occlusion =
                 !visualizers.isCullingDisabled() && !visualizers.isOcclusionDisabled();
         frameData.buildPyramid = frameData.occlusion && !scene.isObserverFrozen();
@@ -1087,7 +1092,8 @@ public class InstanceDrawUpdate implements RenderStage {
                     Math.min(sceneTarget.width(), frameData.gBuffer.width()),
                     Math.min(sceneTarget.height(), frameData.gBuffer.height()),
                     observer.getPosition(),
-                    new Matrix4f(observer.getProjectionMatrix()).mul(observer.getViewMatrix()));
+                    new Matrix4f(observer.getProjectionMatrix()).mul(observer.getViewMatrix()),
+                    scene.getViewID());
         }
 
         final ByteBuffer view =
@@ -1105,10 +1111,11 @@ public class InstanceDrawUpdate implements RenderStage {
         if (frameData.occlusion) {
             flags |= ShaderBindings.Cull.FLAG_OCCLUSION;
         }
-        if (pyramid.isValid()) {
+        if (pyramid.isValid() && ownPyramid) {
             flags |= ShaderBindings.Cull.FLAG_PYRAMID_VALID;
         }
         view.putInt(ShaderBindings.Cull.VIEW_FLAGS_OFFSET, flags);
+        view.putInt(ShaderBindings.Cull.VIEW_ID_OFFSET, scene.getViewID());
     }
 
     /**

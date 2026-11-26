@@ -49,7 +49,8 @@ import javax.annotation.Nullable;
  * vec4 positionHigh;  // xyz: high part of the world position, w: uniform scale
  * vec4 positionLow;   // xyz: low part of the world position, w: unused
  * vec4 rotation;      // quaternion x, y, z, w
- * uvec4 info;         // x: flags (FLAG_ALIVE, FLAG_MOVING, visibility mask in bits 8-15),
+ * uvec4 info;         // x: flags (FLAG_ALIVE, FLAG_MOVING, visibility mask in bits 8-15,
+ *                     //    view in bits 16-31),
  *                     // y: first model mesh, z: mesh count, w: first override
  * </pre>
  *
@@ -73,6 +74,9 @@ public class InstanceTable {
 
     /** Where the flags start in an entry. */
     public static final int INFO_OFFSET = 3 * 4 * Float.BYTES;
+
+    /** Where the view that draws the instance starts in the flags, see {@link InstanceRegistry}. */
+    public static final int VIEW_SHIFT = 16;
 
     /** Set in the flags when the slot holds an instance. */
     public static final int FLAG_ALIVE = 1;
@@ -234,6 +238,7 @@ public class InstanceTable {
      * @param meshCount How many meshes its model has.
      * @param overrideFirst Where its material overrides start in the override list.
      * @param moving Whether it is moving, see {@link #FLAG_MOVING}.
+     * @param view The view that draws it, {@link InstanceRegistry#WORLD_VIEW} for the world.
      */
     public static void writeEntry(
             @NonNull ByteBuffer out,
@@ -244,7 +249,8 @@ public class InstanceTable {
             int meshFirst,
             int meshCount,
             int overrideFirst,
-            boolean moving) {
+            boolean moving,
+            int view) {
         final int base = out.position();
         out.putFloat(base + POSITION_HIGH_OFFSET, high(position.x()));
         out.putFloat(base + POSITION_HIGH_OFFSET + Float.BYTES, high(position.y()));
@@ -258,11 +264,14 @@ public class InstanceTable {
         out.putFloat(base + ROTATION_OFFSET + Float.BYTES, rotation.y());
         out.putFloat(base + ROTATION_OFFSET + 2 * Float.BYTES, rotation.z());
         out.putFloat(base + ROTATION_OFFSET + 3 * Float.BYTES, rotation.w());
+        // A preview's models are left out of the world's ray queries
+        final int rays = view == InstanceRegistry.WORLD_VIEW ? VISIBLE_TO_ALL : 0;
         final int flags =
                 alive
                         ? FLAG_ALIVE
                                 | (moving ? FLAG_MOVING : 0)
-                                | VISIBLE_TO_ALL << VISIBILITY_MASK_SHIFT
+                                | rays << VISIBILITY_MASK_SHIFT
+                                | view << VIEW_SHIFT
                         : 0;
         out.putInt(base + INFO_OFFSET, flags);
         out.putInt(base + INFO_OFFSET + Integer.BYTES, alive ? meshFirst : 0);
@@ -350,7 +359,8 @@ public class InstanceTable {
                                         int meshCount,
                                         int overrideFirst,
                                         @Nullable Model model,
-                                        boolean moving) {
+                                        boolean moving,
+                                        int view) {
                                     writeEntry(
                                             instanceEntries.next(changed),
                                             alive,
@@ -360,10 +370,19 @@ public class InstanceTable {
                                             meshFirst,
                                             meshCount,
                                             overrideFirst,
-                                            moving);
+                                            moving,
+                                            view);
+                                    // Previews' models cast nothing into the world's sky map
                                     skyCasters.changed(
-                                            changed, alive, position, rotation, scale, model,
-                                            moving, resident, sky);
+                                            changed,
+                                            alive && view == InstanceRegistry.WORLD_VIEW,
+                                            position,
+                                            rotation,
+                                            scale,
+                                            model,
+                                            moving,
+                                            resident,
+                                            sky);
                                 }
 
                                 @Override

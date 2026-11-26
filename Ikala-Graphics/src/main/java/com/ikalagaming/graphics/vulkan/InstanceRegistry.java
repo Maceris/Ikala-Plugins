@@ -104,6 +104,7 @@ public class InstanceRegistry {
          * @param model Its model, or null if the slot holds none.
          * @param moving Whether it moved within the last {@link #SETTLE_ROUNDS} rounds of changes,
          *     so maps kept from frame to frame leave it out.
+         * @param view The view that draws it, {@link #WORLD_VIEW} for the world.
          */
         void instance(
                 int slot,
@@ -115,7 +116,8 @@ public class InstanceRegistry {
                 int meshCount,
                 int overrideFirst,
                 @Nullable Model model,
-                boolean moving);
+                boolean moving,
+                int view);
 
         /**
          * A model mesh list entry changed.
@@ -183,6 +185,12 @@ public class InstanceRegistry {
     /** The identity rotation, written for removed slots. */
     private static final Quaternionfc IDENTITY = new Quaternionf();
 
+    /** The view of the world, which instances are in unless placed in a preview. */
+    public static final int WORLD_VIEW = 0;
+
+    /** The highest view an instance can be in, set by the bits the GPU table keeps for it. */
+    public static final int MAX_VIEW = 0xFFFF;
+
     /** Guards every field below. */
     private final ReentrantLock lock = new ReentrantLock();
 
@@ -209,6 +217,9 @@ public class InstanceRegistry {
 
     /** The generation of each slot, which handles must match. */
     private int[] generations = new int[0];
+
+    /** The view each slot is drawn in, {@link #WORLD_VIEW} for the world. */
+    private int[] views = new int[0];
 
     /** Slots that are free to reuse, taken lowest first, which keeps the table compact. */
     private final BitSet freeSlots = new BitSet();
@@ -271,9 +282,36 @@ public class InstanceRegistry {
             @NonNull Vector3dc position,
             @NonNull Quaternionfc rotation,
             float scale) {
+        return place(owner, model, position, rotation, scale, WORLD_VIEW);
+    }
+
+    /**
+     * Place an instance that only one view draws, like a model in a preview. It is drawn from the
+     * next frame on.
+     *
+     * @param owner The key of the plugin that owns it.
+     * @param model The model to place.
+     * @param position The world position.
+     * @param rotation The rotation.
+     * @param scale The uniform scale.
+     * @param view The view that draws it, {@link #WORLD_VIEW} for the world.
+     * @return The handle.
+     * @throws IllegalArgumentException If the view is out of range.
+     */
+    public InstanceHandle place(
+            @NonNull String owner,
+            @NonNull Model model,
+            @NonNull Vector3dc position,
+            @NonNull Quaternionfc rotation,
+            float scale,
+            int view) {
+        if (view < 0 || view > MAX_VIEW) {
+            throw new IllegalArgumentException("View " + view + " is outside 0 to " + MAX_VIEW);
+        }
         lock.lock();
         try {
             final int slot = takeSlot();
+            views[slot] = view;
             final InstanceHandle handle = new InstanceHandle(slot, generations[slot], model);
             owners[slot] = owner;
             handles[slot] = handle;
@@ -586,10 +624,12 @@ public class InstanceRegistry {
                             state.meshCount(),
                             overrideFirsts[slot],
                             handle.model(),
-                            moving.get(slot));
+                            moving.get(slot),
+                            views[slot]);
                     reported.set(slot);
                 } else {
-                    changes.instance(slot, false, ZERO, IDENTITY, 0, 0, 0, 0, null, false);
+                    changes.instance(
+                            slot, false, ZERO, IDENTITY, 0, 0, 0, 0, null, false, WORLD_VIEW);
                 }
             }
             changed.clear();
@@ -754,6 +794,7 @@ public class InstanceRegistry {
             materials = Arrays.copyOf(materials, newLength);
             animations = Arrays.copyOf(animations, newLength);
             generations = Arrays.copyOf(generations, newLength);
+            views = Arrays.copyOf(views, newLength);
             overrideFirsts = Arrays.copyOf(overrideFirsts, newLength);
             movedRounds = Arrays.copyOf(movedRounds, newLength);
             for (int added = oldLength; added < newLength; ++added) {

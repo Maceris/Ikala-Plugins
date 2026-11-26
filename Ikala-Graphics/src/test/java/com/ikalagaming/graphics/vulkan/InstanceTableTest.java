@@ -52,7 +52,7 @@ class InstanceTableTest {
             out.position(InstanceTable.ENTRY_SIZE);
             Quaternionf rotation = new Quaternionf(0.1f, 0.2f, 0.3f, 0.9f);
             InstanceTable.writeEntry(
-                    out, true, new Vector3d(1e9 + 0.5, -2, 3), rotation, 0.25f, 5, 2, 9, true);
+                    out, true, new Vector3d(1e9 + 0.5, -2, 3), rotation, 0.25f, 5, 2, 9, true, 0);
             assertEquals(InstanceTable.ENTRY_SIZE, out.position(), "The position is unchanged");
 
             final int base = InstanceTable.ENTRY_SIZE;
@@ -69,7 +69,9 @@ class InstanceTableTest {
             assertEquals(InstanceTable.FLAG_ALIVE, flags & InstanceTable.FLAG_ALIVE);
             assertEquals(InstanceTable.FLAG_MOVING, flags & InstanceTable.FLAG_MOVING);
             assertEquals(
-                    InstanceTable.VISIBLE_TO_ALL, flags >>> InstanceTable.VISIBILITY_MASK_SHIFT);
+                    InstanceTable.VISIBLE_TO_ALL,
+                    flags >>> InstanceTable.VISIBILITY_MASK_SHIFT & 0xFF);
+            assertEquals(0, flags >>> InstanceTable.VIEW_SHIFT, "In the world's view");
             assertEquals(5, out.getInt(base + InstanceTable.INFO_OFFSET + 4));
             assertEquals(2, out.getInt(base + InstanceTable.INFO_OFFSET + 8));
             assertEquals(9, out.getInt(base + InstanceTable.INFO_OFFSET + 12));
@@ -77,9 +79,17 @@ class InstanceTableTest {
             assertEquals(0, out.getInt(InstanceTable.INFO_OFFSET));
 
             InstanceTable.writeEntry(
-                    out, false, new Vector3d(), new Quaternionf(), 0, 5, 2, 9, true);
+                    out, false, new Vector3d(), new Quaternionf(), 0, 5, 2, 9, true, 0);
             assertEquals(0, out.getInt(base + InstanceTable.INFO_OFFSET), "Not alive");
             assertEquals(0, out.getInt(base + InstanceTable.INFO_OFFSET + 4), "No meshes");
+
+            // A preview's instance keeps its view and is hidden from the world's ray queries
+            InstanceTable.writeEntry(
+                    out, true, new Vector3d(), new Quaternionf(), 1, 5, 2, 9, false, 0xFFFF);
+            flags = out.getInt(base + InstanceTable.INFO_OFFSET);
+            assertEquals(0xFFFF, flags >>> InstanceTable.VIEW_SHIFT);
+            assertEquals(0, flags >>> InstanceTable.VISIBILITY_MASK_SHIFT & 0xFF);
+            assertEquals(InstanceTable.FLAG_ALIVE, flags & 0xFF);
         } finally {
             MemoryUtil.memFree(out);
         }

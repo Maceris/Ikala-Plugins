@@ -98,6 +98,14 @@ public class DepthPyramid {
     @Getter private boolean valid;
 
     /**
+     * The view whose depth it was last built from, 0 for the world, -1 before the first build. --
+     * GETTER -- The view it was last built from.
+     *
+     * @return The view ID.
+     */
+    @Getter private int viewID = -1;
+
+    /**
      * The width of the depth buffer it was last built from. -- GETTER -- The depth width.
      *
      * @return The width in pixels.
@@ -409,9 +417,15 @@ public class DepthPyramid {
      * @param height The depth buffer's height, no bigger than the g-buffer.
      * @param from Where the depth was drawn from, in the world.
      * @param drawnWith The projection × view matrix it was drawn with, relative to that position.
+     * @param view The view whose depth it is built from, 0 for the world.
      */
     public void markBuilt(
-            int width, int height, @NonNull Vector3dc from, @NonNull Matrix4fc drawnWith) {
+            int width,
+            int height,
+            @NonNull Vector3dc from,
+            @NonNull Matrix4fc drawnWith,
+            int view) {
+        viewID = view;
         depthWidth = width;
         depthHeight = height;
         position.set(from);

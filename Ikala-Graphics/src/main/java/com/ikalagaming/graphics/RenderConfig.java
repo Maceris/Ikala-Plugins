@@ -20,17 +20,25 @@ import lombok.With;
  * @param filters Whether to run the post filters over the world.
  * @param debug Whether to draw debug shapes over the world, depth tested against it.
  * @param gui Whether to draw the GUI.
+ * @param preview Whether the world drawn is a small preview scene rather than the game world: the
+ *     stages that stream, cache or simulate the world (sections, level of detail, occupancy,
+ *     deformation, particles, water, volume bricks, the sun's cached cascades and the sky map) are
+ *     left out, so a preview neither sees nor disturbs them.
  */
 @With
-public record RenderConfig(boolean world, boolean filters, boolean debug, boolean gui) {
+public record RenderConfig(
+        boolean world, boolean filters, boolean debug, boolean gui, boolean preview) {
     /** Draw nothing. */
-    public static final RenderConfig NONE = new RenderConfig(false, false, false, false);
+    public static final RenderConfig NONE = new RenderConfig(false, false, false, false, false);
 
     /** Only the GUI, as on a menu with nothing behind it. */
     public static final RenderConfig GUI = NONE.withGui(true);
 
     /** The world with the GUI over it, as in game. */
     public static final RenderConfig WORLD = GUI.withWorld(true);
+
+    /** A preview scene, drawn into its own image rather than a window. */
+    public static final RenderConfig PREVIEW = NONE.withWorld(true).withPreview(true);
 
     /**
      * Whether filters actually run, which needs the world.
