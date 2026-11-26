@@ -10,6 +10,10 @@ the parent, and cached results recomputed only when something changes.
 - **Surfaces are IkGui windows,** placed by an anchor layout against the viewport (safe-area insets, screen-shape
   variants). Fixed panels are placed every frame, movable tool windows once, and the HUD is a transparent window
   that takes no input. Each surface is a navigation scope.
+- **Panels are surfaces the user owns,** for tools: titled, resizable, dockable, and placed by their anchors only
+  the first time IkGui has never seen them. Placing a docked window would undock it, so a panel never sets its
+  position once IkGui has its window or saved settings. Surfaces stay undockable, so a game HUD can never be
+  dragged into a dock.
 - **Content uses a flex layout that runs before submission,** so every node knows its rectangle when submitted. That
   avoids immediate mode's usual one-frame lag on sizes.
 

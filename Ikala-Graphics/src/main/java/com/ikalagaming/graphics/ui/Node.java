@@ -12,6 +12,8 @@ import lombok.NonNull;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * A piece of retained UI. Nodes form a tree inside a {@link Surface}; the layout engine gives each
@@ -131,6 +133,9 @@ public abstract class Node<S extends Node<S>> {
 
     /** The IkGui item ID the node last submitted, or 0 if it submits no item. */
     private int itemID;
+
+    /** The tooltip, context menu and drag and drop, or null for none. */
+    private NodeBehaviors behaviors;
 
     /**
      * Create a node.
@@ -426,6 +431,74 @@ public abstract class Node<S extends Node<S>> {
         return self();
     }
 
+    /**
+     * The node's behaviors, made on first use.
+     *
+     * @return The behaviors.
+     */
+    private NodeBehaviors behaviors() {
+        if (behaviors == null) {
+            behaviors = new NodeBehaviors();
+        }
+        return behaviors;
+    }
+
+    /**
+     * Show text when the mouse rests on the node. Only nodes that submit an IkGui item, like
+     * buttons, text inputs, selectables and images, show it.
+     *
+     * @param text The tooltip, or null for none.
+     * @return This node.
+     */
+    public S tooltip(String text) {
+        behaviors().tooltip = text;
+        return self();
+    }
+
+    /**
+     * Open a menu when the node is right clicked. Only nodes that submit an IkGui item have one.
+     *
+     * @param items The menu's entries, none to remove the menu.
+     * @return This node.
+     */
+    public S contextMenu(@NonNull MenuItem... items) {
+        behaviors().contextMenu = List.of(items);
+        return self();
+    }
+
+    /**
+     * Let the user drag a value out of the node, to drop on nodes that take that type. Only nodes
+     * that submit an IkGui item can be dragged from.
+     *
+     * @param type The payload type, which drop targets ask for.
+     * @param payload Makes the value, on the render thread, while the drag goes on.
+     * @param label What shows beside the mouse while dragging.
+     * @return This node.
+     */
+    public S dragSource(@NonNull String type, @NonNull Supplier<?> payload, @NonNull String label) {
+        behaviors().dragSource = new NodeBehaviors.DragSource(type, payload, label);
+        return self();
+    }
+
+    /**
+     * Take values of a type dropped on the node. Only nodes that submit an IkGui item take drops.
+     *
+     * @param type The payload type to take.
+     * @param payloadClass The class the value must be; others are ignored.
+     * @param onDrop What to do with a dropped value, run on the render thread outside drawing.
+     * @param <T> The value's type.
+     * @return This node.
+     */
+    public <T> S dropTarget(
+            @NonNull String type,
+            @NonNull Class<T> payloadClass,
+            @NonNull Consumer<? super T> onDrop) {
+        behaviors().dropTarget =
+                new NodeBehaviors.DropTarget(
+                        type, payloadClass, value -> onDrop.accept(payloadClass.cast(value)));
+        return self();
+    }
+
     /** Mark this node and its ancestors as needing layout. */
     protected final void markDirty() {
         for (Node<?> node = this; node != null && !node.dirty; node = node.parent) {
@@ -475,6 +548,10 @@ public abstract class Node<S extends Node<S>> {
         submittedFrame = IkGui.getFrameCount();
         submittedVisible = IkGui.isRectVisible(rect);
         submit(frame);
+        // Only on the node's own item, not the last item one of its children submitted
+        if (behaviors != null && itemID != 0 && IkGui.getItemID() == itemID) {
+            behaviors.apply(frame);
+        }
         if (pushedFont) {
             IkGui.popFont();
         }

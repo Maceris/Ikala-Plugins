@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.ikalagaming.graphics.ui.Anchors;
+import com.ikalagaming.graphics.ui.DockLayout;
 import com.ikalagaming.graphics.ui.Layer;
 import com.ikalagaming.graphics.ui.Length;
 import com.ikalagaming.graphics.ui.Sizing;
@@ -20,6 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 class SpecLoaderTest {
 
@@ -33,6 +35,75 @@ class SpecLoaderTest {
     }
 
     private static final String SURFACE = "surface: { id: test }\n";
+
+    @Test
+    void panelSettingsLoad() {
+        UiSpec spec =
+                load(
+                        "panel: { id: tools/files, title: Files, anchors: top-left, width: 300 }\n"
+                                + "content: { type: column, id: root }\n");
+        assertEquals("tools/files", spec.surface().id());
+        assertEquals("Files", spec.surface().title());
+        assertNull(load(SURFACE + "content: { type: column, id: root }\n").surface().title());
+    }
+
+    @Test
+    void panelProblemsAreReported() {
+        assertTrue(
+                failure("panel: { id: p }\ncontent: { type: column, id: root }\n")
+                        .contains("panel: missing 'title'"));
+        assertTrue(
+                failure(
+                                "panel: { id: p, title: P, layer: overlay }\n"
+                                        + "content: { type: column, id: root }\n")
+                        .contains("panel.layer: unknown panel property"));
+        assertTrue(
+                failure(
+                                SURFACE
+                                        + "panel: { id: p, title: P }\n"
+                                        + "content: { type: column, id: root }\n")
+                        .contains("not both"));
+    }
+
+    @Test
+    void dockLayoutLoads() {
+        DockLayout layout =
+                NodeTypes.dockLayout(
+                        Map.of(
+                                "splits",
+                                List.of(
+                                        Map.of("side", "left", "fraction", 0.2, "panels", "a"),
+                                        Map.of(
+                                                "side",
+                                                "bottom",
+                                                "fraction",
+                                                0.4,
+                                                "panels",
+                                                List.of("b", "c"),
+                                                "ofPrevious",
+                                                true)),
+                                "center",
+                                List.of("d")),
+                        "content.layout");
+        assertEquals(2, layout.getSplits().size());
+        assertEquals(List.of("b", "c"), layout.getSplits().get(1).panels());
+        assertTrue(layout.getSplits().get(1).ofPrevious());
+        assertEquals(List.of("d"), layout.getCenter());
+        SpecException bad =
+                assertThrows(
+                        SpecException.class,
+                        () ->
+                                NodeTypes.dockLayout(
+                                        Map.of(
+                                                "splits",
+                                                List.of(
+                                                        Map.of(
+                                                                "side", "left",
+                                                                "fraction", 1.5,
+                                                                "panels", "a"))),
+                                        "content.layout"));
+        assertTrue(bad.getMessage().startsWith("content.layout.splits[0]: "), bad.getMessage());
+    }
 
     @Test
     void surfaceSettingsLoad() {

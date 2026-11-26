@@ -336,6 +336,38 @@ public class Surface {
     }
 
     /**
+     * Extra IkGui window flags set through {@link #hud()}, {@link #transparent()} and the like.
+     *
+     * @return The flags.
+     */
+    int extraFlags() {
+        return extraFlags;
+    }
+
+    /**
+     * Set where the next window goes, before it begins.
+     *
+     * @param window Where the anchors and sizing place it.
+     */
+    void placeWindow(@NonNull RectFloat window) {
+        final Condition condition = movable ? Condition.ONCE : Condition.ALWAYS;
+        // Laid out in the main window, so kept there even when dragged past its edge
+        IkGui.setNextWindowViewport(IkGui.getMainViewport().id);
+        IkGui.setNextWindowPos(window.getLeft(), window.getTop(), condition);
+        IkGui.setNextWindowSize(window.getWidth(), window.getHeight(), condition);
+    }
+
+    /**
+     * Begin the IkGui window.
+     *
+     * @param frame Details about this frame.
+     * @return True if its content should be drawn.
+     */
+    boolean beginWindow(@NonNull UiFrame frame) {
+        return IkGui.begin(windowName(), windowFlags());
+    }
+
+    /**
      * Draw the surface as an IkGui window. Render thread only, between IkGui's new frame and
      * render.
      *
@@ -354,12 +386,7 @@ public class Surface {
                         : new Vector2f(
                                 padding.left().resolve(0, layoutContext.scale(), fontPixels),
                                 padding.top().resolve(0, layoutContext.scale(), fontPixels));
-        final RectFloat window = place(viewport, layoutContext, windowPadding);
-        final Condition condition = movable ? Condition.ONCE : Condition.ALWAYS;
-        // Laid out in the main window, so kept there even when dragged past its edge
-        IkGui.setNextWindowViewport(IkGui.getMainViewport().id);
-        IkGui.setNextWindowPos(window.getLeft(), window.getTop(), condition);
-        IkGui.setNextWindowSize(window.getWidth(), window.getHeight(), condition);
+        placeWindow(place(viewport, layoutContext, windowPadding));
         // The window reads its colors, borders and padding when it begins
         final IkGuiStyler.Pushed pushed =
                 IkGuiStyler.push(
@@ -369,7 +396,7 @@ public class Surface {
                                 padding,
                                 layoutContext.scale(),
                                 fontPixels));
-        final boolean open = IkGui.begin(windowName(), windowFlags());
+        final boolean open = beginWindow(frame);
         pushed.pop();
         switch (layer) {
             case BACKGROUND ->

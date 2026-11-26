@@ -42,6 +42,8 @@ import java.util.regex.Pattern;
  *   id: my-plugin/menu
  *   anchors: center            # fill, top-left ... or {at: [0.5, 0.5], offset: [0, -20]}
  *   width: fit                 # fit, grow, 240, "50%", {grow: 2, min: 100}
+ * # or, for a panel the user can move, resize and dock:
+ * # panel: {id: my-plugin/files, title: Files, anchors: top-left, width: 300}
  * templates:
  *   import: [common.yml]       # templates from other files, in this folder or below it
  *   big-button:
@@ -57,7 +59,7 @@ import java.util.regex.Pattern;
  */
 public final class SpecLoader {
     /** Keys allowed at the top of a spec file. */
-    private static final Set<String> TOP_LEVEL = Set.of(SURFACE, TEMPLATES, CONTENT);
+    private static final Set<String> TOP_LEVEL = Set.of(SURFACE, PANEL, TEMPLATES, CONTENT);
 
     /** Keys a node has that aren't properties. */
     private static final Set<String> STRUCTURE = Set.of(TYPE, ID, CHILDREN, REPEAT);
@@ -215,13 +217,26 @@ public final class SpecLoader {
         if (root.containsKey(TEMPLATES)) {
             readTemplates(root.get(TEMPLATES), TEMPLATES, folder, files, templates);
         }
-        if (!root.containsKey(SURFACE)) {
+        boolean panel = root.containsKey(PANEL);
+        if (panel && root.containsKey(SURFACE)) {
+            throw new SpecException(
+                    source
+                            + ": a spec is shown as a '"
+                            + SURFACE
+                            + "' or a '"
+                            + PANEL
+                            + "', not both");
+        }
+        if (!panel && !root.containsKey(SURFACE)) {
             throw new SpecException(missing(source, SURFACE));
         }
         if (!root.containsKey(CONTENT)) {
             throw new SpecException(missing(source, CONTENT));
         }
-        UiSpec.SurfaceSpec surface = surface(root.get(SURFACE), SURFACE);
+        UiSpec.SurfaceSpec surface =
+                panel
+                        ? surface(root.get(PANEL), PANEL, true)
+                        : surface(root.get(SURFACE), SURFACE, false);
         NodeSpec content = node(root.get(CONTENT), CONTENT, templates, new Expansion());
         return new UiSpec(source, surface, content, List.copyOf(files));
     }
@@ -335,23 +350,40 @@ public final class SpecLoader {
     }
 
     /**
-     * Read the surface settings.
+     * Read the surface or panel settings. Panels take a title, and the user moves them, so they
+     * take no layer and aren't marked movable.
      *
      * @param value The YAML map.
      * @param path Where it is, for messages.
+     * @param panel Whether these are a panel's settings.
      * @return The settings.
      */
-    private static UiSpec.SurfaceSpec surface(Object value, String path) {
+    private static UiSpec.SurfaceSpec surface(Object value, String path, boolean panel) {
         Map<String, Object> map = SpecValues.map(value, path);
         Set<String> known =
-                Set.of(ID, ANCHORS, WIDTH, HEIGHT, LAYER, MOVABLE, TRANSPARENT, CLASSES, STYLE);
+                panel
+                        ? Set.of(ID, TITLE, ANCHORS, WIDTH, HEIGHT, TRANSPARENT, CLASSES, STYLE)
+                        : Set.of(
+                                ID,
+                                ANCHORS,
+                                WIDTH,
+                                HEIGHT,
+                                LAYER,
+                                MOVABLE,
+                                TRANSPARENT,
+                                CLASSES,
+                                STYLE);
+        String kind = panel ? PANEL : SURFACE;
         for (String key : map.keySet()) {
             if (!known.contains(key)) {
-                throw new SpecException(path + "." + key + ": unknown surface property");
+                throw new SpecException(path + "." + key + ": unknown " + kind + " property");
             }
         }
         if (!map.containsKey(ID)) {
             throw new SpecException(missing(path, ID));
+        }
+        if (panel && !map.containsKey(TITLE)) {
+            throw new SpecException(missing(path, TITLE));
         }
         Style style = Style.EMPTY;
         if (map.containsKey(STYLE)) {
@@ -381,7 +413,8 @@ public final class SpecLoader {
                 map.containsKey(CLASSES)
                         ? SpecValues.names(map.get(CLASSES), at(path, CLASSES))
                         : List.of(),
-                style);
+                style,
+                panel ? SpecValues.name(map.get(TITLE), at(path, TITLE)) : null);
     }
 
     /**

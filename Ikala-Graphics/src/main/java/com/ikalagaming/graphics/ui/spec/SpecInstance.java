@@ -5,6 +5,7 @@ import static com.ikalagaming.graphics.ui.spec.SpecKeys.*;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.ui.Container;
 import com.ikalagaming.graphics.ui.Node;
+import com.ikalagaming.graphics.ui.Panel;
 import com.ikalagaming.graphics.ui.Surface;
 import com.ikalagaming.graphics.ui.UiManager;
 import com.ikalagaming.graphics.ui.VirtualGrid;
@@ -322,7 +323,9 @@ public final class SpecInstance {
 
         UiSpec.SurfaceSpec settings = from.surface();
         Surface surface =
-                new Surface(settings.id())
+                (settings.title() == null
+                                ? new Surface(settings.id())
+                                : new Panel(settings.id(), settings.title()))
                         .anchors(settings.anchors())
                         .width(settings.width())
                         .height(settings.height())

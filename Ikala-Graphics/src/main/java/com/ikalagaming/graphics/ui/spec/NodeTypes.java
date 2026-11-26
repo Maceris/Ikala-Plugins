@@ -6,6 +6,8 @@ import com.ikalagaming.graphics.ui.Align;
 import com.ikalagaming.graphics.ui.Button;
 import com.ikalagaming.graphics.ui.Canvas;
 import com.ikalagaming.graphics.ui.Column;
+import com.ikalagaming.graphics.ui.DockLayout;
+import com.ikalagaming.graphics.ui.DockSpace;
 import com.ikalagaming.graphics.ui.Dropdown;
 import com.ikalagaming.graphics.ui.Flex;
 import com.ikalagaming.graphics.ui.Grid;
@@ -58,6 +60,30 @@ public final class NodeTypes {
 
     /** The property for a grid's cell size, one or two lengths. */
     public static final String PROPERTY_CELL = "cell";
+
+    /** The dock space property holding its layout. */
+    private static final String LAYOUT = "layout";
+
+    /** Inside a dock layout: the splits, in order. */
+    private static final String SPLITS = "splits";
+
+    /** Inside a dock layout: the panels in what is left of the middle. */
+    private static final String LAYOUT_CENTER = "center";
+
+    /** Inside a split: the side it takes. */
+    private static final String SIDE = "side";
+
+    /** Inside a split: how much it takes. */
+    private static final String FRACTION = "fraction";
+
+    /** Inside a split: the panels docked there. */
+    private static final String PANELS = "panels";
+
+    /** Inside a split: whether it divides the split before it. */
+    private static final String OF_PREVIOUS = "ofPrevious";
+
+    /** Every key a split can have. */
+    private static final Set<String> SPLIT_KEYS = Set.of(SIDE, FRACTION, PANELS, OF_PREVIOUS);
 
     /**
      * A registered type.
@@ -113,6 +139,7 @@ public final class NodeTypes {
         builtIn("grid", NodeTypes::grid);
         builtIn("virtual-grid", NodeTypes::virtualGrid);
         builtIn("canvas", NodeTypes::canvas);
+        builtIn("dock-space", NodeTypes::dockSpace);
         builtIn("graph-node", NodeTypes::graphNode);
     }
 
@@ -243,6 +270,100 @@ public final class NodeTypes {
                     properties.path() + ".columns: expected a whole number, not " + columns);
         }
         return (int) columns;
+    }
+
+    /**
+     * Make a dock space that panels dock into. {@code layout} gives where panels start, see {@link
+     * #dockLayout}.
+     *
+     * @param id The ID.
+     * @param properties Its properties.
+     * @return The dock space.
+     */
+    private static DockSpace dockSpace(String id, SpecProperties properties) {
+        return new DockSpace(
+                id,
+                properties.has(LAYOUT)
+                        ? dockLayout(properties.raw(LAYOUT), properties.path() + "." + LAYOUT)
+                        : new DockLayout());
+    }
+
+    /**
+     * Read a dock space's layout:
+     *
+     * <pre>
+     * layout:
+     *   splits:
+     *     - {side: left, fraction: 0.2, panels: [my-plugin/files]}
+     *     - {side: bottom, fraction: 0.35, panels: [my-plugin/outliner], ofPrevious: true}
+     *   center: [my-plugin/view]
+     * </pre>
+     *
+     * @param value The YAML value.
+     * @param path Where it is, for messages.
+     * @return The layout.
+     */
+    static DockLayout dockLayout(Object value, String path) {
+        Map<String, Object> map = SpecValues.map(value, path);
+        for (String key : map.keySet()) {
+            if (!SPLITS.equals(key) && !LAYOUT_CENTER.equals(key)) {
+                throw new SpecException(path + "." + key + ": unknown layout property");
+            }
+        }
+        DockLayout layout = new DockLayout();
+        if (map.containsKey(SPLITS)) {
+            String splitsPath = path + "." + SPLITS;
+            if (!(map.get(SPLITS) instanceof List<?> splits)) {
+                throw new SpecException(splitsPath + ": expected a list of splits");
+            }
+            for (int i = 0; i < splits.size(); ++i) {
+                dockSplit(layout, splits.get(i), splitsPath + "[" + i + "]");
+            }
+        }
+        if (map.containsKey(LAYOUT_CENTER)) {
+            layout.center(
+                    SpecValues.names(map.get(LAYOUT_CENTER), path + "." + LAYOUT_CENTER)
+                            .toArray(String[]::new));
+        }
+        return layout;
+    }
+
+    /**
+     * Read one split of a dock layout and add it.
+     *
+     * @param layout The layout to add to.
+     * @param value The YAML value.
+     * @param path Where it is, for messages.
+     */
+    private static void dockSplit(DockLayout layout, Object value, String path) {
+        Map<String, Object> split = SpecValues.map(value, path);
+        for (String key : split.keySet()) {
+            if (!SPLIT_KEYS.contains(key)) {
+                throw new SpecException(path + "." + key + ": unknown split property");
+            }
+        }
+        for (String key : List.of(SIDE, FRACTION, PANELS)) {
+            if (!split.containsKey(key)) {
+                throw new SpecException(path + ": missing '" + key + "'");
+            }
+        }
+        DockLayout.Side side =
+                SpecValues.choice(split.get(SIDE), DockLayout.Side.class, path + "." + SIDE);
+        float fraction = SpecValues.number(split.get(FRACTION), path + "." + FRACTION);
+        String[] panels =
+                SpecValues.names(split.get(PANELS), path + "." + PANELS).toArray(String[]::new);
+        boolean ofPrevious =
+                split.containsKey(OF_PREVIOUS)
+                        && SpecValues.bool(split.get(OF_PREVIOUS), path + "." + OF_PREVIOUS);
+        try {
+            if (ofPrevious) {
+                layout.splitPrevious(side, fraction, panels);
+            } else {
+                layout.split(side, fraction, panels);
+            }
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            throw new SpecException(path + ": " + e.getMessage(), e);
+        }
     }
 
     /**

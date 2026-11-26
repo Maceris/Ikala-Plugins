@@ -7,6 +7,12 @@ public final class SpecKeys {
     /** The surface settings. */
     public static final String SURFACE = "surface";
 
+    /** The panel settings, in place of {@link #SURFACE}, for a spec shown as a dockable panel. */
+    public static final String PANEL = "panel";
+
+    /** Inside {@link #PANEL}: what its title bar or dock tab shows. */
+    public static final String TITLE = "title";
+
     /** The template definitions. */
     public static final String TEMPLATES = "templates";
 

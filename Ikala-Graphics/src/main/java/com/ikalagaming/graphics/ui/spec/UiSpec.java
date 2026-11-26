@@ -39,6 +39,7 @@ public record UiSpec(
      * @param transparent Whether its background is left out.
      * @param classes Its style classes.
      * @param style Its own style.
+     * @param title The title, for a spec shown as a dockable panel, or null for a plain surface.
      */
     public record SurfaceSpec(
             @NonNull String id,
@@ -49,5 +50,6 @@ public record UiSpec(
             boolean movable,
             boolean transparent,
             @NonNull List<String> classes,
-            @NonNull Style style) {}
+            @NonNull Style style,
+            String title) {}
 }

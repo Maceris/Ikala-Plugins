@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics;
 
+import com.ikalagaming.graphics.ui.Panel;
 import com.ikalagaming.graphics.ui.Surface;
 import com.ikalagaming.graphics.ui.Tool;
 import com.ikalagaming.graphics.ui.UiManager;
@@ -71,6 +72,19 @@ public final class UI {
     public Surface surface(@NonNull String id) {
         context.checkOpen();
         return new Surface(id);
+    }
+
+    /**
+     * Create a panel to fill in and show: a titled window the user can move, resize and dock. It
+     * isn't drawn until it is shown with {@link #show(Surface)}.
+     *
+     * @param id The panel ID, unique among all surfaces and panels.
+     * @param title What its title bar or dock tab shows.
+     * @return A new panel with an empty column as its content.
+     */
+    public Panel panel(@NonNull String id, @NonNull String title) {
+        context.checkOpen();
+        return new Panel(id, title);
     }
 
     /**

@@ -18,16 +18,23 @@ import com.ikalagaming.graphics.ui.Align;
 import com.ikalagaming.graphics.ui.Anchors;
 import com.ikalagaming.graphics.ui.Button;
 import com.ikalagaming.graphics.ui.Column;
+import com.ikalagaming.graphics.ui.DockLayout;
+import com.ikalagaming.graphics.ui.DockSpace;
 import com.ikalagaming.graphics.ui.Immediate;
 import com.ikalagaming.graphics.ui.Insets;
 import com.ikalagaming.graphics.ui.Label;
+import com.ikalagaming.graphics.ui.Layer;
 import com.ikalagaming.graphics.ui.Length;
+import com.ikalagaming.graphics.ui.Node;
+import com.ikalagaming.graphics.ui.Panel;
 import com.ikalagaming.graphics.ui.Row;
 import com.ikalagaming.graphics.ui.Scroll;
 import com.ikalagaming.graphics.ui.Selectable;
 import com.ikalagaming.graphics.ui.Sizing;
 import com.ikalagaming.graphics.ui.TextInput;
 import com.ikalagaming.graphics.ui.UiFrame;
+import com.ikalagaming.graphics.ui.style.Style;
+import com.ikalagaming.graphics.ui.style.StyleKey;
 import com.ikalagaming.launcher.PluginFolder;
 
 import lombok.NonNull;
@@ -64,18 +71,24 @@ public class Workbench {
     /** The ID of the top bar surface, with the path and buttons. */
     public static final String SURFACE_ID = "converter/workbench";
 
-    /** The ID of the left surface, with the files and outliner. */
+    /** The ID of the see-through surface under the top bar that the panels dock into. */
+    static final String DOCK_ID = "converter/workbench-dock";
+
+    /** The ID of the files panel. */
     static final String FILES_ID = "converter/workbench-files";
 
-    /** The ID of the right surface, with the properties. */
+    /** The ID of the outliner panel, with the open scene's nodes. */
+    static final String OUTLINER_ID = "converter/workbench-outliner";
+
+    /** The ID of the properties panel. */
     static final String PROPERTIES_ID = "converter/workbench-properties";
 
-    /** The ID of the middle surface, with the image view. */
+    /** The ID of the image panel. */
     static final String IMAGE_ID = "converter/workbench-image";
 
-    /** Every surface, for showing and hiding them together. */
+    /** Every surface and panel, for showing and hiding them together. */
     private static final List<String> SURFACES =
-            List.of(SURFACE_ID, FILES_ID, PROPERTIES_ID, IMAGE_ID);
+            List.of(SURFACE_ID, DOCK_ID, FILES_ID, OUTLINER_ID, PROPERTIES_ID, IMAGE_ID);
 
     /** The height of the top bar. */
     private static final float TOP_HEIGHT = 74;
@@ -83,14 +96,16 @@ public class Workbench {
     /** The shader ball model, in the plugin's data folder. */
     private static final String SHADER_BALL = "models/shader_ball.obj";
 
-    /** The width of the left panel. */
-    private static final float FILES_WIDTH = 300;
+    /** Where the panels start, before the user moves them. */
+    private static final DockLayout LAYOUT =
+            new DockLayout()
+                    .split(DockLayout.Side.LEFT, 0.17f, FILES_ID)
+                    .splitPrevious(DockLayout.Side.BOTTOM, 0.35f, OUTLINER_ID)
+                    .split(DockLayout.Side.RIGHT, 0.25f, PROPERTIES_ID)
+                    .center(IMAGE_ID);
 
-    /** The width of the properties panel. */
-    private static final float PROPERTIES_WIDTH = 380;
-
-    /** The gap between panels and the screen's edges. */
-    private static final float GAP = 4;
+    /** The dock space the panels dock into. */
+    private final DockSpace dockSpace = new DockSpace("dock", LAYOUT);
 
     /** What the middle of the screen shows. */
     enum Mode {
@@ -192,36 +207,32 @@ public class Workbench {
     }
 
     /**
-     * Anchors stretching between two fractions of the screen, with offsets in units.
+     * Anchors stretching across the screen's width, from a distance below its top down to a
+     * distance above its bottom.
      *
-     * @param minX The left anchor.
-     * @param minY The top anchor.
-     * @param maxX The right anchor.
-     * @param maxY The bottom anchor.
-     * @param left Moves the left edge.
-     * @param top Moves the top edge.
-     * @param right Moves the right edge.
-     * @param bottom Moves the bottom edge.
+     * @param top Where the top edge is, in units below the screen's top.
+     * @param bottom Where the bottom edge is, in units above the screen's bottom, or a negative
+     *     number for a fixed height below the top.
      * @return The anchors.
      */
-    private static Anchors edges(
-            float minX,
-            float minY,
-            float maxX,
-            float maxY,
-            float left,
-            float top,
-            float right,
-            float bottom) {
+    private static Anchors band(float top, float bottom) {
         return new Anchors(
-                minX,
-                minY,
-                maxX,
-                maxY,
-                Length.u(left),
-                Length.u(top),
-                Length.u(right),
-                Length.u(bottom));
+                0, 0, 1, bottom < 0 ? 0 : 1, Length.u(0), Length.u(top), Length.u(0), Length.u(0));
+    }
+
+    /**
+     * A panel the workbench docks.
+     *
+     * @param id The panel ID.
+     * @param title The title.
+     * @param content What it holds.
+     * @return The panel, shown.
+     */
+    private Panel panel(String id, String title, Node<?> content) {
+        Panel panel = ui.panel(id, title);
+        panel.content(content);
+        ui.show(panel);
+        return panel;
     }
 
     /** Make the surfaces and show them hidden, so later toggles keep their state. */
@@ -234,7 +245,10 @@ public class Workbench {
                                 path,
                                 new Button("up", "Up").onClick(this::up),
                                 new Button("open", "Open").onClick(() -> openPath(path.text())),
-                                filter);
+                                filter,
+                                new Button("reset-layout", "Reset layout")
+                                        .tooltip("Put every panel back where it started")
+                                        .onClick(dockSpace::resetLayout));
         Column top =
                 new Column("top")
                         .padding(Insets.all(4))
@@ -256,9 +270,17 @@ public class Workbench {
                                                         .onClick(() -> openParticleStage(null))));
         ui.show(
                 ui.surface(SURFACE_ID)
-                        .anchors(edges(0, 0, 1, 0, 0, 0, 0, 0))
+                        .anchors(band(0, -1))
                         .height(Sizing.fixed(TOP_HEIGHT))
                         .content(top));
+        // Behind the panels, see-through, so the scene shows where no panel is docked
+        ui.show(
+                ui.surface(DOCK_ID)
+                        .anchors(band(TOP_HEIGHT, 0))
+                        .layer(Layer.BACKGROUND)
+                        .transparent()
+                        .style(Style.builder().set(StyleKey.PADDING, Insets.NONE).build())
+                        .content(new Column("root").add(dockSpace)));
 
         Row drives = new Row("drives").gap(4);
         List<Path> roots = browser.roots();
@@ -268,9 +290,10 @@ public class Workbench {
                 drives.add(new Button("root" + i, root.toString()).onClick(() -> navigate(root)));
             }
         }
-        Column left =
+        panel(
+                FILES_ID,
+                "Files",
                 new Column("left")
-                        .padding(Insets.all(4))
                         .gap(4)
                         .align(Align.STRETCH)
                         .add(
@@ -278,42 +301,25 @@ public class Workbench {
                                 new Scroll("list")
                                         .border(true)
                                         .height(Sizing.grow())
-                                        .content(files),
-                                new Label("outliner-title", "Outliner"),
-                                new Immediate("outliner", sceneView::drawOutliner).border(true));
-        ui.show(
-                ui.surface(FILES_ID)
-                        .anchors(edges(0, 0, 0, 1, GAP, TOP_HEIGHT + GAP, 0, -GAP))
-                        .width(Sizing.fixed(FILES_WIDTH))
-                        .content(left));
-
-        ui.show(
-                ui.surface(PROPERTIES_ID)
-                        .anchors(edges(1, 0, 1, 1, -GAP, TOP_HEIGHT + GAP, 0, -GAP))
-                        .width(Sizing.fixed(PROPERTIES_WIDTH))
-                        .content(
-                                new Column("right")
-                                        .padding(Insets.all(4))
-                                        .align(Align.STRETCH)
-                                        .add(new Immediate("details", this::drawProperties))));
-
-        ui.show(
-                ui.surface(IMAGE_ID)
-                        .anchors(
-                                edges(
-                                        0,
-                                        0,
-                                        1,
-                                        1,
-                                        FILES_WIDTH + 2 * GAP,
-                                        TOP_HEIGHT + GAP,
-                                        -(PROPERTIES_WIDTH + 2 * GAP),
-                                        -GAP))
-                        .content(
-                                new Column("middle")
-                                        .padding(Insets.all(4))
-                                        .align(Align.STRETCH)
-                                        .add(new Immediate("view", viewer::drawView))));
+                                        .content(files)));
+        panel(
+                OUTLINER_ID,
+                "Outliner",
+                new Column("outliner-root")
+                        .align(Align.STRETCH)
+                        .add(new Immediate("outliner", sceneView::drawOutliner)));
+        panel(
+                PROPERTIES_ID,
+                "Properties",
+                new Column("right")
+                        .align(Align.STRETCH)
+                        .add(new Immediate("details", this::drawProperties)));
+        panel(
+                IMAGE_ID,
+                "Image",
+                new Column("middle")
+                        .align(Align.STRETCH)
+                        .add(new Immediate("view", viewer::drawView)));
         for (String surface : SURFACES) {
             ui.setVisible(surface, false);
         }
@@ -345,8 +351,11 @@ public class Workbench {
     /** Show the surfaces the mode needs, if the workbench is showing. */
     private void updateSurfaces() {
         ui.setVisible(SURFACE_ID, showing);
+        ui.setVisible(DOCK_ID, showing);
         ui.setVisible(FILES_ID, showing);
+        ui.setVisible(OUTLINER_ID, showing);
         ui.setVisible(PROPERTIES_ID, showing);
+        // A hidden image leaves the middle of the dock empty, so the scene shows through it
         ui.setVisible(IMAGE_ID, showing && mode != Mode.SCENE);
     }
 
