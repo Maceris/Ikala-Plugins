@@ -684,6 +684,17 @@ public class IkGuiInternal {
     }
 
     /**
+     * Register a text tooltip with the test engine, if there is one.
+     *
+     * @param text The tooltip's text.
+     */
+    public static void testEngineTooltip(String text) {
+        if (context.testEngineHookItems && context.testEngine != null) {
+            context.testEngine.tooltip(text);
+        }
+    }
+
+    /**
      * Hook called by the ID functions, which reports to the ID stack tool when it is looking for
      * the produced ID. This is cheap when the tool is not in use.
      *

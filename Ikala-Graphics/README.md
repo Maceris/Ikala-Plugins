@@ -94,7 +94,9 @@ submits an item can have a tooltip, a context menu, a drag source and a drop tar
 Themes (`loadTheme`, `useTheme`, `addStyles`) give tokens, variants and per-type defaults with
 hovered, held, focused, selected and disabled states. Plugins add tools to the editor's menu with
 `registerTool`. The `ui.automation` package drives UIs with real input from tests, finding nodes
-by selectors.
+by selectors. Nodes that draw things which aren't nodes, like a graph editor's pins and links, name
+points with `points(...)` for steps to move, click and drag at; steps can also hold keys and read
+tooltips.
 
 A plugin's drawing that throws, such as an `Immediate` node's content, a `GuiWindow` or the
 toolbar, doesn't end the frame or the editor: IkGui is unwound to where it was, the error is logged

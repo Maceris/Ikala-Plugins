@@ -12,6 +12,7 @@ import com.ikalagaming.graphics.ui.Node;
 import com.ikalagaming.graphics.ui.VirtualGrid;
 
 import lombok.NonNull;
+import org.joml.Vector2f;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -142,6 +143,35 @@ public final class Steps {
      */
     public Steps key(@NonNull Key key, @NonNull Key... modifiers) {
         list.add(new Press(key, modifiers.clone()));
+        return this;
+    }
+
+    /**
+     * Press a key and keep it held, until {@link #keyUp}, as IkGui sees it: code that checks {@code
+     * isKeyDown} while the mouse clicks, like holding a key to place a node, sees it held.
+     *
+     * @param key The key.
+     * @return These steps.
+     */
+    public Steps keyDown(@NonNull Key key) {
+        list.add(
+                new Sequence(
+                        "keyDown(" + key + ")",
+                        List.of(run -> run.io().addKeyEvent(key, true), run -> {})));
+        return this;
+    }
+
+    /**
+     * Let go of a key {@link #keyDown} held.
+     *
+     * @param key The key.
+     * @return These steps.
+     */
+    public Steps keyUp(@NonNull Key key) {
+        list.add(
+                new Sequence(
+                        "keyUp(" + key + ")",
+                        List.of(run -> run.io().addKeyEvent(key, false), run -> {})));
         return this;
     }
 
@@ -695,6 +725,191 @@ public final class Steps {
                     }
                 });
         return this;
+    }
+
+    /**
+     * Move the mouse to a point a node named, like a pin on a graph editor's canvas, and leave it
+     * there, so a tooltip can show.
+     *
+     * @param selector Picks out the node.
+     * @param point The point's name, as the node understands it.
+     * @return These steps.
+     * @see Node#points
+     */
+    public Steps mouseMoveTo(@NonNull String selector, @NonNull String point) {
+        final float[] at = new float[2];
+        findPoint(selector, point, at, "mouseMoveTo");
+        list.add(
+                new Sequence(
+                        "mouseMoveTo(" + selector + ", " + point + ")",
+                        List.of(run -> moveScreen(run, at[0], at[1]), run -> {})));
+        return this;
+    }
+
+    /**
+     * Click a mouse button at a point a node named.
+     *
+     * @param selector Picks out the node.
+     * @param point The point's name, as the node understands it.
+     * @param button The button.
+     * @return These steps.
+     * @see Node#points
+     */
+    public Steps mouseClickAt(
+            @NonNull String selector, @NonNull String point, @NonNull MouseButton button) {
+        checkButton(button);
+        final float[] at = new float[2];
+        findPoint(selector, point, at, "mouseClickAt");
+        list.add(
+                new Sequence(
+                        "mouseClickAt(" + selector + ", " + point + ", " + button + ")",
+                        List.of(
+                                run -> moveScreen(run, at[0], at[1]),
+                                run -> run.io().addMouseButtonEvent(button, true),
+                                run -> run.io().addMouseButtonEvent(button, false),
+                                run -> {})));
+        return this;
+    }
+
+    /**
+     * Double click the left mouse button at a point a node named.
+     *
+     * @param selector Picks out the node.
+     * @param point The point's name, as the node understands it.
+     * @return These steps.
+     * @see Node#points
+     */
+    public Steps mouseDoubleClickAt(@NonNull String selector, @NonNull String point) {
+        final float[] at = new float[2];
+        findPoint(selector, point, at, "mouseDoubleClickAt");
+        list.add(
+                new Sequence(
+                        "mouseDoubleClickAt(" + selector + ", " + point + ")",
+                        List.of(
+                                run -> moveScreen(run, at[0], at[1]),
+                                run -> run.io().addMouseButtonEvent(MouseButton.LEFT, true),
+                                run -> run.io().addMouseButtonEvent(MouseButton.LEFT, false),
+                                run -> run.io().addMouseButtonEvent(MouseButton.LEFT, true),
+                                run -> run.io().addMouseButtonEvent(MouseButton.LEFT, false),
+                                run -> {})));
+        return this;
+    }
+
+    /**
+     * Drag with the left mouse button from one point a node named to another, as {@link
+     * #mouseDrag(float, float, float, float, MouseButton)} does. Both points are found before the
+     * press, so the drag goes where the second point was even if dragging moves it.
+     *
+     * @param selector Picks out the node.
+     * @param from The point to press at.
+     * @param to The point to release at.
+     * @return These steps.
+     * @see Node#points
+     */
+    public Steps mouseDragAt(@NonNull String selector, @NonNull String from, @NonNull String to) {
+        final float[] start = new float[2];
+        final float[] end = new float[2];
+        findPoint(selector, from, start, "mouseDragAt");
+        findPoint(selector, to, end, "mouseDragAt");
+        List<Consumer<Run>> actions = new ArrayList<>();
+        actions.add(run -> moveScreen(run, start[0], start[1]));
+        actions.add(run -> run.io().addMouseButtonEvent(MouseButton.LEFT, true));
+        for (int i = 1; i <= DRAG_FRAMES; ++i) {
+            float along = i / (float) DRAG_FRAMES;
+            actions.add(
+                    run ->
+                            moveScreen(
+                                    run,
+                                    start[0] + (end[0] - start[0]) * along,
+                                    start[1] + (end[1] - start[1]) * along));
+        }
+        actions.add(run -> run.io().addMouseButtonEvent(MouseButton.LEFT, false));
+        actions.add(run -> {});
+        list.add(new Sequence("mouseDragAt(" + selector + ", " + from + ", " + to + ")", actions));
+        return this;
+    }
+
+    /**
+     * Wait for a tooltip whose text holds some text.
+     *
+     * @param text The text, matched anywhere in the tooltip.
+     * @return These steps.
+     */
+    public Steps waitForTooltip(@NonNull String text) {
+        list.add(
+                new Wait(
+                        "waitForTooltip(" + text + ")",
+                        timeout,
+                        run -> {
+                            if (!run.items().isRecording()) {
+                                return "tooltips can't be read while another test engine is hooked";
+                            }
+                            String shown = run.items().recentTooltip();
+                            if (shown != null && shown.contains(text)) {
+                                return null;
+                            }
+                            return shown == null
+                                    ? "no tooltip is showing"
+                                    : "the tooltip says '" + shown + "'";
+                        }));
+        return this;
+    }
+
+    /**
+     * Read the tooltip showing now, after waiting a few frames for one to appear.
+     *
+     * @param result Receives its text, or null if none showed.
+     * @return These steps.
+     */
+    public Steps tooltip(@NonNull Consumer<String> result) {
+        list.add(
+                new Sequence(
+                        "tooltip()",
+                        List.of(
+                                run -> {},
+                                run -> {},
+                                run -> result.accept(run.items().recentTooltip()))));
+        return this;
+    }
+
+    /**
+     * Add a step that waits for a node's named point and stores it.
+     *
+     * @param selector Picks out the node.
+     * @param point The point's name.
+     * @param into Receives the point, in IkGui screen pixels.
+     * @param what The step's name, for errors.
+     */
+    private void findPoint(String selector, String point, float[] into, String what) {
+        final Selector parsed = Selector.parse(selector);
+        list.add(
+                new Wait(
+                        what + "(" + selector + ", " + point + ")",
+                        timeout,
+                        run -> {
+                            Run.Lookup found = run.find(parsed);
+                            if (found.shown() == null) {
+                                return found.problem();
+                            }
+                            Vector2f at = found.shown().pointNamed(point);
+                            if (at == null) {
+                                return "'" + selector + "' has no point '" + point + "' now";
+                            }
+                            into[0] = at.x;
+                            into[1] = at.y;
+                            return null;
+                        }));
+    }
+
+    /**
+     * Send the mouse to a point in IkGui screen pixels, as nodes give their points.
+     *
+     * @param run The run.
+     * @param x The point.
+     * @param y The point.
+     */
+    private static void moveScreen(Run run, float x, float y) {
+        run.io().addMousePosEvent(x, y);
     }
 
     /**

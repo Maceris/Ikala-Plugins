@@ -468,7 +468,8 @@ public final class ConverterScripts {
      * "delete"; "duplicate"; "undo"; "redo"; "set node param value"; "save path"; "log"; "reroute
      * fromNode.pin toNode.pin x y"; "frame title"; "collapse id..."; "expand id..."; "hide id...";
      * "show id..."; "comment id text"; "align left|right|top|middle"; "straighten id"; "upstream
-     * id"; "downstream id"; "unused"; "find text"; "focus id"; "minimap on|off".
+     * id"; "downstream id"; "unused"; "find text"; "focus id"; "minimap on|off"; "describe id",
+     * which logs a node's or frame's state and the selection.
      *
      * @param command The command and its words, separated by spaces.
      */
@@ -558,6 +559,37 @@ public final class ConverterScripts {
                                 log.info("Script: Graph found {}", editor.find(rest(words, 1)));
                         case "focus" -> editor.focus(words[1]);
                         case "minimap" -> editor.setMinimap("on".equals(words[1]));
+                        case "describe" -> {
+                            final var graph = tool.getHistory().getGraph();
+                            final Graph.Node node = graph.node(words[1]);
+                            final Graph.Frame frame = graph.frame(words[1]);
+                            if (node != null) {
+                                log.info(
+                                        "Script: Graph {} at {}, {} collapsed {}, hide unused {},"
+                                                + " comment '{}', error '{}', selected {}",
+                                        words[1],
+                                        Math.round(node.getX()),
+                                        Math.round(node.getY()),
+                                        node.isCollapsed(),
+                                        node.isHideUnused(),
+                                        node.getComment(),
+                                        editor.errorOf(words[1]),
+                                        editor.getSelection());
+                            } else if (frame != null) {
+                                log.info(
+                                        "Script: Graph {} '{}' at {}, {} holds {}",
+                                        words[1],
+                                        frame.getText(),
+                                        Math.round(frame.getX()),
+                                        Math.round(frame.getY()),
+                                        graph.nodesIn(words[1]));
+                            } else {
+                                log.info(
+                                        "Script: Graph has no {}, selected {}",
+                                        words[1],
+                                        editor.getSelection());
+                            }
+                        }
                         case "log" -> {
                             final var graph = tool.getHistory().getGraph();
                             log.info(

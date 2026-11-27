@@ -329,7 +329,8 @@ public class GraphEditor {
                         .draggable(false)
                         .leftDragPans(false)
                         .underlay(this::drawLinks)
-                        .overlay(this::handleInput);
+                        .overlay(this::handleInput)
+                        .points(this::pointNamed);
     }
 
     /**
@@ -2217,5 +2218,88 @@ public class GraphEditor {
             IkGui.closeCurrentPopup();
         }
         IkGui.endPopup();
+    }
+
+    /**
+     * A named point on the canvas, in IkGui screen pixels, for UI automation to move and click at:
+     *
+     * <ul>
+     *   <li>{@code node <id>}: the middle of the node's title
+     *   <li>{@code in <id> <pin>}, {@code out <id> <pin>}: an input's or output's dot
+     *   <li>{@code link <node>.<pin> <node>.<pin>}: the middle of the link from an output to an
+     *       input
+     *   <li>{@code frame <id>}: a frame's title; {@code corner <id>}: its sizing corner
+     *   <li>{@code minimap}: the middle of the minimap; {@code minimap <x> <y>}: a point across it,
+     *       from 0 to 1
+     *   <li>{@code at <x> <y>}: a point in canvas units
+     * </ul>
+     *
+     * @param name The point's name.
+     * @return The point, or null if there is no such point now.
+     */
+    public @Nullable Vector2f pointNamed(@NonNull String name) {
+        final String[] words = name.trim().split("\\s+");
+        try {
+            return switch (words[0]) {
+                case "node" -> {
+                    final GraphNodeView view = views.get(words[1]);
+                    if (view == null || getGraph().node(words[1]) == null) {
+                        yield null;
+                    }
+                    final RectFloat rect = view.getRect();
+                    final float title =
+                            view.isReroute()
+                                    ? rect.getHeight()
+                                    : GraphNodeView.TITLE * canvas.getUnit();
+                    yield new Vector2f(
+                            (rect.getLeft() + rect.getRight()) / 2, rect.getTop() + title / 2);
+                }
+                case "in", "out" -> pinOnScreen(words[1], words[2], "in".equals(words[0]));
+                case "link" -> {
+                    final String[] from = words[1].split("\\.");
+                    final String[] to = words[2].split("\\.");
+                    final Vector2f start = pinAt(from[0], from[1], false, new Vector2f());
+                    final Vector2f end = pinAt(to[0], to[1], true, new Vector2f());
+                    final Graph.Link link = getGraph().linkInto(to[0], to[1]);
+                    if (start == null
+                            || end == null
+                            || link == null
+                            || !link.fromNode().equals(from[0])
+                            || !link.fromPin().equals(from[1])) {
+                        yield null;
+                    }
+                    // The curve is symmetric, so its middle is halfway between its ends
+                    yield start.add(end).mul(0.5f);
+                }
+                case "frame", "corner" -> {
+                    final Graph.Frame frame = getGraph().frame(words[1]);
+                    if (frame == null) {
+                        yield null;
+                    }
+                    yield "frame".equals(words[0])
+                            ? canvas.toScreen(
+                                    frame.getX() + frame.getWidth() / 2,
+                                    frame.getY() + FRAME_TITLE / 2)
+                            : canvas.toScreen(
+                                    frame.getX() + frame.getWidth() - FRAME_HANDLE / 3,
+                                    frame.getY() + frame.getHeight() - FRAME_HANDLE / 3);
+                }
+                case "minimap" -> {
+                    if (minimapRect.getWidth() <= 0) {
+                        yield null;
+                    }
+                    final float across = words.length > 2 ? Float.parseFloat(words[1]) : 0.5f;
+                    final float down = words.length > 2 ? Float.parseFloat(words[2]) : 0.5f;
+                    yield new Vector2f(
+                            minimapRect.getLeft() + across * minimapRect.getWidth(),
+                            minimapRect.getTop() + down * minimapRect.getHeight());
+                }
+                case "at" ->
+                        canvas.toScreen(Float.parseFloat(words[1]), Float.parseFloat(words[2]));
+                default -> null;
+            };
+        } catch (ArrayIndexOutOfBoundsException | NumberFormatException e) {
+            return null;
+        }
     }
 }

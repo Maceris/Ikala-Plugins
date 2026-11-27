@@ -36,6 +36,8 @@ import java.util.function.Supplier;
  * await(ui.test().clickItem("tools//lod", "Show cells"));
  * await(ui.test().typeItem("tools//materials", "Roughness", "0.5", true));
  * await(ui.test().saveFrame("shots/front.png"));
+ * await(ui.test().mouseClickAt("graph//graph-canvas", "node add1", "right"));
+ * await(ui.test().waitForTooltip("isn't linked"));
  * </pre>
  *
  * <p>Selectors are written as for {@link com.ikalagaming.graphics.ui.automation.Selector}.
@@ -438,6 +440,111 @@ public final class ScriptAutomation {
     public String itemExists(@NonNull String scope, @NonNull String label) {
         AtomicReference<Boolean> found = new AtomicReference<>(false);
         return start(steps -> steps.itemExists(scope, label, found::set), found::get);
+    }
+
+    /**
+     * Press a key and keep it held, as IkGui sees it, until {@link #keyUp}: for the GUI, like
+     * holding a key while clicking. {@link #holdKey} is for the scene's own keys instead.
+     *
+     * @param name The key's IkGui name, like {@code "m"}, {@code "one"} or {@code "left_shift"}.
+     * @return The tag to await.
+     * @throws IllegalArgumentException If the key isn't known.
+     */
+    public String keyDown(@NonNull String name) {
+        final Key key = keyNamed(name, false);
+        return start(steps -> steps.keyDown(key));
+    }
+
+    /**
+     * Let go of a key {@link #keyDown} held.
+     *
+     * @param name The key's IkGui name.
+     * @return The tag to await.
+     * @throws IllegalArgumentException If the key isn't known.
+     */
+    public String keyUp(@NonNull String name) {
+        final Key key = keyNamed(name, false);
+        return start(steps -> steps.keyUp(key));
+    }
+
+    /**
+     * Move the mouse to a point a node named, like a graph editor's pin, and leave it there.
+     *
+     * @param selector Picks out the node.
+     * @param point The point's name, as the node understands it.
+     * @return The tag to await.
+     */
+    public String mouseMoveTo(@NonNull String selector, @NonNull String point) {
+        return start(steps -> steps.mouseMoveTo(selector, point));
+    }
+
+    /**
+     * Click the left mouse button at a point a node named.
+     *
+     * @param selector Picks out the node.
+     * @param point The point's name, as the node understands it.
+     * @return The tag to await.
+     */
+    public String mouseClickAt(@NonNull String selector, @NonNull String point) {
+        return start(steps -> steps.mouseClickAt(selector, point, MouseButton.LEFT));
+    }
+
+    /**
+     * Click a mouse button at a point a node named.
+     *
+     * @param selector Picks out the node.
+     * @param point The point's name, as the node understands it.
+     * @param button {@code left}, {@code right} or {@code middle}.
+     * @return The tag to await.
+     */
+    public String mouseClickAt(
+            @NonNull String selector, @NonNull String point, @NonNull String button) {
+        final MouseButton pressed = buttonNamed(button);
+        return start(steps -> steps.mouseClickAt(selector, point, pressed));
+    }
+
+    /**
+     * Double click at a point a node named.
+     *
+     * @param selector Picks out the node.
+     * @param point The point's name, as the node understands it.
+     * @return The tag to await.
+     */
+    public String mouseDoubleClickAt(@NonNull String selector, @NonNull String point) {
+        return start(steps -> steps.mouseDoubleClickAt(selector, point));
+    }
+
+    /**
+     * Drag with the left mouse button from one point a node named to another.
+     *
+     * @param selector Picks out the node.
+     * @param from The point to press at.
+     * @param to The point to release at.
+     * @return The tag to await.
+     */
+    public String mouseDragAt(@NonNull String selector, @NonNull String from, @NonNull String to) {
+        return start(steps -> steps.mouseDragAt(selector, from, to));
+    }
+
+    /**
+     * Wait for a tooltip holding some text.
+     *
+     * @param text The text, matched anywhere in the tooltip.
+     * @return The tag to await.
+     */
+    public String waitForTooltip(@NonNull String text) {
+        return start(steps -> steps.waitForTooltip(text));
+    }
+
+    /**
+     * Read the tooltip showing now. Awaiting the tag gives its text, or an empty string if none.
+     *
+     * @return The tag to await.
+     */
+    public String tooltip() {
+        AtomicReference<String> shown = new AtomicReference<>("");
+        return start(
+                steps -> steps.tooltip(text -> shown.set(text == null ? "" : text)), shown::get);
     }
 
     /**

@@ -8,11 +8,13 @@ import com.ikalagaming.graphics.ui.style.Style;
 
 import lombok.Getter;
 import lombok.NonNull;
+import org.joml.Vector2f;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -429,6 +431,34 @@ public abstract class Node<S extends Node<S>> {
         visible = show;
         markDirty();
         return self();
+    }
+
+    /** Finds the node's named points, for automation, or null for none. */
+    private Function<String, Vector2f> points;
+
+    /**
+     * Name points inside the node that automation steps can move and click at, for nodes that draw
+     * things which aren't nodes or items of their own, like a graph editor's pins and links. The
+     * points are looked up when a step runs, so they follow scrolling and zoom.
+     *
+     * @param finder Gives the point for a name, in IkGui screen pixels, or null if there is no such
+     *     point now.
+     * @return This node.
+     */
+    public S points(Function<String, Vector2f> finder) {
+        points = finder;
+        return self();
+    }
+
+    /**
+     * A point the node named, for automation.
+     *
+     * @param name The point's name, as the node understands it.
+     * @return The point in IkGui screen pixels, or null if the node has no such point now.
+     * @see #points(Function)
+     */
+    public Vector2f pointNamed(@NonNull String name) {
+        return points == null ? null : points.apply(name);
     }
 
     /**

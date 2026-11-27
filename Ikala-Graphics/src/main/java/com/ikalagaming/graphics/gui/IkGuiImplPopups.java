@@ -170,6 +170,7 @@ class IkGuiImplPopups {
         if (!beginTooltipEx(true, WindowFlags.NONE)) {
             return;
         }
+        IkGuiInternal.testEngineTooltip(text);
         IkGuiImplText.textUnformatted(text);
         endTooltip();
     }

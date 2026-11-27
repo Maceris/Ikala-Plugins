@@ -28,4 +28,12 @@ public interface TestEngineHooks {
      * @see com.ikalagaming.graphics.gui.flags.ItemStatusFlags
      */
     void itemInfo(int id, String label, int statusFlags);
+
+    /**
+     * Register the text of a tooltip shown this frame through {@code setTooltip} or {@code
+     * setItemTooltip}, so a test can read what the user would.
+     *
+     * @param text The tooltip's text.
+     */
+    default void tooltip(String text) {}
 }

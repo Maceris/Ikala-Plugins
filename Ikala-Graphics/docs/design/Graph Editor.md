@@ -35,6 +35,11 @@ the canvas doesn't pan, and turns off the canvas's left-drag panning, leaving th
 are hit by distance to their dots, which reach a little past the node's edge, so a node's body and its pins don't
 fight over a click.
 
+Pins, links, frames and the minimap are drawn, not nodes or IkGui items, so UI automation can't find them by
+selector or label. The editor names them as points on its canvas instead (`node add1`, `in add1 a`, `link
+constant1.value add1.a`, `frame frame1`, `minimap`, `at x y`), and steps move, click and drag there with real input,
+which exercises the same code a user's mouse does.
+
 Copy and paste go through the system clipboard as the same YAML, behind a header line, so a part of one graph pastes
 into another, even in another editor run.
 

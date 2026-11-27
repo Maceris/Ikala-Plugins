@@ -80,6 +80,12 @@ final class ItemRecorder implements TestEngineHooks {
     /** The context the hooks are installed in, or null. */
     private Context hooked;
 
+    /** The last tooltip's text, or null. */
+    private String tooltip;
+
+    /** The frame the last tooltip was shown in. */
+    private int tooltipFrame = -1;
+
     /**
      * Hook into the current IkGui context, if nothing else is hooked into it.
      *
@@ -110,6 +116,7 @@ final class ItemRecorder implements TestEngineHooks {
         hooked = null;
         items.clear();
         early.clear();
+        tooltip = null;
     }
 
     /**
@@ -187,6 +194,23 @@ final class ItemRecorder implements TestEngineHooks {
             item.statusFlags = itemData.statusFlags;
         }
         item.frame = context.frameCount;
+    }
+
+    @Override
+    public void tooltip(String text) {
+        tooltip = text;
+        tooltipFrame = IkGui.getContext().frameCount;
+    }
+
+    /**
+     * The tooltip shown this frame or the one before.
+     *
+     * @return Its text, or null if none showed.
+     */
+    String recentTooltip() {
+        return tooltip != null && tooltipFrame >= IkGui.getContext().frameCount - 1
+                ? tooltip
+                : null;
     }
 
     @Override
