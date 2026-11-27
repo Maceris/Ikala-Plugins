@@ -270,6 +270,37 @@ public final class TextureGraph {
     }
 
     /**
+     * A copy, with its own graph, settings and parameters, using the same library.
+     *
+     * @return The copy.
+     */
+    public TextureGraph copy() {
+        final TextureGraph copy = new TextureGraph(library);
+        copy.graph.restore(graph);
+        copy.width = width;
+        copy.height = height;
+        copy.seed = seed;
+        copy.data = data;
+        copy.maps = maps;
+        copy.texture = texture;
+        copy.model = model;
+        copy.parameters.putAll(parameters);
+        copy.shared.addAll(shared);
+        copy.sharedOverrides = sharedOverrides;
+        return copy;
+    }
+
+    /**
+     * Shared parameters' values set in place of their files', as an editor's unsaved changes or an
+     * instance's overrides.
+     *
+     * @return The values, by name.
+     */
+    public Map<String, GraphParameter> getSharedOverrides() {
+        return sharedOverrides;
+    }
+
+    /**
      * Write the file's text.
      *
      * @return The YAML.

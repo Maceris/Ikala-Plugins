@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.ui.graph.model;
 
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -37,6 +38,16 @@ public final class GraphHistory {
     @Getter private long changes;
 
     /**
+     * Whether the graph can't be edited, as when it is shown for something made from it: edits are
+     * dropped, and one applied as the mouse moved is put back when recorded. -- GETTER -- Whether
+     * it is locked. -- SETTER -- Lock or unlock it.
+     *
+     * @param locked Whether it is locked.
+     * @return True if locked.
+     */
+    @Getter @Setter private boolean locked;
+
+    /**
      * A copy of the graph, and the name of the edit it was taken before.
      *
      * @param name The edit's name, like "Delete".
@@ -60,6 +71,9 @@ public final class GraphHistory {
      * @param change The change.
      */
     public void edit(@NonNull String name, @NonNull Consumer<Graph> change) {
+        if (locked) {
+            return;
+        }
         final Graph before = graph.copy();
         change.accept(graph);
         record(name, before);
@@ -73,6 +87,11 @@ public final class GraphHistory {
      * @param before A copy of the graph from before the edit.
      */
     public void record(@NonNull String name, @NonNull Graph before) {
+        if (locked) {
+            graph.restore(before);
+            ++changes;
+            return;
+        }
         undo.push(new Step(name, before));
         while (undo.size() > DEPTH) {
             undo.removeLast();

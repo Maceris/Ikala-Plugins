@@ -3,6 +3,7 @@ package com.ikalagaming.converter.texture;
 import com.ikalagaming.converter.texgraph.Baker;
 import com.ikalagaming.converter.texgraph.Evaluator;
 import com.ikalagaming.converter.texgraph.TextureGraph;
+import com.ikalagaming.converter.texgraph.TextureInstance;
 import com.ikalagaming.converter.texgraph.TextureLibraries;
 
 import lombok.NonNull;
@@ -17,10 +18,10 @@ import java.util.stream.Stream;
 
 /**
  * Builds a game's textures from their sources, as {@code bin/buildTextures} runs it: every texture
- * graph under a folder of sources bakes its PNG maps (beside itself, by its maps setting), then
- * every texture's PNG maps there, baked or painted, become one {@code .ika} in the shipped folder
- * with the same layout. Files whose pixels wouldn't change are left alone, so running it again
- * changes only what an edit changed.
+ * graph and instance under a folder of sources bakes its PNG maps (beside itself, by its maps
+ * setting; an instance by its graph's), then every texture's PNG maps there, baked or painted,
+ * become one {@code .ika} in the shipped folder with the same layout. Files whose pixels wouldn't
+ * change are left alone, so running it again changes only what an edit changed.
  *
  * <pre>
  * buildTextures &lt;sources&gt; &lt;shipped&gt; [--uses &lt;shared parameter file&gt;]
@@ -77,13 +78,19 @@ public final class BuildTextures {
         int written = 0;
         int unchanged = 0;
         final List<Path> graphs;
+        final List<Path> instances;
         try (Stream<Path> files = Files.walk(sources)) {
-            graphs =
-                    files.filter(f -> f.toString().endsWith(TextureGraph.SUFFIX)).sorted().toList();
+            final List<Path> all = files.sorted().toList();
+            graphs = all.stream().filter(f -> f.toString().endsWith(TextureGraph.SUFFIX)).toList();
+            instances =
+                    all.stream()
+                            .filter(f -> f.toString().endsWith(TextureInstance.SUFFIX))
+                            .toList();
         } catch (IOException e) {
             err.println("Can't list " + sources + ": " + e.getMessage());
             return 1;
         }
+        final java.util.Set<Path> bakedGraphs = new java.util.HashSet<>();
         for (Path file : graphs) {
             // A library each, as subgraphs are named by paths relative to each graph
             final TextureGraph graph = new TextureGraph(TextureLibraries.standard());
@@ -104,6 +111,30 @@ public final class BuildTextures {
             }
             final Baker.Result result =
                     Baker.bake(graph, new Evaluator(graph.getLibrary()), file.getParent(), null);
+            if (!result.ok()) {
+                err.println(file + ": " + String.join("; ", result.problems()));
+                ++failed;
+                continue;
+            }
+            ++baked;
+            bakedGraphs.add(file.toAbsolutePath().normalize());
+            written += result.written().size();
+            unchanged += result.unchanged().size();
+            for (Path map : result.written()) {
+                out.println("Baked " + sources.relativize(map));
+            }
+            bakedMaps.addAll(result.written());
+            bakedMaps.addAll(result.unchanged());
+        }
+        for (Path file : instances) {
+            // With --uses, those whose graph baked
+            if (uses != null) {
+                final TextureInstance.Chain chain = TextureInstance.chain(file);
+                if (chain.graph() == null || !bakedGraphs.contains(chain.graph())) {
+                    continue;
+                }
+            }
+            final Baker.Result result = TextureInstance.bake(file);
             if (!result.ok()) {
                 err.println(file + ": " + String.join("; ", result.problems()));
                 ++failed;

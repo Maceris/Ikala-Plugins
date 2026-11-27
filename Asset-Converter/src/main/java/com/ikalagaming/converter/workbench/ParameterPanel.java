@@ -86,6 +86,22 @@ public class ParameterPanel {
     private final Random random = new Random();
 
     /**
+     * The parent's values while an instance is edited, by name, or null for a graph: values are
+     * then the instance's overrides, with a reset back to these, and the graph's own parameters and
+     * shared files can't be changed.
+     */
+    private @Nullable Map<String, String> parentValues;
+
+    /**
+     * Edit an instance's values rather than the graph's parameters.
+     *
+     * @param values The parent's values, by name, or null to edit the graph again.
+     */
+    public void setParentValues(@Nullable Map<String, String> values) {
+        parentValues = values == null ? null : Map.copyOf(values);
+    }
+
+    /**
      * Set up the section.
      *
      * @param texture The texture graph.
@@ -133,7 +149,13 @@ public class ParameterPanel {
      */
     public void draw(@NonNull UiFrame frame) {
         IkGui.separator();
-        IkGui.textUnformatted("Parameters");
+        IkGui.textUnformatted(parentValues == null ? "Parameters" : "Parameters (the instance's)");
+        if (parentValues != null) {
+            for (Listed item : listed()) {
+                drawValue(frame, item);
+            }
+            return;
+        }
         textField(
                 "shared",
                 "Shared files",
@@ -197,7 +219,7 @@ public class ParameterPanel {
                 final SharedParameters.Read read = SharedParameters.read(base.resolve(file));
                 for (GraphParameter parameter : read.parameters().values()) {
                     final GraphParameter edited =
-                            sharedEdits.getOrDefault(file, Map.of()).get(parameter.name());
+                            texture.getSharedOverrides().get(parameter.name());
                     all.put(
                             parameter.name(),
                             new Listed(edited == null ? parameter : edited, file));
@@ -303,7 +325,15 @@ public class ParameterPanel {
                             parameter.value(),
                             text -> set(frame, item, text.trim()));
         }
-        if (item.file() == null) {
+        final String parentValue = parentValues == null ? null : parentValues.get(parameter.name());
+        if (parentValue != null && !parentValue.equals(parameter.value())) {
+            IkGui.sameLine();
+            if (IkGui.smallButton("Reset" + id)) {
+                set(frame, item, parentValue);
+            }
+            IkGui.setItemTooltip("Back to the parent's value, " + parentValue);
+        }
+        if (item.file() == null && parentValues == null) {
             IkGui.sameLine();
             if (IkGui.smallButton("..." + id)) {
                 editing = parameter.name();
@@ -330,6 +360,13 @@ public class ParameterPanel {
                 () -> {
                     if (item.file() == null) {
                         texture.putParameter(parameter.withValue(value));
+                    } else if (parentValues != null) {
+                        // An instance's override, saved with it rather than to the file
+                        final Map<String, GraphParameter> overrides =
+                                new LinkedHashMap<>(texture.getSharedOverrides());
+                        overrides.put(parameter.name(), parameter.withValue(value));
+                        texture.setSharedOverrides(overrides);
+                        reevaluate.run();
                     } else {
                         sharedEdits
                                 .computeIfAbsent(item.file(), f -> new LinkedHashMap<>())

@@ -133,6 +133,23 @@ unlinked behind the user's back. A subgraph placing itself, at any depth, is an 
 Relative file names inside a subgraph, like an Image node's, start from the subgraph's folder; Make subgraph doesn't
 rewrite them, so a subgraph made into another folder may need them fixed.
 
+## Instances change a graph's values, and nothing else
+
+An instance (`*.texinst.yml`, `TextureInstance`) names a parent, a graph or another instance, by a path relative to
+itself, and lists only what it overrides, one line each: the seed, the bake target (texture, and content folder,
+maps folder or model where they differ) and parameter values, the graph's own or ones it reads from shared files.
+So one recipe makes several textures, and a change to the recipe reaches all of them. Overrides apply from the graph
+down the chain, the nearest winning; a chain that loops is an error, and a value for a parameter the graph doesn't
+have stays in the file and is reported, never dropped. An instance must name its own texture, so it never bakes over
+its parent's maps. `BuildTextures` and `BakeTextures` bake instances with the graphs; with `--uses`, the instances of
+the graphs that baked.
+
+Opening an instance shows its graph read-only (`GraphHistory` is locked: edits are dropped, a drag is put back),
+with the instance's values in every swatch. The graph settings and parameters then edit the instance, with a reset
+back to the parent's value, and saving writes only what differs from the parent (`TextureInstance.between`). A
+graph's settings list the instances near it (its folder and below) with a swatch each, made with the graph as it is
+in the editor, so an edit to the graph shows in every instance before it is saved.
+
 ## What ships is converted from PNGs
 
 Graphs bake PNG maps, and a separate step turns a texture's PNG maps, baked or painted, into the one `.ika` a game

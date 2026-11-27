@@ -127,6 +127,28 @@ class TextureBuildTest {
         assertEquals(0, build(sources.toString(), shipped.toString(), "--uses", wear));
         assertTrue(out.toString(StandardCharsets.UTF_8).startsWith("Baked 1 graphs"));
         assertEquals(2, build());
+
+        // An instance of the graph bakes beside it, and ships, as its own texture
+        final com.ikalagaming.converter.texgraph.TextureInstance instance =
+                new com.ikalagaming.converter.texgraph.TextureInstance();
+        instance.setParent("made" + TextureGraph.SUFFIX);
+        instance.setTexture("block/made_other");
+        instance.setSeed(9L);
+        Files.writeString(
+                sources.resolve(
+                        "block/made_other"
+                                + com.ikalagaming.converter.texgraph.TextureInstance.SUFFIX),
+                instance.write());
+        assertEquals(0, build(sources.toString(), shipped.toString()), err.toString());
+        assertTrue(Files.isRegularFile(sources.resolve("block/made_other.png")));
+        assertTrue(Files.isRegularFile(shipped.resolve("block/made_other.ika")));
+        assertTrue(
+                Files.readString(sources.resolve("block/.gitignore")).contains("made_other.png"),
+                "Baked maps are ignored");
+        assertEquals(0, build(sources.toString(), shipped.toString(), "--uses", wear));
+        assertTrue(
+                out.toString(StandardCharsets.UTF_8).startsWith("Baked 2 graphs"),
+                "With --uses, the instances of the graphs baked too");
     }
 
     @Test

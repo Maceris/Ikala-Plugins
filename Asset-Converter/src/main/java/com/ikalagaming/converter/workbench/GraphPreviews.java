@@ -110,6 +110,9 @@ public class GraphPreviews {
                 @Nullable TextureHandle color,
                 @Nullable TextureHandle normal,
                 @Nullable TextureHandle orm);
+
+        /** Bring the graph panel to the front, as when the graph panel opens another file. */
+        default void showGraph() {}
     }
 
     /** Uploads swatches and maps. */
@@ -339,7 +342,9 @@ public class GraphPreviews {
     public void update() {
         final Graph graph = texture.getGraph();
         for (String key : atlas.keys()) {
-            if (!key.startsWith(SEED_KEY) && graph.node(key) == null) {
+            if (!key.startsWith(SEED_KEY)
+                    && !key.startsWith(OTHER_KEY)
+                    && graph.node(key) == null) {
                 atlas.remove(key);
                 swatched.remove(key);
             }
@@ -624,6 +629,63 @@ public class GraphPreviews {
 
     /** What the seed grid's atlas keys start with. */
     private static final String SEED_KEY = "seed:";
+
+    /** What the atlas keys of swatches the caller keeps start with, like instances'. */
+    private static final String OTHER_KEY = "other:";
+
+    /**
+     * Keep a swatch of the caller's own in the atlas, like an instance's, until removed.
+     *
+     * @param key Its name.
+     * @param plane What it shows.
+     * @param type The plane's pin type.
+     */
+    public void putSwatch(@NonNull String key, @NonNull Plane plane, @NonNull String type) {
+        atlas.put(
+                OTHER_KEY + key,
+                PlaneViews.rgba(plane, type, false),
+                plane.getWidth(),
+                plane.getHeight());
+    }
+
+    /**
+     * Take out a swatch of the caller's own.
+     *
+     * @param key Its name.
+     */
+    public void removeSwatch(@NonNull String key) {
+        atlas.remove(OTHER_KEY + key);
+    }
+
+    /**
+     * Draw a swatch of the caller's own as a button, empty until it is made.
+     *
+     * @param key Its name.
+     * @param size Its side, in pixels.
+     * @return True if it was clicked.
+     */
+    public boolean drawSwatch(@NonNull String key, float size) {
+        final Vector2f at = IkGui.getCursorScreenPos();
+        final boolean clicked = IkGui.invisibleButton("swatch " + key, size, size);
+        final TextureHandle handle = atlas.getTexture();
+        final SwatchAtlas.Cell placed = atlas.cell(OTHER_KEY + key);
+        final DrawList drawList = IkGui.getWindowDrawList();
+        if (handle != null && placed != null) {
+            drawList.addImageView(
+                    handle,
+                    at.x,
+                    at.y,
+                    at.x + size,
+                    at.y + size,
+                    placed.minU(),
+                    placed.minV(),
+                    placed.maxU(),
+                    placed.maxV(),
+                    SwatchAtlas.VIEW);
+        }
+        drawList.addRect(at.x, at.y, at.x + size, at.y + size, CHOSEN, 0, 0, 1);
+        return clicked;
+    }
 
     /**
      * Make the seed grid's swatches again when the graph changed.

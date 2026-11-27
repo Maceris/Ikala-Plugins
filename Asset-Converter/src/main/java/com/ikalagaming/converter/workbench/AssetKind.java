@@ -1,6 +1,7 @@
 package com.ikalagaming.converter.workbench;
 
 import com.ikalagaming.converter.texgraph.TextureGraph;
+import com.ikalagaming.converter.texgraph.TextureInstance;
 
 import lombok.NonNull;
 
@@ -28,6 +29,7 @@ public enum AssetKind {
     MATERIAL(Set.of()),
     /** A texture graph for the graph panel, named *.texgraph.yml. */
     GRAPH(Set.of()),
+    INSTANCE(Set.of()),
     /** A game content definition, like a block's look, as KVT text. */
     LOOK(Set.of("kvt")),
     /** Anything else. */
@@ -41,6 +43,8 @@ public enum AssetKind {
 
     /** What a texture graph's file name ends with. */
     public static final String GRAPH_SUFFIX = TextureGraph.SUFFIX;
+
+    public static final String INSTANCE_SUFFIX = TextureInstance.SUFFIX;
 
     /** The extensions of this kind, lower case and without the dot. */
     private final Set<String> extensions;
@@ -69,6 +73,9 @@ public enum AssetKind {
         }
         if (text.toLowerCase(Locale.ROOT).endsWith(GRAPH_SUFFIX)) {
             return GRAPH;
+        }
+        if (text.toLowerCase(Locale.ROOT).endsWith(INSTANCE_SUFFIX)) {
+            return INSTANCE;
         }
         final int dot = text.lastIndexOf('.');
         if (dot < 0) {

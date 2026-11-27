@@ -11,8 +11,9 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * Bakes texture graphs from the command line, without the editor: one graph, every graph under a
- * folder, or both, as {@code bin/bakeTextures} runs it.
+ * Bakes texture graphs and instances from the command line, without the editor: one file, every
+ * graph and instance under a folder, or both, as {@code bin/bakeTextures} runs it. An instance
+ * bakes its graph with its values, to its graph's content folder.
  *
  * <pre>
  * bakeTextures [--data &lt;content folder&gt;] &lt;graph or folder&gt;...
@@ -64,7 +65,11 @@ public final class BakeTextures {
         for (Path target : targets) {
             if (Files.isDirectory(target)) {
                 try (Stream<Path> files = Files.walk(target)) {
-                    files.filter(f -> f.toString().endsWith(TextureGraph.SUFFIX))
+                    files.filter(
+                                    f ->
+                                            f.toString().endsWith(TextureGraph.SUFFIX)
+                                                    || f.toString()
+                                                            .endsWith(TextureInstance.SUFFIX))
                             .sorted()
                             .forEach(graphs::add);
                 } catch (IOException e) {
@@ -83,6 +88,20 @@ public final class BakeTextures {
         int unchanged = 0;
         for (Path file : graphs) {
             final Path absolute = file.toAbsolutePath().normalize();
+            if (absolute.toString().endsWith(TextureInstance.SUFFIX)) {
+                final Baker.Result baked = TextureInstance.bake(absolute);
+                if (!baked.ok()) {
+                    err.println(file + ": " + String.join("; ", baked.problems()));
+                    ++failed;
+                    continue;
+                }
+                for (Path map : baked.written()) {
+                    out.println("Wrote " + map);
+                }
+                written += baked.written().size();
+                unchanged += baked.unchanged().size();
+                continue;
+            }
             // A library each, as subgraphs are named by paths relative to each graph
             final TextureGraph graph = new TextureGraph(TextureLibraries.standard());
             final Baker.Result result;

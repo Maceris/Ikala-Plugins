@@ -316,6 +316,11 @@ public class Workbench {
                                     @Nullable TextureHandle orm) {
                                 wearGraphMaps(color, normal, orm);
                             }
+
+                            @Override
+                            public void showGraph() {
+                                showGraphPanel();
+                            }
                         });
         refresh();
     }
@@ -685,6 +690,17 @@ public class Workbench {
                             + absolute.getFileName()
                             + ", it isn't an image, model, container, material, look, graph"
                             + " or particle effect");
+            return;
+        }
+        if (kind == AssetKind.INSTANCE) {
+            openFile = absolute;
+            final Path folder = absolute.getParent();
+            if (folder != null && !folder.equals(browser.getDirectory())) {
+                browser.navigate(folder);
+            }
+            refresh();
+            graphTool.openInstance(absolute);
+            showGraphPanel();
             return;
         }
         if (kind == AssetKind.GRAPH) {

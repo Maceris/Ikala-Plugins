@@ -480,7 +480,9 @@ public final class ConverterScripts {
      * shared file...", which change the graph's parameters and log them; "subgraph make file
      * id...", making a subgraph file (in the graph's folder) of nodes; "subgraph open id", opening
      * the subgraph a node places; "subgraph back"; "subgraph check", reading changed subgraph files
-     * now.
+     * now; "instance new file [texture]", making an instance of the open graph beside it; "instance
+     * parent", opening the open instance's parent; "instances", logging each instance's swatch near
+     * the open graph, measured.
      *
      * @param command The command and its words, separated by spaces.
      */
@@ -686,6 +688,61 @@ public final class ConverterScripts {
                                                                 rest(words, 1),
                                                                 tool.starters().size()));
                         case "swatches" -> tool.setSwatches("on".equals(words[1]));
+                        case "instance" -> {
+                            switch (words[1]) {
+                                case "new" -> {
+                                    final Path graphFile = tool.getFile();
+                                    log.info(
+                                            "Script: Graph instance made {}",
+                                            graphFile != null
+                                                    && tool.newInstance(
+                                                            graphFile.resolveSibling(words[2]),
+                                                            words.length > 3 ? words[3] : null));
+                                }
+                                case "parent" -> {
+                                    tool.openParent();
+                                    log.info("Script: Graph opened the parent {}", tool.getFile());
+                                }
+                                case "show" -> {
+                                    final Path graphFile = tool.getFile();
+                                    try {
+                                        log.info(
+                                                "Script: Graph instance file {}: {}",
+                                                words[2],
+                                                Files.readString(graphFile.resolveSibling(words[2]))
+                                                        .strip()
+                                                        .replace('\n', '|'));
+                                    } catch (IOException | RuntimeException e) {
+                                        log.warn(
+                                                "Script: can't read {}: {}",
+                                                words[2],
+                                                e.getMessage());
+                                    }
+                                }
+                                default -> log.warn("Script: no instance command {}", words[1]);
+                            }
+                        }
+                        case "instances" -> {
+                            tool.refreshInstances();
+                            final List<String> lines = new java.util.ArrayList<>();
+                            tool.getInstanceSwatches()
+                                    .forEach(
+                                            (file, plane) -> {
+                                                final float[] average =
+                                                        com.ikalagaming.converter.texgraph
+                                                                .PlaneViews.average(plane);
+                                                lines.add(
+                                                        String.format(
+                                                                java.util.Locale.ROOT,
+                                                                "%s r %.3f g %.3f b %.3f",
+                                                                file.getFileName(),
+                                                                average[0],
+                                                                average[1],
+                                                                average[2]));
+                                            });
+                            java.util.Collections.sort(lines);
+                            log.info("Script: Graph instances {}", lines);
+                        }
                         case "subgraph" -> {
                             switch (words[1]) {
                                 case "make" -> {

@@ -5,11 +5,14 @@ import com.ikalagaming.converter.texgraph.CoreNodes;
 import com.ikalagaming.converter.texgraph.Evaluator;
 import com.ikalagaming.converter.texgraph.GraphParameter;
 import com.ikalagaming.converter.texgraph.OutputNodes;
+import com.ikalagaming.converter.texgraph.Plane;
 import com.ikalagaming.converter.texgraph.SubgraphMaker;
 import com.ikalagaming.converter.texgraph.SubgraphNodes;
 import com.ikalagaming.converter.texgraph.TextureGraph;
+import com.ikalagaming.converter.texgraph.TextureInstance;
 import com.ikalagaming.converter.texgraph.TextureLibraries;
 import com.ikalagaming.converter.texgraph.TextureLibrary;
+import com.ikalagaming.converter.texgraph.TexturePins;
 import com.ikalagaming.graphics.Textures;
 import com.ikalagaming.graphics.UI;
 import com.ikalagaming.graphics.gui.IkGui;
@@ -111,6 +114,9 @@ public class GraphTool {
     /** What happened last, for the toolbar. */
     private String status = "";
 
+    /** Brings the graph panel to the front when it opens another file itself. */
+    private final GraphPreviews.Host host;
+
     /** Reports what happened, to the workbench's status line. */
     private final Consumer<String> report;
 
@@ -166,6 +172,45 @@ public class GraphTool {
     /** When subgraph files were last checked. */
     private long subgraphsChecked;
 
+    /** The side of an instance's swatch in the graph settings, in pixels. */
+    private static final float INSTANCE_SWATCH = 48;
+
+    /** How deep the instances near a graph are looked for under its folder. */
+    private static final int INSTANCE_DEPTH = 4;
+
+    /**
+     * The instance open, shown as its graph with its values, or null while a graph is open. --
+     * GETTER -- The instance file.
+     *
+     * @return The file, or null.
+     */
+    @Getter private @Nullable Path instanceFile;
+
+    /** The open instance's way to its graph. */
+    private @Nullable TextureInstance.Chain instanceChain;
+
+    /** The open instance's graph with its parents' values, which it is saved against. */
+    private @Nullable TextureGraph instanceBase;
+
+    /** The instances near the open graph whose graph it is, sorted. */
+    private List<Path> nearInstances = List.of();
+
+    /** Evaluates each nearby instance's swatch. */
+    private final Map<Path, Evaluator> instanceEvaluators = new HashMap<>();
+
+    /**
+     * What each nearby instance's swatch shows, its Output's color. -- GETTER -- The swatches.
+     *
+     * @return The planes, by instance file.
+     */
+    @Getter private final Map<Path, Plane> instanceSwatches = new HashMap<>();
+
+    /** What the instance swatches were made for, to make them again when the graph changes. */
+    private long instancesFor = Long.MIN_VALUE;
+
+    /** Counts evaluations asked for that the history doesn't count, like shared values. */
+    private long revalidations;
+
     /**
      * The graph's parameters and the shared files it reads. -- GETTER -- The parameter section.
      *
@@ -217,6 +262,7 @@ public class GraphTool {
         this.ui = ui;
         this.report = report;
         this.show = show;
+        this.host = host;
         library.getNodeTypes()
                 .bindKey('1', CoreNodes.CONSTANT)
                 .bindKey('A', "math/add")
@@ -423,8 +469,10 @@ public class GraphTool {
     private void updatePreviews() {
         if (System.nanoTime() - subgraphsChecked > SUBGRAPH_CHECK_NANOS) {
             refreshSubgraphs();
+            refreshInstances();
         }
         previews.update();
+        updateInstanceSwatches();
         if (file == null) {
             return;
         }
@@ -534,6 +582,12 @@ public class GraphTool {
      */
     private void drawToolbar(UiFrame frame) {
         updatePreviews();
+        if (instanceFile != null) {
+            if (IkGui.button("Open parent")) {
+                frame.fire(this::openParent);
+            }
+            IkGui.sameLine();
+        }
         if (!parents.isEmpty()) {
             if (IkGui.button(
                     "Back to " + SubgraphNodes.titleOf(parents.peek().getFileName().toString()))) {
@@ -601,7 +655,14 @@ public class GraphTool {
         }
         IkGui.sameLine();
         IkGui.textDisabled(
-                (file == null ? "New texture graph" : file.getFileName().toString())
+                (instanceFile != null
+                                ? instanceFile.getFileName()
+                                        + " (an instance of "
+                                        + file.getFileName()
+                                        + ")"
+                                : file == null
+                                        ? "New texture graph"
+                                        : file.getFileName().toString())
                         + (history.isDirty() ? " *" : "")
                         + (status.isEmpty() ? "" : "  " + status));
     }
@@ -667,19 +728,27 @@ public class GraphTool {
     private void drawGraphSettings(UiFrame frame) {
         IkGui.separator();
         IkGui.textUnformatted("Texture graph");
+        if (instanceFile != null) {
+            IkGui.textWrapped(
+                    "An instance: the graph is shown read-only, and its settings and parameters"
+                            + " below are the instance's. Saving writes only what differs from"
+                            + " its parent.");
+        }
         if (!IkGui.beginTable("graph-settings", 2, TableFlags.ROW_BACKGROUND)) {
             return;
         }
-        field(
-                "graph/width",
-                "Width",
-                Integer.toString(texture.getWidth()),
-                edited -> frame.fire(() -> setSize(edited, true)));
-        field(
-                "graph/height",
-                "Height",
-                Integer.toString(texture.getHeight()),
-                edited -> frame.fire(() -> setSize(edited, false)));
+        if (instanceFile == null) {
+            field(
+                    "graph/width",
+                    "Width",
+                    Integer.toString(texture.getWidth()),
+                    edited -> frame.fire(() -> setSize(edited, true)));
+            field(
+                    "graph/height",
+                    "Height",
+                    Integer.toString(texture.getHeight()),
+                    edited -> frame.fire(() -> setSize(edited, false)));
+        }
         field(
                 "graph/seed",
                 "Seed",
@@ -736,6 +805,306 @@ public class GraphTool {
                                 }));
         IkGui.endTable();
         parameterPanel.draw(frame);
+        if (instanceFile == null && file != null) {
+            drawInstances(frame);
+        }
+    }
+
+    /**
+     * Draw the instances near the graph, each a swatch of its Output's color made with the graph as
+     * it is now, and a button making a new one.
+     *
+     * @param frame The current frame.
+     */
+    private void drawInstances(UiFrame frame) {
+        IkGui.separator();
+        IkGui.textUnformatted("Instances");
+        boolean first = true;
+        for (Path instance : nearInstances) {
+            if (!first) {
+                IkGui.sameLine();
+            }
+            first = false;
+            if (previews.drawSwatch(instance.toString(), INSTANCE_SWATCH)) {
+                frame.fire(() -> openInstance(instance));
+            }
+            if (IkGui.isItemHovered()) {
+                IkGui.setTooltip(instance.getFileName() + "; click to open it");
+            }
+        }
+        if (IkGui.button("New instance...")) {
+            frame.fire(this::askNewInstance);
+        }
+    }
+
+    /** Ask where to save a new instance of the graph, then make it. */
+    private void askNewInstance() {
+        if (file == null) {
+            return;
+        }
+        final String stem = SubgraphNodes.titleOf(file.getFileName().toString());
+        ui.saveFile(
+                "New texture instance",
+                file.getParent(),
+                stem + "_variant" + TextureInstance.SUFFIX,
+                chosen -> {
+                    if (chosen != null) {
+                        newInstance(chosen, null);
+                    }
+                },
+                "yml");
+    }
+
+    /**
+     * Make an instance of the open graph, changing nothing yet but its texture's name.
+     *
+     * @param target The instance file.
+     * @param textureName Its texture's name, or null for the graph's folder of textures and the
+     *     file's name.
+     * @return True if it was written.
+     */
+    public boolean newInstance(@NonNull Path target, @Nullable String textureName) {
+        if (file == null || instanceFile != null) {
+            report.accept("Open a saved graph to make an instance of it");
+            return false;
+        }
+        final Path absolute = target.toAbsolutePath().normalize();
+        final TextureInstance instance = new TextureInstance();
+        instance.setParent(
+                TextureInstance.rebase(
+                        absolute.getParent(), file.getParent(), file.getFileName().toString()));
+        String name = textureName;
+        if (name == null && texture.getTexture() != null) {
+            final String stem = absolute.getFileName().toString();
+            final String own = stem.substring(0, stem.length() - TextureInstance.SUFFIX.length());
+            final int slash = texture.getTexture().lastIndexOf('/');
+            name = (slash < 0 ? "" : texture.getTexture().substring(0, slash + 1)) + own;
+        }
+        instance.setTexture(name);
+        try {
+            Files.writeString(absolute, instance.write());
+        } catch (IOException e) {
+            report.accept("Can't write " + absolute.getFileName() + ": " + e.getMessage());
+            return false;
+        }
+        refreshInstances();
+        report.accept("Made the instance " + absolute.getFileName());
+        return true;
+    }
+
+    /** Find the instances near the open graph whose graph it is. */
+    public void refreshInstances() {
+        if (file == null || instanceFile != null) {
+            setNearInstances(List.of());
+            return;
+        }
+        final List<Path> found = new java.util.ArrayList<>();
+        try (java.util.stream.Stream<Path> files = Files.walk(file.getParent(), INSTANCE_DEPTH)) {
+            for (Path candidate :
+                    files.filter(f -> f.toString().endsWith(TextureInstance.SUFFIX))
+                            .sorted()
+                            .toList()) {
+                final TextureInstance.Chain chain = TextureInstance.chain(candidate);
+                if (file.equals(chain.graph())) {
+                    found.add(candidate.toAbsolutePath().normalize());
+                }
+            }
+        } catch (IOException | java.io.UncheckedIOException e) {
+            log.debug("Can't look for instances of {}", file, e);
+        }
+        setNearInstances(found);
+    }
+
+    /**
+     * Keep a new list of nearby instances, dropping the swatches of those gone.
+     *
+     * @param found The instances.
+     */
+    private void setNearInstances(List<Path> found) {
+        for (Path old : nearInstances) {
+            if (!found.contains(old)) {
+                previews.removeSwatch(old.toString());
+                instanceEvaluators.remove(old);
+                instanceSwatches.remove(old);
+            }
+        }
+        if (!found.equals(nearInstances)) {
+            instancesFor = Long.MIN_VALUE;
+        }
+        nearInstances = List.copyOf(found);
+    }
+
+    /** Make the nearby instances' swatches again once the graph or what it reads changed. */
+    private void updateInstanceSwatches() {
+        final Path folder = folder();
+        if (nearInstances.isEmpty() || folder == null) {
+            return;
+        }
+        final long stamp = history.getChanges() * 31 + revalidations;
+        if (stamp == instancesFor) {
+            return;
+        }
+        instancesFor = stamp;
+        for (Path instance : nearInstances) {
+            final TextureInstance.Chain chain = TextureInstance.chain(instance);
+            final List<String> problems = new java.util.ArrayList<>(chain.problems());
+            final TextureGraph applied =
+                    TextureInstance.resolve(chain, texture, chain.instances().size(), problems);
+            final Graph graph = applied.getGraph();
+            final Graph.Node output =
+                    graph.nodes().stream()
+                            .filter(node -> OutputNodes.isOutput(node.getType()))
+                            .findFirst()
+                            .orElse(null);
+            final Plane plane =
+                    output == null
+                            ? null
+                            : instanceEvaluators
+                                    .computeIfAbsent(instance, i -> new Evaluator(library))
+                                    .input(
+                                            graph,
+                                            applied.settings(folder),
+                                            output.getId(),
+                                            "color");
+            if (plane == null) {
+                previews.removeSwatch(instance.toString());
+                instanceSwatches.remove(instance);
+            } else {
+                previews.putSwatch(instance.toString(), plane, TexturePins.COLOR);
+                instanceSwatches.put(instance, plane);
+            }
+        }
+    }
+
+    /**
+     * Open an instance: its graph, read-only, with its values, which its settings and parameters
+     * then edit.
+     *
+     * @param path The instance file.
+     * @return True if it was opened.
+     */
+    public boolean openInstance(@NonNull Path path) {
+        final Path absolute = path.toAbsolutePath().normalize();
+        final TextureInstance.Chain chain = TextureInstance.chain(absolute);
+        if (chain.graph() == null) {
+            status =
+                    "Can't open "
+                            + absolute.getFileName()
+                            + ": "
+                            + String.join("; ", chain.problems());
+            report.accept(status);
+            return false;
+        }
+        if (!open(chain.graph())) {
+            return false;
+        }
+        final List<String> problems = new java.util.ArrayList<>(chain.problems());
+        final int count = chain.instances().size();
+        final TextureGraph base = TextureInstance.resolve(chain, texture, count - 1, problems);
+        final TextureGraph edited = TextureInstance.resolve(chain, texture, count, problems);
+        texture.setSeed(edited.getSeed());
+        texture.setData(edited.getData());
+        texture.setMaps(edited.getMaps());
+        texture.setTexture(edited.getTexture());
+        texture.setModel(edited.getModel());
+        for (GraphParameter parameter : edited.getParameters()) {
+            texture.putParameter(parameter);
+        }
+        texture.setSharedOverrides(edited.getSharedOverrides());
+        final Map<String, String> parentValues = new LinkedHashMap<>();
+        base.resolveParameters(folder(), new java.util.ArrayList<>())
+                .forEach((name, parameter) -> parentValues.put(name, parameter.value()));
+        parameterPanel.setParentValues(parentValues);
+        instanceFile = absolute;
+        instanceChain = chain;
+        instanceBase = base;
+        history.setLocked(true);
+        history.markSaved();
+        setNearInstances(List.of());
+        evaluator.clear();
+        previews.clear();
+        editor.revalidate();
+        status = problems.isEmpty() ? "" : String.join("; ", problems);
+        report.accept(
+                "Opened the instance "
+                        + absolute.getFileName()
+                        + " of "
+                        + chain.graph().getFileName()
+                        + (problems.isEmpty() ? "" : " with " + problems.size() + " problems"));
+        return true;
+    }
+
+    /** Leave an instance, back to editing graphs. */
+    private void leaveInstance() {
+        instanceFile = null;
+        instanceChain = null;
+        instanceBase = null;
+        history.setLocked(false);
+        parameterPanel.setParentValues(null);
+    }
+
+    /** Open the open instance's parent: the graph, or the instance it changes. */
+    public void openParent() {
+        if (instanceFile == null || instanceChain == null) {
+            return;
+        }
+        if (history.isDirty()) {
+            report.accept("Save the instance before opening its parent");
+            return;
+        }
+        final Path parent =
+                instanceFile
+                        .getParent()
+                        .resolve(instanceChain.last().instance().getParent())
+                        .toAbsolutePath()
+                        .normalize();
+        if (parent.toString().endsWith(TextureInstance.SUFFIX)) {
+            openInstance(parent);
+        } else {
+            open(parent);
+        }
+    }
+
+    /**
+     * Save the open instance: only what differs from its parent, and values for parameters the
+     * graph doesn't have, which are kept as they were.
+     *
+     * @param path The file.
+     * @return True if it was written.
+     */
+    private boolean saveInstance(Path path) {
+        final Path absolute = path.toAbsolutePath().normalize();
+        final TextureInstance was = instanceChain.last().instance();
+        final TextureInstance saved =
+                TextureInstance.between(
+                        TextureInstance.rebase(
+                                absolute.getParent(), instanceFile.getParent(), was.getParent()),
+                        absolute.getParent(),
+                        file.getParent(),
+                        instanceBase,
+                        texture);
+        final Map<String, GraphParameter> readable =
+                texture.resolveParameters(folder(), new java.util.ArrayList<>());
+        was.getValues()
+                .forEach(
+                        (name, value) -> {
+                            if (!readable.containsKey(name)) {
+                                saved.setValue(name, value);
+                            }
+                        });
+        try {
+            Files.writeString(absolute, saved.write());
+        } catch (IOException e) {
+            status = "Can't save: " + e.getMessage();
+            report.accept(status);
+            return false;
+        }
+        instanceFile = absolute;
+        instanceChain = TextureInstance.chain(absolute);
+        history.markSaved();
+        status = "";
+        report.accept("Saved " + absolute.getFileName());
+        return true;
     }
 
     /**
@@ -832,6 +1201,7 @@ public class GraphTool {
 
     /** Something the graph reads from outside changed, so evaluate it again. */
     private void revalidate() {
+        ++revalidations;
         editor.revalidate();
     }
 
@@ -868,6 +1238,7 @@ public class GraphTool {
 
     /** Start a new, empty graph. */
     public void newGraph() {
+        leaveInstance();
         history.getGraph().restore(library.newGraph());
         history.clear();
         editor.select(List.of());
@@ -948,6 +1319,7 @@ public class GraphTool {
      * @return True if it was read.
      */
     public boolean open(@NonNull Path path) {
+        leaveInstance();
         final TextureGraph read = new TextureGraph(library);
         final List<String> problems;
         try {
@@ -982,8 +1354,10 @@ public class GraphTool {
         file = path.toAbsolutePath();
         subgraphVersions.clear();
         refreshSubgraphs();
+        refreshInstances();
         // The history starts over, so its change count can't tell the editor to check again
         editor.revalidate();
+        host.showGraph();
         restoreView();
         status =
                 problems.isEmpty()
@@ -1003,6 +1377,9 @@ public class GraphTool {
      * @return True if it was written.
      */
     public boolean save(@NonNull Path path) {
+        if (instanceFile != null) {
+            return saveInstance(path);
+        }
         final Path oldFolder = folder();
         final Path newFolder = path.toAbsolutePath().getParent();
         String text = texture.write();
@@ -1056,6 +1433,13 @@ public class GraphTool {
             report.accept(status);
             return result;
         }
+        if (instanceFile != null
+                && (texture.getTexture() == null
+                        || texture.getTexture().equals(instanceBase.getTexture()))) {
+            status = "An instance names its own texture, so it doesn't bake over its parent's";
+            report.accept(status);
+            return new Baker.Result(List.of(), List.of(), List.of(status));
+        }
         // Image files may have changed on disk since they were read
         evaluator.clear();
         final Baker.Result result = Baker.bake(texture, evaluator, file.getParent(), null);
@@ -1082,6 +1466,19 @@ public class GraphTool {
 
     /** Ask where to save, then save. */
     private void askToSave() {
+        if (instanceFile != null) {
+            ui.saveFile(
+                    "Save texture instance",
+                    instanceFile.getParent(),
+                    instanceFile.getFileName().toString(),
+                    chosen -> {
+                        if (chosen != null) {
+                            save(chosen);
+                        }
+                    },
+                    "yml");
+            return;
+        }
         ui.saveFile(
                 "Save texture graph",
                 file == null ? null : file.getParent(),
