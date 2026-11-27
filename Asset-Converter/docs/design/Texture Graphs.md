@@ -69,6 +69,43 @@ disk, so a bake picks up a new value. Changed in the graph panel, shared values 
 are written on Save shared files, which then bakes the graphs that read them: for now those in the folder above the
 open graph's and below it, until the asset index knows every graph that does.
 
+## The library is sized in pixels and wraps
+
+Noises (value, gradient, cell, simplex, ridged and white, each with octaves and a domain warp; white is one
+random value per cell, a pixel at size 1, the speckle pixel art is shaded with), patterns (bricks, planks,
+tiles, panel seams, rivets, stripes, checker, gradients, wood grain, scratches), operations (levels, curves, remap,
+threshold, blend, blur, edge detect, distance, slope blur, warp, offset, transform), coordinates, channels and color
+nodes. Sizes are in pixels, every operation that moves pixels wraps, and every noise is periodic, so anything built
+from them tiles. Simplex noise isn't periodic on its own lattice, so it is read on a torus in four dimensions, each
+axis a circle as long as its cells. Patterns of pieces put the gap on each piece's far side and give a random value
+per piece from the node's seed, so a graph can shade bricks or planks one by one. Operations that move pixels come
+for scalars and for colors, since a color doesn't turn into a scalar by itself.
+
+## Palettes are where pixel art lives
+
+A palette index pin carries an index per pixel and the palette it indexes, and reads as color through it. Quantize
+maps colors to a given palette, Palette to a few of the image's own colors (median cut, darkest first), both with no
+dither, ordered (4x4 Bayer) or error diffusion (Floyd and Steinberg, wrapping). Ordered dither moves colors by the
+palette's own spacing, its colors' usual distance to their nearest neighbor; moving them by the full 0..1 range throws a
+palette of close tones into a checkerboard of far apart ones. Colors are matched, dithered,
+blended in gradient maps and turned in HSV on their sRGB values, as an artist picks and compares them; everything
+else stays linear. The Viewer's pixel readout names the index under the mouse.
+
+## Expression covers the gaps
+
+A one-line formula over four scalar inputs and the pixel's position, parsed once per evaluation into a tree. Its
+errors name the character, and show on the node like any other.
+
+## Starter graphs
+
+The editor's data folder holds starter graphs made from nodes alone, the old starterTextures set rebuilt: stone,
+dirt, grass, oak leaves, oak log, water, sand, concrete, steel, bronze, glass and a grass tuft. Each follows the old
+generator's formula (a flat color varied a few percent by white noise, sparse specks from a second white noise, and
+the shapes drawn with Expression and Cells), in the colors the block textures were later tuned to, so their averages
+match the blocks' within about a percent; only where the random pixels fall differs. The Graph toolbar
+opens one as a new graph, unsaved, to change and save somewhere with a bake target. They aren't a game look's
+source: the block textures stay painted.
+
 ## The file
 
 `*.texgraph.yml`: the graph's settings first (format, size, seed, the content folder it bakes to relative to the

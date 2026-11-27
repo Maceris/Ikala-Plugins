@@ -31,6 +31,9 @@ public final class TexturePins {
     /** A position in the tile per pixel, 0 to 1 across and down, wrapping at the edge. */
     public static final String COORDINATES = "coordinates";
 
+    /** An index per pixel into a palette the plane carries; reads as color through it. */
+    public static final String PALETTE = "palette";
+
     /** The node that samples a texture into a color, put in when one is linked into a color. */
     public static final String SAMPLE = "texture/sample";
 
@@ -56,6 +59,11 @@ public final class TexturePins {
                 .register(
                         new PinTypes.PinType(
                                 COORDINATES, "Coordinates", Color.rgba(0.75f, 0.5f, 0.95f, 1)))
+                .register(
+                        new PinTypes.PinType(
+                                PALETTE, "Palette index", Color.rgba(0.95f, 0.45f, 0.75f, 1)))
+                .convertDirectly(PALETTE, COLOR)
+                .convertDirectly(PALETTE, SCALAR)
                 .convertDirectly(SCALAR, MASK)
                 .convertDirectly(SCALAR, COLOR)
                 .convertDirectly(SCALAR, HEIGHT)
@@ -75,7 +83,7 @@ public final class TexturePins {
      */
     public static int channels(@NonNull String type) {
         return switch (type) {
-            case SCALAR, MASK, HEIGHT -> 1;
+            case SCALAR, MASK, HEIGHT, PALETTE -> 1;
             case COORDINATES -> 2;
             case VECTOR -> 3;
             case COLOR, TEXTURE -> 4;
@@ -110,6 +118,9 @@ public final class TexturePins {
         if (from.equals(to) || PinTypes.ANY.equals(from) || PinTypes.ANY.equals(to)) {
             return plane;
         }
+        if (PALETTE.equals(from) && COLOR.equals(to)) {
+            return throughPalette(plane);
+        }
         if (MASK.equals(to)) {
             return plane.map((value, channel) -> Math.clamp(value, 0, 1));
         }
@@ -138,5 +149,31 @@ public final class TexturePins {
         }
         // Scalars, masks and heights share their one channel
         return plane;
+    }
+
+    /**
+     * Palette indices as the colors they name; an index past the palette, or a plane without one,
+     * is opaque black.
+     *
+     * @param plane The indices.
+     * @return The colors.
+     */
+    public static Plane throughPalette(@NonNull Plane plane) {
+        final float[] palette = plane.getPalette();
+        final int size = palette == null ? 0 : palette.length / 4;
+        final Plane out = new Plane(plane.getWidth(), plane.getHeight(), 4);
+        for (int y = 0; y < plane.getHeight(); ++y) {
+            for (int x = 0; x < plane.getWidth(); ++x) {
+                final int index = Math.round(plane.get(x, y, 0));
+                if (index < 0 || index >= size) {
+                    out.set(x, y, 3, 1);
+                    continue;
+                }
+                for (int c = 0; c < 4; ++c) {
+                    out.set(x, y, c, palette[index * 4 + c]);
+                }
+            }
+        }
+        return out;
     }
 }

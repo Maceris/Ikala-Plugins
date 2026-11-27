@@ -37,6 +37,47 @@ public final class Plane {
     private final float[] values;
 
     /**
+     * For a plane of palette indices, the palette's colors, linear RGBA one after another; null for
+     * any other plane.
+     */
+    private float[] palette;
+
+    /**
+     * The palette a plane of indices is read through.
+     *
+     * @return Linear red, green, blue and alpha of each color in turn, or null if it has none.
+     */
+    public float[] getPalette() {
+        return palette == null ? null : palette.clone();
+    }
+
+    /**
+     * Give this plane of indices its palette.
+     *
+     * @param colors Linear red, green, blue and alpha of each color in turn.
+     * @return This plane.
+     * @throws IllegalArgumentException If the plane has more than one channel, or the colors aren't
+     *     whole RGBA.
+     */
+    public Plane withPalette(float @NonNull [] colors) {
+        if (channels != 1 || colors.length == 0 || colors.length % 4 != 0) {
+            throw new IllegalArgumentException(
+                    "A palette goes on one channel of indices, as whole RGBA colors");
+        }
+        palette = colors.clone();
+        return this;
+    }
+
+    /**
+     * How many colors the palette has.
+     *
+     * @return The count, 0 without a palette.
+     */
+    public int paletteSize() {
+        return palette == null ? 0 : palette.length / 4;
+    }
+
+    /**
      * Make a plane of zeros.
      *
      * @param width Pixels across, at least 1.

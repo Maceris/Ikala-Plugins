@@ -6,7 +6,8 @@ public final class TextureLibraries {
     private TextureLibraries() {}
 
     /**
-     * The standard library: the core nodes, the Outputs and the parameter nodes.
+     * The standard library: the core nodes, the Outputs, the parameter nodes, patterns, operations,
+     * color nodes and the Expression node.
      *
      * @return A new library.
      */
@@ -15,6 +16,10 @@ public final class TextureLibraries {
         CoreNodes.register(library);
         OutputNodes.register(library);
         ParameterNodes.register(library);
+        PatternNodes.register(library);
+        OperationNodes.register(library);
+        ColorNodes.register(library);
+        Expression.register(library);
         return library;
     }
 }

@@ -13,7 +13,16 @@ final class Noise {
         /** Random slopes at the lattice points, Perlin's noise. */
         GRADIENT("Gradient Noise"),
         /** Distance to the nearest of one random point per cell, Worley's noise. */
-        CELLS("Cell Noise");
+        CELLS("Cell Noise"),
+        /** Simplex noise, made on a torus in four dimensions so it wraps like the others. */
+        SIMPLEX("Simplex Noise"),
+        /** Gradient noise folded at its middle into sharp ridges, for veins and cracks. */
+        RIDGED("Ridged Noise"),
+        /**
+         * One random value per cell, unblended: at a size of 1, a different value for every pixel,
+         * the speckle pixel art is shaded with.
+         */
+        WHITE("White Noise");
 
         /** The node's title. */
         private final String title;
@@ -63,6 +72,31 @@ final class Noise {
             int octaves,
             float persistence,
             long seed) {
+        return make(kind, width, height, size, octaves, persistence, 0, seed);
+    }
+
+    /**
+     * Make noise, its lookups pushed around by two smoother gradient noises first (domain warp).
+     *
+     * @param kind Which noise.
+     * @param width Pixels across.
+     * @param height Pixels down.
+     * @param size How big the features are, in pixels, at the first octave.
+     * @param octaves How many octaves, each with twice the cells.
+     * @param persistence How much each octave counts, compared to the one before.
+     * @param warp How far lookups move, in first-octave cells; 0 for none.
+     * @param seed The node's seed.
+     * @return The noise, one channel, 0 to 1.
+     */
+    static Plane make(
+            Kind kind,
+            int width,
+            int height,
+            float size,
+            int octaves,
+            float persistence,
+            float warp,
+            long seed) {
         final float feature = Math.max(1, size);
         final int cellsX = Math.max(1, Math.round(width / feature));
         final int cellsY = Math.max(1, Math.round(height / feature));
@@ -77,11 +111,30 @@ final class Noise {
             for (int x = 0; x < width; ++x) {
                 float sum = 0;
                 amplitude = 1;
+                float shiftU = 0;
+                float shiftV = 0;
+                if (warp != 0) {
+                    final float u0 = (x + 0.5f) / width * cellsX;
+                    final float v0 = (y + 0.5f) / height * cellsY;
+                    final long warpSeed = Evaluator.mix(seed ^ 0x5741_5250L);
+                    shiftU =
+                            warp * (sample(Kind.GRADIENT, u0, v0, cellsX, cellsY, warpSeed) - 0.5f);
+                    shiftV =
+                            warp
+                                    * (sample(
+                                                    Kind.GRADIENT,
+                                                    u0,
+                                                    v0,
+                                                    cellsX,
+                                                    cellsY,
+                                                    Evaluator.mix(warpSeed))
+                                            - 0.5f);
+                }
                 for (int octave = 0; octave < octaves; ++octave) {
                     final int cx = cellsX << octave;
                     final int cy = cellsY << octave;
-                    final float u = (x + 0.5f) / width * cx;
-                    final float v = (y + 0.5f) / height * cy;
+                    final float u = ((x + 0.5f) / width + shiftU / cellsX) * cx;
+                    final float v = ((y + 0.5f) / height + shiftV / cellsY) * cy;
                     final long octaveSeed = Evaluator.mix(seed + octave);
                     sum += amplitude * sample(kind, u, v, cx, cy, octaveSeed);
                     amplitude *= persistence;
@@ -137,6 +190,13 @@ final class Noise {
                     }
                 }
                 yield Math.min(1, (float) Math.sqrt(nearest));
+            }
+            case SIMPLEX -> Simplex.torus(u, v, cellsX, cellsY, seed);
+            case WHITE -> CoreNodes.unit(lattice(ix, iy, cellsX, cellsY, seed));
+            case RIDGED -> {
+                final float g = sample(Kind.GRADIENT, u, v, cellsX, cellsY, seed);
+                final float ridge = 1 - Math.abs(g * 2 - 1);
+                yield ridge * ridge;
             }
         };
     }

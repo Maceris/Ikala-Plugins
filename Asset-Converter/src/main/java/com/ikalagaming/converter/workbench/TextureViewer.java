@@ -824,6 +824,31 @@ public class TextureViewer implements Viewer {
         }
     }
 
+    /** Says more about a pixel than its value, like the palette index it was made from. */
+    @FunctionalInterface
+    public interface PixelNote {
+        /**
+         * What to say about a pixel.
+         *
+         * @param x The column.
+         * @param y The row.
+         * @return The text, or null for nothing.
+         */
+        String note(int x, int y);
+    }
+
+    /** Says more about the hovered pixel, or null. */
+    private PixelNote pixelNote;
+
+    /**
+     * Say more about the hovered pixel than its value.
+     *
+     * @param note What to say, or null for nothing.
+     */
+    public void setPixelNote(PixelNote note) {
+        pixelNote = note;
+    }
+
     /** Draw the hovered pixel's value. */
     private void drawPixel() {
         IkGui.separatorText("Pixel");
@@ -834,6 +859,10 @@ public class TextureViewer implements Viewer {
             if (hoverKnown) {
                 IkGui.text(pixelText(image.depth(), hoverValue));
                 IkGui.textDisabled("As stored in the top level");
+                final String note = pixelNote == null ? null : pixelNote.note(hoverX, hoverY);
+                if (note != null) {
+                    IkGui.text(note);
+                }
             } else {
                 IkGui.textDisabled("Can't read back " + image.format().name());
             }

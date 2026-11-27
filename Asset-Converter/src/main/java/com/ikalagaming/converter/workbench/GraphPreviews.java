@@ -437,6 +437,21 @@ public class GraphPreviews {
                     look.plane().getWidth(),
                     look.plane().getHeight());
             viewerSource = look.plane();
+            final Plane indices = look.plane();
+            if (viewer != null) {
+                viewer.getViewer()
+                        .setPixelNote(
+                                TexturePins.PALETTE.equals(look.type())
+                                                && indices.getPalette() != null
+                                        ? (x, y) ->
+                                                x < indices.getWidth() && y < indices.getHeight()
+                                                        ? "Palette index "
+                                                                + Math.round(indices.get(x, y, 0))
+                                                                + " of "
+                                                                + indices.paletteSize()
+                                                        : null
+                                        : null);
+            }
         }
     }
 

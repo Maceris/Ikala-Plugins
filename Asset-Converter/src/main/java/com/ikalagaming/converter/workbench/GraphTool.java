@@ -142,6 +142,12 @@ public class GraphTool {
     /** Frames left before the view is saved, so a view just restored isn't overwritten first. */
     private int viewSettles;
 
+    /** The folder in the converter's data holding the starter graphs. */
+    static final String STARTERS = "starters";
+
+    /** The starter graphs, found when first asked for. */
+    private @Nullable List<Path> starterFiles;
+
     /**
      * The graph's parameters and the shared files it reads. -- GETTER -- The parameter section.
      *
@@ -376,6 +382,16 @@ public class GraphTool {
         IkGui.sameLine();
         if (IkGui.button("Bake")) {
             frame.fire(this::bake);
+        }
+        IkGui.sameLine();
+        IkGui.setNextItemWidth(150);
+        if (IkGui.beginCombo("##starter", "From a starter")) {
+            for (Path starter : starters()) {
+                if (IkGui.selectable(starterName(starter))) {
+                    frame.fire(() -> openStarter(starter));
+                }
+            }
+            IkGui.endCombo();
         }
         IkGui.sameLine();
         if (IkGui.checkbox("Swatches", swatches)) {
@@ -665,6 +681,57 @@ public class GraphTool {
         file = null;
         status = "";
         fields.clear();
+    }
+
+    /**
+     * The starter graphs in the converter's data folder, made from nodes alone, to begin a texture
+     * from.
+     *
+     * @return Their files, by name.
+     */
+    public List<Path> starters() {
+        if (starterFiles == null) {
+            final java.io.File folder =
+                    com.ikalagaming.launcher.PluginFolder.getResource(
+                            com.ikalagaming.converter.ConverterPlugin.PLUGIN_NAME,
+                            com.ikalagaming.launcher.PluginFolder.ResourceType.DATA,
+                            STARTERS);
+            try (java.util.stream.Stream<Path> list = Files.list(folder.toPath())) {
+                starterFiles = list.filter(f -> f.toString().endsWith(SUFFIX)).sorted().toList();
+            } catch (IOException | RuntimeException e) {
+                log.debug("No starter graphs at {}", folder, e);
+                starterFiles = List.of();
+            }
+        }
+        return starterFiles;
+    }
+
+    /**
+     * A starter graph's name.
+     *
+     * @param file Its file.
+     * @return The name without the suffix, with spaces for underscores.
+     */
+    public static String starterName(@NonNull Path file) {
+        final String name = file.getFileName().toString();
+        return name.substring(0, name.length() - SUFFIX.length()).replace('_', ' ');
+    }
+
+    /**
+     * Open a starter graph as a new graph, not yet saved anywhere.
+     *
+     * @param starter The starter's file.
+     * @return True if it was read.
+     */
+    public boolean openStarter(@NonNull Path starter) {
+        if (!open(starter)) {
+            return false;
+        }
+        file = null;
+        history.markDirty();
+        status = "From the " + starterName(starter) + " starter; save it to bake it";
+        report.accept(status);
+        return true;
     }
 
     /**

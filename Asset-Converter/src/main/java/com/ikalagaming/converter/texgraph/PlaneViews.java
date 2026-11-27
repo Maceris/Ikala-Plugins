@@ -35,6 +35,9 @@ public final class PlaneViews {
      * @return Red, green, blue and alpha for each pixel, rows from the top.
      */
     public static float[] rgba(@NonNull Plane plane, @NonNull String type, boolean marks) {
+        if (TexturePins.PALETTE.equals(type) && plane.getPalette() != null) {
+            return rgba(TexturePins.throughPalette(plane), TexturePins.COLOR, marks);
+        }
         final int width = plane.getWidth();
         final int height = plane.getHeight();
         final int channels = plane.getChannels();

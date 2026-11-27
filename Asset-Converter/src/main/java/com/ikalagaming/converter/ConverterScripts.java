@@ -475,9 +475,9 @@ public final class ConverterScripts {
      * "measure id"; "pin node pin in|out", which logs its tooltip; "seeds on|off|other|pick n";
      * "map name", which map a shown Output shows; "shape on|off", the Output on the 3D shape;
      * "previews", which logs the swatches, the shown node and each node's cost; "swatches on|off";
-     * "view x y zoom", centering the canvas; "where", logging the view's middle; "param add name
-     * kind", "param set name value" and "param shared file...", which change the graph's parameters
-     * and log them.
+     * "starter name", opening a starter graph as a new one; "view x y zoom", centering the canvas;
+     * "where", logging the view's middle; "param add name kind", "param set name value" and "param
+     * shared file...", which change the graph's parameters and log them.
      *
      * @param command The command and its words, separated by spaces.
      */
@@ -664,6 +664,23 @@ public final class ConverterScripts {
                                         editor.getViewCenter(),
                                         editor.getCanvas().getRect(),
                                         editor.getCanvas().getZoom());
+                        case "starter" ->
+                                tool.starters().stream()
+                                        .filter(
+                                                f ->
+                                                        GraphTool.starterName(f)
+                                                                .equals(rest(words, 1)))
+                                        .findFirst()
+                                        .ifPresentOrElse(
+                                                f ->
+                                                        log.info(
+                                                                "Script: Graph from starter {}",
+                                                                tool.openStarter(f)),
+                                                () ->
+                                                        log.warn(
+                                                                "Script: no starter {} among {}",
+                                                                rest(words, 1),
+                                                                tool.starters().size()));
                         case "swatches" -> tool.setSwatches("on".equals(words[1]));
                         case "previews" ->
                                 log.info(

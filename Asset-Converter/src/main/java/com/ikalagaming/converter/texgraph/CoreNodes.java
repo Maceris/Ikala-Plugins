@@ -800,8 +800,8 @@ public final class CoreNodes {
     // ---- noise
 
     /**
-     * Value, gradient and cell noise, each with octaves for fBm. Every noise is periodic over the
-     * tile, so tiles never show a seam.
+     * Value, gradient, cell, simplex and ridged noise, each with octaves for fBm and a domain warp.
+     * Every noise is periodic over the tile, so tiles never show a seam.
      *
      * @param library The library.
      */
@@ -817,7 +817,8 @@ public final class CoreNodes {
                             List.of(
                                     param("size", "4"),
                                     param("octaves", "1"),
-                                    param("persistence", "0.5"))),
+                                    param("persistence", "0.5"),
+                                    param("warp", "0"))),
                     context ->
                             context.output(
                                     VALUE,
@@ -828,6 +829,7 @@ public final class CoreNodes {
                                             context.number("size"),
                                             Math.clamp(context.integer("octaves"), 1, 8),
                                             context.number("persistence"),
+                                            context.number("warp"),
                                             context.getSeed())));
         }
     }
