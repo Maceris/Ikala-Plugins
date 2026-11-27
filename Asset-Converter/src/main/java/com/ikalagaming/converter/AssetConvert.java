@@ -249,7 +249,7 @@ public final class AssetConvert {
      *
      * @return The version, or empty if it can't be found.
      */
-    static String version() {
+    public static String version() {
         try {
             final URL jar = AssetConvert.class.getProtectionDomain().getCodeSource().getLocation();
             final URL info =

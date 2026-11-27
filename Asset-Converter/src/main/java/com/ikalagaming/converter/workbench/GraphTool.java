@@ -532,6 +532,16 @@ public class GraphTool {
                                     texture.setModel(edited.isBlank() ? null : edited.trim());
                                     settingsChanged();
                                 }));
+        field(
+                "graph/maps",
+                "Maps folder",
+                texture.getMaps() == null ? "" : texture.getMaps(),
+                edited ->
+                        frame.fire(
+                                () -> {
+                                    texture.setMaps(edited.isBlank() ? null : edited.trim());
+                                    settingsChanged();
+                                }));
         IkGui.endTable();
         parameterPanel.draw(frame);
     }
@@ -671,6 +681,7 @@ public class GraphTool {
         texture.setData(null);
         texture.setTexture(null);
         texture.setModel(null);
+        texture.setMaps(null);
         texture.setShared(List.of());
         for (GraphParameter parameter : texture.getParameters()) {
             texture.removeParameter(parameter.name());
@@ -759,6 +770,7 @@ public class GraphTool {
         texture.setData(read.getData());
         texture.setTexture(read.getTexture());
         texture.setModel(read.getModel());
+        texture.setMaps(read.getMaps());
         texture.setShared(read.getShared());
         for (GraphParameter parameter : texture.getParameters()) {
             texture.removeParameter(parameter.name());

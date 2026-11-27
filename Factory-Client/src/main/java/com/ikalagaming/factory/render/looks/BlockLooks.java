@@ -11,6 +11,7 @@ import com.ikalagaming.graphics.asset.AssetFormat;
 import com.ikalagaming.graphics.asset.MaterialSection;
 import com.ikalagaming.graphics.asset.MeshSection;
 import com.ikalagaming.graphics.asset.Section;
+import com.ikalagaming.graphics.asset.TextureSection;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MeshData;
 
@@ -34,9 +35,12 @@ import javax.imageio.ImageIO;
  * Finds block looks, their models and textures in plugins' content folders ({@link
  * ContentFolders}): {@code looks/block/<id>.kvt}, {@code models/<path>.ika} (meshes exported from
  * the asset editor, see {@link MeshSection}), {@code render_materials/<path>.ika} (see {@link
- * MaterialSection}) and {@code textures/<path>.png}, each in the folder of the plugin whose
- * namespace the name has. A later plugin's {@code overrides/<namespace>/} wins over the plugin's
- * own file, and resource packs will go in front of them later.
+ * MaterialSection}) and {@code textures/<path>.ika} (all of a texture's maps, see {@link
+ * TextureSection}, made from graphs or painted PNGs by the asset editor), or {@code
+ * textures/<path>.png} and its {@code .normal.png} where there is no {@code .ika}, as overrides and
+ * packs may have, each in the folder of the plugin whose namespace the name has. A later plugin's
+ * {@code overrides/<namespace>/} wins over the plugin's own file, and resource packs will go in
+ * front of them later.
  *
  * <p>Textures are pixel art, sampled so their pixels stay sharp up close, of any size: a model's
  * texture coordinates decide which part of it each face shows. Render thread only.
@@ -68,8 +72,11 @@ public final class BlockLooks implements AutoCloseable {
     /** The extension of look files. */
     public static final String LOOK_EXTENSION = ".kvt";
 
-    /** The extension of textures. */
+    /** The extension of textures as PNGs, read where there is no texture file. */
     public static final String TEXTURE_EXTENSION = ".png";
+
+    /** The extension of texture files, holding every map of a texture. */
+    public static final String TEXTURE_FILE_EXTENSION = AssetFormat.EXTENSION;
 
     /** The ending of a texture's normal map, before the extension. */
     public static final String NORMAL_SUFFIX = ".normal";
@@ -112,6 +119,9 @@ public final class BlockLooks implements AutoCloseable {
 
     /** The images textures were loaded from, by name, for working out what parts of them show. */
     private final Map<String, BufferedImage> images = new HashMap<>();
+
+    /** Texture files by name, once read; empty for textures that have none, so PNGs are used. */
+    private final Map<String, Optional<TextureSection.Stored>> textureFiles = new HashMap<>();
 
     /**
      * Looks from some folders.
@@ -276,10 +286,15 @@ public final class BlockLooks implements AutoCloseable {
         if (normalMaps.containsKey(name)) {
             return normalMaps.get(name);
         }
-        final String mapName = name + NORMAL_SUFFIX;
+        final Optional<TextureSection.Stored> file = textureFile(name);
         TextureHandle map = null;
-        if (find(mapName, TEXTURES_FOLDER, TEXTURE_EXTENSION).isPresent()) {
-            map = loadImage(mapName, Format.R8G8B8A8_UNORM);
+        if (file.isPresent()) {
+            map = upload(name, file.get(), TextureSection.Kind.NORMAL, Format.R8G8B8A8_UNORM);
+        } else {
+            final String mapName = name + NORMAL_SUFFIX;
+            if (find(mapName, TEXTURES_FOLDER, TEXTURE_EXTENSION).isPresent()) {
+                map = loadImage(mapName, Format.R8G8B8A8_UNORM);
+            }
         }
         normalMaps.put(name, map);
         return map;
@@ -303,7 +318,106 @@ public final class BlockLooks implements AutoCloseable {
      * @return The texture, or null.
      */
     private TextureHandle loadTexture(@NonNull String name) {
-        return loadImage(name, Format.R8G8B8A8_SRGB);
+        final Optional<TextureSection.Stored> file = textureFile(name);
+        if (file.isEmpty()) {
+            return loadImage(name, Format.R8G8B8A8_SRGB);
+        }
+        final TextureSection.Stored stored = file.get();
+        final Optional<TextureSection.MapData> color = stored.map(TextureSection.Kind.COLOR);
+        if (color.isEmpty()) {
+            log.warn("The texture {} has no base color", name);
+            return null;
+        }
+        images.put(name, image(stored.width(), stored.height(), stored.topLevel(color.get())));
+        return upload(name, stored, TextureSection.Kind.COLOR, Format.R8G8B8A8_SRGB);
+    }
+
+    /**
+     * A texture's file, read the first time it is asked for.
+     *
+     * @param name The texture's name.
+     * @return The texture, or empty if it has no file or it can't be read, which is logged.
+     */
+    private Optional<TextureSection.Stored> textureFile(@NonNull String name) {
+        return textureFiles.computeIfAbsent(
+                name,
+                n -> {
+                    final Optional<Path> file = find(n, TEXTURES_FOLDER, TEXTURE_FILE_EXTENSION);
+                    if (file.isEmpty()) {
+                        return Optional.empty();
+                    }
+                    try {
+                        return Optional.of(TextureSection.read(AssetFile.open(file.get())));
+                    } catch (RuntimeException e) {
+                        log.warn("Couldn't read the texture {}", file.get(), e);
+                        return Optional.empty();
+                    }
+                });
+    }
+
+    /**
+     * Upload one map of a texture file with its mip levels, pixel-sharp.
+     *
+     * @param name The texture's name, for the log.
+     * @param stored The texture.
+     * @param kind Which map.
+     * @param format How its values are read.
+     * @return The texture, or null if it has no such map.
+     */
+    private TextureHandle upload(
+            @NonNull String name,
+            @NonNull TextureSection.Stored stored,
+            @NonNull TextureSection.Kind kind,
+            @NonNull Format format) {
+        final Optional<TextureSection.MapData> map = stored.map(kind);
+        if (map.isEmpty()) {
+            return null;
+        }
+        final byte[] pixels = map.get().pixels();
+        final ByteBuffer buffer = MemoryUtil.memAlloc(pixels.length);
+        try {
+            buffer.put(pixels).flip();
+            // Clamped, since a model's faces take parts of it that don't wrap into each other
+            return graphics.textures()
+                    .load(
+                            buffer,
+                            format,
+                            stored.width(),
+                            stored.height(),
+                            stored.levelOffsets(),
+                            TextureWrap.CLAMP,
+                            TextureFilter.PIXELS);
+        } catch (RuntimeException e) {
+            log.warn("Couldn't load the {} map of the texture {}", kind, name, e);
+            return null;
+        } finally {
+            MemoryUtil.memFree(buffer);
+        }
+    }
+
+    /**
+     * Pixels as an image, for working out what parts of a texture show.
+     *
+     * @param width The width.
+     * @param height The height.
+     * @param rgba The pixels, rows from the top, RGBA bytes.
+     * @return The image.
+     */
+    static BufferedImage image(int width, int height, byte @NonNull [] rgba) {
+        final BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                final int at = (y * width + x) * CHANNELS;
+                image.setRGB(
+                        x,
+                        y,
+                        (rgba[at + 3] & 0xFF) << ALPHA_SHIFT
+                                | (rgba[at] & 0xFF) << RED_SHIFT
+                                | (rgba[at + 1] & 0xFF) << GREEN_SHIFT
+                                | rgba[at + 2] & 0xFF);
+            }
+        }
+        return image;
     }
 
     /**
@@ -434,6 +548,7 @@ public final class BlockLooks implements AutoCloseable {
         textures.clear();
         normalMaps.clear();
         images.clear();
+        textureFiles.clear();
         models.clear();
         materials.clear();
         looks.clear();

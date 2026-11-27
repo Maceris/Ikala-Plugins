@@ -23,7 +23,9 @@ public final class KnownSections {
                             MeshSection.TAG,
                             Set.of(MeshSection.VERSION),
                             MaterialSection.TAG,
-                            Set.of(MaterialSection.VERSION)));
+                            Set.of(MaterialSection.VERSION),
+                            TextureSection.TAG,
+                            Set.of(TextureSection.VERSION)));
 
     /** Supported versions of each known tag. */
     private final Map<Integer, Set<Integer>> versions;

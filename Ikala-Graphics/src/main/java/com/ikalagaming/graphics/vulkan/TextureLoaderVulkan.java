@@ -493,6 +493,60 @@ public class TextureLoaderVulkan {
     }
 
     /**
+     * Start loading a texture whose mip levels were made already, as a texture file stores them.
+     * Safe from any thread, as {@link #load(String, ByteBuffer, Format, int, int, TextureWrap)} is.
+     *
+     * @param owner The owner key the texture is tracked under.
+     * @param buffer Every level, from the largest, from its position to its limit.
+     * @param format The format of the data; not block compressed.
+     * @param width The width of the largest level, in pixels.
+     * @param height Its height.
+     * @param levelOffsets Where each level starts in the data, from the largest.
+     * @param wrap What it shows outside its texture coordinates.
+     * @param filter How it is sampled when magnified.
+     * @return The handle for the texture, pending until uploaded.
+     * @throws TextureException If the format is not supported, or there are no bindless slots left.
+     * @throws IllegalArgumentException If the size isn't positive, there are no levels, or the data
+     *     is shorter than its levels.
+     */
+    public TextureHandle load(
+            @NonNull String owner,
+            @NonNull ByteBuffer buffer,
+            @NonNull Format format,
+            int width,
+            int height,
+            int @NonNull [] levelOffsets,
+            @NonNull TextureWrap wrap,
+            @NonNull TextureFilter filter) {
+        if (levelOffsets.length == 0) {
+            throw new IllegalArgumentException("A texture has at least one level");
+        }
+        formatFeatures(format);
+        final int last = levelOffsets.length - 1;
+        final long needed =
+                levelOffsets[last]
+                        + DdsFile.byteCount(
+                                format, Math.max(1, width >> last), Math.max(1, height >> last));
+        if (buffer.remaining() < needed) {
+            throw new IllegalArgumentException(
+                    SafeResourceLoader.format(
+                            "{} levels of a {} x {} texture need {} bytes, but the data has {}",
+                            levelOffsets.length,
+                            width,
+                            height,
+                            needed,
+                            buffer.remaining()));
+        }
+        checkData(buffer, format, width, height);
+        final ByteBuffer top = buffer.duplicate().order(buffer.order());
+        top.limit(top.position() + (int) DdsFile.byteCount(format, width, height));
+        final float[] average = average(top, format);
+        TextureInfoVulkan info =
+                createImage(format, width, height, levelOffsets.length, false, wrap, filter);
+        return queue(owner, info, buffer, format, width, height, average, levelOffsets.clone());
+    }
+
+    /**
      * Replace part of a texture's pixels, and make its other mip levels again. Safe from any
      * thread: the data is staged right away, and the copy is recorded at the start of a later
      * frame, after the texture's own upload and any earlier updates.

@@ -106,8 +106,24 @@ match the blocks' within about a percent; only where the random pixels fall diff
 opens one as a new graph, unsaved, to change and save somewhere with a bake target. They aren't a game look's
 source: the block textures stay painted.
 
+## What ships is converted from PNGs
+
+Graphs bake PNG maps, and a separate step turns a texture's PNG maps, baked or painted, into the one `.ika` a game
+ships (`TextureConvert`, a `TEXR` section in Ikala-Graphics' `TextureSection`). Keeping the two apart lets painted
+textures and graphs go the same way, and lets a PNG be looked at and diffed before it ships. A graph's `maps` setting
+puts its PNGs in an unshipped source folder beside it, while `data` still names the content folder its model is
+found in. The texture file is uncompressed RGBA8, since block compression works on 4x4 blocks and would smear
+16 pixel art, with every mip level made when it is written: colors averaged in linear light, normals renormalized.
+The game uploads those levels as they are. A converted file is left alone when its maps wouldn't change, compared as
+pixels rather than bytes, so a new converter version in the metadata doesn't rewrite every file.
+
+`BuildTextures` (`bin/buildTextures`) bakes every graph under a sources folder and converts every texture there, or
+with `--uses` bakes only the graphs reading a shared parameter file; Lotomation's block textures are built that way,
+and a test fails when a block graph and the `.ika` shipped from it disagree.
+
 ## The file
 
 `*.texgraph.yml`: the graph's settings first (format, size, seed, the content folder it bakes to relative to the
-file, the texture's name under its textures folder, the model whose UVs give the layout, the shared parameter files
+file, the folder of textures its maps bake under when not the content folder's, the texture's name under its
+textures folder, the model whose UVs give the layout, the shared parameter files
 it reads, and its parameters, one line each without their defaults), then the graph as `GraphFile` writes it. Graph files for the base game's blocks live in Lotomation's `art/textures/block/`.

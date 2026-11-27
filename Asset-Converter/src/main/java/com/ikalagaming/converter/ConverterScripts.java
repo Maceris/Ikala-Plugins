@@ -470,10 +470,10 @@ public final class ConverterScripts {
      * "show id..."; "comment id text"; "align left|right|top|middle"; "straighten id"; "upstream
      * id"; "downstream id"; "unused"; "find text"; "focus id"; "minimap on|off"; "describe id",
      * which logs a node's or frame's state and the selection; "setting
-     * width|height|seed|data|texture|model value", a texture graph setting; "bake", which bakes the
-     * saved graph and logs what it wrote; "display id|none", which shows a node in the Viewer;
-     * "measure id"; "pin node pin in|out", which logs its tooltip; "seeds on|off|other|pick n";
-     * "map name", which map a shown Output shows; "shape on|off", the Output on the 3D shape;
+     * width|height|seed|data|texture|model|maps value", a texture graph setting; "bake", which
+     * bakes the saved graph and logs what it wrote; "display id|none", which shows a node in the
+     * Viewer; "measure id"; "pin node pin in|out", which logs its tooltip; "seeds on|off|other|pick
+     * n"; "map name", which map a shown Output shows; "shape on|off", the Output on the 3D shape;
      * "previews", which logs the swatches, the shown node and each node's cost; "swatches on|off";
      * "starter name", opening a starter graph as a new one; "view x y zoom", centering the canvas;
      * "where", logging the view's middle; "param add name kind", "param set name value" and "param
@@ -577,6 +577,7 @@ public final class ConverterScripts {
                                 case "data" -> texture.setData(value);
                                 case "texture" -> texture.setTexture(value);
                                 case "model" -> texture.setModel(value);
+                                case "maps" -> texture.setMaps(value);
                                 default -> log.warn("Script: no graph setting {}", words[1]);
                             }
                             tool.getHistory().markDirty();

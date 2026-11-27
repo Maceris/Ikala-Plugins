@@ -36,7 +36,8 @@ import javax.annotation.Nullable;
  *   ...
  * </pre>
  *
- * {@code data} is the content folder baked maps go to, relative to the graph file; {@code texture}
+ * {@code data} is the content folder baked maps go to, relative to the graph file, unless {@code
+ * maps} names another folder of textures for them, like an unshipped source folder; {@code texture}
  * names the maps under its {@code textures} folder, and {@code model} the model under its {@code
  * models} folder whose UVs give the face layout. {@code shared} lists shared parameter files the
  * graph reads, relative to it, and {@code parameters} the values it exposes; see {@link
@@ -100,6 +101,16 @@ public final class TextureGraph {
      * @return The folder, or null when not set.
      */
     @Getter @Setter private @Nullable String data;
+
+    /**
+     * The folder of textures baked maps go under, relative to the graph file, or null for the
+     * content folder's {@code textures}: an unshipped source folder, for maps converted to the
+     * shipped format afterwards. -- GETTER -- The maps folder. -- SETTER -- Set the maps folder.
+     *
+     * @param maps The folder.
+     * @return The folder, or null when not set.
+     */
+    @Getter @Setter private @Nullable String maps;
 
     /**
      * The maps' name under the content folder's textures, like {@code block/grass}, or null. --
@@ -262,6 +273,9 @@ public final class TextureGraph {
         if (data != null) {
             out.append("data: ").append(quote(data)).append('\n');
         }
+        if (maps != null) {
+            out.append("maps: ").append(quote(maps)).append('\n');
+        }
         if (texture != null) {
             out.append("texture: ").append(quote(texture)).append('\n');
         }
@@ -309,6 +323,7 @@ public final class TextureGraph {
             seed = number.longValue();
         }
         data = text(root, "data");
+        maps = text(root, "maps");
         texture = text(root, "texture");
         model = text(root, "model");
         shared.clear();

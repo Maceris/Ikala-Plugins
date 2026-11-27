@@ -102,15 +102,25 @@ public final class Baker {
                         : texture.getData() == null
                                 ? null
                                 : graphFolder.resolve(texture.getData()).normalize();
-        if (data == null || texture.getTexture() == null) {
-            problems.add("Set the graph's data folder and texture name to bake it");
+        // A content folder given for the bake takes the maps too, so a bake into a copy never
+        // writes beside the graph
+        final Path mapsFolder =
+                dataFolder == null && texture.getMaps() != null
+                        ? graphFolder.resolve(texture.getMaps()).normalize()
+                        : data == null ? null : data.resolve("textures");
+        if (mapsFolder == null || texture.getTexture() == null) {
+            problems.add("Set the graph's data or maps folder and texture name to bake it");
+            return new Result(written, unchanged, problems);
+        }
+        if (data == null && texture.getModel() != null) {
+            problems.add("Set the graph's data folder, where its model is found");
             return new Result(written, unchanged, problems);
         }
         final Maps maps = maps(texture, evaluator, graphFolder, data, problems);
         if (maps == null || !problems.isEmpty()) {
             return new Result(written, unchanged, problems);
         }
-        final Path base = data.resolve("textures").resolve(texture.getTexture());
+        final Path base = mapsFolder.resolve(texture.getTexture());
         try {
             save(maps.color(), file(base, ""), written, unchanged);
             save(

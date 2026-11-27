@@ -9,6 +9,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.ikalagaming.converter.texgraph.OutputNodes.Side;
+import com.ikalagaming.converter.texture.TextureConvert;
+import com.ikalagaming.graphics.asset.AssetFile;
+import com.ikalagaming.graphics.asset.TextureSection;
 import com.ikalagaming.graphics.ui.graph.model.Graph;
 
 import org.junit.jupiter.api.Test;
@@ -178,10 +181,9 @@ class TextureGraphTest {
     }
 
     @Test
-    void everyBlockGraphBakesTheMapsItReplaces(@TempDir Path temp) throws IOException {
+    void everyBlockGraphBuildsTheTextureThatShips(@TempDir Path temp) throws IOException {
         assumeTrue(Files.isDirectory(ART), "Lotomation isn't checked out beside Ikala-Plugins");
-        // Bake into a copy, so the checked-in maps are what the bakes are compared with
-        copy(DATA.resolve("textures"), temp.resolve("textures"));
+        // Bake into a copy, with the models the layouts come from
         copy(DATA.resolve("models"), temp.resolve("models"));
         List<Path> graphs;
         try (Stream<Path> files = Files.list(ART)) {
@@ -192,20 +194,19 @@ class TextureGraphTest {
         for (Path file : graphs) {
             TextureGraph graph = new TextureGraph(library);
             assertTrue(graph.read(Files.readString(file)).isEmpty(), file + " reads cleanly");
+            for (Graph.Node node : graph.getGraph().nodes()) {
+                assertNotEquals(CoreNodes.IMAGE, node.getType(), file + " is made from nodes");
+            }
             Baker.Result result = Baker.bake(graph, new Evaluator(library), file.getParent(), temp);
             assertTrue(result.ok(), file + ": " + result.problems());
-            assertTrue(result.written().isEmpty(), file + " changed " + result.written());
             String name = graph.getTexture();
-            for (String suffix : List.of("", Baker.NORMAL_SUFFIX)) {
-                Path original = DATA.resolve("textures").resolve(name + suffix + Baker.PNG);
-                Path baked = temp.resolve("textures").resolve(name + suffix + Baker.PNG);
-                if (Files.exists(original)) {
-                    assertTrue(result.unchanged().contains(baked), baked + " was baked");
-                    assertTrue(
-                            Baker.samePixels(read(original), read(baked)),
-                            baked + " matches what it replaces");
-                }
-            }
+            Path shipped = DATA.resolve("textures").resolve(name + ".ika");
+            assertTrue(Files.isRegularFile(shipped), shipped + " ships");
+            assertTrue(
+                    TextureConvert.same(
+                            TextureConvert.read(temp.resolve("textures").resolve(name + Baker.PNG)),
+                            TextureSection.read(AssetFile.open(shipped))),
+                    shipped + " is what its graph builds; run bin/buildTextures");
         }
     }
 

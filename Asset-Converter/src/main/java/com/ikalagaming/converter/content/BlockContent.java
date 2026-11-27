@@ -3,6 +3,8 @@ package com.ikalagaming.converter.content;
 import com.ikalagaming.factory.kvt.Node;
 import com.ikalagaming.factory.kvt.TreeStringSerialization;
 import com.ikalagaming.factory.registry.ContentFolders;
+import com.ikalagaming.graphics.asset.AssetFile;
+import com.ikalagaming.graphics.asset.TextureSection;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -240,26 +242,48 @@ public final class BlockContent {
     }
 
     /**
-     * A look's texture file.
+     * A look's texture: its {@code .ika} texture file, or its PNG if it has no texture file.
      *
      * @param look The look.
      * @return The file, or empty if it has none or no content folder has it.
      */
     public static Optional<Path> textureFile(@NonNull Look look) {
-        return look.texture() == null
-                ? Optional.empty()
+        if (look.texture() == null) {
+            return Optional.empty();
+        }
+        final Optional<Path> file =
+                ContentFolders.find(folders(), TEXTURES, look.texture(), CONTAINER_EXTENSION);
+        return file.isPresent()
+                ? file
                 : ContentFolders.find(folders(), TEXTURES, look.texture(), TEXTURE_EXTENSION);
     }
 
+    /** What follows a texture file's path to name its normal map, as {@link #normalFile} does. */
+    public static final String NORMAL_MAP = "#normal";
+
     /**
-     * A look's normal map, beside its texture.
+     * A look's normal map: in its texture file, named by the file's path and {@link #NORMAL_MAP},
+     * or the PNG beside its texture PNG.
      *
      * @param look The look.
      * @return The file, or empty if there is none.
      */
     public static Optional<Path> normalFile(@NonNull Look look) {
-        return textureFile(look)
-                .map(
+        final Optional<Path> found = textureFile(look);
+        if (found.isPresent() && found.get().toString().endsWith(CONTAINER_EXTENSION)) {
+            // The texture file holds its normal map: named by the file and a mark, so a loader
+            // can tell the two apart
+            try {
+                final TextureSection.Stored stored =
+                        TextureSection.read(AssetFile.open(found.get()));
+                return stored.map(TextureSection.Kind.NORMAL).isPresent()
+                        ? Optional.of(Path.of(found.get() + NORMAL_MAP))
+                        : Optional.empty();
+            } catch (RuntimeException e) {
+                return Optional.empty();
+            }
+        }
+        return found.map(
                         texture -> {
                             final String name = texture.getFileName().toString();
                             return texture.resolveSibling(

@@ -248,6 +248,45 @@ public final class Textures {
     }
 
     /**
+     * Start loading a texture whose mip levels were made already, like a texture file's, rather
+     * than made on the GPU from the largest. The data is copied before this returns.
+     *
+     * @param buffer Every level, from the largest, tightly packed, from its position to its limit.
+     * @param format The format of the data; not block compressed.
+     * @param width The width of the largest level, in pixels.
+     * @param height Its height.
+     * @param levelOffsets Where each level starts in the data; each level is half the size of the
+     *     one before, rounded down, at least 1.
+     * @param wrap What it shows outside its texture coordinates.
+     * @param filter How it is sampled when magnified.
+     * @return The handle for the new texture, which becomes resident once uploaded.
+     * @throws TextureException If the format isn't supported, or the texture can't be created.
+     * @throws IllegalArgumentException If there are no levels, or the data is too short.
+     * @throws IllegalStateException If the plugin was unloaded, or the renderer isn't running.
+     */
+    public TextureHandle load(
+            @NonNull ByteBuffer buffer,
+            @NonNull Format format,
+            int width,
+            int height,
+            int @NonNull [] levelOffsets,
+            @NonNull TextureWrap wrap,
+            @NonNull TextureFilter filter) {
+        context.checkOpen();
+        return renderer()
+                .getTextureLoader()
+                .load(
+                        context.getOwnerKey(),
+                        buffer,
+                        format,
+                        width,
+                        height,
+                        levelOffsets,
+                        wrap,
+                        filter);
+    }
+
+    /**
      * Replace part of a texture this plugin loaded from pixel data, such as one cell of an atlas,
      * keeping the rest. The data is copied before this returns, and the new pixels show from a
      * later frame. Updates happen in the order they were asked for, after the texture's own upload,

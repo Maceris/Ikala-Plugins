@@ -1,20 +1,26 @@
 package com.ikalagaming.converter.scene;
 
+import com.ikalagaming.converter.content.BlockContent;
 import com.ikalagaming.converter.scene.ImportedScene.ImportedMaterial;
 import com.ikalagaming.converter.scene.ImportedScene.Node;
 import com.ikalagaming.converter.scene.ImportedScene.TextureRef;
 import com.ikalagaming.converter.scene.ImportedScene.TextureSlot;
 import com.ikalagaming.converter.workbench.Workbench;
 import com.ikalagaming.graphics.ColorSpace;
+import com.ikalagaming.graphics.Format;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.InstanceHandle;
 import com.ikalagaming.graphics.LightHandle;
 import com.ikalagaming.graphics.Lights;
 import com.ikalagaming.graphics.PreviewView;
+import com.ikalagaming.graphics.TextureFilter;
 import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.TextureWrap;
+import com.ikalagaming.graphics.asset.AssetFile;
+import com.ikalagaming.graphics.asset.AssetFormat;
 import com.ikalagaming.graphics.asset.MaterialText;
+import com.ikalagaming.graphics.asset.TextureSection;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
@@ -33,8 +39,10 @@ import org.joml.Quaterniond;
 import org.joml.Quaternionf;
 import org.joml.Vector3d;
 import org.joml.Vector3f;
+import org.lwjgl.system.MemoryUtil;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -821,6 +829,46 @@ public final class ScenePlacement {
     }
 
     /**
+     * Load a map of a texture file with its mip levels: the base color, or the normal map when the
+     * path ends with {@link BlockContent#NORMAL_MAP}.
+     *
+     * @param path The file, maybe with the mark.
+     * @param colorSpace How its values are read.
+     * @return The texture.
+     * @throws IOException If the file has no such map.
+     */
+    private TextureHandle loadTextureFile(Path path, ColorSpace colorSpace) throws IOException {
+        final String text = path.toString();
+        final boolean normal = text.endsWith(BlockContent.NORMAL_MAP);
+        final Path file =
+                normal
+                        ? Path.of(
+                                text.substring(0, text.length() - BlockContent.NORMAL_MAP.length()))
+                        : path;
+        final TextureSection.Stored stored = TextureSection.read(AssetFile.open(file));
+        final TextureSection.MapData map =
+                stored.map(normal ? TextureSection.Kind.NORMAL : TextureSection.Kind.COLOR)
+                        .orElseThrow(() -> new IOException(file + " has no such map"));
+        final ByteBuffer buffer = MemoryUtil.memAlloc(map.pixels().length);
+        try {
+            buffer.put(map.pixels()).flip();
+            return graphics.textures()
+                    .load(
+                            buffer,
+                            colorSpace == ColorSpace.SRGB
+                                    ? Format.R8G8B8A8_SRGB
+                                    : Format.R8G8B8A8_UNORM,
+                            stored.width(),
+                            stored.height(),
+                            stored.levelOffsets(),
+                            TextureWrap.REPEAT,
+                            TextureFilter.PIXELS);
+        } finally {
+            MemoryUtil.memFree(buffer);
+        }
+    }
+
+    /**
      * Load every texture the materials name, a bounded amount at a time, and hand each to its
      * materials on the render thread as it is queued. On a background thread.
      *
@@ -860,7 +908,12 @@ public final class ScenePlacement {
             final TextureHandle texture;
             final long bytes;
             try {
-                if (file.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".dds")) {
+                final String fileName = file.getFileName().toString();
+                if (fileName.endsWith(AssetFormat.EXTENSION)
+                        || fileName.endsWith(AssetFormat.EXTENSION + BlockContent.NORMAL_MAP)) {
+                    texture = loadTextureFile(file, spaces.get(file));
+                    bytes = (long) texture.width() * texture.height() * 4;
+                } else if (fileName.toLowerCase(Locale.ROOT).endsWith(".dds")) {
                     final DdsFile dds = DdsFile.read(file);
                     bytes = dds.getData().remaining();
                     texture = graphics.textures().load(dds, spaces.get(file));
