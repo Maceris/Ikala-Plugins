@@ -265,4 +265,158 @@ class GraphEditorTest {
         assertEquals(2, duplicated.size());
         assertTrue(editor.paste("not a graph", 0, 0).isEmpty());
     }
+
+    @Test
+    void doubleClickingALinkAddsAReroute() {
+        threeNodes();
+        editor.link("constant1", "value", "add1", "a");
+        frames(2);
+        Vector2f from = editor.pinOnScreen("constant1", "value", false);
+        Vector2f to = editor.pinOnScreen("add1", "a", true);
+        Vector2f mid = new Vector2f(from).add(to).mul(0.5f);
+        click(mid);
+        click(mid);
+        frames(2);
+        assertNotNull(graph.node("reroute1"), "A double-click on the link adds a reroute");
+        assertEquals("reroute1", graph.linkInto("add1", "a").fromNode());
+        assertEquals("constant1", graph.linkInto("reroute1", "in").fromNode());
+        assertEquals("scalar", graph.effectiveType("reroute1", "out", false));
+        assertEquals("Add reroute", editor.getHistory().nextUndo());
+        Vector2f dot = middle(editor.viewOf("reroute1").getRect());
+        assertEquals(mid.x, dot.x, 2, "The dot sits where the link was clicked");
+        assertEquals(mid.y, dot.y, 2);
+    }
+
+    @Test
+    void framesCarryTheirNodesAndSizeByTheirCorner() {
+        threeNodes();
+        editor.select(List.of("constant1", "add1"));
+        String id = editor.frameSelection("Inputs", 0, 0);
+        frames(2);
+        Graph.Frame made = graph.frame(id);
+        assertEquals(List.of("constant1", "add1"), graph.nodesIn(id));
+        float unit = editor.getCanvas().getUnit();
+
+        Vector2f title = editor.getCanvas().toScreen(made.getX() + 40, made.getY() + 8);
+        drag(title, new Vector2f(title.x, title.y + 100 * unit));
+        assertEquals(100, graph.node("constant1").getY(), 1, "The nodes in it come along");
+        assertEquals(100, graph.node("add1").getY(), 1);
+        assertEquals(0, graph.node("output1").getY(), 0.01, "Outside, it stays");
+        assertEquals("Move frame", editor.getHistory().nextUndo());
+
+        Graph.Frame moved = graph.frame(id);
+        float width = moved.getWidth();
+        Vector2f corner =
+                editor.getCanvas()
+                        .toScreen(
+                                moved.getX() + moved.getWidth() - 3,
+                                moved.getY() + moved.getHeight() - 3);
+        drag(corner, new Vector2f(corner.x + 50 * unit, corner.y));
+        assertEquals(width + 50, graph.frame(id).getWidth(), 1);
+        assertEquals("Size frame", editor.getHistory().nextUndo());
+        editor.undo();
+        editor.undo();
+        assertEquals(0, graph.node("constant1").getY(), 0.01, "Each drag is one edit");
+    }
+
+    @Test
+    void collapsedAndTrimmedNodesShrink() {
+        threeNodes();
+        editor.link("constant1", "value", "add1", "a");
+        frames(2);
+        float full = editor.viewOf("add1").getRect().getHeight();
+        editor.setHideUnused(List.of("add1"), true);
+        frames(2);
+        assertTrue(editor.viewOf("add1").getRect().getHeight() < full, "Unlinked b is hidden");
+        assertNull(editor.pinOnScreen("add1", "b", true));
+        assertNotNull(editor.pinOnScreen("add1", "a", true));
+
+        editor.setCollapsed(List.of("add1"), true);
+        frames(2);
+        Vector2f a = editor.pinOnScreen("add1", "a", true);
+        assertNotNull(a, "A collapsed node's links meet its side");
+        assertEquals(1, graph.links().size(), "Collapsing keeps the links");
+        editor.undo();
+        editor.undo();
+        frames(2);
+        assertEquals(full, editor.viewOf("add1").getRect().getHeight(), 0.01);
+    }
+
+    @Test
+    void holdingABoundKeyAndClickingPlacesANode() {
+        threeNodes();
+        graph.getNodeTypes().bindKey('m', "math/add");
+        context.io.addKeyEvent(Key.M, true);
+        frame();
+        click(editor.getCanvas().toScreen(100, 300));
+        context.io.addKeyEvent(Key.M, false);
+        frame();
+        assertNotNull(graph.node("add2"));
+        assertEquals(100, graph.node("add2").getX(), 8);
+        assertEquals(
+                1, graph.nodes().stream().filter(n -> "math/add".equals(n.getType())).count() - 1);
+    }
+
+    @Test
+    void findSelectsAndAlignLinesUp() {
+        threeNodes();
+        editor.setComment("output1", "The final color");
+        assertEquals(List.of("output1"), editor.find("final"));
+        assertEquals(List.of("add1"), editor.find("ADD"));
+        editor.focus("add1");
+        frames(2);
+        assertEquals(Set.of("add1"), editor.getSelection());
+
+        editor.getHistory().edit("Set up", g -> g.move("add1", 260, 70));
+        frames(2);
+        editor.select(List.of("constant1", "add1", "output1"));
+        editor.align(GraphEditor.Align.TOP);
+        assertEquals(0, graph.node("add1").getY(), 0.01);
+        editor.align(GraphEditor.Align.LEFT);
+        assertEquals(0, graph.node("output1").getX(), 0.01);
+    }
+
+    @Test
+    void straightenLevelsTheLinkAndRemoveUnusedTrims() {
+        threeNodes();
+        editor.getHistory().edit("Set up", g -> g.move("add1", 260, 55));
+        editor.link("constant1", "value", "add1", "a");
+        editor.link("add1", "sum", "output1", "color");
+        frames(2);
+        assertTrue(editor.straighten("add1"));
+        frames(2);
+        assertEquals(
+                editor.pinOnScreen("constant1", "value", false).y,
+                editor.pinOnScreen("add1", "a", true).y,
+                0.5f);
+        editor.getHistory().edit("Set up", g -> g.add("math/constant", 0, 300));
+        assertEquals(1, editor.removeUnused());
+        assertNull(graph.node("constant2"));
+    }
+
+    @Test
+    void clickingTheMinimapPans() {
+        threeNodes();
+        // Far enough out that the view can't show it all, so there is somewhere to pan
+        editor.getHistory().edit("Set up", g -> g.add("math/constant", 2400, 1600));
+        frames(3);
+        Vector2f before = editor.getCanvas().toScreen(0, 0);
+        RectFloat map = editor.getMinimapRect();
+        assertTrue(map.getWidth() > 0, "It shows in the corner");
+        Vector2f corner = new Vector2f(map.getRight() - 3, map.getBottom() - 3);
+        click(corner);
+        frames(2);
+        Vector2f after = editor.getCanvas().toScreen(0, 0);
+        assertTrue(before.distance(after) > 100, "The view moved to the far node");
+        assertEquals(4, graph.nodes().size());
+        assertTrue(editor.getSelection().isEmpty(), "No box selection either");
+
+        editor.setMinimap(false);
+        frames(2);
+        assertEquals(0, editor.getMinimapRect().getWidth(), 0.01);
+        Vector2f hidden = editor.getCanvas().toScreen(0, 0);
+        click(new Vector2f(map.getLeft() + 3, map.getTop() + 3));
+        frames(2);
+        assertEquals(hidden.x, editor.getCanvas().toScreen(0, 0).x, 0.01, "Hidden, it doesn't pan");
+    }
 }

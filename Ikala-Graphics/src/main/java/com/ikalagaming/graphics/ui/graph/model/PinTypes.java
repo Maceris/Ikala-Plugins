@@ -21,8 +21,19 @@ import javax.annotation.Nullable;
  * </pre>
  */
 public final class PinTypes {
+    /**
+     * The type of the editor's own reroute pins, which link with anything and carry the type of
+     * what is linked into them.
+     */
+    public static final String ANY = "*";
+
     /** The types by ID, in the order registered. */
     private final Map<String, PinType> types = new LinkedHashMap<>();
+
+    /** Make the types, holding only {@link #ANY}. */
+    public PinTypes() {
+        types.put(ANY, new PinType(ANY, "Any", 0xFFAAAAAA));
+    }
 
     /** Conversions, by from-type then to-type. */
     private final Map<String, Map<String, Conversion>> conversions = new LinkedHashMap<>();
@@ -126,7 +137,7 @@ public final class PinTypes {
      * @return The conversion: direct for the same type.
      */
     public Conversion conversion(@NonNull String from, @NonNull String to) {
-        if (from.equals(to)) {
+        if (from.equals(to) || ANY.equals(from) || ANY.equals(to)) {
             return Conversion.DIRECT;
         }
         final Map<String, Conversion> into = conversions.get(from);

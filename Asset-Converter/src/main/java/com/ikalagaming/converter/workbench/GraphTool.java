@@ -124,7 +124,8 @@ public class GraphTool {
     }
 
     /**
-     * The demo's node types.
+     * The demo's node types. Holding 1, A, M or L and clicking empty space places a constant, add,
+     * multiply or lerp.
      *
      * @return The types.
      */
@@ -182,7 +183,11 @@ public class GraphTool {
                                 "Output",
                                 List.of(pin("color", COLOR)),
                                 List.of(),
-                                List.of()));
+                                List.of()))
+                .bindKey('1', "math/constant")
+                .bindKey('A', "math/add")
+                .bindKey('M', "math/multiply")
+                .bindKey('L', "math/lerp");
     }
 
     /**
@@ -329,7 +334,8 @@ public class GraphTool {
         IkGui.textUnformatted(
                 String.format(
                         "%d nodes, %d links. Drag from a pin to link; Tab or a drop on empty"
-                                + " space adds a node.",
+                                + " space adds a node; hold 1, A, M or L and click to place one."
+                                + " Right-click for more.",
                         graph.nodes().size(), graph.links().size()));
         if (editor.getSelection().size() != 1) {
             IkGui.textDisabled(

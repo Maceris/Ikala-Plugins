@@ -38,6 +38,15 @@ public final class Graph {
         /** Its parameters set away from their defaults, sorted by name. */
         private final Map<String, String> params = new TreeMap<>();
 
+        /** Whether it shows only its title. */
+        @Getter private boolean collapsed;
+
+        /** Whether its pins without links are hidden. */
+        @Getter private boolean hideUnused;
+
+        /** A note shown over it, or null for none. */
+        @Getter private String comment;
+
         /**
          * Make a node.
          *
@@ -71,6 +80,9 @@ public final class Graph {
         Node copy(String newId) {
             final Node copy = new Node(newId, type, x, y);
             copy.params.putAll(params);
+            copy.collapsed = collapsed;
+            copy.hideUnused = hideUnused;
+            copy.comment = comment;
             return copy;
         }
     }
@@ -88,6 +100,71 @@ public final class Graph {
             @NonNull String fromPin,
             @NonNull String toNode,
             @NonNull String toPin) {}
+
+    /** A colored frame with a title, drawn behind the nodes it holds, which move with it. */
+    public static final class Frame {
+        /** Its ID, unique among the frames. */
+        @Getter private final String id;
+
+        /** Its left edge, in canvas units. */
+        @Getter private float x;
+
+        /** Its top edge. */
+        @Getter private float y;
+
+        /** Its width. */
+        @Getter private float width;
+
+        /** Its height. */
+        @Getter private float height;
+
+        /** Its title. */
+        @Getter private String text;
+
+        /** Its color, packed as by {@code Color.rgba}; drawn see-through. */
+        @Getter private int color;
+
+        /**
+         * Make a frame.
+         *
+         * @param id Its ID.
+         * @param x Its left edge.
+         * @param y Its top edge.
+         * @param width Its width.
+         * @param height Its height.
+         * @param text Its title.
+         * @param color Its color.
+         */
+        Frame(String id, float x, float y, float width, float height, String text, int color) {
+            this.id = id;
+            this.x = x;
+            this.y = y;
+            this.width = width;
+            this.height = height;
+            this.text = text;
+            this.color = color;
+        }
+
+        /**
+         * A copy of the frame.
+         *
+         * @return The copy.
+         */
+        Frame copy() {
+            return new Frame(id, x, y, width, height, text, color);
+        }
+
+        /**
+         * Whether a point is inside the frame.
+         *
+         * @param px The point across.
+         * @param py The point down.
+         * @return True if inside.
+         */
+        public boolean contains(float px, float py) {
+            return px >= x && px <= x + width && py >= y && py <= y + height;
+        }
+    }
 
     /** What linking two pins did. */
     public enum LinkResult {
@@ -110,6 +187,9 @@ public final class Graph {
 
     /** The links, in the order made. */
     private final List<Link> links = new ArrayList<>();
+
+    /** The comment frames by ID, in the order added, which is the order drawn. */
+    private final Map<String, Frame> frames = new LinkedHashMap<>();
 
     /**
      * Make an empty graph.
@@ -289,6 +369,7 @@ public final class Graph {
     public void remove(@NonNull Collection<String> ids) {
         for (String id : ids) {
             nodes.remove(id);
+            frames.remove(id);
         }
         links.removeIf(link -> ids.contains(link.fromNode()) || ids.contains(link.toNode()));
     }
@@ -322,7 +403,10 @@ public final class Graph {
         if (output == null || input == null || fromNode.equals(toNode)) {
             return LinkResult.REFUSED;
         }
-        final PinTypes.Conversion conversion = pinTypes.conversion(output.type(), input.type());
+        final PinTypes.Conversion conversion =
+                pinTypes.conversion(
+                        effectiveType(fromNode, fromPin, false),
+                        effectiveType(toNode, toPin, true));
         switch (conversion.kind()) {
             case DIRECT -> {
                 replaceInto(toNode, toPin, new Link(fromNode, fromPin, toNode, toPin));
@@ -429,6 +513,10 @@ public final class Graph {
         }
         links.clear();
         links.addAll(other.links);
+        frames.clear();
+        for (Frame frame : other.frames.values()) {
+            frames.put(frame.id, frame.copy());
+        }
     }
 
     /**
@@ -447,6 +535,11 @@ public final class Graph {
         for (Link link : links) {
             if (ids.contains(link.fromNode()) && ids.contains(link.toNode())) {
                 part.links.add(link);
+            }
+        }
+        for (Frame frame : frames.values()) {
+            if (ids.contains(frame.id)) {
+                part.frames.put(frame.id, frame.copy());
             }
         }
         return part;
@@ -482,6 +575,332 @@ public final class Graph {
                 links.add(new Link(from, link.fromPin(), to, link.toPin()));
             }
         }
+        for (Frame frame : part.frames.values()) {
+            final Frame copy =
+                    addFrame(
+                            frame.x + dx,
+                            frame.y + dy,
+                            frame.width,
+                            frame.height,
+                            frame.text,
+                            frame.color);
+            added.add(copy.id);
+        }
         return added;
+    }
+
+    /**
+     * Collapse a node to its title, or open it again.
+     *
+     * @param id The node.
+     * @param collapsed Whether it shows only its title.
+     */
+    public void setCollapsed(@NonNull String id, boolean collapsed) {
+        final Node node = nodes.get(id);
+        if (node != null) {
+            node.collapsed = collapsed;
+        }
+    }
+
+    /**
+     * Hide a node's pins that have no links, or show them again.
+     *
+     * @param id The node.
+     * @param hide Whether to hide them.
+     */
+    public void setHideUnused(@NonNull String id, boolean hide) {
+        final Node node = nodes.get(id);
+        if (node != null) {
+            node.hideUnused = hide;
+        }
+    }
+
+    /**
+     * Put a note over a node, or take it away.
+     *
+     * @param id The node.
+     * @param comment The note, or null or blank for none.
+     */
+    public void setComment(@NonNull String id, @Nullable String comment) {
+        final Node node = nodes.get(id);
+        if (node != null) {
+            node.comment = comment == null || comment.isBlank() ? null : comment;
+        }
+    }
+
+    /**
+     * Every comment frame, in the order added.
+     *
+     * @return The frames.
+     */
+    public Collection<Frame> frames() {
+        return Collections.unmodifiableCollection(frames.values());
+    }
+
+    /**
+     * A comment frame by ID.
+     *
+     * @param id The ID.
+     * @return The frame, or null if there is none.
+     */
+    public @Nullable Frame frame(@NonNull String id) {
+        return frames.get(id);
+    }
+
+    /**
+     * Add a comment frame, with an ID like {@code frame2}.
+     *
+     * @param x Its left edge, in canvas units.
+     * @param y Its top edge.
+     * @param width Its width.
+     * @param height Its height.
+     * @param text Its title.
+     * @param color Its color.
+     * @return The frame.
+     */
+    public Frame addFrame(
+            float x, float y, float width, float height, @NonNull String text, int color) {
+        int number = 1;
+        while (frames.containsKey("frame" + number) || nodes.containsKey("frame" + number)) {
+            ++number;
+        }
+        return putFrame("frame" + number, x, y, width, height, text, color);
+    }
+
+    /**
+     * Put a comment frame in with its own ID, as when reading a file, replacing one with that ID.
+     *
+     * @param id The ID.
+     * @param x Its left edge.
+     * @param y Its top edge.
+     * @param width Its width.
+     * @param height Its height.
+     * @param text Its title.
+     * @param color Its color.
+     * @return The frame.
+     */
+    public Frame putFrame(
+            @NonNull String id,
+            float x,
+            float y,
+            float width,
+            float height,
+            @NonNull String text,
+            int color) {
+        final Frame frame =
+                new Frame(id, x, y, Math.max(1, width), Math.max(1, height), text, color);
+        frames.put(id, frame);
+        return frame;
+    }
+
+    /**
+     * Move and size a comment frame.
+     *
+     * @param id The frame.
+     * @param x Its left edge.
+     * @param y Its top edge.
+     * @param width Its width.
+     * @param height Its height.
+     */
+    public void placeFrame(@NonNull String id, float x, float y, float width, float height) {
+        final Frame frame = frames.get(id);
+        if (frame != null) {
+            frame.x = x;
+            frame.y = y;
+            frame.width = Math.max(1, width);
+            frame.height = Math.max(1, height);
+        }
+    }
+
+    /**
+     * Change a comment frame's title and color.
+     *
+     * @param id The frame.
+     * @param text Its title.
+     * @param color Its color.
+     */
+    public void setFrameLook(@NonNull String id, @NonNull String text, int color) {
+        final Frame frame = frames.get(id);
+        if (frame != null) {
+            frame.text = text;
+            frame.color = color;
+        }
+    }
+
+    /**
+     * The nodes whose top left corner is inside a frame, which move with it.
+     *
+     * @param id The frame.
+     * @return The nodes' IDs.
+     */
+    public List<String> nodesIn(@NonNull String id) {
+        final Frame frame = frames.get(id);
+        final List<String> inside = new ArrayList<>();
+        if (frame == null) {
+            return inside;
+        }
+        for (Node node : nodes.values()) {
+            if (frame.contains(node.x, node.y)) {
+                inside.add(node.id);
+            }
+        }
+        return inside;
+    }
+
+    /**
+     * The type a pin carries: its own, or for the editor's reroute pins, the type of what is linked
+     * into them, followed upstream through reroutes and named reroutes. {@link PinTypes#ANY} if
+     * nothing typed is linked in.
+     *
+     * @param node The node.
+     * @param pin The pin.
+     * @param input Whether it is an input.
+     * @return The type's ID.
+     */
+    public String effectiveType(@NonNull String node, @NonNull String pin, boolean input) {
+        return effectiveType(node, pin, input, new java.util.HashSet<>());
+    }
+
+    /**
+     * The type a pin carries, not visiting a node twice.
+     *
+     * @param node The node.
+     * @param pin The pin.
+     * @param input Whether it is an input.
+     * @param seen The nodes visited.
+     * @return The type's ID.
+     */
+    private String effectiveType(String node, String pin, boolean input, Set<String> seen) {
+        final NodeTypes.Pin declared = input ? inputPin(node, pin) : outputPin(node, pin);
+        if (declared == null) {
+            return PinTypes.ANY;
+        }
+        if (!PinTypes.ANY.equals(declared.type()) || !seen.add(node)) {
+            return declared.type();
+        }
+        final Node found = nodes.get(node);
+        final String type = found.type;
+        if (NodeTypes.RECEIVE.equals(type)) {
+            final String name = param(node, NodeTypes.NAME);
+            for (Node sender : nodes.values()) {
+                if (NodeTypes.SEND.equals(sender.type)
+                        && name != null
+                        && name.equals(param(sender.id, NodeTypes.NAME))) {
+                    return effectiveType(sender.id, "in", true, seen);
+                }
+            }
+            return PinTypes.ANY;
+        }
+        if (input || NodeTypes.REROUTE.equals(type)) {
+            final Link into = linkInto(node, input ? pin : "in");
+            if (into != null) {
+                return effectiveType(into.fromNode(), into.fromPin(), false, seen);
+            }
+        }
+        return PinTypes.ANY;
+    }
+
+    /**
+     * The nodes a node's inputs come from, near and far, through named reroutes too.
+     *
+     * @param id The node.
+     * @return The nodes upstream, not counting it.
+     */
+    public Set<String> upstream(@NonNull String id) {
+        final Set<String> found = new java.util.LinkedHashSet<>();
+        final java.util.ArrayDeque<String> open = new java.util.ArrayDeque<>();
+        open.push(id);
+        while (!open.isEmpty()) {
+            final String at = open.pop();
+            for (Link link : links) {
+                if (link.toNode().equals(at) && found.add(link.fromNode())) {
+                    open.push(link.fromNode());
+                }
+            }
+            final Node node = nodes.get(at);
+            if (node != null && NodeTypes.RECEIVE.equals(node.type)) {
+                for (Node sender : namedPartners(node, NodeTypes.SEND)) {
+                    if (found.add(sender.id)) {
+                        open.push(sender.id);
+                    }
+                }
+            }
+        }
+        found.remove(id);
+        return found;
+    }
+
+    /**
+     * The nodes a node's outputs go to, near and far, through named reroutes too.
+     *
+     * @param id The node.
+     * @return The nodes downstream, not counting it.
+     */
+    public Set<String> downstream(@NonNull String id) {
+        final Set<String> found = new java.util.LinkedHashSet<>();
+        final java.util.ArrayDeque<String> open = new java.util.ArrayDeque<>();
+        open.push(id);
+        while (!open.isEmpty()) {
+            final String at = open.pop();
+            for (Link link : links) {
+                if (link.fromNode().equals(at) && found.add(link.toNode())) {
+                    open.push(link.toNode());
+                }
+            }
+            final Node node = nodes.get(at);
+            if (node != null && NodeTypes.SEND.equals(node.type)) {
+                for (Node receiver : namedPartners(node, NodeTypes.RECEIVE)) {
+                    if (found.add(receiver.id)) {
+                        open.push(receiver.id);
+                    }
+                }
+            }
+        }
+        found.remove(id);
+        return found;
+    }
+
+    /**
+     * The named reroutes of a kind with the same name as a node.
+     *
+     * @param node A send or receive node.
+     * @param kind The other kind's type ID.
+     * @return The partners.
+     */
+    private List<Node> namedPartners(Node node, String kind) {
+        final String name = param(node.id, NodeTypes.NAME);
+        final List<Node> partners = new ArrayList<>();
+        for (Node other : nodes.values()) {
+            if (kind.equals(other.type)
+                    && name != null
+                    && name.equals(param(other.id, NodeTypes.NAME))) {
+                partners.add(other);
+            }
+        }
+        return partners;
+    }
+
+    /**
+     * The nodes nothing uses: those that are neither an end of the graph, a node of a type with no
+     * outputs, nor upstream of one.
+     *
+     * @return The unused nodes' IDs.
+     */
+    public Set<String> unused() {
+        final Set<String> used = new java.util.HashSet<>();
+        for (Node node : nodes.values()) {
+            final NodeTypes.NodeType type = nodeTypes.get(node.type);
+            if (type != null && type.outputs().isEmpty() && !NodeTypes.SEND.equals(type.id())) {
+                used.add(node.id);
+                used.addAll(upstream(node.id));
+            }
+        }
+        final Set<String> unused = new java.util.LinkedHashSet<>();
+        for (Node node : nodes.values()) {
+            if (!used.contains(node.id)) {
+                unused.add(node.id);
+            }
+        }
+        return unused;
     }
 }

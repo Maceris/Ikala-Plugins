@@ -165,12 +165,20 @@ class GraphModelTest {
     @Test
     void searchFindsNodesWithAFittingPin() {
         NodeTypes types = TestGraphTypes.nodes();
-        assertEquals(4, types.search("", TestGraphTypes.pins(), null, false).size());
+        assertEquals(
+                7,
+                types.search("", TestGraphTypes.pins(), null, false).size(),
+                "The four registered, and the editor's reroute, send and receive");
         List<String> forScalarOutput =
                 types.search("", TestGraphTypes.pins(), "scalar", true).stream()
                         .map(NodeTypes.NodeType::id)
                         .toList();
-        assertEquals(List.of("math/gray", "math/add", "out/output"), forScalarOutput);
+        assertEquals(
+                List.of("math/gray", "math/add", "out/output", NodeTypes.REROUTE, NodeTypes.SEND)
+                        .stream()
+                        .sorted()
+                        .toList(),
+                forScalarOutput.stream().sorted().toList());
         assertEquals(
                 "a",
                 NodeTypes.fittingPin(types.get("math/add"), TestGraphTypes.pins(), "mask", true)
@@ -179,5 +187,73 @@ class GraphModelTest {
         assertNull(
                 NodeTypes.fittingPin(
                         types.get("math/add"), TestGraphTypes.pins(), "texture", true));
+    }
+
+    @Test
+    void reroutesCarryTheTypeLinkedIntoThem() {
+        graph.add("math/constant", 0, 0);
+        graph.add(NodeTypes.REROUTE, 100, 0);
+        graph.add("out/output", 200, 0);
+        assertEquals(PinTypes.ANY, graph.effectiveType("reroute1", "out", false));
+        assertEquals(Graph.LinkResult.LINKED, graph.link("constant1", "value", "reroute1", "in"));
+        assertEquals("scalar", graph.effectiveType("reroute1", "out", false));
+        assertEquals(
+                Graph.LinkResult.CONVERTED,
+                graph.link("reroute1", "out", "output1", "color"),
+                "A rerouted scalar into a color still gets its conversion");
+    }
+
+    @Test
+    void namedReroutesCarryAValueWithoutAWire() {
+        graph.add("math/constant", 0, 0);
+        graph.add(NodeTypes.SEND, 100, 0);
+        graph.add(NodeTypes.RECEIVE, 300, 200);
+        graph.add("math/add", 400, 200);
+        graph.add("out/output", 600, 200);
+        graph.setParam("send1", NodeTypes.NAME, "height");
+        graph.setParam("receive1", NodeTypes.NAME, "height");
+        graph.link("constant1", "value", "send1", "in");
+        assertEquals("scalar", graph.effectiveType("receive1", "out", false));
+        graph.link("receive1", "out", "add1", "a");
+        graph.add("math/gray", 500, 200);
+        graph.link("add1", "sum", "gray1", "value");
+        graph.link("gray1", "color", "output1", "color");
+        assertEquals(Set.of("receive1", "send1", "constant1"), graph.upstream("add1"));
+        assertTrue(
+                graph.downstream("constant1")
+                        .containsAll(List.of("send1", "receive1", "add1", "output1")));
+        graph.add("math/constant", 0, 300);
+        assertEquals(Set.of("constant2"), graph.unused(), "Only the loose constant is unused");
+    }
+
+    @Test
+    void framesHoldTheNodesInsideThem() {
+        graph.add("math/constant", 10, 10);
+        graph.add("math/add", 500, 10);
+        Graph.Frame frame = graph.addFrame(0, 0, 200, 100, "Inputs", 0x80FF0000);
+        assertEquals("frame1", frame.getId());
+        assertEquals(List.of("constant1"), graph.nodesIn("frame1"));
+        graph.remove(List.of("frame1"));
+        assertTrue(graph.frames().isEmpty());
+    }
+
+    @Test
+    void theNewPartsRoundTrip() {
+        graph.add("math/constant", 0, 0);
+        graph.add("math/add", 200, 0);
+        graph.setCollapsed("constant1", true);
+        graph.setHideUnused("add1", true);
+        graph.setComment("add1", "Adds: the two");
+        graph.addFrame(-16, -40, 320, 200, "Inputs", 0xFF8040A0);
+        String text = GraphFile.write(graph);
+        assertTrue(text.contains("collapsed: true"));
+        assertTrue(text.contains("hide unused: true"));
+        assertTrue(text.contains("color: '#FF8040A0'"));
+        Graph read = new Graph(TestGraphTypes.nodes(), TestGraphTypes.pins());
+        assertTrue(GraphFile.read(text, read, (t, v, p) -> {}).isEmpty());
+        assertTrue(read.node("constant1").isCollapsed());
+        assertEquals("Adds: the two", read.node("add1").getComment());
+        assertEquals(0xFF8040A0, read.frame("frame1").getColor());
+        assertEquals(text, GraphFile.write(read));
     }
 }

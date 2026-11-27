@@ -16,8 +16,85 @@ import javax.annotation.Nullable;
  * and version. The editor gives them no meaning beyond their pins' types.
  */
 public final class NodeTypes {
+    /** A reroute dot: one input and one output of any type, passing the value on. */
+    public static final String REROUTE = "graph/reroute";
+
+    /** A named reroute's sending end: its input's value goes to every receiver of its name. */
+    public static final String SEND = "graph/send";
+
+    /** A named reroute's receiving end: its output is the value sent under its name. */
+    public static final String RECEIVE = "graph/receive";
+
+    /** The parameter holding a named reroute's name. */
+    public static final String NAME = "name";
+
+    /** The category the editor's own types are listed in. */
+    public static final String EDITOR_CATEGORY = "Graph";
+
     /** The types by ID, in the order registered. */
     private final Map<String, NodeType> types = new LinkedHashMap<>();
+
+    /** Node types placed by holding a key and clicking, by the key's character. */
+    private final Map<Character, String> keys = new LinkedHashMap<>();
+
+    /** Make the types, holding the editor's own: the reroute dot and named reroutes. */
+    public NodeTypes() {
+        final Pin in = new Pin("in", PinTypes.ANY);
+        final Pin out = new Pin("out", PinTypes.ANY);
+        final Param name = new Param(NAME, "value");
+        register(
+                new NodeType(
+                        REROUTE,
+                        "Reroute",
+                        EDITOR_CATEGORY,
+                        List.of(in),
+                        List.of(out),
+                        List.of(),
+                        1));
+        register(
+                new NodeType(
+                        SEND, "Send", EDITOR_CATEGORY, List.of(in), List.of(), List.of(name), 1));
+        register(
+                new NodeType(
+                        RECEIVE,
+                        "Receive",
+                        EDITOR_CATEGORY,
+                        List.of(),
+                        List.of(out),
+                        List.of(name),
+                        1));
+    }
+
+    /**
+     * Whether a type is one of the editor's own.
+     *
+     * @param id The type's ID.
+     * @return True for reroutes and named reroutes.
+     */
+    public static boolean isEditorType(@NonNull String id) {
+        return REROUTE.equals(id) || SEND.equals(id) || RECEIVE.equals(id);
+    }
+
+    /**
+     * Place a node type by holding a key and clicking empty canvas.
+     *
+     * @param key The key's character, like {@code 'M'}; letters ignore case.
+     * @param type The node type's ID.
+     * @return These types.
+     */
+    public NodeTypes bindKey(char key, @NonNull String type) {
+        keys.put(Character.toUpperCase(key), type);
+        return this;
+    }
+
+    /**
+     * The keys bound to node types.
+     *
+     * @return The node types' IDs by key, upper case.
+     */
+    public Map<Character, String> keys() {
+        return Collections.unmodifiableMap(keys);
+    }
 
     /**
      * A pin of a node type.

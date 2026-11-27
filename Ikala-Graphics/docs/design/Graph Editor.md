@@ -37,3 +37,24 @@ fight over a click.
 
 Copy and paste go through the system clipboard as the same YAML, behind a header line, so a part of one graph pastes
 into another, even in another editor run.
+
+## Tidying belongs to the editor
+
+Reroutes, named reroutes, comment frames, collapsing, hidden pins, comments and errors are the same for every kind
+of graph, so the editor provides them and callers register nothing for them. Reroutes and the send and receive pair
+of a named reroute are node types the editor registers itself, with pins of the "any" type: they are ordinary nodes
+in the graph, the file and the undo history, and nothing special-cases them but the drawing. What flows through them
+is found by following links (and a receive's name, to its send) back to a real output, so a reroute takes on the
+color and the conversion rules of what is linked into it. A caller that evaluates the graph follows them the same
+way.
+
+A comment frame is not a node. It holds the nodes inside it only by where they are: dragging a frame by its title
+brings along the nodes whose boxes are inside it when the drag starts, and nothing else ties them together, so
+moving a node out of a frame is just moving it. Collapsing, hiding unused pins and comments are a node's own
+fields, written only when set.
+
+Colors in the file are `#RRGGBBAA`, the order IkGui packs colors in, so the value in the file and in code match.
+
+Searching and selecting by relation (upstream, downstream, unused) are model queries on `Graph`, so scripts and
+tests use them without the editor. Aligning and straightening need node sizes, which only the views know, so they
+live on the editor and act on what was last drawn.

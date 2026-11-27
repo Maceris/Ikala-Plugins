@@ -30,9 +30,18 @@ import java.util.TreeMap;
  *     at: [0, 48]
  * links:
  *   - constant1.value > add1.a
+ * frames:
+ *   frame1:
+ *     at: [-16, -40]
+ *     size: [320, 200]
+ *     color: '#FF8040A0'
+ *     text: Inputs
  * </pre>
  *
- * A node written by an older version of its type is upgraded as it is read, through the caller's
+ * A node can also have {@code collapsed: true}, {@code hide unused: true} and a {@code comment}. A
+ * frame's color is {@code '#RRGGBBAA'} in hex, the order IkGui packs colors in.
+ *
+ * <p>A node written by an older version of its type is upgraded as it is read, through the caller's
  * {@link Upgrader}.
  */
 public final class GraphFile {
@@ -83,6 +92,15 @@ public final class GraphFile {
                     .append(", ")
                     .append(onGrid(node.getY()))
                     .append("]\n");
+            if (node.isCollapsed()) {
+                out.append("    collapsed: true\n");
+            }
+            if (node.isHideUnused()) {
+                out.append("    hide unused: true\n");
+            }
+            if (node.getComment() != null) {
+                out.append("    comment: ").append(quote(node.getComment())).append('\n');
+            }
             if (!node.getParams().isEmpty()) {
                 out.append("    set:\n");
                 for (Map.Entry<String, String> param : node.getParams().entrySet()) {
@@ -113,6 +131,28 @@ public final class GraphFile {
         out.append('\n');
         for (String link : links) {
             out.append("  - ").append(quote(link)).append('\n');
+        }
+        final List<Graph.Frame> frames = new ArrayList<>(graph.frames());
+        if (!frames.isEmpty()) {
+            frames.sort(Comparator.comparing(Graph.Frame::getId));
+            out.append("frames:\n");
+            for (Graph.Frame frame : frames) {
+                out.append("  ").append(frame.getId()).append(":\n");
+                out.append("    at: [")
+                        .append(onGrid(frame.getX()))
+                        .append(", ")
+                        .append(onGrid(frame.getY()))
+                        .append("]\n");
+                out.append("    size: [")
+                        .append(onGrid(frame.getWidth()))
+                        .append(", ")
+                        .append(onGrid(frame.getHeight()))
+                        .append("]\n");
+                out.append("    color: '")
+                        .append(String.format("#%08X", frame.getColor()))
+                        .append("'\n");
+                out.append("    text: ").append(quote(frame.getText())).append('\n');
+            }
         }
         return out.toString();
     }
@@ -174,6 +214,13 @@ public final class GraphFile {
                 readLink(String.valueOf(entry), into, problems);
             }
         }
+        if (root.get("frames") instanceof Map<?, ?> frames) {
+            final Map<String, Object> sorted = new TreeMap<>();
+            frames.forEach((key, value) -> sorted.put(String.valueOf(key), value));
+            for (Map.Entry<String, Object> entry : sorted.entrySet()) {
+                readFrame(entry.getKey(), entry.getValue(), into, problems);
+            }
+        }
         return problems;
     }
 
@@ -223,6 +270,11 @@ public final class GraphFile {
             problems.add(e.getMessage());
             return;
         }
+        into.setCollapsed(id, Boolean.TRUE.equals(node.get("collapsed")));
+        into.setHideUnused(id, Boolean.TRUE.equals(node.get("hide unused")));
+        if (node.get("comment") != null) {
+            into.setComment(id, String.valueOf(node.get("comment")));
+        }
         for (Map.Entry<String, String> param : params.entrySet()) {
             if (type.defaultOf(param.getKey()) == null) {
                 problems.add("Node " + id + " has an unknown parameter, " + param.getKey());
@@ -231,6 +283,49 @@ public final class GraphFile {
             into.setParam(added.getId(), param.getKey(), param.getValue());
         }
     }
+
+    /**
+     * Read one comment frame.
+     *
+     * @param id Its ID.
+     * @param value Its map.
+     * @param into The graph.
+     * @param problems Receives what was wrong.
+     */
+    private static void readFrame(String id, Object value, Graph into, List<String> problems) {
+        if (!(value instanceof Map<?, ?> frame)
+                || !(frame.get("at") instanceof List<?> at)
+                || at.size() != 2
+                || !(at.get(0) instanceof Number x)
+                || !(at.get(1) instanceof Number y)
+                || !(frame.get("size") instanceof List<?> size)
+                || size.size() != 2
+                || !(size.get(0) instanceof Number width)
+                || !(size.get(1) instanceof Number height)) {
+            problems.add("Frame " + id + " needs at and size");
+            return;
+        }
+        int color = DEFAULT_FRAME_COLOR;
+        final String text = String.valueOf(frame.get("color"));
+        if (text.startsWith("#") && text.length() == 9) {
+            try {
+                color = (int) Long.parseLong(text.substring(1), 16);
+            } catch (NumberFormatException e) {
+                problems.add("Frame " + id + " has a color that isn't #RRGGBBAA in hex");
+            }
+        }
+        into.putFrame(
+                id,
+                x.floatValue(),
+                y.floatValue(),
+                width.floatValue(),
+                height.floatValue(),
+                frame.get("text") == null ? "" : String.valueOf(frame.get("text")),
+                color);
+    }
+
+    /** A frame's color when its file doesn't give one: a see-through blue gray. */
+    public static final int DEFAULT_FRAME_COLOR = 0x59729959;
 
     /**
      * Read one link.

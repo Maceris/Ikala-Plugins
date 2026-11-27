@@ -23,6 +23,7 @@ import lombok.NonNull;
 import org.joml.Vector2f;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -44,6 +45,14 @@ import javax.annotation.Nullable;
  * selection box, and drag selected nodes together. Delete removes the selection, Ctrl+C, Ctrl+V and
  * Ctrl+D copy, paste and duplicate it, and Ctrl+Z and Ctrl+Y undo and redo. The middle button pans
  * and the wheel zooms.
+ *
+ * <p>To keep a large graph readable: double-click a link for a reroute dot; drag a comment frame by
+ * its title, which brings the nodes in it along, or by its corner to size it; right-click a node,
+ * frame or empty space for collapsing, hiding unused pins, comments, frames, aligning,
+ * straightening, upstream and downstream selection and removing unused nodes; hold a key the caller
+ * bound to a node type and click empty space to place one; Ctrl+F finds nodes by name, parameter or
+ * comment; the minimap in the corner shows the whole graph and pans where clicked. A node's error
+ * shows when the mouse is over it.
  *
  * <p>Put {@link #getCanvas()} in a surface or panel. Render thread only.
  */
@@ -77,6 +86,130 @@ public class GraphEditor {
 
     /** The name of the search popup. */
     private static final String SEARCH_POPUP = "graph-search";
+
+    /** The name of a node's or the selection's context menu. */
+    private static final String NODE_MENU = "graph-node-menu";
+
+    /** The name of empty space's context menu. */
+    private static final String CANVAS_MENU = "graph-canvas-menu";
+
+    /** The name of a frame's context menu. */
+    private static final String FRAME_MENU = "graph-frame-menu";
+
+    /** The name of the comment popup. */
+    private static final String COMMENT_POPUP = "graph-comment";
+
+    /** The name of the frame popup. */
+    private static final String FRAME_POPUP = "graph-frame";
+
+    /** The name of the find popup. */
+    private static final String FIND_POPUP = "graph-find";
+
+    /** How tall a frame's title strip is, in units. */
+    static final float FRAME_TITLE = 26;
+
+    /** How big a frame's resize corner is, in units. */
+    static final float FRAME_HANDLE = 14;
+
+    /** How far around new frames reach past what they hold, in units. */
+    static final float FRAME_MARGIN = 24;
+
+    /** A new frame's color: a see-through blue gray. */
+    public static final int FRAME_COLOR = Color.rgba(0.35f, 0.45f, 0.6f, 0.35f);
+
+    /** The frame colors offered when editing one. */
+    static final int[] FRAME_COLORS = {
+        FRAME_COLOR,
+        Color.rgba(0.6f, 0.35f, 0.35f, 0.35f),
+        Color.rgba(0.35f, 0.6f, 0.4f, 0.35f),
+        Color.rgba(0.6f, 0.55f, 0.3f, 0.35f),
+        Color.rgba(0.5f, 0.38f, 0.62f, 0.35f)
+    };
+
+    /** How close, in pixels, a double-click must be to a link to put a reroute on it. */
+    static final float LINK_REACH = 6;
+
+    /** The minimap's size, in pixels. */
+    static final float MINIMAP_WIDTH = 200;
+
+    /** The minimap's size, in pixels. */
+    static final float MINIMAP_HEIGHT = 130;
+
+    /** How far the minimap sits from the canvas's corner, in pixels. */
+    static final float MINIMAP_INSET = 10;
+
+    /** The minimap's background. */
+    private static final int MINIMAP_BACK = Color.rgba(0.08f, 0.08f, 0.1f, 0.85f);
+
+    /** A node on the minimap. */
+    private static final int MINIMAP_NODE = Color.rgba(0.55f, 0.6f, 0.7f, 1);
+
+    /** The view's rectangle on the minimap. */
+    private static final int MINIMAP_VIEW = Color.rgba(1, 1, 1, 0.9f);
+
+    /** The digit keys, by digit, for placing nodes. */
+    private static final Key[] DIGITS = {
+        Key.ZERO, Key.ONE, Key.TWO, Key.THREE, Key.FOUR, Key.FIVE, Key.SIX, Key.SEVEN, Key.EIGHT,
+        Key.NINE
+    };
+
+    /** Which way to line up the selection. */
+    public enum Align {
+        /** Left edges. */
+        LEFT,
+        /** Right edges. */
+        RIGHT,
+        /** Top edges. */
+        TOP,
+        /** Middles, across. */
+        MIDDLE
+    }
+
+    /** The frame being dragged or sized. */
+    private String frameDragged;
+
+    /** The nodes moving with the frame being dragged. */
+    private List<String> frameNodes = List.of();
+
+    /** The node, frame or link the open context menu is for. */
+    private String menuTarget;
+
+    /** The link the open context menu is for, or null. */
+    private Graph.Link menuLink;
+
+    /** Where the open context menu was opened, in canvas units. */
+    private final Vector2f menuAt = new Vector2f();
+
+    /** Which context menu to open this frame, or null. */
+    private String menuRequested;
+
+    /** Which popup to open this frame, besides the search, or null. */
+    private String popupRequested;
+
+    /** The text being edited in the comment or frame popup. */
+    private final IkString popupText = new IkString(256);
+
+    /** The color picked in the frame popup. */
+    private int popupColor;
+
+    /** The node or frame the comment or frame popup edits. */
+    private String popupTarget;
+
+    /** The find popup's filter. */
+    private final IkString findText = new IkString(64);
+
+    /**
+     * Whether the minimap shows. -- GETTER -- Whether the minimap shows.
+     *
+     * @return True if it shows.
+     */
+    @Getter private boolean minimap = true;
+
+    /** Where the minimap was drawn last, on the screen, or empty before. */
+    private final RectFloat minimapRect = new RectFloat();
+
+    /** The canvas area the minimap shows, in units: left, top, and units per pixel. */
+    private final float[] minimapMap = new float[3];
 
     /**
      * The canvas the graph is drawn on. -- GETTER -- The canvas, to put in the UI.
@@ -121,7 +254,13 @@ public class GraphEditor {
         /** Dragging a link from a pin. */
         LINKING,
         /** Dragging a selection box. */
-        BOX
+        BOX,
+        /** Moving a frame and the nodes in it. */
+        FRAME_MOVE,
+        /** Sizing a frame by its corner. */
+        FRAME_SIZE,
+        /** Panning from the minimap. */
+        MINIMAP
     }
 
     /** What the mouse is doing. */
@@ -447,16 +586,15 @@ public class GraphEditor {
             }
             for (Graph.Node node : graph.nodes()) {
                 if (!views.containsKey(node.getId())) {
-                    final NodeTypes.NodeType type = graph.getNodeTypes().get(node.getType());
-                    final int rows =
-                            type == null
-                                    ? 1
-                                    : Math.max(type.inputs().size(), type.outputs().size());
-                    final GraphNodeView view = new GraphNodeView(this, node.getId(), rows);
+                    final GraphNodeView view = new GraphNodeView(this, node.getId());
                     views.put(node.getId(), view);
                     canvas.add(view);
                 }
             }
+        }
+        // Collapsing, hiding pins and linking all change sizes; a view only resizes on change
+        for (GraphNodeView view : views.values()) {
+            view.fit();
         }
         // Positions every frame, since a move changes them without a new edit until it ends
         for (Graph.Node node : graph.nodes()) {
@@ -481,14 +619,16 @@ public class GraphEditor {
         syncViews(frame);
         final DrawList drawList = IkGui.getWindowDrawList();
         final float unit = canvas.getUnit();
+        drawFrames(drawList, unit);
         for (Graph.Link link : getGraph().links()) {
             final Vector2f from = pinAt(link.fromNode(), link.fromPin(), false, scratch);
             final Vector2f to = pinAt(link.toNode(), link.toPin(), true, scratch2);
             if (from == null || to == null) {
                 continue;
             }
-            final NodeTypes.Pin pin = getGraph().outputPin(link.fromNode(), link.fromPin());
-            final int color = colorOf(pin == null ? "" : pin.type());
+            // The type that flows, so a link out of a reroute takes the color of its source
+            final int color =
+                    colorOf(getGraph().effectiveType(link.fromNode(), link.fromPin(), false));
             curve(drawList, from.x, from.y, to.x, to.y, color, unit);
         }
     }
@@ -548,17 +688,7 @@ public class GraphEditor {
      */
     private @Nullable Vector2f pinAt(String node, String pin, boolean input, Vector2f out) {
         final GraphNodeView view = views.get(node);
-        final NodeTypes.NodeType type = getGraph().typeOf(node);
-        if (view == null || type == null) {
-            return null;
-        }
-        final List<NodeTypes.Pin> pins = input ? type.inputs() : type.outputs();
-        for (int i = 0; i < pins.size(); ++i) {
-            if (pins.get(i).name().equals(pin)) {
-                return view.pinPosition(input, i, out);
-            }
-        }
-        return null;
+        return view == null ? null : view.pinPosition(input, pin, out);
     }
 
     /**
@@ -574,16 +704,17 @@ public class GraphEditor {
         float best = Float.MAX_VALUE;
         for (Graph.Node node : graph.nodes()) {
             final GraphNodeView view = views.get(node.getId());
-            final NodeTypes.NodeType type = graph.getNodeTypes().get(node.getType());
-            if (view == null || type == null) {
+            if (view == null || !view.pinsGrabbable()) {
                 continue;
             }
             final float reach = GraphNodeView.PIN_RADIUS * GraphNodeView.PIN_REACH * view.scale();
             for (int side = 0; side < 2; ++side) {
                 final boolean input = side == 0;
-                final List<NodeTypes.Pin> pins = input ? type.inputs() : type.outputs();
+                final List<NodeTypes.Pin> pins = view.shownPins(input);
                 for (int i = 0; i < pins.size(); ++i) {
-                    view.pinPosition(input, i, scratch);
+                    if (view.pinPosition(input, pins.get(i).name(), scratch) == null) {
+                        continue;
+                    }
                     final float distance = scratch.distance(x, y);
                     if (distance <= reach && distance < best) {
                         best = distance;
@@ -628,10 +759,23 @@ public class GraphEditor {
         final IkIO io = IkGui.getIO();
         final Vector2f mouse = IkGui.getMousePos();
         final boolean hovered = IkGui.isWindowHovered();
-        final boolean popupOpen = IkGui.isPopupOpen(SEARCH_POPUP);
+        final boolean popupOpen = anyPopupOpen();
 
-        if (hovered && !popupOpen && IkGui.isMouseClicked(MouseButton.LEFT)) {
-            press(id, mouse, io.keyCtrl);
+        if (hovered && !popupOpen && drag == Drag.NONE) {
+            if (IkGui.isMouseDoubleClicked(MouseButton.LEFT)
+                    && !(minimap && minimapRect.contains(mouse.x, mouse.y))
+                    && pinUnder(mouse.x, mouse.y) == null
+                    && nodeUnder(mouse.x, mouse.y) == null) {
+                final Graph.Link link = linkUnder(mouse.x, mouse.y);
+                if (link != null) {
+                    final Vector2f at = canvas.fromScreen(mouse.x, mouse.y);
+                    insertReroute(link, at.x, at.y);
+                }
+            } else if (IkGui.isMouseClicked(MouseButton.LEFT)) {
+                press(id, mouse, io.keyCtrl);
+            } else if (IkGui.isMouseClicked(MouseButton.RIGHT)) {
+                openMenuAt(mouse);
+            }
         }
         if (drag != Drag.NONE) {
             IkGuiInternal.keepAliveID(id);
@@ -645,11 +789,38 @@ public class GraphEditor {
             }
         }
         drawDragged(mouse);
+        drawMinimap();
+        if (hovered && drag == Drag.NONE && !popupOpen) {
+            final String node = nodeUnder(mouse.x, mouse.y);
+            final String error = node == null ? null : errorOf(node);
+            if (error != null) {
+                IkGui.setTooltip(error);
+            }
+        }
 
         if ((hovered || IkGui.isWindowFocused()) && !popupOpen && !io.wantTextInput) {
             shortcuts(mouse, io);
         }
         searchPopup(frame);
+        menus();
+        commentPopup();
+        framePopup();
+        findPopup();
+    }
+
+    /**
+     * Whether any of the editor's popups is open, so clicks and keys go to it.
+     *
+     * @return True if one is.
+     */
+    private boolean anyPopupOpen() {
+        return IkGui.isPopupOpen(SEARCH_POPUP)
+                || IkGui.isPopupOpen(NODE_MENU)
+                || IkGui.isPopupOpen(CANVAS_MENU)
+                || IkGui.isPopupOpen(FRAME_MENU)
+                || IkGui.isPopupOpen(COMMENT_POPUP)
+                || IkGui.isPopupOpen(FRAME_POPUP)
+                || IkGui.isPopupOpen(FIND_POPUP);
     }
 
     /**
@@ -663,6 +834,11 @@ public class GraphEditor {
     private void press(int id, Vector2f mouse, boolean ctrl) {
         dragStart.set(mouse);
         IkGuiInternal.setActiveID(id, IkGuiInternal.getCurrentWindow());
+        if (minimap && minimapRect.contains(mouse.x, mouse.y)) {
+            drag = Drag.MINIMAP;
+            panFromMinimap(mouse);
+            return;
+        }
         final PinRef pin = pinUnder(mouse.x, mouse.y);
         if (pin != null) {
             pickedUp = null;
@@ -701,6 +877,17 @@ public class GraphEditor {
             drag = Drag.PRESSED;
             return;
         }
+        if (pressFrame(mouse, ctrl)) {
+            return;
+        }
+        final String keyed = keyedType();
+        if (keyed != null) {
+            final Vector2f at = canvas.fromScreen(mouse.x, mouse.y);
+            addNode(keyed, at.x, at.y);
+            drag = Drag.NONE;
+            IkGuiInternal.clearActiveID();
+            return;
+        }
         boxBase.clear();
         if (ctrl) {
             boxBase.addAll(selection);
@@ -727,6 +914,39 @@ public class GraphEditor {
                 final Graph.Node node = getGraph().node(id);
                 getGraph().move(id, node.getX() + delta.x / unit, node.getY() + delta.y / unit);
             }
+        } else if (drag == Drag.FRAME_MOVE || drag == Drag.FRAME_SIZE) {
+            final Vector2f delta = IkGui.getIO().mouseDelta;
+            final float unit = canvas.getUnit();
+            final Graph.Frame frame = getGraph().frame(frameDragged);
+            if (frame != null) {
+                final float dx = delta.x / unit;
+                final float dy = delta.y / unit;
+                if (drag == Drag.FRAME_MOVE) {
+                    getGraph()
+                            .placeFrame(
+                                    frame.getId(),
+                                    frame.getX() + dx,
+                                    frame.getY() + dy,
+                                    frame.getWidth(),
+                                    frame.getHeight());
+                    for (String id : frameNodes) {
+                        final Graph.Node node = getGraph().node(id);
+                        if (node != null) {
+                            getGraph().move(id, node.getX() + dx, node.getY() + dy);
+                        }
+                    }
+                } else {
+                    getGraph()
+                            .placeFrame(
+                                    frame.getId(),
+                                    frame.getX(),
+                                    frame.getY(),
+                                    frame.getWidth() + dx,
+                                    frame.getHeight() + dy);
+                }
+            }
+        } else if (drag == Drag.MINIMAP) {
+            panFromMinimap(mouse);
         } else if (drag == Drag.BOX) {
             selection.clear();
             selection.addAll(boxBase);
@@ -751,6 +971,14 @@ public class GraphEditor {
         if (ended == Drag.MOVING && beforeMove != null) {
             history.record(selection.size() == 1 ? "Move" : "Move nodes", beforeMove);
             beforeMove = null;
+        } else if ((ended == Drag.FRAME_MOVE || ended == Drag.FRAME_SIZE) && beforeMove != null) {
+            if (mouse.distance(dragStart) > DRAG_SLOP) {
+                history.record(ended == Drag.FRAME_MOVE ? "Move frame" : "Size frame", beforeMove);
+            } else {
+                getGraph().restore(beforeMove);
+            }
+            beforeMove = null;
+            frameDragged = null;
         } else if (ended == Drag.LINKING) {
             dropLink(mouse);
         }
@@ -879,6 +1107,11 @@ public class GraphEditor {
     private void shortcuts(Vector2f mouse, IkIO io) {
         if (IkGui.isKeyPressed(Key.DELETE, false)) {
             deleteSelection();
+        }
+        if (io.keyCtrl && IkGui.isKeyPressed(Key.F, false)) {
+            findText.set("", true);
+            popupRequested = FIND_POPUP;
+            return;
         }
         if (IkGui.isKeyPressed(Key.TAB, false) && drag == Drag.NONE) {
             openSearch(mouse, null);
@@ -1078,5 +1311,911 @@ public class GraphEditor {
             @NonNull String node, @NonNull String pin, boolean input) {
         final Vector2f at = pinAt(node, pin, input, new Vector2f());
         return at == null ? null : new Vector2f(at);
+    }
+
+    /**
+     * Start dragging a frame by its title or sizing it by its corner, if the press is on one. The
+     * topmost frame wins: the last drawn.
+     *
+     * @param mouse The mouse.
+     * @param ctrl Whether Ctrl is held, which adds the frame to the selection.
+     * @return True if the press was on a frame's title or corner.
+     */
+    private boolean pressFrame(Vector2f mouse, boolean ctrl) {
+        final Vector2f at = canvas.fromScreen(mouse.x, mouse.y);
+        final List<Graph.Frame> frames = new ArrayList<>(getGraph().frames());
+        Collections.reverse(frames);
+        for (Graph.Frame frame : frames) {
+            final boolean corner =
+                    at.x >= frame.getX() + frame.getWidth() - FRAME_HANDLE
+                            && at.x <= frame.getX() + frame.getWidth()
+                            && at.y >= frame.getY() + frame.getHeight() - FRAME_HANDLE
+                            && at.y <= frame.getY() + frame.getHeight();
+            final boolean title =
+                    at.x >= frame.getX()
+                            && at.x <= frame.getX() + frame.getWidth()
+                            && at.y >= frame.getY()
+                            && at.y <= frame.getY() + FRAME_TITLE;
+            if (!corner && !title) {
+                continue;
+            }
+            if (ctrl) {
+                if (!selection.remove(frame.getId())) {
+                    selection.add(frame.getId());
+                }
+            } else if (!selection.contains(frame.getId())) {
+                select(List.of(frame.getId()));
+            }
+            frameDragged = frame.getId();
+            frameNodes = getGraph().nodesIn(frame.getId());
+            beforeMove = getGraph().copy();
+            drag = corner ? Drag.FRAME_SIZE : Drag.FRAME_MOVE;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * The node type whose bound key is held, for placing it with a click.
+     *
+     * @return The type's ID, or null if no bound key is held.
+     */
+    private @Nullable String keyedType() {
+        for (Map.Entry<Character, String> binding : getGraph().getNodeTypes().keys().entrySet()) {
+            final Key key = keyFor(binding.getKey());
+            if (key != null && IkGui.isKeyDown(key)) {
+                return binding.getValue();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The key for a character: a letter or a digit.
+     *
+     * @param character The character, upper case.
+     * @return The key, or null if it isn't a letter or digit.
+     */
+    static @Nullable Key keyFor(char character) {
+        if (character >= '0' && character <= '9') {
+            return DIGITS[character - '0'];
+        }
+        if (character >= 'A' && character <= 'Z') {
+            return Key.valueOf(String.valueOf(character));
+        }
+        return null;
+    }
+
+    /**
+     * Draw the comment frames: a see-through body, a title strip with the title, and a corner to
+     * size it by. Selected frames are outlined.
+     *
+     * @param drawList Where to draw.
+     * @param unit Pixels per canvas unit.
+     */
+    private void drawFrames(DrawList drawList, float unit) {
+        final float rounding = IkGui.getStyle().variable.frameRounding * unit;
+        final int font = Math.max(1, Math.round(GraphNodeView.ROW * unit * 0.62f));
+        for (Graph.Frame frame : getGraph().frames()) {
+            final Vector2f min = canvas.toScreen(frame.getX(), frame.getY());
+            final Vector2f max =
+                    canvas.toScreen(
+                            frame.getX() + frame.getWidth(), frame.getY() + frame.getHeight());
+            final int color = frame.getColor();
+            drawList.addRectFilled(min.x, min.y, max.x, max.y, color, rounding);
+            final int strip = (color & 0xFFFFFF00) | Math.min(255, (color & 0xFF) * 2);
+            drawList.addRectFilled(
+                    min.x,
+                    min.y,
+                    max.x,
+                    min.y + FRAME_TITLE * unit,
+                    strip,
+                    rounding,
+                    com.ikalagaming.graphics.gui.flags.DrawFlags.ROUND_CORNERS_TOP);
+            drawList.addText(
+                    font,
+                    min.x + 8 * unit,
+                    min.y + (FRAME_TITLE * unit - font) / 2,
+                    Color.rgba(1, 1, 1, 0.95f),
+                    frame.getText(),
+                    0);
+            final float handle = FRAME_HANDLE * unit;
+            drawList.addTriangleFilled(
+                    max.x, max.y - handle, max.x, max.y, max.x - handle, max.y, strip);
+            if (selection.contains(frame.getId())) {
+                drawList.addRect(
+                        min.x, min.y, max.x, max.y, GraphNodeView.SELECTED, rounding, 0, 2);
+            }
+        }
+    }
+
+    /**
+     * The link nearest a point on the screen, if it is close enough.
+     *
+     * @param x The point.
+     * @param y The point.
+     * @return The link, or null.
+     */
+    @Nullable Graph.Link linkUnder(float x, float y) {
+        final float unit = canvas.getUnit();
+        Graph.Link best = null;
+        float bestDistance = LINK_REACH;
+        for (Graph.Link link : getGraph().links()) {
+            final Vector2f from = pinAt(link.fromNode(), link.fromPin(), false, scratch);
+            final Vector2f to = pinAt(link.toNode(), link.toPin(), true, scratch2);
+            if (from == null || to == null) {
+                continue;
+            }
+            final float distance = curveDistance(from.x, from.y, to.x, to.y, unit, x, y);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = link;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * How far a point is from a link's curve, by sampling it as {@link #curve} draws it.
+     *
+     * @param fromX The output's position.
+     * @param fromY The output's position.
+     * @param toX The input's position.
+     * @param toY The input's position.
+     * @param unit Pixels per canvas unit.
+     * @param x The point.
+     * @param y The point.
+     * @return The distance, in pixels.
+     */
+    static float curveDistance(
+            float fromX, float fromY, float toX, float toY, float unit, float x, float y) {
+        final float reach = Math.max(CURVE_REACH * unit, Math.abs(toX - fromX) * 0.5f);
+        final int steps = 32;
+        float best = Float.MAX_VALUE;
+        float lastX = fromX;
+        float lastY = fromY;
+        for (int i = 1; i <= steps; ++i) {
+            final float t = i / (float) steps;
+            final float u = 1 - t;
+            final float px =
+                    u * u * u * fromX
+                            + 3 * u * u * t * (fromX + reach)
+                            + 3 * u * t * t * (toX - reach)
+                            + t * t * t * toX;
+            final float py =
+                    u * u * u * fromY
+                            + 3 * u * u * t * fromY
+                            + 3 * u * t * t * toY
+                            + t * t * t * toY;
+            best = Math.min(best, segmentDistance(lastX, lastY, px, py, x, y));
+            lastX = px;
+            lastY = py;
+        }
+        return best;
+    }
+
+    /**
+     * How far a point is from a line segment.
+     *
+     * @param ax The segment's start.
+     * @param ay The segment's start.
+     * @param bx The segment's end.
+     * @param by The segment's end.
+     * @param x The point.
+     * @param y The point.
+     * @return The distance.
+     */
+    private static float segmentDistance(float ax, float ay, float bx, float by, float x, float y) {
+        final float dx = bx - ax;
+        final float dy = by - ay;
+        final float length = dx * dx + dy * dy;
+        final float t =
+                length == 0 ? 0 : Math.clamp(((x - ax) * dx + (y - ay) * dy) / length, 0, 1);
+        final float cx = ax + t * dx - x;
+        final float cy = ay + t * dy - y;
+        return (float) Math.sqrt(cx * cx + cy * cy);
+    }
+
+    /**
+     * Put a reroute dot on a link, splitting it in two.
+     *
+     * @param link The link.
+     * @param x Where, across, in canvas units: the dot's middle.
+     * @param y Where, down.
+     * @return The reroute's ID.
+     */
+    public String insertReroute(@NonNull Graph.Link link, float x, float y) {
+        final String[] added = new String[1];
+        final float half = GraphNodeView.REROUTE_SIZE / 2;
+        history.edit(
+                "Add reroute",
+                graph -> {
+                    graph.unlink(link);
+                    final Graph.Node reroute = graph.add(NodeTypes.REROUTE, x - half, y - half);
+                    graph.link(link.fromNode(), link.fromPin(), reroute.getId(), "in");
+                    graph.link(reroute.getId(), "out", link.toNode(), link.toPin());
+                    added[0] = reroute.getId();
+                });
+        select(List.of(added[0]));
+        return added[0];
+    }
+
+    /**
+     * Collapse nodes to their titles, or open them.
+     *
+     * @param ids The nodes.
+     * @param collapsed Whether to collapse them.
+     */
+    public void setCollapsed(@NonNull Collection<String> ids, boolean collapsed) {
+        history.edit(
+                collapsed ? "Collapse" : "Expand",
+                graph -> ids.forEach(id -> graph.setCollapsed(id, collapsed)));
+    }
+
+    /**
+     * Hide nodes' unused pins, or show them.
+     *
+     * @param ids The nodes.
+     * @param hide Whether to hide them.
+     */
+    public void setHideUnused(@NonNull Collection<String> ids, boolean hide) {
+        history.edit(
+                hide ? "Hide unused pins" : "Show all pins",
+                graph -> ids.forEach(id -> graph.setHideUnused(id, hide)));
+    }
+
+    /**
+     * Put a comment over a node, or take it away.
+     *
+     * @param id The node.
+     * @param comment The comment, or null or blank for none.
+     */
+    public void setComment(@NonNull String id, @Nullable String comment) {
+        history.edit("Comment", graph -> graph.setComment(id, comment));
+    }
+
+    /**
+     * Put a comment frame around the selected nodes, or an empty one at a point.
+     *
+     * @param text Its title.
+     * @param x Where, if nothing is selected, in canvas units.
+     * @param y Where, if nothing is selected.
+     * @return The frame's ID.
+     */
+    public String frameSelection(@NonNull String text, float x, float y) {
+        float minX = Float.MAX_VALUE;
+        float minY = Float.MAX_VALUE;
+        float maxX = -Float.MAX_VALUE;
+        float maxY = -Float.MAX_VALUE;
+        for (String id : getSelection()) {
+            final Graph.Node node = getGraph().node(id);
+            final float[] size = sizeOf(id);
+            if (node == null || size == null) {
+                continue;
+            }
+            minX = Math.min(minX, node.getX());
+            minY = Math.min(minY, node.getY());
+            maxX = Math.max(maxX, node.getX() + size[0]);
+            maxY = Math.max(maxY, node.getY() + size[1]);
+        }
+        final float left;
+        final float top;
+        final float width;
+        final float height;
+        if (minX == Float.MAX_VALUE) {
+            left = x;
+            top = y;
+            width = 320;
+            height = 200;
+        } else {
+            left = minX - FRAME_MARGIN;
+            top = minY - FRAME_MARGIN - FRAME_TITLE;
+            width = maxX - minX + 2 * FRAME_MARGIN;
+            height = maxY - minY + 2 * FRAME_MARGIN + FRAME_TITLE;
+        }
+        final String[] added = new String[1];
+        history.edit(
+                "Add frame",
+                graph ->
+                        added[0] =
+                                graph.addFrame(left, top, width, height, text, FRAME_COLOR)
+                                        .getId());
+        select(List.of(added[0]));
+        return added[0];
+    }
+
+    /**
+     * A node's size on the canvas, from its view.
+     *
+     * @param id The node.
+     * @return Its width and height, in canvas units, or null before it is drawn.
+     */
+    private float[] sizeOf(String id) {
+        final GraphNodeView view = views.get(id);
+        final float unit = canvas.getUnit();
+        if (view == null || unit <= 0) {
+            return null;
+        }
+        return new float[] {view.getRect().getWidth() / unit, view.getRect().getHeight() / unit};
+    }
+
+    /**
+     * Line the selected nodes up.
+     *
+     * @param how Which edges or middles to line up.
+     */
+    public void align(@NonNull Align how) {
+        final List<String> nodes = new ArrayList<>();
+        for (String id : getSelection()) {
+            if (getGraph().node(id) != null && sizeOf(id) != null) {
+                nodes.add(id);
+            }
+        }
+        if (nodes.size() < 2) {
+            return;
+        }
+        float target =
+                switch (how) {
+                    case LEFT, TOP, MIDDLE -> Float.MAX_VALUE;
+                    case RIGHT -> -Float.MAX_VALUE;
+                };
+        float middleSum = 0;
+        for (String id : nodes) {
+            final Graph.Node node = getGraph().node(id);
+            final float[] size = sizeOf(id);
+            switch (how) {
+                case LEFT -> target = Math.min(target, node.getX());
+                case RIGHT -> target = Math.max(target, node.getX() + size[0]);
+                case TOP -> target = Math.min(target, node.getY());
+                case MIDDLE -> middleSum += node.getX() + size[0] / 2;
+            }
+        }
+        final float middle = middleSum / nodes.size();
+        final float edge = target;
+        history.edit(
+                "Align",
+                graph -> {
+                    for (String id : nodes) {
+                        final Graph.Node node = graph.node(id);
+                        final float[] size = sizeOf(id);
+                        switch (how) {
+                            case LEFT -> graph.move(id, edge, node.getY());
+                            case RIGHT -> graph.move(id, edge - size[0], node.getY());
+                            case TOP -> graph.move(id, node.getX(), edge);
+                            case MIDDLE -> graph.move(id, middle - size[0] / 2, node.getY());
+                        }
+                    }
+                });
+    }
+
+    /**
+     * Move a node up or down so its first linked input is level with the output feeding it, which
+     * straightens that link.
+     *
+     * @param id The node.
+     * @return True if it had a linked input to straighten.
+     */
+    public boolean straighten(@NonNull String id) {
+        final GraphNodeView view = views.get(id);
+        if (view == null) {
+            return false;
+        }
+        for (NodeTypes.Pin pin : view.shownPins(true)) {
+            final Graph.Link link = getGraph().linkInto(id, pin.name());
+            if (link == null) {
+                continue;
+            }
+            final Vector2f in = pinAt(id, pin.name(), true, new Vector2f());
+            final Vector2f out = pinAt(link.fromNode(), link.fromPin(), false, new Vector2f());
+            if (in == null || out == null) {
+                return false;
+            }
+            final float dy = (out.y - in.y) / canvas.getUnit();
+            final Graph.Node node = getGraph().node(id);
+            history.edit("Straighten", graph -> graph.move(id, node.getX(), node.getY() + dy));
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Select a node and everything upstream of it.
+     *
+     * @param id The node.
+     */
+    public void selectUpstream(@NonNull String id) {
+        final List<String> chosen = new ArrayList<>(getGraph().upstream(id));
+        chosen.addFirst(id);
+        select(chosen);
+    }
+
+    /**
+     * Select a node and everything downstream of it.
+     *
+     * @param id The node.
+     */
+    public void selectDownstream(@NonNull String id) {
+        final List<String> chosen = new ArrayList<>(getGraph().downstream(id));
+        chosen.addFirst(id);
+        select(chosen);
+    }
+
+    /**
+     * Remove the nodes nothing uses.
+     *
+     * @return How many were removed.
+     */
+    public int removeUnused() {
+        final Set<String> unused = getGraph().unused();
+        if (!unused.isEmpty()) {
+            history.edit("Remove unused nodes", graph -> graph.remove(unused));
+            selection.removeAll(unused);
+        }
+        return unused.size();
+    }
+
+    /**
+     * The nodes and frames whose title, ID, parameters or comment contain some text, ignoring case.
+     *
+     * @param query The text.
+     * @return Their IDs, nodes first, in the order added.
+     */
+    public List<String> find(@NonNull String query) {
+        final String wanted = query.trim().toLowerCase(java.util.Locale.ROOT);
+        final List<String> found = new ArrayList<>();
+        if (wanted.isEmpty()) {
+            return found;
+        }
+        for (Graph.Node node : getGraph().nodes()) {
+            final NodeTypes.NodeType type = getGraph().typeOf(node.getId());
+            final StringBuilder text = new StringBuilder(node.getId()).append(' ');
+            if (type != null) {
+                text.append(type.title()).append(' ');
+            }
+            node.getParams()
+                    .forEach(
+                            (name, value) ->
+                                    text.append(name).append(' ').append(value).append(' '));
+            if (node.getComment() != null) {
+                text.append(node.getComment());
+            }
+            if (text.toString().toLowerCase(java.util.Locale.ROOT).contains(wanted)) {
+                found.add(node.getId());
+            }
+        }
+        for (Graph.Frame frame : getGraph().frames()) {
+            if ((frame.getId() + " " + frame.getText())
+                    .toLowerCase(java.util.Locale.ROOT)
+                    .contains(wanted)) {
+                found.add(frame.getId());
+            }
+        }
+        return found;
+    }
+
+    /**
+     * Select a node or frame and pan the view to its middle.
+     *
+     * @param id The node or frame.
+     */
+    public void focus(@NonNull String id) {
+        final Graph.Node node = getGraph().node(id);
+        final Graph.Frame frame = getGraph().frame(id);
+        if (node != null) {
+            final float[] size = sizeOf(id);
+            final float width = size == null ? GraphNodeView.WIDTH : size[0];
+            final float height = size == null ? GraphNodeView.TITLE : size[1];
+            canvas.centerOn(node.getX() + width / 2, node.getY() + height / 2);
+        } else if (frame != null) {
+            canvas.centerOn(
+                    frame.getX() + frame.getWidth() / 2, frame.getY() + frame.getHeight() / 2);
+        } else {
+            return;
+        }
+        select(List.of(id));
+    }
+
+    /**
+     * Where the minimap was drawn last, on the screen.
+     *
+     * @return A copy of its rectangle, empty when it is hidden or before it is drawn.
+     */
+    public RectFloat getMinimapRect() {
+        return new RectFloat(minimapRect);
+    }
+
+    /**
+     * Show or hide the minimap.
+     *
+     * @param show Whether it shows.
+     */
+    public void setMinimap(boolean show) {
+        minimap = show;
+    }
+
+    /**
+     * Draw the minimap in the canvas's bottom right corner: every frame and node as a box, and the
+     * view as an outline.
+     */
+    private void drawMinimap() {
+        minimapRect.set(0, 0, 0, 0);
+        if (!minimap || getGraph().nodes().isEmpty()) {
+            return;
+        }
+        // The clip rectangle leaves out the scrollbars, which would take the minimap's clicks
+        final DrawList drawList = IkGui.getWindowDrawList();
+        final float viewLeft = drawList.getClipRectMinX();
+        final float viewTop = drawList.getClipRectMinY();
+        final float viewRight = drawList.getClipRectMaxX();
+        final float viewBottom = drawList.getClipRectMaxY();
+        final float right = viewRight - MINIMAP_INSET;
+        final float bottom = viewBottom - MINIMAP_INSET;
+        final float left = right - MINIMAP_WIDTH;
+        final float top = bottom - MINIMAP_HEIGHT;
+        if (left < viewLeft || top < viewTop) {
+            return;
+        }
+        // What to fit: every node and frame, and the view
+        final Vector2f viewMin = canvas.fromScreen(viewLeft, viewTop);
+        final Vector2f viewMax = canvas.fromScreen(viewRight, viewBottom);
+        float minX = viewMin.x;
+        float minY = viewMin.y;
+        float maxX = viewMax.x;
+        float maxY = viewMax.y;
+        for (Graph.Node node : getGraph().nodes()) {
+            final float[] size = sizeOf(node.getId());
+            final float w = size == null ? GraphNodeView.WIDTH : size[0];
+            final float h = size == null ? GraphNodeView.TITLE : size[1];
+            minX = Math.min(minX, node.getX());
+            minY = Math.min(minY, node.getY());
+            maxX = Math.max(maxX, node.getX() + w);
+            maxY = Math.max(maxY, node.getY() + h);
+        }
+        for (Graph.Frame frame : getGraph().frames()) {
+            minX = Math.min(minX, frame.getX());
+            minY = Math.min(minY, frame.getY());
+            maxX = Math.max(maxX, frame.getX() + frame.getWidth());
+            maxY = Math.max(maxY, frame.getY() + frame.getHeight());
+        }
+        final float scale = Math.max((maxX - minX) / MINIMAP_WIDTH, (maxY - minY) / MINIMAP_HEIGHT);
+        minimapMap[0] = minX;
+        minimapMap[1] = minY;
+        minimapMap[2] = Math.max(scale, 1e-3f);
+        minimapRect.set(left, top, right, bottom);
+        drawList.addRectFilled(left, top, right, bottom, MINIMAP_BACK, 4);
+        for (Graph.Frame frame : getGraph().frames()) {
+            drawList.addRectFilled(
+                    mapX(frame.getX()),
+                    mapY(frame.getY()),
+                    mapX(frame.getX() + frame.getWidth()),
+                    mapY(frame.getY() + frame.getHeight()),
+                    frame.getColor());
+        }
+        for (Graph.Node node : getGraph().nodes()) {
+            final float[] size = sizeOf(node.getId());
+            final float w = size == null ? GraphNodeView.WIDTH : size[0];
+            final float h = size == null ? GraphNodeView.TITLE : size[1];
+            drawList.addRectFilled(
+                    mapX(node.getX()),
+                    mapY(node.getY()),
+                    Math.max(mapX(node.getX()) + 1, mapX(node.getX() + w)),
+                    Math.max(mapY(node.getY()) + 1, mapY(node.getY() + h)),
+                    selection.contains(node.getId()) ? GraphNodeView.SELECTED : MINIMAP_NODE);
+        }
+        drawList.addRect(
+                mapX(viewMin.x), mapY(viewMin.y), mapX(viewMax.x), mapY(viewMax.y), MINIMAP_VIEW);
+    }
+
+    /**
+     * A canvas position across, on the minimap.
+     *
+     * @param x The position, in canvas units.
+     * @return The point on the screen.
+     */
+    private float mapX(float x) {
+        return minimapRect.getLeft() + (x - minimapMap[0]) / minimapMap[2];
+    }
+
+    /**
+     * A canvas position down, on the minimap.
+     *
+     * @param y The position, in canvas units.
+     * @return The point on the screen.
+     */
+    private float mapY(float y) {
+        return minimapRect.getTop() + (y - minimapMap[1]) / minimapMap[2];
+    }
+
+    /**
+     * Pan the view to the canvas point under the mouse on the minimap.
+     *
+     * @param mouse The mouse.
+     */
+    private void panFromMinimap(Vector2f mouse) {
+        if (minimapRect.getWidth() <= 0) {
+            return;
+        }
+        final float x =
+                minimapMap[0]
+                        + (Math.clamp(mouse.x, minimapRect.getLeft(), minimapRect.getRight())
+                                        - minimapRect.getLeft())
+                                * minimapMap[2];
+        final float y =
+                minimapMap[1]
+                        + (Math.clamp(mouse.y, minimapRect.getTop(), minimapRect.getBottom())
+                                        - minimapRect.getTop())
+                                * minimapMap[2];
+        canvas.centerOn(x, y);
+    }
+
+    /**
+     * Open the context menu for what is under a right-click: a node, a frame, or empty space.
+     *
+     * @param mouse The mouse.
+     */
+    private void openMenuAt(Vector2f mouse) {
+        final Vector2f at = canvas.fromScreen(mouse.x, mouse.y);
+        menuAt.set(at);
+        menuLink = null;
+        final String node = nodeUnder(mouse.x, mouse.y);
+        if (node != null) {
+            if (!selection.contains(node)) {
+                select(List.of(node));
+            }
+            menuTarget = node;
+            menuRequested = NODE_MENU;
+            return;
+        }
+        final List<Graph.Frame> frames = new ArrayList<>(getGraph().frames());
+        Collections.reverse(frames);
+        for (Graph.Frame frame : frames) {
+            if (frame.contains(at.x, at.y)) {
+                menuTarget = frame.getId();
+                menuRequested = FRAME_MENU;
+                return;
+            }
+        }
+        menuTarget = null;
+        menuLink = linkUnder(mouse.x, mouse.y);
+        menuRequested = CANVAS_MENU;
+    }
+
+    /** Draw whichever context menu is open, and do what is picked. */
+    private void menus() {
+        if (menuRequested != null) {
+            IkGui.openPopup(menuRequested);
+            menuRequested = null;
+        }
+        if (popupRequested != null) {
+            IkGui.openPopup(popupRequested);
+            popupRequested = null;
+        }
+        if (IkGui.beginPopup(NODE_MENU)) {
+            nodeMenu();
+            IkGui.endPopup();
+        }
+        if (IkGui.beginPopup(FRAME_MENU)) {
+            frameMenu();
+            IkGui.endPopup();
+        }
+        if (IkGui.beginPopup(CANVAS_MENU)) {
+            canvasMenu();
+            IkGui.endPopup();
+        }
+    }
+
+    /** The menu for a node and the selection it is in. */
+    private void nodeMenu() {
+        final String id = menuTarget;
+        final Graph.Node node = id == null ? null : getGraph().node(id);
+        if (node == null) {
+            IkGui.closeCurrentPopup();
+            return;
+        }
+        final Set<String> chosen = new LinkedHashSet<>(getSelection());
+        chosen.add(id);
+        if (IkGui.menuItem(node.isCollapsed() ? "Expand" : "Collapse")) {
+            setCollapsed(chosen, !node.isCollapsed());
+        }
+        if (IkGui.menuItem(node.isHideUnused() ? "Show all pins" : "Hide unused pins")) {
+            setHideUnused(chosen, !node.isHideUnused());
+        }
+        if (IkGui.menuItem("Comment...")) {
+            popupTarget = id;
+            popupText.set(node.getComment() == null ? "" : node.getComment(), true);
+            popupRequested = COMMENT_POPUP;
+        }
+        IkGui.separator();
+        if (IkGui.menuItem("Select upstream")) {
+            selectUpstream(id);
+        }
+        if (IkGui.menuItem("Select downstream")) {
+            selectDownstream(id);
+        }
+        if (IkGui.menuItem("Straighten")) {
+            straighten(id);
+        }
+        if (chosen.size() > 1) {
+            IkGui.separator();
+            if (IkGui.menuItem("Align left")) {
+                align(Align.LEFT);
+            }
+            if (IkGui.menuItem("Align right")) {
+                align(Align.RIGHT);
+            }
+            if (IkGui.menuItem("Align tops")) {
+                align(Align.TOP);
+            }
+            if (IkGui.menuItem("Align middles")) {
+                align(Align.MIDDLE);
+            }
+        }
+        IkGui.separator();
+        if (IkGui.menuItem("Frame selection")) {
+            frameSelection("Comment", menuAt.x, menuAt.y);
+        }
+        if (IkGui.menuItem("Delete", "Delete")) {
+            deleteSelection();
+        }
+    }
+
+    /** The menu for a comment frame. */
+    private void frameMenu() {
+        final Graph.Frame frame = menuTarget == null ? null : getGraph().frame(menuTarget);
+        if (frame == null) {
+            IkGui.closeCurrentPopup();
+            return;
+        }
+        if (IkGui.menuItem("Edit...")) {
+            popupTarget = frame.getId();
+            popupText.set(frame.getText(), true);
+            popupColor = frame.getColor();
+            popupRequested = FRAME_POPUP;
+        }
+        if (IkGui.menuItem("Select the nodes in it")) {
+            select(getGraph().nodesIn(frame.getId()));
+        }
+        if (IkGui.menuItem("Delete frame")) {
+            history.edit("Delete frame", graph -> graph.remove(List.of(frame.getId())));
+            selection.remove(frame.getId());
+        }
+    }
+
+    /** The menu for empty space, or a link. */
+    private void canvasMenu() {
+        if (IkGui.menuItem("Add node...", "Tab")) {
+            searchAt.set(menuAt);
+            searchLink = null;
+            searchText.set("", true);
+            searchRequested = true;
+            searchFocus = true;
+        }
+        if (menuLink != null && IkGui.menuItem("Add reroute")) {
+            insertReroute(menuLink, menuAt.x, menuAt.y);
+        }
+        if (IkGui.menuItem(getSelection().isEmpty() ? "Add frame" : "Frame selection")) {
+            frameSelection("Comment", menuAt.x, menuAt.y);
+        }
+        if (IkGui.menuItem("Find...", "Ctrl+F")) {
+            findText.set("", true);
+            popupRequested = FIND_POPUP;
+        }
+        IkGui.separator();
+        if (IkGui.menuItem("Remove unused nodes")) {
+            removeUnused();
+        }
+        if (IkGui.menuItem("Show the minimap", null, minimap)) {
+            minimap = !minimap;
+        }
+    }
+
+    /** The popup that edits a node's comment. */
+    private void commentPopup() {
+        if (!IkGui.beginPopup(COMMENT_POPUP)) {
+            return;
+        }
+        if (IkGui.isWindowAppearing()) {
+            IkGui.setKeyboardFocusHere();
+        }
+        final boolean entered =
+                IkGui.inputTextWithHint(
+                        "##comment", "Comment", popupText, InputTextFlags.ENTER_RETURNS_TRUE);
+        if (entered || IkGui.button("OK")) {
+            if (popupTarget != null) {
+                setComment(popupTarget, popupText.get());
+            }
+            IkGui.closeCurrentPopup();
+        }
+        IkGui.sameLine();
+        if (IkGui.button("Cancel") || IkGui.isKeyPressed(Key.ESCAPE, false)) {
+            IkGui.closeCurrentPopup();
+        }
+        IkGui.endPopup();
+    }
+
+    /** The popup that edits a frame's title and color. */
+    private void framePopup() {
+        if (!IkGui.beginPopup(FRAME_POPUP)) {
+            return;
+        }
+        if (IkGui.isWindowAppearing()) {
+            IkGui.setKeyboardFocusHere();
+        }
+        final boolean entered =
+                IkGui.inputTextWithHint(
+                        "##frame", "Title", popupText, InputTextFlags.ENTER_RETURNS_TRUE);
+        for (int i = 0; i < FRAME_COLORS.length; ++i) {
+            if (i > 0) {
+                IkGui.sameLine();
+            }
+            final Vector2f at = IkGui.getCursorScreenPos();
+            if (IkGui.invisibleButton("color" + i, 22, 22)) {
+                popupColor = FRAME_COLORS[i];
+            }
+            final int opaque = FRAME_COLORS[i] | 0xFF;
+            IkGui.getWindowDrawList().addRectFilled(at.x, at.y, at.x + 22, at.y + 22, opaque, 3);
+            if (popupColor == FRAME_COLORS[i]) {
+                IkGui.getWindowDrawList()
+                        .addRect(at.x, at.y, at.x + 22, at.y + 22, Color.rgba(1, 1, 1, 1), 3, 0, 2);
+            }
+        }
+        if (entered || IkGui.button("OK")) {
+            final String id = popupTarget;
+            final String text = popupText.get();
+            final int color = popupColor;
+            if (id != null) {
+                history.edit("Edit frame", graph -> graph.setFrameLook(id, text, color));
+            }
+            IkGui.closeCurrentPopup();
+        }
+        IkGui.sameLine();
+        if (IkGui.button("Cancel") || IkGui.isKeyPressed(Key.ESCAPE, false)) {
+            IkGui.closeCurrentPopup();
+        }
+        IkGui.endPopup();
+    }
+
+    /** The popup that finds nodes and frames by text, and goes to the one picked. */
+    private void findPopup() {
+        if (!IkGui.beginPopup(FIND_POPUP)) {
+            return;
+        }
+        if (IkGui.isWindowAppearing()) {
+            IkGui.setKeyboardFocusHere();
+        }
+        final boolean entered =
+                IkGui.inputTextWithHint(
+                        "##find",
+                        "Find nodes, parameters, comments",
+                        findText,
+                        InputTextFlags.ENTER_RETURNS_TRUE);
+        final List<String> found = find(findText.get());
+        String picked = entered && !found.isEmpty() ? found.getFirst() : null;
+        int shown = 0;
+        for (String id : found) {
+            if (shown++ >= SEARCH_ROWS) {
+                break;
+            }
+            final NodeTypes.NodeType type = getGraph().typeOf(id);
+            final Graph.Frame frame = getGraph().frame(id);
+            final String label =
+                    type != null
+                            ? type.title() + "  (" + id + ")"
+                            : frame == null ? id : "Frame " + frame.getText();
+            if (IkGui.selectable(label + "##" + id)) {
+                picked = id;
+            }
+        }
+        if (found.isEmpty() && !findText.get().isBlank()) {
+            IkGui.textDisabled("Nothing matches");
+        }
+        if (IkGui.isKeyPressed(Key.ESCAPE, false)) {
+            IkGui.closeCurrentPopup();
+        }
+        if (picked != null) {
+            focus(picked);
+            IkGui.closeCurrentPopup();
+        }
+        IkGui.endPopup();
     }
 }

@@ -20,6 +20,7 @@ import com.ikalagaming.graphics.asset.MaterialSection;
 import com.ikalagaming.graphics.asset.MeshSection;
 import com.ikalagaming.graphics.scene.Camera;
 import com.ikalagaming.graphics.ui.graph.GraphEditor;
+import com.ikalagaming.graphics.ui.graph.model.Graph;
 import com.ikalagaming.graphics.vulkan.FrameTimings;
 import com.ikalagaming.plugins.PluginInfo;
 import com.ikalagaming.plugins.PluginManager;
@@ -464,7 +465,10 @@ public final class ConverterScripts {
     /**
      * Change the workbench's graph as the editor does, for checks, and log "Script: Graph" with
      * what happened: "new"; "add type x y"; "link fromNode.pin toNode.pin"; "select id id...";
-     * "delete"; "duplicate"; "undo"; "redo"; "set node param value"; "save path"; "log".
+     * "delete"; "duplicate"; "undo"; "redo"; "set node param value"; "save path"; "log"; "reroute
+     * fromNode.pin toNode.pin x y"; "frame title"; "collapse id..."; "expand id..."; "hide id...";
+     * "show id..."; "comment id text"; "align left|right|top|middle"; "straighten id"; "upstream
+     * id"; "downstream id"; "unused"; "find text"; "focus id"; "minimap on|off".
      *
      * @param command The command and its words, separated by spaces.
      */
@@ -501,6 +505,59 @@ public final class ConverterScripts {
                         case "redo" -> editor.redo();
                         case "set" -> editor.setParam(words[1], words[2], words[3]);
                         case "save" -> tool.save(Path.of(words[1]));
+                        case "reroute" -> {
+                            final String[] from = words[1].split("\\.");
+                            final String[] to = words[2].split("\\.");
+                            final Graph.Link link =
+                                    tool.getHistory().getGraph().linkInto(to[0], to[1]);
+                            if (link == null
+                                    || !link.fromNode().equals(from[0])
+                                    || !link.fromPin().equals(from[1])) {
+                                log.warn("Script: no graph link {} > {}", words[1], words[2]);
+                            } else {
+                                log.info(
+                                        "Script: Graph added {}",
+                                        editor.insertReroute(
+                                                link,
+                                                Float.parseFloat(words[3]),
+                                                Float.parseFloat(words[4])));
+                            }
+                        }
+                        case "frame" ->
+                                log.info(
+                                        "Script: Graph added {}",
+                                        editor.frameSelection(rest(words, 1), 0, 0));
+                        case "collapse", "expand" ->
+                                editor.setCollapsed(
+                                        List.of(words).subList(1, words.length),
+                                        "collapse".equals(words[0]));
+                        case "hide", "show" ->
+                                editor.setHideUnused(
+                                        List.of(words).subList(1, words.length),
+                                        "hide".equals(words[0]));
+                        case "comment" -> editor.setComment(words[1], rest(words, 2));
+                        case "align" ->
+                                editor.align(
+                                        GraphEditor.Align.valueOf(
+                                                words[1].toUpperCase(java.util.Locale.ROOT)));
+                        case "straighten" ->
+                                log.info(
+                                        "Script: Graph straightened {}",
+                                        editor.straighten(words[1]));
+                        case "upstream" -> {
+                            editor.selectUpstream(words[1]);
+                            log.info("Script: Graph selected {}", editor.getSelection());
+                        }
+                        case "downstream" -> {
+                            editor.selectDownstream(words[1]);
+                            log.info("Script: Graph selected {}", editor.getSelection());
+                        }
+                        case "unused" ->
+                                log.info("Script: Graph removed {} unused", editor.removeUnused());
+                        case "find" ->
+                                log.info("Script: Graph found {}", editor.find(rest(words, 1)));
+                        case "focus" -> editor.focus(words[1]);
+                        case "minimap" -> editor.setMinimap("on".equals(words[1]));
                         case "log" -> {
                             final var graph = tool.getHistory().getGraph();
                             log.info(
@@ -514,6 +571,19 @@ public final class ConverterScripts {
                         default -> log.warn("Script: no graph command {}", words[0]);
                     }
                 });
+    }
+
+    /**
+     * The words from one on, joined by spaces.
+     *
+     * @param words The words.
+     * @param from The first to keep.
+     * @return The text, empty if there are none.
+     */
+    private static String rest(String[] words, int from) {
+        return from >= words.length
+                ? ""
+                : String.join(" ", List.of(words).subList(from, words.length));
     }
 
     /**
