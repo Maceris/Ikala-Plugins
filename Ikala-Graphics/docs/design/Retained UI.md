@@ -14,6 +14,11 @@ the parent, and cached results recomputed only when something changes.
   the first time IkGui has never seen them. Placing a docked window would undock it, so a panel never sets its
   position once IkGui has its window or saved settings. Surfaces stay undockable, so a game HUD can never be
   dragged into a dock.
+- **A dock space remembers which panels it placed,** in its own `gui.ini` entry (`DockSpaceSettings`). A panel a
+  newer layout names, that a saved layout has never seen, is docked once beside a docked panel of its split, or in
+  the middle. Without that record a new panel would float, since IkGui keeps the saved layout and only rebuilds it
+  on reset; with it, a panel the user pulled out stays out. The middle node isn't known on the first frame after
+  the file is read, so a panel bound there waits a frame.
 - **Content uses a flex layout that runs before submission,** so every node knows its rectangle when submitted. That
   avoids immediate mode's usual one-frame lag on sizes.
 

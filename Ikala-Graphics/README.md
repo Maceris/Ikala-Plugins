@@ -78,8 +78,9 @@ world, after `requestFrames()`, and `capture(path)` saves one to PNG. See docs/d
 Tools use `Panel`s (`context.ui().panel(id, title)`, or `panel:` in place of `surface:` in a spec):
 titled windows the user moves, resizes, docks and drags out of the main window, with the layout saved
 in `gui.ini`. A `DockSpace` node (`type: dock-space` in specs) holds them, starting from a `DockLayout`
-of splits and a center, and goes back to it on `resetLayout()`. Any node that submits an item can
-have a tooltip, a context menu, a drag source and a drop target.
+of splits and a center, and goes back to it on `resetLayout()`. Panels added to a layout later dock
+where it says, even in a saved layout, and `bringToFront()` picks a panel's tab. Any node that
+submits an item can have a tooltip, a context menu, a drag source and a drop target.
 
 Themes (`loadTheme`, `useTheme`, `addStyles`) give tokens, variants and per-type defaults with
 hovered, held, focused, selected and disabled states. Plugins add tools to the editor's menu with

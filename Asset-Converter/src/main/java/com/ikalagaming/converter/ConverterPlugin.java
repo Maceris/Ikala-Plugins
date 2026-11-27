@@ -5,8 +5,7 @@ import static com.ikalagaming.converter.gui.DefaultWindows.*;
 import com.ikalagaming.converter.gui.DebugToolbar;
 import com.ikalagaming.converter.gui.window.LodPrototype;
 import com.ikalagaming.converter.gui.window.MainMenu;
-import com.ikalagaming.converter.inspector.AssetInspectorWindow;
-import com.ikalagaming.converter.inspector.AssetSamples;
+import com.ikalagaming.converter.workbench.ContainerViewer;
 import com.ikalagaming.converter.workbench.Workbench;
 import com.ikalagaming.event.Listener;
 import com.ikalagaming.graphics.GraphicsManager;
@@ -14,7 +13,6 @@ import com.ikalagaming.graphics.UI;
 import com.ikalagaming.graphics.gui.WindowManager;
 import com.ikalagaming.graphics.gui.windows.GraphicsDebug;
 import com.ikalagaming.graphics.gui.windows.IkGuiDemo;
-import com.ikalagaming.graphics.ui.spec.Observable;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 import com.ikalagaming.scripting.HostClass;
@@ -110,17 +108,6 @@ public class ConverterPlugin extends Plugin {
         return true;
     }
 
-    /**
-     * Show or hide the asset inspector.
-     *
-     * @param visible Whether it should be shown.
-     */
-    public void setInspectorVisible(boolean visible) {
-        GraphicsManager.forPlugin(getName())
-                .ui()
-                .setVisible(AssetInspectorWindow.SURFACE_ID, visible);
-    }
-
     @Override
     public boolean onEnable() {
         guiManager = GraphicsManager.getWindowManager();
@@ -135,29 +122,12 @@ public class ConverterPlugin extends Plugin {
                 ConverterScripts.GLOBAL, getName(), owner -> HostClass.of(ConverterScripts.class));
         // This is the editor, so UI spec files are reloaded when they change
         GraphicsManager.getUiManager().setHotReload(true);
-        Observable<Integer> sampleCount = Observable.of(AssetSamples.count(AssetSamples.folder()));
-        ui.addStyles(AssetInspectorWindow.styles());
+        ui.addStyles(ContainerViewer.styles());
         lodPrototype = new LodPrototype(graphics);
         ui.registerTool(LodPrototype.TOOL_ID, LodPrototype.LABEL, lodPrototype::open);
         workbench = new Workbench(graphics, ui, () -> ui.setVisible(MainMenu.SURFACE_ID, true));
         workbench.install();
-        new MainMenu(
-                        ui,
-                        () -> setInspectorVisible(true),
-                        () -> workbench.setVisible(true),
-                        sampleCount)
-                .open();
-        // Shown once so later toggles only change its visibility, and keep its state
-        ui.show(
-                new AssetInspectorWindow(
-                                ui,
-                                sampleCount,
-                                () -> {
-                                    setInspectorVisible(false);
-                                    ui.setVisible(MainMenu.SURFACE_ID, true);
-                                })
-                        .build());
-        ui.setVisible(AssetInspectorWindow.SURFACE_ID, false);
+        new MainMenu(ui, () -> workbench.setVisible(true)).open();
 
         guiManager.setToolbar(graphics, new DebugToolbar(guiManager));
         final String script = System.getProperty(SCRIPT_PROPERTY);

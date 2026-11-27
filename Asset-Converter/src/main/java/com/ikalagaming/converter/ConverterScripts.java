@@ -1,10 +1,13 @@
 package com.ikalagaming.converter;
 
 import com.ikalagaming.converter.gui.window.MainMenu;
-import com.ikalagaming.converter.inspector.AssetInspectorWindow;
 import com.ikalagaming.converter.scene.ImportedScene;
 import com.ikalagaming.converter.scene.MeshExport;
 import com.ikalagaming.converter.scene.SceneImporter;
+import com.ikalagaming.converter.workbench.ContainerViewer;
+import com.ikalagaming.converter.workbench.Swatch;
+import com.ikalagaming.converter.workbench.TextureViewer;
+import com.ikalagaming.converter.workbench.Viewer;
 import com.ikalagaming.converter.workbench.Workbench;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
@@ -22,8 +25,8 @@ import java.util.function.Consumer;
 
 /**
  * What the converter's scripts can call, through the global {@code converter}, like {@code
- * converter.showInspector()}. Static methods only, so the global is the class and scripts hold no
- * plugin objects.
+ * converter.openWorkbench(file)}. Static methods only, so the global is the class and scripts hold
+ * no plugin objects.
  *
  * <p>Scripts run on their own thread, so what changes the scene or the UI is posted to the render
  * thread, and done a frame or so later; scripts wait on what they need to see with {@code
@@ -44,13 +47,6 @@ public final class ConverterScripts {
                 .getInfo(ConverterPlugin.PLUGIN_NAME)
                 .map(PluginInfo::getVersion)
                 .orElse("");
-    }
-
-    /** Show the asset inspector. */
-    public static void showInspector() {
-        GraphicsManager.forPlugin(ConverterPlugin.PLUGIN_NAME)
-                .ui()
-                .setVisible(AssetInspectorWindow.SURFACE_ID, true);
     }
 
     /**
@@ -217,6 +213,141 @@ public final class ConverterScripts {
     }
 
     /**
+     * Log what the workbench's viewer shows, as "Script: Viewer ..." with its kind and file; for a
+     * container, also whether it is readable and how many sections it has.
+     */
+    public static void logViewer() {
+        onWorkbench(
+                workbench -> {
+                    final Viewer viewer = workbench.getHost().getViewer();
+                    if (viewer == null) {
+                        log.info("Script: Viewer shows nothing");
+                        return;
+                    }
+                    final Path file = viewer.file();
+                    final String name = file == null ? "" : " " + file.getFileName();
+                    if (viewer instanceof ContainerViewer container) {
+                        log.info(
+                                "Script: Viewer {}{}: {}, {} sections",
+                                viewer.kind(),
+                                name,
+                                container.getContainer().status(),
+                                container.getContainer().inspection().entries().size());
+                    } else {
+                        log.info("Script: Viewer {}{}", viewer.kind(), name);
+                    }
+                });
+    }
+
+    /**
+     * Measure the average linear albedo of the texture the workbench's viewer shows, logging
+     * "Script: Measured ..." with red, green, blue and luminance.
+     */
+    public static void measureViewer() {
+        onWorkbench(
+                workbench -> {
+                    final TextureViewer viewer = textureViewer(workbench);
+                    if (viewer == null) {
+                        log.warn("Script: no texture is shown to measure");
+                        return;
+                    }
+                    viewer.measure();
+                    final float[] measured = viewer.getMeasured();
+                    if (measured == null) {
+                        log.warn("Script: the texture can't be measured");
+                        return;
+                    }
+                    log.info(
+                            String.format(
+                                    "Script: Measured %s: R %.4f G %.4f B %.4f luminance %.4f",
+                                    viewer.getImage().path().getFileName(),
+                                    measured[0],
+                                    measured[1],
+                                    measured[2],
+                                    measured[3]));
+                });
+    }
+
+    /**
+     * Show the texture in the workbench's viewer 3x3 times, or once.
+     *
+     * @param tiled Whether to tile it.
+     */
+    public static void tileViewer(boolean tiled) {
+        onWorkbench(
+                workbench -> {
+                    final TextureViewer viewer = textureViewer(workbench);
+                    if (viewer != null) {
+                        viewer.setTiled(tiled);
+                    }
+                });
+    }
+
+    /**
+     * Save what the workbench's viewer shows to a PNG file, logging "Script: Captured ..." when
+     * done.
+     *
+     * @param folder The folder to save it in, made if missing.
+     * @param name The file's name, like "texture.png".
+     */
+    public static void captureViewer(String folder, String name) {
+        onWorkbench(
+                workbench ->
+                        workbench
+                                .getHost()
+                                .capture(Path.of(folder, name))
+                                .whenComplete(
+                                        (saved, error) -> {
+                                            if (error == null) {
+                                                log.info("Script: Captured {}", saved);
+                                            } else {
+                                                log.warn(
+                                                        "Script: capture failed: {}",
+                                                        error.getMessage());
+                                            }
+                                        }));
+    }
+
+    /**
+     * Open one of the sample containers in the workbench, writing them first, as the Files panel's
+     * Write samples button does.
+     *
+     * @param name The sample's file name, like "valid.ika" or "bad-checksum.ika".
+     */
+    public static void openSample(String name) {
+        onWorkbench(
+                workbench -> {
+                    showMenu(false);
+                    workbench.setVisible(true);
+                    workbench.openSample(name);
+                });
+    }
+
+    /**
+     * Show a swatch in the workbench's viewer: a square of linear red rising across and green
+     * rising down, for checks of swatches.
+     *
+     * @param size The width and height in pixels.
+     */
+    public static void showSwatch(int size) {
+        final float[] rgba = new float[size * size * 4];
+        for (int y = 0; y < size; ++y) {
+            for (int x = 0; x < size; ++x) {
+                final int first = (y * size + x) * 4;
+                rgba[first] = (x + 0.5f) / size;
+                rgba[first + 1] = (y + 0.5f) / size;
+                rgba[first + 3] = 1;
+            }
+        }
+        onWorkbench(
+                workbench -> {
+                    showMenu(false);
+                    workbench.setVisible(true);
+                    workbench.showSwatch("gradient", rgba, size, size);
+                });
+    }
+
+    /**
      * Open a tool another plugin offers, as the main menu's button for it does, for checks that
      * can't click the menu.
      *
@@ -286,6 +417,19 @@ public final class ConverterScripts {
                             final var at = camera.getPosition();
                             camera.setPosition(at.x + dx, at.y + dy, at.z + dz);
                         });
+    }
+
+    /**
+     * The texture viewer the workbench's viewer panel shows, on its own or inside a swatch.
+     *
+     * @param workbench The workbench.
+     * @return The viewer, or null if neither is shown.
+     */
+    private static TextureViewer textureViewer(Workbench workbench) {
+        final Swatch swatch = workbench.getHost().viewer(Swatch.class);
+        return swatch != null
+                ? swatch.getViewer()
+                : workbench.getHost().viewer(TextureViewer.class);
     }
 
     /**

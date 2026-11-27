@@ -1,6 +1,8 @@
 package com.ikalagaming.converter.workbench;
 
 import com.ikalagaming.converter.ConverterPlugin;
+import com.ikalagaming.converter.inspector.AssetSamples;
+import com.ikalagaming.converter.inspector.ContainerFile;
 import com.ikalagaming.converter.scene.ImportedScene;
 import com.ikalagaming.converter.scene.PreviewShapes;
 import com.ikalagaming.converter.scene.SceneImporter;
@@ -58,8 +60,9 @@ import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
 
 /**
- * The asset workbench: browse for raw assets and open them. Images, DDS textures included, show in
- * an {@link ImageViewer}; models and whole scenes are put in the world and shown through a {@link
+ * The asset workbench: browse for raw assets and open them. Images, DDS textures included, and
+ * {@code .ika} containers show in a {@link PreviewHost}, through a {@link TextureViewer} or a
+ * {@link ContainerViewer}; models and whole scenes are put in the world and shown through a {@link
  * SceneView}, with an outliner of their nodes. Built on retained UI, as separate surfaces around
  * the edges of the screen, so the scene shows in the middle and the mouse reaches it there.
  *
@@ -84,8 +87,8 @@ public class Workbench {
     /** The ID of the properties panel. */
     static final String PROPERTIES_ID = "converter/workbench-properties";
 
-    /** The ID of the image panel. */
-    static final String IMAGE_ID = "converter/workbench-image";
+    /** The ID of the viewer panel, the preview host showing the open file. */
+    static final String VIEWER_ID = "converter/workbench-viewer";
 
     /** The ID of the panel of preview views. */
     static final String PREVIEWS_ID = "converter/workbench-previews";
@@ -98,7 +101,7 @@ public class Workbench {
                     FILES_ID,
                     OUTLINER_ID,
                     PROPERTIES_ID,
-                    IMAGE_ID,
+                    VIEWER_ID,
                     PREVIEWS_ID);
 
     /** The height of the top bar. */
@@ -113,7 +116,7 @@ public class Workbench {
                     .split(DockLayout.Side.LEFT, 0.17f, FILES_ID)
                     .splitPrevious(DockLayout.Side.BOTTOM, 0.35f, OUTLINER_ID)
                     .split(DockLayout.Side.RIGHT, 0.25f, PROPERTIES_ID)
-                    .center(IMAGE_ID, PREVIEWS_ID);
+                    .center(VIEWER_ID, PREVIEWS_ID);
 
     /** The dock space the panels dock into. */
     private final DockSpace dockSpace = new DockSpace("dock", LAYOUT);
@@ -130,8 +133,8 @@ public class Workbench {
     enum Mode {
         /** Nothing open. */
         NONE,
-        /** An image, over the scene if one is open. */
-        IMAGE,
+        /** A viewer of the open file, over the scene if one is open. */
+        VIEWER,
         /** A scene. */
         SCENE
     }
@@ -148,8 +151,15 @@ public class Workbench {
     /** What is being browsed. */
     private final FileBrowser browser;
 
-    /** Shows the open image. */
-    private final ImageViewer viewer;
+    /**
+     * Shows the open file, unless it is a scene. -- GETTER -- The preview host.
+     *
+     * @return The host.
+     */
+    @Getter private final PreviewHost host;
+
+    /** The panel the host draws in, brought to the front when something opens in it. */
+    private Panel viewerPanel;
 
     /** Shows the open scene. */
     private final SceneView sceneView;
@@ -207,15 +217,12 @@ public class Workbench {
         this.graphics = graphics;
         this.ui = ui;
         this.back = back;
-        viewer = new ImageViewer(graphics.textures(), this::useAsSky);
+        host = new PreviewHost(ui);
         previewPanel = new PreviewPanel(graphics);
         sceneView =
                 new SceneView(
                         graphics,
-                        new MaterialEditor(
-                                graphics.ui(),
-                                this::loadTexture,
-                                () -> viewer.getImage() == null ? null : viewer.getImage().path()));
+                        new MaterialEditor(graphics.ui(), this::loadTexture, this::shownImage));
         browser = new FileBrowser(Path.of(""));
         sceneView.getParticles().setFolder(browser::getDirectory);
         sceneView.getParticles().setSaved(saved -> refresh());
@@ -302,7 +309,15 @@ public class Workbench {
                         .style(Style.builder().set(StyleKey.PADDING, Insets.NONE).build())
                         .content(new Column("root").add(dockSpace)));
 
-        Row drives = new Row("drives").gap(4);
+        Row drives =
+                new Row("drives")
+                        .gap(4)
+                        .add(
+                                new Button("samples", "Write samples")
+                                        .tooltip(
+                                                "Write sample .ika containers, good and broken,"
+                                                        + " and browse their folder")
+                                        .onClick(this::writeSamples));
         List<Path> roots = browser.roots();
         if (roots.size() > 1) {
             for (int i = 0; i < roots.size(); ++i) {
@@ -334,12 +349,13 @@ public class Workbench {
                 new Column("right")
                         .align(Align.STRETCH)
                         .add(new Immediate("details", this::drawProperties)));
-        panel(
-                IMAGE_ID,
-                "Image",
-                new Column("middle")
-                        .align(Align.STRETCH)
-                        .add(new Immediate("view", viewer::drawView)));
+        viewerPanel =
+                panel(
+                        VIEWER_ID,
+                        "Viewer",
+                        new Column("middle")
+                                .align(Align.STRETCH)
+                                .add(new Immediate("view", host::draw)));
         panel(PREVIEWS_ID, "Previews", previewPanel.content());
         for (String surface : SURFACES) {
             ui.setVisible(surface, false);
@@ -379,8 +395,8 @@ public class Workbench {
         ui.setVisible(FILES_ID, showing);
         ui.setVisible(OUTLINER_ID, showing);
         ui.setVisible(PROPERTIES_ID, showing);
-        // A hidden image leaves the middle of the dock empty, so the scene shows through it
-        ui.setVisible(IMAGE_ID, showing && mode != Mode.SCENE);
+        // A hidden viewer leaves the middle of the dock empty, so the scene shows through it
+        ui.setVisible(VIEWER_ID, showing && mode != Mode.SCENE);
         ui.setVisible(PREVIEWS_ID, showing && mode != Mode.SCENE);
     }
 
@@ -394,7 +410,7 @@ public class Workbench {
             sceneView.drawProperties(frame, this::closeScene);
             return;
         }
-        viewer.drawProperties(frame);
+        host.drawProperties(frame);
         if (sceneView.getPlacement() != null) {
             IkGui.separator();
             if (IkGui.button("Back to the scene")) {
@@ -413,7 +429,7 @@ public class Workbench {
     private void closeScene() {
         scenes.incrementAndGet();
         sceneView.close();
-        mode = viewer.getImage() != null ? Mode.IMAGE : Mode.NONE;
+        mode = host.getViewer() != null ? Mode.VIEWER : Mode.NONE;
         updateSurfaces();
         status.text("Closed the scene");
     }
@@ -468,7 +484,7 @@ public class Workbench {
             status.text(
                     "Can't open "
                             + absolute.getFileName()
-                            + ", it isn't an image, model or particle effect");
+                            + ", it isn't an image, model, container or particle effect");
             return;
         }
         if (kind == AssetKind.PARTICLE_EFFECT) {
@@ -496,6 +512,8 @@ public class Workbench {
         refresh();
         if (kind == AssetKind.MODEL) {
             loader.execute(() -> loadScene(absolute, request));
+        } else if (kind == AssetKind.CONTAINER) {
+            loader.execute(() -> loadContainer(absolute, request));
         } else {
             loader.execute(() -> load(absolute, request));
         }
@@ -737,6 +755,99 @@ public class Workbench {
     }
 
     /**
+     * The path of the image the viewer shows, for the material editor to use as a texture.
+     *
+     * @return The image's path, or null if no image is shown.
+     */
+    private @Nullable Path shownImage() {
+        final TextureViewer shown = host.viewer(TextureViewer.class);
+        return shown == null ? null : shown.getImage().path();
+    }
+
+    /**
+     * Read and inspect a container. On the loader thread.
+     *
+     * @param file The container.
+     * @param request Which request this is, to drop it if a newer one was made.
+     */
+    private void loadContainer(Path file, int request) {
+        if (request != requests.get()) {
+            return;
+        }
+        try {
+            final ContainerFile container = ContainerFile.read(file);
+            post(
+                    () -> {
+                        if (request != requests.get()) {
+                            return;
+                        }
+                        showViewer(new ContainerViewer(container));
+                        status.text("Opened " + file.getFileName() + ": " + container.status());
+                    });
+        } catch (IOException | RuntimeException e) {
+            log.warn("Could not open {}", file, e);
+            final String message = "Can't open " + file.getFileName() + ": " + e.getMessage();
+            post(() -> failed(request, message));
+        }
+    }
+
+    /**
+     * Show a viewer in the viewer panel, in front of the panels it shares a dock node with.
+     *
+     * @param viewer The viewer.
+     */
+    private void showViewer(Viewer viewer) {
+        host.show(viewer);
+        mode = Mode.VIEWER;
+        updateSurfaces();
+        if (viewerPanel != null) {
+            viewerPanel.bringToFront();
+        }
+    }
+
+    /**
+     * Show a swatch of pixels in the viewer, as a texture graph node's output would be.
+     *
+     * @param name What the pixels are called.
+     * @param rgba Linear red, green, blue and alpha for each pixel, rows from the top.
+     * @param width The width in pixels.
+     * @param height The height in pixels.
+     */
+    public void showSwatch(@NonNull String name, float @NonNull [] rgba, int width, int height) {
+        showViewer(new Swatch(graphics.textures(), loader, name, rgba, width, height));
+    }
+
+    /**
+     * Open one of the sample containers, writing them first.
+     *
+     * @param name The sample's file name, like "valid.ika".
+     */
+    public void openSample(@NonNull String name) {
+        final Path folder = AssetSamples.folder();
+        try {
+            AssetSamples.write(folder);
+        } catch (IOException e) {
+            log.warn("Could not write the asset samples", e);
+            status.text("Can't write the samples: " + e.getMessage());
+            return;
+        }
+        open(folder.resolve(name));
+    }
+
+    /** Write the sample containers and browse their folder. */
+    private void writeSamples() {
+        final Path folder = AssetSamples.folder();
+        try {
+            AssetSamples.write(folder);
+            status.text("Wrote " + AssetSamples.count(folder) + " sample containers");
+        } catch (IOException e) {
+            log.warn("Could not write the asset samples", e);
+            status.text("Can't write the samples: " + e.getMessage());
+        }
+        navigate(folder);
+    }
+
+    /**
      * Decode an image and start loading its texture. On the loader thread.
      *
      * @param file The image.
@@ -788,10 +899,9 @@ public class Workbench {
             graphics.textures().release(texture);
             return;
         }
-        releaseTexture();
-        viewer.show(image, texture, colorSpace);
-        mode = Mode.IMAGE;
-        updateSurfaces();
+        showViewer(
+                new TextureViewer(
+                        graphics.textures(), loader, image, texture, colorSpace, this::useAsSky));
         status.text(String.format("Opened %s in %d ms", image.path().getFileName(), millis));
     }
 
@@ -843,15 +953,6 @@ public class Workbench {
         final TextureHandle old = skyTexture;
         skyTexture = null;
         sceneView.setSky(null, "", this::clearSky);
-        if (old != null) {
-            graphics.textures().release(old);
-        }
-    }
-
-    /** Release the shown image's texture, if there is one. */
-    private void releaseTexture() {
-        TextureHandle old = viewer.getTexture();
-        viewer.clear();
         if (old != null) {
             graphics.textures().release(old);
         }

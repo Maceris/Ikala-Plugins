@@ -18,6 +18,8 @@ public enum AssetKind {
             Set.of(
                     "fbx", "obj", "gltf", "glb", "dae", "3ds", "blend", "ply", "stl", "x", "lwo",
                     "ms3d")),
+    /** A {@code .ika} container, shown by the container viewer. */
+    CONTAINER(Set.of("ika")),
     /** A particle effect, a YAML file named *.effect.yml, shown on the particle stage. */
     PARTICLE_EFFECT(Set.of()),
     /** Anything else. */

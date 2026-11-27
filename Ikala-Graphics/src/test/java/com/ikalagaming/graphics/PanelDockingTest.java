@@ -19,6 +19,7 @@ import com.ikalagaming.graphics.ui.Button;
 import com.ikalagaming.graphics.ui.Column;
 import com.ikalagaming.graphics.ui.DockLayout;
 import com.ikalagaming.graphics.ui.DockSpace;
+import com.ikalagaming.graphics.ui.DockSpaceSettings;
 import com.ikalagaming.graphics.ui.Image;
 import com.ikalagaming.graphics.ui.Insets;
 import com.ikalagaming.graphics.ui.Label;
@@ -68,6 +69,7 @@ class PanelDockingTest {
     /** Make a fresh IkGui context with docking on and no ini file. */
     private static void newContext() {
         Context context = IkGui.createContext();
+        DockSpaceSettings.install();
         context.io.iniFilename = null;
         context.io.displaySize.set(1280, 720);
         context.io.mouseInsideWindow = true;
@@ -79,16 +81,24 @@ class PanelDockingTest {
         IkGui.destroyContext();
     }
 
-    /** Show a see-through surface holding a dock space, then three panels. */
+    /** Show a see-through surface holding a dock space, then four panels. */
     private void showWorkspace() {
-        dockSpace =
-                new DockSpace(
-                        "dock",
-                        new DockLayout()
-                                .split(DockLayout.Side.LEFT, 0.25f, "files")
-                                .splitPrevious(DockLayout.Side.BOTTOM, 0.4f, "outliner")
-                                .split(DockLayout.Side.RIGHT, 0.3f, "details", "notes")
-                                .center());
+        showWorkspace(
+                new DockLayout()
+                        .split(DockLayout.Side.LEFT, 0.25f, "files")
+                        .splitPrevious(DockLayout.Side.BOTTOM, 0.4f, "outliner")
+                        .split(DockLayout.Side.RIGHT, 0.3f, "details", "notes")
+                        .center());
+    }
+
+    /**
+     * Show a see-through surface holding a dock space, then the four panels and any others.
+     *
+     * @param layout The dock space's layout.
+     * @param extra The IDs of more panels to show.
+     */
+    private void showWorkspace(DockLayout layout, String... extra) {
+        dockSpace = new DockSpace("dock", layout);
         manager.add(
                 owner,
                 new Surface("workspace")
@@ -100,6 +110,9 @@ class PanelDockingTest {
         manager.add(owner, panel("outliner", "Outliner"));
         manager.add(owner, panel("details", "Details"));
         manager.add(owner, panel("notes", "Notes"));
+        for (String id : extra) {
+            manager.add(owner, panel(id, id));
+        }
         driver.frames(3);
     }
 
@@ -171,6 +184,50 @@ class PanelDockingTest {
         assertTrue(window("details").dockIsActive);
         assertFalse(window("notes").dockIsActive, "still floating after the reload");
         assertEquals(detailsWidth, window("details").size.x, 1);
+    }
+
+    @Test
+    void panelsAddedToTheLayoutLaterAreDocked() {
+        showWorkspace();
+        IkGuiInternal.dockContextQueueUndockWindow(window("notes"));
+        driver.frames(2);
+        String ini = IkGui.saveIniSettingsToMemory();
+        assertTrue(ini.contains("[DockSpace]"), ini);
+        IkGui.destroyContext();
+
+        // A later version adds a tab beside details, and one in the middle
+        newContext();
+        IkGui.loadIniSettingsFromMemory(ini);
+        manager = new UiManager();
+        driver = new UiTestDriver(manager, owner);
+        showWorkspace(
+                new DockLayout()
+                        .split(DockLayout.Side.LEFT, 0.25f, "files")
+                        .splitPrevious(DockLayout.Side.BOTTOM, 0.4f, "outliner")
+                        .split(DockLayout.Side.RIGHT, 0.3f, "details", "notes", "history")
+                        .center("viewer"),
+                "history",
+                "viewer");
+        assertTrue(window("history").dockIsActive, "the new tab is docked");
+        assertSame(window("details").dockNode, window("history").dockNode, "beside details");
+        assertTrue(window("viewer").dockIsActive, "the new middle panel is docked");
+        assertTrue(window("viewer").dockNode.isCentralNode(), "in the middle");
+        assertFalse(window("notes").dockIsActive, "what the user pulled out stays out");
+    }
+
+    @Test
+    void bringToFrontPicksATab() {
+        showWorkspace();
+        Window details = window("details");
+        Window notes = window("notes");
+        assertSame(details.dockNode, notes.dockNode, "tabs of one node");
+        String hiddenID = details.dockTabIsVisible ? "notes" : "details";
+        String frontID = details.dockTabIsVisible ? "details" : "notes";
+        assertFalse(window(hiddenID).dockTabIsVisible, "one tab shows at a time");
+        ((Panel) manager.get(hiddenID)).bringToFront();
+        driver.frames(2);
+        assertTrue(window(hiddenID).dockTabIsVisible, "its tab is picked");
+        assertFalse(window(frontID).dockTabIsVisible, "the other tab is behind it");
     }
 
     @Test

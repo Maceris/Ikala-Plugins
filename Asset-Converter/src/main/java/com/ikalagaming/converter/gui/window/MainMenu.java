@@ -18,7 +18,6 @@ import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.ui.Tool;
-import com.ikalagaming.graphics.ui.spec.Observable;
 import com.ikalagaming.graphics.ui.spec.SpecBindings;
 import com.ikalagaming.graphics.ui.spec.SpecInstance;
 import com.ikalagaming.graphics.ui.spec.UiSpec;
@@ -35,7 +34,7 @@ import java.util.Objects;
 /**
  * The main menu we start up showing. Its layout lives in the spec {@code ui/main-menu.yml} in the
  * plugin's data folder, which the editor reloads when it changes; this class supplies what the spec
- * names: the button handlers, the sample count, and the plugin's text.
+ * names: the button handlers, the tools, and the plugin's text.
  */
 @Slf4j
 public class MainMenu {
@@ -48,14 +47,8 @@ public class MainMenu {
     /** The UI the menu is shown through. */
     private final UI ui;
 
-    /** Shows the asset inspector. */
-    private final Runnable openInspector;
-
     /** Shows the asset workbench. */
     private final Runnable openWorkbench;
-
-    /** How many sample containers have been written, shown under the buttons. */
-    private final Observable<Integer> sampleCount;
 
     /** The benchmark screen, which comes back to this menu. */
     private final BenchmarkMenu benchmarks;
@@ -64,19 +57,11 @@ public class MainMenu {
      * Create the main menu.
      *
      * @param ui The converter plugin's UI.
-     * @param openInspector Shows the asset inspector.
      * @param openWorkbench Shows the asset workbench.
-     * @param sampleCount How many sample containers have been written.
      */
-    public MainMenu(
-            @NonNull UI ui,
-            @NonNull Runnable openInspector,
-            @NonNull Runnable openWorkbench,
-            @NonNull Observable<Integer> sampleCount) {
+    public MainMenu(@NonNull UI ui, @NonNull Runnable openWorkbench) {
         this.ui = ui;
-        this.openInspector = openInspector;
         this.openWorkbench = openWorkbench;
-        this.sampleCount = sampleCount;
         benchmarks = new BenchmarkMenu(ui, () -> ui.setVisible(SURFACE_ID, true));
     }
 
@@ -107,11 +92,9 @@ public class MainMenu {
                                 .bundle(ConverterPlugin.getResourceBundle())
                                 .handler("start-sphere-demo", this::startSphereDemo)
                                 .handler("open-workbench", this::startWorkbench)
-                                .handler("open-inspector", this::startInspector)
                                 .handler("open-benchmarks", this::openBenchmarks)
                                 .handler("open-tool", event -> openTool((Tool) event.item()))
-                                .list("tools", ui.tools())
-                                .value("samples.count", sampleCount));
+                                .list("tools", ui.tools()));
         // Straight to the sphere demo, for captures and tests that can't click the menu
         if (Boolean.getBoolean(SPHERE_DEMO_PROPERTY)) {
             startSphereDemo();
@@ -134,12 +117,6 @@ public class MainMenu {
     private void openBenchmarks() {
         ui.setVisible(SURFACE_ID, false);
         benchmarks.open();
-    }
-
-    /** Hide the menu and show the asset inspector. */
-    private void startInspector() {
-        ui.setVisible(SURFACE_ID, false);
-        openInspector.run();
     }
 
     /** Hide the menu and show the asset workbench. */

@@ -82,16 +82,16 @@ class ImageViewportTest {
     void testPixelText() {
         float[] value = {1, 0.5f, 0, 1};
         assertEquals(
-                "R 255  G 128  B 0  A 255", ImageViewer.pixelText(ImageFile.Depth.UNORM8, value));
+                "R 255  G 128  B 0  A 255", TextureViewer.pixelText(ImageFile.Depth.UNORM8, value));
         assertEquals(
                 "R 1.0000  G 0.5000  B 0.0000  A 1.0000",
-                ImageViewer.pixelText(ImageFile.Depth.HALF, value));
+                TextureViewer.pixelText(ImageFile.Depth.HALF, value));
     }
 
     @Test
     void testSizeText() {
-        assertEquals("512 bytes", ImageViewer.sizeText(512));
-        assertEquals("1.5 KB", ImageViewer.sizeText(1536));
-        assertEquals("2.0 MB", ImageViewer.sizeText(2 * 1024 * 1024));
+        assertEquals("512 bytes", TextureViewer.sizeText(512));
+        assertEquals("1.5 KB", TextureViewer.sizeText(1536));
+        assertEquals("2.0 MB", TextureViewer.sizeText(2 * 1024 * 1024));
     }
 }

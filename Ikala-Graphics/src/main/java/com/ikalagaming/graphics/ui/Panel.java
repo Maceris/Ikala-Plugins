@@ -37,6 +37,9 @@ public class Panel extends Surface {
     /** Cleared by IkGui when the close button is pressed. */
     private final IkBoolean open = new IkBoolean(true);
 
+    /** Whether to focus the panel the next time it is drawn. */
+    private volatile boolean focusRequested;
+
     /**
      * Create a panel with an empty column as its content.
      *
@@ -68,6 +71,17 @@ public class Panel extends Surface {
      */
     public Panel onClose(@NonNull Runnable action) {
         onClose = action;
+        return this;
+    }
+
+    /**
+     * Focus the panel the next time it is drawn: a docked panel's tab is picked, a floating one
+     * comes in front of the others. For showing what a panel holds after something opens in it.
+     *
+     * @return This panel.
+     */
+    public Panel bringToFront() {
+        focusRequested = true;
         return this;
     }
 
@@ -107,6 +121,10 @@ public class Panel extends Surface {
 
     @Override
     boolean beginWindow(@NonNull UiFrame frame) {
+        if (focusRequested) {
+            focusRequested = false;
+            IkGui.setNextWindowFocus();
+        }
         if (onClose == null) {
             return IkGui.begin(windowName(), windowFlags());
         }

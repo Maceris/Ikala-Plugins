@@ -2,13 +2,19 @@ package com.ikalagaming.graphics.ui;
 
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.IkGuiInternal;
+import com.ikalagaming.graphics.gui.data.DockNode;
 import com.ikalagaming.graphics.gui.data.IkInt;
+import com.ikalagaming.graphics.gui.data.Window;
+import com.ikalagaming.graphics.gui.data.WindowSettings;
 import com.ikalagaming.graphics.gui.enums.Direction;
 import com.ikalagaming.graphics.gui.flags.DockNodeFlags;
+import com.ikalagaming.graphics.gui.util.Hash;
 
 import lombok.NonNull;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * An area that {@link Panel}s can dock into, filling its rectangle. The middle is see-through and
@@ -17,6 +23,11 @@ import java.util.List;
  * <p>The first time it is drawn with no saved layout, and whenever {@link #resetLayout()} is
  * called, the panels are docked as its {@link DockLayout} says. After that IkGui keeps the user's
  * layout, and saves it with the other window settings.
+ *
+ * <p>A panel added to the layout after the user's layout was saved is docked once where the layout
+ * says: beside the other panels of its split if one of them is docked, else in the middle. Which
+ * panels were placed is kept by {@link DockSpaceSettings}, so a panel the user pulled out stays
+ * out.
  */
 public class DockSpace extends Node<DockSpace> {
     /** The layout to start from. */
@@ -53,9 +64,18 @@ public class DockSpace extends Node<DockSpace> {
         final int dockID = IkGui.getID("dock");
         final float width = Math.max(1, rect.getWidth());
         final float height = Math.max(1, rect.getHeight());
+        final Set<String> placed = DockSpaceSettings.placed(dockID);
         if (resetRequested || IkGuiInternal.dockBuilderGetNode(dockID) == null) {
             resetRequested = false;
             build(dockID, width, height);
+            if (placed != null) {
+                for (List<String> group : groups()) {
+                    placed.addAll(group);
+                }
+                IkGuiInternal.markIniSettingsDirty();
+            }
+        } else if (placed != null) {
+            placeNewPanels(dockID, placed);
         }
         IkGui.setCursorScreenPos(rect.getLeft(), rect.getTop());
         IkGui.dockSpace(dockID, width, height, DockNodeFlags.PASSTHROUGH_CENTRAL_NODE);
@@ -97,6 +117,81 @@ public class DockSpace extends Node<DockSpace> {
         }
         dock(layout.getCenter(), middle.get());
         IkGuiInternal.dockBuilderFinish(dockID);
+    }
+
+    /**
+     * The layout's panels, a list for each split and then the middle.
+     *
+     * @return The groups of panel IDs.
+     */
+    private List<List<String>> groups() {
+        final List<List<String>> groups = new ArrayList<>();
+        for (DockLayout.Split split : layout.getSplits()) {
+            groups.add(split.panels());
+        }
+        groups.add(layout.getCenter());
+        return groups;
+    }
+
+    /**
+     * Dock the layout's panels this dock space has never placed: beside a docked panel of their
+     * group, else in the middle.
+     *
+     * @param dockID The dock space's ID.
+     * @param placed The panels placed before, which the new ones are added to.
+     */
+    private void placeNewPanels(int dockID, Set<String> placed) {
+        boolean changed = false;
+        for (List<String> group : groups()) {
+            int target = 0;
+            for (String panelID : group) {
+                if (placed.contains(panelID)) {
+                    continue;
+                }
+                if (target == 0) {
+                    target = groupNode(group);
+                }
+                if (target == 0) {
+                    // Known once the dock space has updated; on the first frame after the ini file
+                    // is read it isn't yet, so the panel waits a frame
+                    final DockNode middle = IkGuiInternal.dockBuilderGetCentralNode(dockID);
+                    if (middle == null) {
+                        continue;
+                    }
+                    target = middle.id;
+                }
+                IkGuiInternal.dockBuilderDockWindow(Panel.windowID(panelID), target);
+                placed.add(panelID);
+                changed = true;
+            }
+        }
+        if (changed) {
+            IkGuiInternal.markIniSettingsDirty();
+        }
+    }
+
+    /**
+     * The dock node a panel of a group is docked in.
+     *
+     * @param group The panel IDs.
+     * @return The node's ID, or 0 if none of them is docked.
+     */
+    private static int groupNode(List<String> group) {
+        for (String panelID : group) {
+            final int windowID = Hash.getID(Panel.windowID(panelID));
+            final Window window = IkGuiInternal.findWindowByID(windowID);
+            final int nodeID;
+            if (window != null) {
+                nodeID = window.dockID;
+            } else {
+                final WindowSettings settings = IkGuiInternal.findWindowSettingsByID(windowID);
+                nodeID = settings == null ? 0 : settings.dockID;
+            }
+            if (nodeID != 0 && IkGuiInternal.dockBuilderGetNode(nodeID) != null) {
+                return nodeID;
+            }
+        }
+        return 0;
     }
 
     /**

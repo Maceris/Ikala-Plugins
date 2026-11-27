@@ -5,7 +5,7 @@ import lombok.Getter;
 /**
  * Where an image sits in a view that can pan and zoom: the scale, in screen pixels per image pixel,
  * and the offset of the image's top left from the view's. Plain math, so it can be tested; {@link
- * ImageViewer} drives it from the mouse.
+ * TextureViewer} drives it from the mouse.
  */
 public class ImageViewport {
     /** The smallest scale, so a huge image can still shrink to a few pixels. */
