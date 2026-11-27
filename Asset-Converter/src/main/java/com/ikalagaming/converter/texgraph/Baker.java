@@ -106,14 +106,94 @@ public final class Baker {
             problems.add("Set the graph's data folder and texture name to bake it");
             return new Result(written, unchanged, problems);
         }
+        final Maps maps = maps(texture, evaluator, graphFolder, data, problems);
+        if (maps == null || !problems.isEmpty()) {
+            return new Result(written, unchanged, problems);
+        }
+        final Path base = data.resolve("textures").resolve(texture.getTexture());
+        try {
+            save(maps.color(), file(base, ""), written, unchanged);
+            save(
+                    maps.heightFile() ? maps.height() : null,
+                    file(base, HEIGHT_SUFFIX),
+                    written,
+                    unchanged);
+            save(maps.normal(), file(base, NORMAL_SUFFIX), written, unchanged);
+            save(maps.orm(), file(base, ORM_SUFFIX), written, unchanged);
+            save(maps.emissive(), file(base, EMISSIVE_SUFFIX), written, unchanged);
+            save(maps.mask(), file(base, MASK_SUFFIX), written, unchanged);
+        } catch (IOException e) {
+            problems.add("Couldn't write the maps: " + e.getMessage());
+        }
+        return new Result(written, unchanged, problems);
+    }
+
+    /**
+     * The maps a graph bakes, as the game would read them, each null if nothing makes it.
+     *
+     * @param color Base color, sRGB with alpha.
+     * @param height Height, 16-bit gray.
+     * @param normal The normal map, linear.
+     * @param orm Occlusion, roughness and metallic, linear.
+     * @param emissive Emitted light, sRGB.
+     * @param mask Which material each pixel is.
+     * @param heightFile Whether the height is written to its own file.
+     * @param tiles Each face's tile across the layout, in the Output's face order.
+     * @param tileWidth A tile's width in pixels.
+     */
+    public record Maps(
+            @Nullable BufferedImage color,
+            @Nullable BufferedImage height,
+            @Nullable BufferedImage normal,
+            @Nullable BufferedImage orm,
+            @Nullable BufferedImage emissive,
+            @Nullable BufferedImage mask,
+            boolean heightFile,
+            List<Integer> tiles,
+            int tileWidth) {}
+
+    /**
+     * Make a graph's maps without writing them, laid out by its model when the content folder is
+     * known, else with its faces side by side.
+     *
+     * @param texture The graph.
+     * @param evaluator Evaluates it, keeping its cache.
+     * @param graphFolder The folder the graph's file is in, or null for a graph not saved yet.
+     * @param data The content folder its model is under, or null to lay the faces side by side.
+     * @param problems Gets what went wrong.
+     * @return The maps, or null if the graph has no one Output or its layout doesn't fit.
+     */
+    public static @Nullable Maps maps(
+            @NonNull TextureGraph texture,
+            @NonNull Evaluator evaluator,
+            @Nullable Path graphFolder,
+            @Nullable Path data,
+            @NonNull List<String> problems) {
+        final Graph graph = texture.getGraph();
+        final List<Graph.Node> outputs =
+                graph.nodes().stream().filter(n -> OutputNodes.isOutput(n.getType())).toList();
+        if (outputs.size() != 1) {
+            problems.add(
+                    outputs.isEmpty()
+                            ? "The graph has no Output node"
+                            : "The graph has " + outputs.size() + " Output nodes; bake needs one");
+            return null;
+        }
         final Graph.Node output = outputs.getFirst();
         final List<Face> faces = OutputNodes.faces(output.getType());
-        final List<Integer> tiles;
-        try {
-            tiles = layout(data, texture.getModel()).place(faces);
-        } catch (IllegalArgumentException | IOException e) {
-            problems.add(e.getMessage());
-            return new Result(written, unchanged, problems);
+        List<Integer> tiles;
+        if (data == null) {
+            tiles = new ArrayList<>();
+            for (int f = 0; f < faces.size(); ++f) {
+                tiles.add(f);
+            }
+        } else {
+            try {
+                tiles = layout(data, texture.getModel()).place(faces);
+            } catch (IllegalArgumentException | IOException e) {
+                problems.add(e.getMessage());
+                return null;
+            }
         }
         final Bake bake =
                 new Bake(
@@ -125,31 +205,20 @@ public final class Baker {
                         faces,
                         tiles,
                         problems);
-        final Path base = data.resolve("textures").resolve(texture.getTexture());
-        final BufferedImage color = bake.color(OutputNodes.Map.COLOR, true);
-        final BufferedImage height = bake.height();
-        final BufferedImage normal = bake.normal();
-        final BufferedImage orm = bake.orm();
-        final BufferedImage emissive = bake.color(OutputNodes.Map.EMISSIVE, false);
-        final BufferedImage mask = bake.color(OutputNodes.Map.MASK, true);
-        if (!problems.isEmpty()) {
-            return new Result(written, unchanged, problems);
-        }
         final boolean heightFile =
                 graph.param(output.getId(), OutputNodes.HEIGHT_FILE) != null
                         && Boolean.parseBoolean(
                                 graph.param(output.getId(), OutputNodes.HEIGHT_FILE));
-        try {
-            save(color, file(base, ""), written, unchanged);
-            save(heightFile ? height : null, file(base, HEIGHT_SUFFIX), written, unchanged);
-            save(normal, file(base, NORMAL_SUFFIX), written, unchanged);
-            save(orm, file(base, ORM_SUFFIX), written, unchanged);
-            save(emissive, file(base, EMISSIVE_SUFFIX), written, unchanged);
-            save(mask, file(base, MASK_SUFFIX), written, unchanged);
-        } catch (IOException e) {
-            problems.add("Couldn't write the maps: " + e.getMessage());
-        }
-        return new Result(written, unchanged, problems);
+        return new Maps(
+                bake.color(OutputNodes.Map.COLOR, true),
+                bake.height(),
+                bake.normal(),
+                bake.orm(),
+                bake.color(OutputNodes.Map.EMISSIVE, false),
+                bake.color(OutputNodes.Map.MASK, true),
+                heightFile,
+                tiles,
+                texture.getWidth());
     }
 
     /**

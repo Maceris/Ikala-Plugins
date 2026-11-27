@@ -1,10 +1,12 @@
 package com.ikalagaming.graphics.ui.graph;
 
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.IkGuiInternal;
 import com.ikalagaming.graphics.gui.data.DrawList;
 import com.ikalagaming.graphics.gui.data.IkIO;
 import com.ikalagaming.graphics.gui.data.IkString;
+import com.ikalagaming.graphics.gui.data.TextureView;
 import com.ikalagaming.graphics.gui.enums.Key;
 import com.ikalagaming.graphics.gui.enums.MouseButton;
 import com.ikalagaming.graphics.gui.flags.InputTextFlags;
@@ -30,6 +32,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import javax.annotation.Nullable;
 
@@ -302,6 +305,18 @@ public class GraphEditor {
     /** Scratch for pin positions. */
     private final Vector2f scratch = new Vector2f();
 
+    /** Gives nodes their previews, or null for none. */
+    private @Nullable Function<String, NodePreview> previews;
+
+    /** Draws the caller's items in a node's menu, or null. */
+    private @Nullable Consumer<String> nodeMenuItems;
+
+    /** Gives pins their tooltips, or null. */
+    private @Nullable PinDescriber pinTooltips;
+
+    /** What keys do to nodes. */
+    private final Map<Key, Consumer<String>> nodeKeys = new HashMap<>();
+
     /** Scratch for pin positions. */
     private final Vector2f scratch2 = new Vector2f();
 
@@ -354,6 +369,11 @@ public class GraphEditor {
         return this;
     }
 
+    /** Check the graph again on the next frame, as when something it reads from outside changed. */
+    public void revalidate() {
+        errorsFor = -1;
+    }
+
     /**
      * The selected nodes.
      *
@@ -394,6 +414,127 @@ public class GraphEditor {
      */
     public @Nullable String errorOf(@NonNull String id) {
         return errors.get(id);
+    }
+
+    /**
+     * What a node shows under its pins: an image, such as what the node makes, and a line of text
+     * under it.
+     *
+     * @param texture The texture to show.
+     * @param view How to show it.
+     * @param minU The texture coordinate at the image's left edge.
+     * @param minV The texture coordinate at its top edge.
+     * @param maxU The texture coordinate at its right edge.
+     * @param maxV The texture coordinate at its bottom edge.
+     * @param aspect The image's width over its height, which it keeps.
+     * @param caption The text under the image, or null for none.
+     * @param marked Whether the node is marked in its title bar, as the one being shown elsewhere.
+     */
+    public record NodePreview(
+            @NonNull TextureHandle texture,
+            @NonNull TextureView view,
+            float minU,
+            float minV,
+            float maxU,
+            float maxV,
+            float aspect,
+            @Nullable String caption,
+            boolean marked) {}
+
+    /**
+     * Give nodes previews: an image under their pins, from the caller, asked for each frame.
+     *
+     * @param source Gives a node's preview by its ID, or null for none; null to show none.
+     * @return This editor.
+     */
+    public GraphEditor previews(@Nullable Function<String, NodePreview> source) {
+        previews = source;
+        return this;
+    }
+
+    /**
+     * A node's preview.
+     *
+     * @param id The node.
+     * @return The preview, or null for none.
+     */
+    @Nullable NodePreview previewOf(@NonNull String id) {
+        return previews == null ? null : previews.apply(id);
+    }
+
+    /**
+     * Add the caller's items to the end of a node's right-click menu. The items are drawn with
+     * {@link IkGui#menuItem} while the menu is open.
+     *
+     * @param items Draws the items for a node, given its ID; null for none.
+     * @return This editor.
+     */
+    public GraphEditor nodeMenuItems(@Nullable Consumer<String> items) {
+        nodeMenuItems = items;
+        return this;
+    }
+
+    /**
+     * Show the caller's text in a tooltip while the mouse is over a pin, such as what flows out of
+     * it.
+     *
+     * @param describe Gives a pin's text from its node, name and whether it is an input, or null
+     *     for none; null to show nothing.
+     * @return This editor.
+     */
+    public GraphEditor pinTooltips(@Nullable PinDescriber describe) {
+        pinTooltips = describe;
+        return this;
+    }
+
+    /** Gives text about a pin. */
+    @FunctionalInterface
+    public interface PinDescriber {
+        /**
+         * Text about a pin.
+         *
+         * @param node The node's ID.
+         * @param pin The pin's name.
+         * @param input Whether it is an input.
+         * @return The text, or null for none.
+         */
+        @Nullable String describe(@NonNull String node, @NonNull String pin, boolean input);
+    }
+
+    /**
+     * Do something to a node when a key is pressed without Ctrl while the editor is hovered or
+     * focused: to the node under the mouse, or else the only selected node.
+     *
+     * @param key The key.
+     * @param action Gets the node's ID.
+     * @return This editor.
+     */
+    public GraphEditor nodeKey(@NonNull Key key, @NonNull Consumer<String> action) {
+        nodeKeys.put(key, action);
+        return this;
+    }
+
+    /**
+     * The canvas position at the middle of the view, from the last frame, to save the view.
+     *
+     * @return The position, in canvas units.
+     */
+    public Vector2f getViewCenter() {
+        final RectFloat rect = canvas.getRect();
+        return canvas.fromScreen(
+                (rect.getLeft() + rect.getRight()) / 2, (rect.getTop() + rect.getBottom()) / 2);
+    }
+
+    /**
+     * Show a saved view: a zoom, and a canvas position in the middle, from the next frame.
+     *
+     * @param x The position's x, in canvas units.
+     * @param y The position's y, in canvas units.
+     * @param zoom The zoom.
+     */
+    public void setView(float x, float y, float zoom) {
+        canvas.zoom(zoom);
+        canvas.centerOn(x, y);
     }
 
     /**
@@ -792,9 +933,14 @@ public class GraphEditor {
         drawDragged(mouse);
         drawMinimap();
         if (hovered && drag == Drag.NONE && !popupOpen) {
+            final PinRef pin = pinTooltips == null ? null : pinUnder(mouse.x, mouse.y);
+            final String about =
+                    pin == null ? null : pinTooltips.describe(pin.node(), pin.pin(), pin.input());
             final String node = nodeUnder(mouse.x, mouse.y);
             final String error = node == null ? null : errorOf(node);
-            if (error != null) {
+            if (about != null) {
+                IkGui.setTooltip(about);
+            } else if (error != null) {
                 IkGui.setTooltip(error);
             }
         }
@@ -1118,6 +1264,18 @@ public class GraphEditor {
             openSearch(mouse, null);
         }
         if (!io.keyCtrl) {
+            for (Map.Entry<Key, Consumer<String>> bound : nodeKeys.entrySet()) {
+                if (!IkGui.isKeyPressed(bound.getKey(), false)) {
+                    continue;
+                }
+                String target = nodeUnder(mouse.x, mouse.y);
+                if (target == null && selection.size() == 1) {
+                    target = selection.iterator().next();
+                }
+                if (target != null) {
+                    bound.getValue().accept(target);
+                }
+            }
             return;
         }
         if (IkGui.isKeyPressed(Key.Z, false)) {
@@ -2057,6 +2215,10 @@ public class GraphEditor {
         }
         if (IkGui.menuItem("Delete", "Delete")) {
             deleteSelection();
+        }
+        if (nodeMenuItems != null) {
+            IkGui.separator();
+            nodeMenuItems.accept(id);
         }
     }
 

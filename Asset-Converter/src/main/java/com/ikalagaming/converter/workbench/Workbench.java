@@ -290,7 +290,33 @@ public class Workbench {
         // Shown from the start, so its toolbar offers the scenes before one is open
         sceneHost.show(sceneView);
         status = new Label("status", "");
-        graphTool = new GraphTool(ui, status::text, this::open);
+        graphTool =
+                new GraphTool(
+                        ui,
+                        graphics.textures(),
+                        loader,
+                        status::text,
+                        this::open,
+                        new GraphPreviews.Host() {
+                            @Override
+                            public void showViewer(@NonNull Viewer viewer) {
+                                // Not brought to the front, so the graph stays in sight
+                                host.show(viewer);
+                            }
+
+                            @Override
+                            public boolean isShown(@NonNull Viewer viewer) {
+                                return host.viewer(Viewer.class) == viewer;
+                            }
+
+                            @Override
+                            public void wearMaps(
+                                    @Nullable TextureHandle color,
+                                    @Nullable TextureHandle normal,
+                                    @Nullable TextureHandle orm) {
+                                wearGraphMaps(color, normal, orm);
+                            }
+                        });
         refresh();
     }
 
@@ -1248,6 +1274,24 @@ public class Workbench {
         if (viewerPanel != null) {
             viewerPanel.bringToFront();
         }
+    }
+
+    /**
+     * Put a texture graph's maps on the 3D view's shape, showing a cube first if no scene is shown.
+     *
+     * @param color Base color, sRGB, or null.
+     * @param normal The normal map, or null.
+     * @param orm Occlusion, roughness and metallic, or null.
+     */
+    private void wearGraphMaps(
+            @Nullable TextureHandle color,
+            @Nullable TextureHandle normal,
+            @Nullable TextureHandle orm) {
+        if (sceneView.getPlacement() != null) {
+            sceneView.wearTextures(color, normal, orm);
+            return;
+        }
+        openPreview(PreviewShapes.Shape.CUBE, () -> sceneView.wearTextures(color, normal, orm));
     }
 
     /**

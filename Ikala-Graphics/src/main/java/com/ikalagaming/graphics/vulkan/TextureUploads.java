@@ -36,6 +36,8 @@ public class TextureUploads {
      * @param clear Whether the format can be cleared, for a texture with no data.
      * @param levelOffsets Where each mip level starts in the staged data, for data that holds every
      *     level already, like a DDS file; null to generate the levels from level 0.
+     * @param region Where new pixels go in a texture that was already uploaded, as the left and top
+     *     edges of a {@code width} by {@code height} region; null for a whole upload.
      */
     public record Request(
             @NonNull TextureHandle handle,
@@ -45,7 +47,8 @@ public class TextureUploads {
             int height,
             int mipLevels,
             boolean clear,
-            @Nullable int[] levelOffsets) {}
+            @Nullable int[] levelOffsets,
+            @Nullable int[] region) {}
 
     /**
      * A texture to read in another color space, once it is resident.
@@ -106,6 +109,10 @@ public class TextureUploads {
             }
             if (state.textureRegistry.resolve(request.handle()) == null) {
                 // Released while pending, the deletion queue destroys the image
+                continue;
+            }
+            if (request.region() != null) {
+                loader.recordRegion(commandBuffer, request);
                 continue;
             }
             loader.recordUpload(commandBuffer, request);

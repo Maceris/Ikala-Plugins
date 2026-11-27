@@ -45,8 +45,32 @@ stored sRGB values weighed as the eye sees them, as the tool took it, not a lumi
 differs in the last bits and would change rounded normals. The migrated block graphs bake every existing color and
 normal map pixel for pixel, and a test holds them to it.
 
+## Swatches read what validation evaluated
+
+The graph panel evaluates every node to find errors, so each node's swatch is that output, and showing swatches
+costs nothing more. Swatches share one atlas texture with a 64 pixel cell per node, scaled to fit, and stripe values
+outside 0..1, red above and blue below, so clipping shows. The shown node and an Output's maps are made at full
+size. The seed grid evaluates the shown node under nine seeds with an evaluator each, so its cache doesn't fight
+the graph's. Measure averages a node's output as linear albedo, with luminance as the overall figure, to check by
+hand against physical references.
+
+## Parameters are values a graph exposes
+
+A graph's parameters (scalar with a range and step, color, switch, choice, texture, seed) have a group and an order,
+so every details panel lists them the same way; instances, when they come, override their values. Parameter nodes read one
+by name, one node type per kind, so their pins are fixed. The evaluator adds the value a node reads to its
+parameters before hashing, so changing a parameter evaluates again only the nodes that read it and what is below
+them. A Switch names a switch parameter and declares the input it won't read, which is then neither evaluated nor
+part of its key: the branch it turns off costs nothing.
+
+Shared parameter files (`*.texparams.yml`) hold values many graphs read, like UE's material parameter collections.
+A graph lists the ones it reads; its own parameters of the same name win. Files are read again when they change on
+disk, so a bake picks up a new value. Changed in the graph panel, shared values apply to the open graph at once and
+are written on Save shared files, which then bakes the graphs that read them: for now those in the folder above the
+open graph's and below it, until the asset index knows every graph that does.
+
 ## The file
 
 `*.texgraph.yml`: the graph's settings first (format, size, seed, the content folder it bakes to relative to the
-file, the texture's name under its textures folder, and the model whose UVs give the layout), then the graph as
-`GraphFile` writes it. Graph files for the base game's blocks live in Lotomation's `art/textures/block/`.
+file, the texture's name under its textures folder, the model whose UVs give the layout, the shared parameter files
+it reads, and its parameters, one line each without their defaults), then the graph as `GraphFile` writes it. Graph files for the base game's blocks live in Lotomation's `art/textures/block/`.

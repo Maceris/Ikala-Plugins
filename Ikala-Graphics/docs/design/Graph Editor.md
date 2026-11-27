@@ -40,6 +40,17 @@ selector or label. The editor names them as points on its canvas instead (`node 
 constant1.value add1.a`, `frame frame1`, `minimap`, `at x y`), and steps move, click and drag there with real input,
 which exercises the same code a user's mouse does.
 
+## The caller adds what its graphs show
+
+A caller can give each node a preview, an image drawn under its pins with a line of text, from a texture and its
+coordinates, so many nodes can share one atlas texture instead of a bindless slot each (`Textures.update` writes one
+cell). The caller can also add items to a node's menu, give pins tooltips, bind keys that act on the node under the
+mouse or the one selected, and read and set the view, to keep it somewhere of its own. Previews make nodes taller,
+so a graph laid out without them can overlap; a caller showing them should let the user turn them off.
+
+The canvas scrolls only as far as the nodes' bounds, so centering on a point past the last node stops short; a
+saved view restores fine, since it was a place the view could reach.
+
 Copy and paste go through the system clipboard as the same YAML, behind a header line, so a part of one graph pastes
 into another, even in another editor run.
 

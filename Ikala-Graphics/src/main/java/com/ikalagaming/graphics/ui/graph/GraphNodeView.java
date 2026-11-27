@@ -25,7 +25,8 @@ import javax.annotation.Nullable;
  * One node of a {@link GraphEditor}, on its canvas: a title bar, then a row for each pin, inputs on
  * the left edge and outputs on the right, each a dot in its type's color. A collapsed node shows
  * only its title, its links meeting its sides; a node hiding unused pins shows only linked ones; a
- * reroute is a single dot. A comment floats above. Draws only; the editor reads the mouse for every
+ * reroute is a single dot. A node the caller gives a preview shows an image under its pins, and a
+ * line of text under that. A comment floats above. Draws only; the editor reads the mouse for every
  * node at once. Sizes are in canvas units and scale with the zoom.
  */
 public class GraphNodeView extends Node<GraphNodeView> {
@@ -46,6 +47,15 @@ public class GraphNodeView extends Node<GraphNodeView> {
 
     /** The space under the last row. */
     public static final float BOTTOM = 6;
+
+    /** How tall a node's preview image is, in units. */
+    public static final float PREVIEW = 64;
+
+    /** How tall the line of text under a preview is, in units. */
+    public static final float CAPTION = 16;
+
+    /** The mark in the title bar of a node that is shown elsewhere. */
+    private static final int MARK = Color.rgba(0.35f, 0.85f, 0.45f, 1);
 
     /** A pin dot's radius. */
     public static final float PIN_RADIUS = 5;
@@ -148,8 +158,24 @@ public class GraphNodeView extends Node<GraphNodeView> {
         } else {
             unitsWide = wideEnough();
             width(Sizing.fixed(unitsWide));
-            height(Sizing.fixed(height(Math.max(shownPins(true).size(), shownPins(false).size()))));
+            height(
+                    Sizing.fixed(
+                            height(Math.max(shownPins(true).size(), shownPins(false).size()))
+                                    + previewHeight(editor.previewOf(nodeId))));
         }
+    }
+
+    /**
+     * How much taller a preview makes a node.
+     *
+     * @param preview The preview, or null for none.
+     * @return The extra height, in units.
+     */
+    private static float previewHeight(@Nullable GraphEditor.NodePreview preview) {
+        if (preview == null) {
+            return 0;
+        }
+        return PREVIEW + BOTTOM + (preview.caption() == null ? 0 : CAPTION);
     }
 
     /**
@@ -202,7 +228,9 @@ public class GraphNodeView extends Node<GraphNodeView> {
         if (isCollapsed()) {
             return -3;
         }
-        return Math.max(shownPins(true).size(), shownPins(false).size());
+        final GraphEditor.NodePreview preview = editor.previewOf(nodeId);
+        final int extra = preview == null ? 0 : preview.caption() == null ? 1 << 16 : 2 << 16;
+        return Math.max(shownPins(true).size(), shownPins(false).size()) + extra;
     }
 
     /**
@@ -397,10 +425,72 @@ public class GraphNodeView extends Node<GraphNodeView> {
                     "!",
                     0);
         }
+        final GraphEditor.NodePreview preview = collapsed ? null : editor.previewOf(nodeId);
+        if (preview != null && preview.marked()) {
+            final float size = font * 0.6f;
+            final float markRight = right - textInset - font;
+            final float markTop = top + (TITLE * scale - size) / 2;
+            drawList.addRectFilled(
+                    markRight - size,
+                    markTop,
+                    markRight,
+                    markTop + size,
+                    MARK,
+                    size / 4,
+                    DrawFlags.ROUND_CORNERS_ALL);
+        }
         if (!collapsed) {
             final Vector2f at = new Vector2f();
             drawPins(drawList, shownPins(true), true, font, at);
             drawPins(drawList, shownPins(false), false, font, at);
+            if (preview != null) {
+                final int rows =
+                        Math.max(1, Math.max(shownPins(true).size(), shownPins(false).size()));
+                drawPreview(drawList, rect, preview, top + (TITLE + rows * ROW + BOTTOM) * scale);
+            }
+        }
+    }
+
+    /**
+     * Draw a node's preview: its image as large as fits, centered, and its caption under it.
+     *
+     * @param drawList Where to draw.
+     * @param rect The node's rectangle.
+     * @param preview The preview.
+     * @param top Where the image's area starts, in pixels.
+     */
+    private void drawPreview(
+            DrawList drawList, RectFloat rect, GraphEditor.NodePreview preview, float top) {
+        final float scale = scale();
+        final float room = rect.getWidth() - 2 * TEXT_PAD * scale;
+        final float tall = PREVIEW * scale;
+        final float aspect = preview.aspect() > 0 ? preview.aspect() : 1;
+        final float width = Math.min(room, tall * aspect);
+        final float height = width / aspect;
+        final float left = (rect.getLeft() + rect.getRight() - width) / 2;
+        final float imageTop = top + (tall - height) / 2;
+        drawList.addImageView(
+                preview.texture(),
+                left,
+                imageTop,
+                left + width,
+                imageTop + height,
+                preview.minU(),
+                preview.minV(),
+                preview.maxU(),
+                preview.maxV(),
+                preview.view());
+        if (preview.caption() != null) {
+            final int font = Math.max(1, Math.round(CAPTION * scale * 0.8f));
+            final float textWidth =
+                    IkGui.calcTextSize(preview.caption()).x * font / IkGui.getFontSize();
+            drawList.addText(
+                    font,
+                    (rect.getLeft() + rect.getRight() - textWidth) / 2,
+                    top + tall + (CAPTION * scale - font) / 2,
+                    TEXT,
+                    preview.caption(),
+                    0);
         }
     }
 

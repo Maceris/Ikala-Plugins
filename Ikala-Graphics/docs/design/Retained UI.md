@@ -19,6 +19,10 @@ the parent, and cached results recomputed only when something changes.
   the middle. Without that record a new panel would float, since IkGui keeps the saved layout and only rebuilds it
   on reset; with it, a panel the user pulled out stays out. The middle node isn't known on the first frame after
   the file is read, so a panel bound there waits a frame.
+- **Tools keep small view state in `gui.ini` too** (`SavedState`): named entries of keys and text values, like a
+  graph's pan, zoom and shown node per file, so remembering how something was viewed never changes the file being
+  edited. Its handler is installed before the file is read, like the dock spaces', since IkGui drops sections no
+  handler claims.
 - **Content uses a flex layout that runs before submission,** so every node knows its rectangle when submitted. That
   avoids immediate mode's usual one-frame lag on sizes.
 

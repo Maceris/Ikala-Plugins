@@ -27,6 +27,15 @@ public final class Evaluator {
     /** The key of a node that couldn't be evaluated, which nothing downstream caches against. */
     private static final long FAILED = 0;
 
+    /** The kind of the graph parameter a node reads, among its parameters; empty if missing. */
+    public static final String READ_KIND = "@kind";
+
+    /** The value of the graph parameter a node reads, among its parameters. */
+    public static final String READ_VALUE = "@value";
+
+    /** A choice parameter's options a node reads, one per line, among its parameters. */
+    public static final String READ_CHOICES = "@choices";
+
     /** The library the nodes come from. */
     private final TextureLibrary library;
 
@@ -49,6 +58,21 @@ public final class Evaluator {
     @Getter private long runs;
 
     /**
+     * What each node cost when it last ran, by node ID. -- GETTER -- The costs.
+     *
+     * @return The costs, by node ID.
+     */
+    @Getter private final Map<String, Cost> costs = new HashMap<>();
+
+    /**
+     * What a node cost when it last ran.
+     *
+     * @param nanos How long it took, in nanoseconds.
+     * @param bytes How much memory its outputs take.
+     */
+    public record Cost(long nanos, long bytes) {}
+
+    /**
      * A node's cached outputs.
      *
      * @param key The key they were made with.
@@ -63,8 +87,14 @@ public final class Evaluator {
      * @param height Pixels down.
      * @param seed The graph's seed, which each node's seed is made from.
      * @param folder Where relative file names start, or null when the graph isn't saved.
+     * @param parameters The parameters Parameter nodes read, by name.
      */
-    public record Settings(int width, int height, long seed, @Nullable Path folder) {
+    public record Settings(
+            int width,
+            int height,
+            long seed,
+            @Nullable Path folder,
+            @NonNull Map<String, GraphParameter> parameters) {
         /**
          * Check the settings.
          *
@@ -75,6 +105,29 @@ public final class Evaluator {
                 throw new IllegalArgumentException(
                         "A texture is at least 1x1, not " + width + "x" + height);
             }
+            parameters = Map.copyOf(parameters);
+        }
+
+        /**
+         * Settings without parameters.
+         *
+         * @param width Pixels across.
+         * @param height Pixels down.
+         * @param seed The graph's seed.
+         * @param folder Where relative file names start, or null.
+         */
+        public Settings(int width, int height, long seed, @Nullable Path folder) {
+            this(width, height, seed, folder, Map.of());
+        }
+
+        /**
+         * These settings with another seed, as a seed grid tries.
+         *
+         * @param newSeed The seed.
+         * @return The settings.
+         */
+        public Settings withSeed(long newSeed) {
+            return new Settings(width, height, newSeed, folder, parameters);
         }
     }
 
@@ -139,6 +192,32 @@ public final class Evaluator {
     /** Forget every cached output, as when the files a graph reads may have changed. */
     public void clear() {
         cache.clear();
+        costs.clear();
+    }
+
+    /**
+     * A node's outputs from its last evaluation, without evaluating anything, for showing them.
+     *
+     * @param node The node.
+     * @return The outputs by pin, or null if it hasn't been evaluated or its last try failed.
+     */
+    public @Nullable Map<String, Plane> cached(@NonNull String node) {
+        if (errors.containsKey(node)) {
+            return null;
+        }
+        final Cached cached = cache.get(node);
+        return cached == null ? null : cached.outputs();
+    }
+
+    /**
+     * Forget what nodes no longer in a graph had cached.
+     *
+     * @param graph The graph.
+     */
+    public void forgetRemoved(@NonNull Graph graph) {
+        cache.keySet().removeIf(id -> graph.node(id) == null);
+        costs.keySet().removeIf(id -> graph.node(id) == null);
+        errors.keySet().removeIf(id -> graph.node(id) == null);
     }
 
     /**
@@ -150,7 +229,8 @@ public final class Evaluator {
      * @param pin The input.
      * @return The real output's node and pin, or null if it leads to nothing.
      */
-    static @Nullable String[] source(Graph graph, String node, String pin) {
+    public static @Nullable String[] source(
+            @NonNull Graph graph, @NonNull String node, @NonNull String pin) {
         final Set<String> seen = new HashSet<>();
         Graph.Link link = graph.linkInto(node, pin);
         while (link != null) {
@@ -241,8 +321,13 @@ public final class Evaluator {
             errors.put(id, "This node doesn't make a texture");
             return null;
         }
+        final Map<String, String> params = paramsFor(pass, id, type, node);
+        final Set<String> unused = node.unused(params);
         // An input that failed has its own error; this node reads it as failed too
         for (NodeTypes.Pin input : type.inputs()) {
+            if (unused.contains(input.name())) {
+                continue;
+            }
             final String[] from = source(graph, id, input.name());
             if (from != null && evaluate(pass, from[0]) == null) {
                 errors.put(id, "Input " + input.name() + " has an error");
@@ -257,8 +342,9 @@ public final class Evaluator {
                         settings.height(),
                         nodeSeed(settings.seed(), id),
                         settings.folder(),
-                        paramsOf(graph, id, type),
-                        pin -> read(pass, id, pin));
+                        params,
+                        pin -> unused.contains(pin) ? null : read(pass, id, pin));
+        final long start = System.nanoTime();
         try {
             node.evaluate(context);
         } catch (TextureNode.NodeException e) {
@@ -266,9 +352,15 @@ public final class Evaluator {
             cache.remove(id);
             return null;
         }
+        final long took = System.nanoTime() - start;
         ++runs;
         errors.remove(id);
         final Map<String, Plane> outputs = Collections.unmodifiableMap(context.outputs());
+        long bytes = 0;
+        for (Plane plane : outputs.values()) {
+            bytes += (long) plane.values().length * Float.BYTES;
+        }
+        costs.put(id, new Cost(took, bytes));
         cache.put(id, new Cached(key, outputs));
         return outputs;
     }
@@ -295,8 +387,9 @@ public final class Evaluator {
             return FAILED;
         }
         final Settings settings = pass.settings();
-        final Map<String, String> params = paramsOf(graph, id, type);
         final TextureNode node = library.get(type.id());
+        final Map<String, String> params = paramsFor(pass, id, type, node);
+        final Set<String> unused = node == null ? Set.of() : node.unused(params);
         final StringBuilder text =
                 new StringBuilder(type.id())
                         .append('/')
@@ -313,7 +406,8 @@ public final class Evaluator {
                         .append(node == null ? "" : node.fingerprint(params, settings.folder()));
         long key = hash(text.toString());
         for (NodeTypes.Pin input : type.inputs()) {
-            final String[] from = source(graph, id, input.name());
+            final String[] from =
+                    unused.contains(input.name()) ? null : source(graph, id, input.name());
             long inputKey = 1;
             if (from != null) {
                 inputKey = keyOf(pass, from[0]);
@@ -332,6 +426,30 @@ public final class Evaluator {
         }
         pass.keys().put(id, key);
         return key;
+    }
+
+    /**
+     * A node's parameters as it sees them: its own, and for a node that reads a graph parameter,
+     * that parameter's kind and value as {@link #READ_KIND} and {@link #READ_VALUE}.
+     *
+     * @param pass The pass.
+     * @param id The node.
+     * @param type Its type.
+     * @param node What it does, or null.
+     * @return The parameters.
+     */
+    private static Map<String, String> paramsFor(
+            Pass pass, String id, NodeTypes.NodeType type, @Nullable TextureNode node) {
+        final Map<String, String> params = paramsOf(pass.graph(), id, type);
+        final String read = node == null ? null : node.parameterRead(params);
+        if (read != null) {
+            final GraphParameter parameter = pass.settings().parameters().get(read);
+            params.put(READ_KIND, parameter == null ? "" : parameter.kind().id);
+            params.put(READ_VALUE, parameter == null ? "" : parameter.value());
+            params.put(
+                    READ_CHOICES, parameter == null ? "" : String.join("\n", parameter.choices()));
+        }
+        return params;
     }
 
     /**

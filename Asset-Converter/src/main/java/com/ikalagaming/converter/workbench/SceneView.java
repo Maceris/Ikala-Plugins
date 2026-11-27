@@ -352,6 +352,55 @@ public class SceneView implements Viewer {
         return false;
     }
 
+    /** The material a texture graph's maps were last put on, kept to change in place. */
+    private @Nullable Material graphMaterial;
+
+    /** The scene {@link #graphMaterial} was added to. */
+    private @Nullable ScenePlacement graphMaterialPlacement;
+
+    /**
+     * Put textures, like a texture graph's live maps, on every mesh of the scene's first node that
+     * has any, in a white material, made once per scene and changed in place after. Render thread,
+     * with a scene shown.
+     *
+     * @param color Base color, sRGB, or null.
+     * @param normal The normal map, or null.
+     * @param orm Packed occlusion, roughness and metallic, or null.
+     * @return True if a mesh took them.
+     */
+    public boolean wearTextures(
+            @Nullable TextureHandle color,
+            @Nullable TextureHandle normal,
+            @Nullable TextureHandle orm) {
+        final ScenePlacement shown = placement;
+        if (shown == null) {
+            return false;
+        }
+        final boolean reuse = graphMaterial != null && graphMaterialPlacement == shown;
+        final Material material = reuse ? graphMaterial : new Material();
+        material.getBaseColor().set(1, 1, 1, 1);
+        material.setTexture(color);
+        material.setNormalMap(normal);
+        material.setOcclusionRoughnessMetal(orm);
+        material.setPackedOcclusion(orm != null);
+        if (reuse) {
+            com.ikalagaming.graphics.GraphicsManager.getScene().getMaterialCache().setDirty(true);
+        } else {
+            shown.addMaterial("Texture graph", material);
+            graphMaterial = material;
+            graphMaterialPlacement = shown;
+        }
+        for (Node node : shown.getImported().root().children()) {
+            if (node.meshes().length > 0) {
+                for (int mesh : node.meshes()) {
+                    shown.assign(node, mesh, material);
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Offer scenes to show in the toolbar.
      *

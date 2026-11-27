@@ -39,8 +39,15 @@ What it opens:
 
 The Graph panel holds Ikala-Graphics' graph editor on texture graphs (see Texture Graphs.md), opening, saving and
 baking `*.texgraph.yml`. The properties panel shows the selected node's parameters, or the graph's size, seed and
-bake target when nothing is selected, and node errors come from evaluating the graph. Bake writes the maps and
-opens the baked texture in the Viewer.
+bake target and parameters when nothing is selected, and node errors come from evaluating the graph. Bake writes
+the maps and opens the baked texture in the Viewer.
+
+Each node shows a swatch of what it makes, with what it cost, and a pin's tooltip gives the range of what flows
+through it. D over a node, or its menu, shows it in the Viewer as a swatch that follows every edit; an Output shows
+one of its maps there, and can put its first face's color, normal and ORM maps on the 3D view's shape, opening a
+cube if no scene is shown. Showing a node doesn't bring the Viewer to the front, so the graph stays in sight; drag
+the Graph tab beside the Viewer to see both. The panel's pan, zoom and shown node are kept per graph file in
+`gui.ini`, and whether nodes show swatches for every graph.
 
 ## Decisions
 

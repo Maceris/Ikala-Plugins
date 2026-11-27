@@ -487,8 +487,131 @@ public class TextureLoaderVulkan {
                         height,
                         info.mipLevels,
                         canClearColor(format),
-                        levelOffsets));
+                        levelOffsets,
+                        null));
         return handle;
+    }
+
+    /**
+     * Replace part of a texture's pixels, and make its other mip levels again. Safe from any
+     * thread: the data is staged right away, and the copy is recorded at the start of a later
+     * frame, after the texture's own upload and any earlier updates.
+     *
+     * @param owner The owner key the texture must be tracked under.
+     * @param handle The texture.
+     * @param buffer The tightly packed pixels for the region, in the texture's format, from its
+     *     position to its limit.
+     * @param x The region's left edge, in pixels.
+     * @param y The region's top edge, in pixels.
+     * @param width The region's width.
+     * @param height The region's height.
+     * @return False if the handle is stale or owned by someone else, so nothing was queued.
+     * @throws IllegalArgumentException If the region isn't inside the texture, the data is too
+     *     short, or the format is block compressed.
+     */
+    public boolean update(
+            @NonNull String owner,
+            @NonNull TextureHandle handle,
+            @NonNull ByteBuffer buffer,
+            int x,
+            int y,
+            int width,
+            int height) {
+        final TextureInfoVulkan info = state.textureRegistry.resolve(handle);
+        if (info == null || !owner.equals(state.textureRegistry.ownerOf(handle))) {
+            return false;
+        }
+        if (handle.format().name().endsWith("_BLOCK")) {
+            throw new IllegalArgumentException(
+                    "Compressed textures can't be updated in part, " + handle.format().name());
+        }
+        if (info.layout != VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL) {
+            throw new IllegalArgumentException(
+                    "Only textures loaded from data can be updated in part");
+        }
+        if (x < 0 || y < 0 || x + width > handle.width() || y + height > handle.height()) {
+            throw new IllegalArgumentException(
+                    SafeResourceLoader.format(
+                            "A {} x {} region at {}, {} isn't inside a {} x {} texture",
+                            width,
+                            height,
+                            x,
+                            y,
+                            handle.width(),
+                            handle.height()));
+        }
+        checkData(buffer, handle.format(), width, height);
+        final StagingRing.Staging staging = state.stagingRing.stage(state, buffer);
+        state.textureUploads.add(
+                new TextureUploads.Request(
+                        handle,
+                        info,
+                        staging,
+                        width,
+                        height,
+                        info.mipLevels,
+                        false,
+                        null,
+                        new int[] {x, y}));
+        return true;
+    }
+
+    /**
+     * Record copying staged pixels into part of an uploaded texture: move every level from where
+     * shaders read it to the transfer layout, keeping its contents, copy the region into level 0,
+     * then make the other levels again and move them back. Render thread only.
+     *
+     * @param commandBuffer The command buffer to record into.
+     * @param request The update, with its region.
+     */
+    void recordRegion(
+            @NonNull VkCommandBuffer commandBuffer, @NonNull TextureUploads.Request request) {
+        final TextureInfoVulkan info = request.info();
+        final int[] region = request.region();
+        final StagingRing.Staging staging = request.staging();
+        if (region == null || staging == null) {
+            return;
+        }
+        final int levels = info.mipLevels;
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkImageMemoryBarrier2.Buffer barrier = VkImageMemoryBarrier2.calloc(1, stack);
+            // Earlier frames sample it and earlier copies write it, so wait for both
+            barrier.get(0)
+                    .sType$Default()
+                    .srcStageMask(VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT)
+                    .srcAccessMask(VK_ACCESS_2_TRANSFER_WRITE_BIT)
+                    .dstStageMask(VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT)
+                    .dstAccessMask(VK_ACCESS_2_TRANSFER_READ_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT)
+                    .oldLayout(info.layout)
+                    .newLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+                    .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                    .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                    .image(info.texture)
+                    .subresourceRange(colorRange(stack, 0, levels));
+            recordBarriers(commandBuffer, barrier, stack);
+
+            VkBufferImageCopy.Buffer copy = VkBufferImageCopy.calloc(1, stack);
+            copy.get(0)
+                    .bufferOffset(staging.offset())
+                    // Zero means tightly packed
+                    .bufferRowLength(0)
+                    .bufferImageHeight(0)
+                    .imageSubresource(
+                            layers ->
+                                    layers.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                                            .mipLevel(0)
+                                            .layerCount(1))
+                    .imageOffset(o -> o.set(region[0], region[1], 0))
+                    .imageExtent(e -> e.set(request.width(), request.height(), 1));
+            vkCmdCopyBufferToImage(
+                    commandBuffer,
+                    staging.buffer(),
+                    info.texture,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    copy);
+        }
+        final TextureHandle handle = request.handle();
+        generateMips(commandBuffer, info.texture, handle.width(), handle.height(), levels);
     }
 
     /**

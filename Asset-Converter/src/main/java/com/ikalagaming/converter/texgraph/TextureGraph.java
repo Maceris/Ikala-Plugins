@@ -10,7 +10,10 @@ import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -26,13 +29,18 @@ import javax.annotation.Nullable;
  * data: ../../../plugins/Lotomation/data
  * texture: block/grass
  * model: block/cube_bottom_top
+ * shared: ['../shared/wear.texparams.yml']
+ * parameters:
+ *   tint: {type: color, value: '#6b8f3a', group: Color}
  * nodes:
  *   ...
  * </pre>
  *
  * {@code data} is the content folder baked maps go to, relative to the graph file; {@code texture}
  * names the maps under its {@code textures} folder, and {@code model} the model under its {@code
- * models} folder whose UVs give the face layout.
+ * models} folder whose UVs give the face layout. {@code shared} lists shared parameter files the
+ * graph reads, relative to it, and {@code parameters} the values it exposes; see {@link
+ * GraphParameter} and {@link SharedParameters}.
  */
 public final class TextureGraph {
     /** What a texture graph file's name ends with. */
@@ -43,6 +51,9 @@ public final class TextureGraph {
 
     /** The key holding the format's version. */
     static final String FORMAT_KEY = "texture graph";
+
+    /** The key holding the graph's parameters. */
+    static final String PARAMETERS = "parameters";
 
     /** A new graph's tile size. */
     public static final int DEFAULT_SIZE = 16;
@@ -108,6 +119,116 @@ public final class TextureGraph {
      */
     @Getter @Setter private @Nullable String model;
 
+    /** The graph's own parameters, by name, in the order added. */
+    private final Map<String, GraphParameter> parameters = new LinkedHashMap<>();
+
+    /** The shared parameter files it reads, relative to the graph file, in order. */
+    private final List<String> shared = new ArrayList<>();
+
+    /** Shared parameters' values changed in the editor and not saved to their files yet. */
+    private Map<String, GraphParameter> sharedOverrides = Map.of();
+
+    /**
+     * Use shared parameters' values the editor changed but hasn't saved, in place of their files'.
+     * Not written with the graph.
+     *
+     * @param overrides The changed parameters, by name.
+     */
+    public void setSharedOverrides(@NonNull Map<String, GraphParameter> overrides) {
+        sharedOverrides = Map.copyOf(overrides);
+    }
+
+    /**
+     * The graph's own parameters.
+     *
+     * @return A copy, in the order added.
+     */
+    public List<GraphParameter> getParameters() {
+        return new ArrayList<>(parameters.values());
+    }
+
+    /**
+     * A parameter of the graph's own.
+     *
+     * @param name Its name.
+     * @return The parameter, or null.
+     */
+    public @Nullable GraphParameter parameter(@NonNull String name) {
+        return parameters.get(name);
+    }
+
+    /**
+     * Add a parameter, or replace the one with its name.
+     *
+     * @param parameter The parameter.
+     */
+    public void putParameter(@NonNull GraphParameter parameter) {
+        parameters.put(parameter.name(), parameter);
+    }
+
+    /**
+     * Remove a parameter.
+     *
+     * @param name Its name.
+     * @return True if there was one.
+     */
+    public boolean removeParameter(@NonNull String name) {
+        return parameters.remove(name) != null;
+    }
+
+    /**
+     * The shared parameter files the graph reads.
+     *
+     * @return A copy of their names, relative to the graph file.
+     */
+    public List<String> getShared() {
+        return new ArrayList<>(shared);
+    }
+
+    /**
+     * Set the shared parameter files the graph reads.
+     *
+     * @param files Their names, relative to the graph file.
+     */
+    public void setShared(@NonNull List<String> files) {
+        shared.clear();
+        shared.addAll(files);
+    }
+
+    /**
+     * Every parameter the graph can read: its shared files' in order, then its own, which win.
+     *
+     * @param folder The graph file's folder, which shared files are named from, or null.
+     * @param problems Gets each shared file that couldn't be read.
+     * @return The parameters, by name.
+     */
+    public Map<String, GraphParameter> resolveParameters(
+            @Nullable Path folder, @NonNull List<String> problems) {
+        final Map<String, GraphParameter> all = new LinkedHashMap<>();
+        for (String file : shared) {
+            if (folder == null) {
+                problems.add("Save the graph to read " + file);
+                continue;
+            }
+            try {
+                final SharedParameters.Read read = SharedParameters.read(folder.resolve(file));
+                all.putAll(read.parameters());
+                for (String problem : read.problems()) {
+                    problems.add(file + ": " + problem);
+                }
+            } catch (IOException | IllegalArgumentException e) {
+                problems.add("Can't read " + file + ": " + e.getMessage());
+            }
+        }
+        for (Map.Entry<String, GraphParameter> override : sharedOverrides.entrySet()) {
+            if (all.containsKey(override.getKey())) {
+                all.put(override.getKey(), override.getValue());
+            }
+        }
+        all.putAll(parameters);
+        return all;
+    }
+
     /**
      * Make an empty texture graph.
      *
@@ -123,8 +244,9 @@ public final class TextureGraph {
      * @param folder Where relative file names start: the graph file's folder, or null.
      * @return The settings.
      */
-    public Evaluator.Settings settings(@Nullable java.nio.file.Path folder) {
-        return new Evaluator.Settings(width, height, seed, folder);
+    public Evaluator.Settings settings(@Nullable Path folder) {
+        return new Evaluator.Settings(
+                width, height, seed, folder, resolveParameters(folder, new ArrayList<>()));
     }
 
     /**
@@ -146,6 +268,12 @@ public final class TextureGraph {
         if (model != null) {
             out.append("model: ").append(quote(model)).append('\n');
         }
+        if (!shared.isEmpty()) {
+            out.append("shared: [")
+                    .append(String.join(", ", shared.stream().map(TextureGraph::quote).toList()))
+                    .append("]\n");
+        }
+        out.append(GraphParameter.writeAll(PARAMETERS, parameters.values()));
         out.append(GraphFile.write(graph));
         return out.toString();
     }
@@ -183,6 +311,16 @@ public final class TextureGraph {
         data = text(root, "data");
         texture = text(root, "texture");
         model = text(root, "model");
+        shared.clear();
+        if (root.get("shared") instanceof List<?> files) {
+            for (Object file : files) {
+                shared.add(String.valueOf(file));
+            }
+        } else if (root.containsKey("shared")) {
+            problems.add("shared is a list of shared parameter files");
+        }
+        parameters.clear();
+        parameters.putAll(GraphParameter.readAll(root.get(PARAMETERS), problems));
         problems.addAll(GraphFile.read(text, graph, (type, from, params) -> {}));
         return problems;
     }

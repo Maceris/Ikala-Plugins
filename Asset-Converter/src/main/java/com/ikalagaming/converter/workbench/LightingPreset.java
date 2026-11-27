@@ -37,7 +37,9 @@ import java.util.stream.Stream;
  * name: Torch cave
  * order: 4              # where it is listed, lowest first
  * sun:                  # leave out for none
- *   around: 40          # degrees, turning from +z toward +x, as the lighting panel shows
+ *   around: 140         # degrees the light travels, turning from +z toward +x, as the
+ *                         # lighting panel shows; the camera starts looking along -z, so
+ *                         # 90 to 270 lights the side facing it
  *   up: 70              # degrees above the horizon
  *   color: [1, 0.97, 0.92]
  *   lux: 100000

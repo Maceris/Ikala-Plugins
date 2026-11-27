@@ -471,7 +471,13 @@ public final class ConverterScripts {
      * id"; "downstream id"; "unused"; "find text"; "focus id"; "minimap on|off"; "describe id",
      * which logs a node's or frame's state and the selection; "setting
      * width|height|seed|data|texture|model value", a texture graph setting; "bake", which bakes the
-     * saved graph and logs what it wrote.
+     * saved graph and logs what it wrote; "display id|none", which shows a node in the Viewer;
+     * "measure id"; "pin node pin in|out", which logs its tooltip; "seeds on|off|other|pick n";
+     * "map name", which map a shown Output shows; "shape on|off", the Output on the 3D shape;
+     * "previews", which logs the swatches, the shown node and each node's cost; "swatches on|off";
+     * "view x y zoom", centering the canvas; "where", logging the view's middle; "param add name
+     * kind", "param set name value" and "param shared file...", which change the graph's parameters
+     * and log them.
      *
      * @param command The command and its words, separated by spaces.
      */
@@ -586,6 +592,82 @@ public final class ConverterScripts {
                                     result.unchanged().size(),
                                     result.problems());
                         }
+                        case "display" -> {
+                            tool.getPreviews().show("none".equals(words[1]) ? null : words[1]);
+                            log.info("Script: Graph shows {}", tool.getPreviews().getShown());
+                        }
+                        case "measure" ->
+                                log.info(
+                                        "Script: Graph measured {}",
+                                        tool.getPreviews().measure(words[1]));
+                        case "pin" ->
+                                log.info(
+                                        "Script: Graph pin {}",
+                                        tool.getPreviews()
+                                                .describePin(
+                                                        words[1], words[2], "in".equals(words[3])));
+                        case "seeds" -> {
+                            final var previews = tool.getPreviews();
+                            switch (words[1]) {
+                                case "on" -> previews.setSeedGrid(true);
+                                case "off" -> previews.setSeedGrid(false);
+                                case "other" -> previews.otherSeeds();
+                                case "pick" ->
+                                        previews.pickSeed(
+                                                previews.seedOf(Integer.parseInt(words[2])));
+                                default -> log.warn("Script: no seeds command {}", words[1]);
+                            }
+                            log.info("Script: Graph seed {}", tool.getTexture().getSeed());
+                        }
+                        case "map" -> tool.getPreviews().showMap(words[1]);
+                        case "shape" -> tool.getPreviews().setOnShape("on".equals(words[1]));
+                        case "param" -> {
+                            final var texture = tool.getTexture();
+                            switch (words[1]) {
+                                case "add" ->
+                                        tool.getParameterPanel()
+                                                .add(
+                                                        words[2],
+                                                        com.ikalagaming.converter.texgraph
+                                                                .GraphParameter.Kind.valueOf(
+                                                                words[3].toUpperCase(
+                                                                        java.util.Locale.ROOT)));
+                                case "set" -> {
+                                    final var parameter = texture.parameter(words[2]);
+                                    if (parameter == null) {
+                                        log.warn("Script: no graph parameter {}", words[2]);
+                                    } else {
+                                        texture.putParameter(parameter.withValue(rest(words, 3)));
+                                        tool.getHistory().markDirty();
+                                    }
+                                }
+                                case "shared" -> {
+                                    texture.setShared(List.of(words).subList(2, words.length));
+                                    tool.getHistory().markDirty();
+                                }
+                                default -> log.warn("Script: no param command {}", words[1]);
+                            }
+                            log.info(
+                                    "Script: Graph parameters {}",
+                                    texture.getParameters().stream()
+                                            .map(p -> p.name() + "=" + p.value())
+                                            .toList());
+                        }
+                        case "view" ->
+                                editor.setView(
+                                        Float.parseFloat(words[1]),
+                                        Float.parseFloat(words[2]),
+                                        Float.parseFloat(words[3]));
+                        case "where" ->
+                                log.info(
+                                        "Script: Graph view at {}, zoom {}, canvas {}",
+                                        editor.getViewCenter(),
+                                        editor.getCanvas().getRect(),
+                                        editor.getCanvas().getZoom());
+                        case "swatches" -> tool.setSwatches("on".equals(words[1]));
+                        case "previews" ->
+                                log.info(
+                                        "Script: Graph previews {}", tool.getPreviews().describe());
                         case "describe" -> {
                             final var graph = tool.getHistory().getGraph();
                             final Graph.Node node = graph.node(words[1]);

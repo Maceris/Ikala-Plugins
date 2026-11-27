@@ -248,6 +248,40 @@ public final class Textures {
     }
 
     /**
+     * Replace part of a texture this plugin loaded from pixel data, such as one cell of an atlas,
+     * keeping the rest. The data is copied before this returns, and the new pixels show from a
+     * later frame. Updates happen in the order they were asked for, after the texture's own upload,
+     * and its other mip levels are made again from the new pixels.
+     *
+     * @param texture The texture.
+     * @param buffer The tightly packed pixels for the region, in the texture's format, from its
+     *     position to its limit.
+     * @param x The region's left edge, in pixels.
+     * @param y The region's top edge, in pixels.
+     * @param width The region's width.
+     * @param height The region's height.
+     * @return False if the handle is null, stale, or another plugin's, so nothing changed.
+     * @throws IllegalArgumentException If the region isn't inside the texture, the data is too
+     *     short, or the texture is block compressed.
+     * @throws IllegalStateException If the plugin was unloaded, or the renderer isn't running.
+     */
+    public boolean update(
+            @Nullable TextureHandle texture,
+            @NonNull ByteBuffer buffer,
+            int x,
+            int y,
+            int width,
+            int height) {
+        context.checkOpen();
+        if (texture == null) {
+            return false;
+        }
+        return renderer()
+                .getTextureLoader()
+                .update(context.getOwnerKey(), texture, buffer, x, y, width, height);
+    }
+
+    /**
      * Release a texture this plugin owns. The handle, and any copies of it, become stale. Nothing
      * happens if the handle is null or already stale. Releasing another plugin's texture is not
      * allowed, and is ignored with a warning.

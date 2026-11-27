@@ -105,6 +105,21 @@ class UICanvasTest {
     }
 
     @Test
+    void centeringPutsAPointInTheMiddleOfTheView() {
+        Button far = node("far", 0, 1500);
+        Canvas canvas = show(new Canvas("canvas").add(node("near", 0, 0), far));
+        frames(3);
+        canvas.centerOn(30, 1515);
+        frames(3);
+        RectFloat view = canvas.getRect();
+        assertEquals(view.getCenterY(), far.getRect().getCenterY(), 2, "Vertically");
+        assertEquals(view.getCenterX(), far.getRect().getCenterX(), 2, "Horizontally");
+        canvas.centerOn(30, 15);
+        frames(3);
+        assertEquals(view.getCenterY(), canvas.toScreen(30, 15).y, 2, "Back up");
+    }
+
+    @Test
     void childrenArePlacedAtTheirPositions() {
         Button a = node("a", 0, 0);
         Button b = node("b", 100, 50);

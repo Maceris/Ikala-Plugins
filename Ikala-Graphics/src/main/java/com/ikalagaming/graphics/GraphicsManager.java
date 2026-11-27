@@ -21,6 +21,7 @@ import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugLabel;
 import com.ikalagaming.graphics.scene.debug.DebugShape;
 import com.ikalagaming.graphics.ui.DockSpaceSettings;
+import com.ikalagaming.graphics.ui.SavedState;
 import com.ikalagaming.graphics.ui.UiManager;
 import com.ikalagaming.graphics.vulkan.DeletionQueue;
 import com.ikalagaming.graphics.vulkan.GeometryArena;
@@ -310,6 +311,7 @@ public class GraphicsManager {
         IkGui.createContext();
         // Before the ini file is read, so dock spaces know which panels they placed last run
         DockSpaceSettings.install();
+        SavedState.install();
 
         IkIO ikIO = IkGui.getIO();
         // Window positions, sizes and docking are kept between runs
