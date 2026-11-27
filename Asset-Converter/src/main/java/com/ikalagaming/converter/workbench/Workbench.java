@@ -290,7 +290,7 @@ public class Workbench {
         // Shown from the start, so its toolbar offers the scenes before one is open
         sceneHost.show(sceneView);
         status = new Label("status", "");
-        graphTool = new GraphTool(ui, status::text);
+        graphTool = new GraphTool(ui, status::text, this::open);
         refresh();
     }
 

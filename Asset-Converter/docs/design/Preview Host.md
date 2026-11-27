@@ -37,11 +37,10 @@ What it opens:
 
 ## The graph panel
 
-The Graph panel holds Ikala-Graphics' graph editor on a small demo set of math and color nodes (constant, color,
-checker, add, multiply, lerp, a Gray conversion and an output), opening and saving `*.graph.yml`. It lets the editor
-be used and checked in the workbench before texture graphs (E5) give it real nodes; their node set replaces the
-demo's. The properties panel shows the selected node's parameters, and the demo's check flags unlinked inputs and a
-second output.
+The Graph panel holds Ikala-Graphics' graph editor on texture graphs (see Texture Graphs.md), opening, saving and
+baking `*.texgraph.yml`. The properties panel shows the selected node's parameters, or the graph's size, seed and
+bake target when nothing is selected, and node errors come from evaluating the graph. Bake writes the maps and
+opens the baked texture in the Viewer.
 
 ## Decisions
 

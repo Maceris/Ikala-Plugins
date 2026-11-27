@@ -71,6 +71,9 @@ public final class BlockLooks implements AutoCloseable {
     /** The extension of textures. */
     public static final String TEXTURE_EXTENSION = ".png";
 
+    /** The ending of a texture's normal map, before the extension. */
+    public static final String NORMAL_SUFFIX = ".normal";
+
     /** The namespace of names that don't give one. */
     public static final String DEFAULT_NAMESPACE = "lotomation";
 
@@ -264,7 +267,7 @@ public final class BlockLooks implements AutoCloseable {
 
     /**
      * A texture's normal map, {@code <name>.normal.png} beside it, loaded the first time it is
-     * asked for. See {@link BlockNormals} for making them.
+     * asked for. Texture graphs in the asset editor bake them.
      *
      * @param name The texture's name, such as {@code lotomation:block/stone}.
      * @return The normal map, or null if the texture has none or it can't be read.
@@ -273,7 +276,7 @@ public final class BlockLooks implements AutoCloseable {
         if (normalMaps.containsKey(name)) {
             return normalMaps.get(name);
         }
-        final String mapName = name + BlockNormals.NORMAL_SUFFIX;
+        final String mapName = name + NORMAL_SUFFIX;
         TextureHandle map = null;
         if (find(mapName, TEXTURES_FOLDER, TEXTURE_EXTENSION).isPresent()) {
             map = loadImage(mapName, Format.R8G8B8A8_UNORM);

@@ -214,6 +214,14 @@ final class GlfwGuiBackend {
         // Automation moves its own mouse, which counts as inside even when the real one isn't
         final boolean driving = isAutomationDriving();
         io.mouseInsideWindow = mouseWindow != null || driving;
+        // GLFW knows which window the real cursor is over, not where automation sent its mouse, so
+        // while it drives IkGui works the hovered viewport out from the mouse's position. Otherwise
+        // a popup that opens in its own viewport could never be hovered
+        if (driving) {
+            io.backendFlags &= ~BackendFlags.HAS_MOUSE_HOVERED_VIEWPORT;
+        } else {
+            io.backendFlags |= BackendFlags.HAS_MOUSE_HOVERED_VIEWPORT;
+        }
         updateMouseData(io, driving);
         updateMouseCursors(io);
         if (!driving) {

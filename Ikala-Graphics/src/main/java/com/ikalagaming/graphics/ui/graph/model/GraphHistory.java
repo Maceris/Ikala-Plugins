@@ -148,4 +148,13 @@ public final class GraphHistory {
     public void markSaved() {
         dirty = false;
     }
+
+    /**
+     * Note that something saved with the graph but not part of it, like a setting the caller keeps,
+     * changed, so the graph needs saving.
+     */
+    public void markDirty() {
+        dirty = true;
+        ++changes;
+    }
 }

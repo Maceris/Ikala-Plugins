@@ -1,5 +1,7 @@
 package com.ikalagaming.converter.workbench;
 
+import com.ikalagaming.converter.texgraph.TextureGraph;
+
 import lombok.NonNull;
 
 import java.nio.file.Path;
@@ -24,7 +26,7 @@ public enum AssetKind {
     PARTICLE_EFFECT(Set.of()),
     /** A material as text, named *.material.yml, shown on a sphere in the 3D viewer. */
     MATERIAL(Set.of()),
-    /** A graph for the graph panel, named *.graph.yml. */
+    /** A texture graph for the graph panel, named *.texgraph.yml. */
     GRAPH(Set.of()),
     /** A game content definition, like a block's look, as KVT text. */
     LOOK(Set.of("kvt")),
@@ -37,8 +39,8 @@ public enum AssetKind {
     /** What a material's text file name ends with. */
     public static final String MATERIAL_SUFFIX = ".material.yml";
 
-    /** What a graph's file name ends with. */
-    public static final String GRAPH_SUFFIX = ".graph.yml";
+    /** What a texture graph's file name ends with. */
+    public static final String GRAPH_SUFFIX = TextureGraph.SUFFIX;
 
     /** The extensions of this kind, lower case and without the dot. */
     private final Set<String> extensions;

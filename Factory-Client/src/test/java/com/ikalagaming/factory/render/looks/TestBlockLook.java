@@ -62,23 +62,49 @@ class TestBlockLook {
         assertNull(BlockLooks.qualified(":stone"));
     }
 
-    /** The starter textures survive a trip through an image, and strips put tiles side by side. */
+    /** Tiles survive a trip through an image, and strips put tiles side by side. */
     @Test
     void testImageRoundTrip() {
         byte[] art =
                 com.ikalagaming.graphics.benchmark.BlockTextures.art(
                         com.ikalagaming.graphics.benchmark.BlockTextures.Tile.LEAVES);
-        BufferedImage image = StarterTextures.image(java.util.List.of(art));
+        BufferedImage image = image(java.util.List.of(art));
         assertEquals(
                 java.util.Arrays.toString(art), java.util.Arrays.toString(BlockLooks.rgba(image)));
         byte[] dirt =
                 com.ikalagaming.graphics.benchmark.BlockTextures.art(
                         com.ikalagaming.graphics.benchmark.BlockTextures.Tile.DIRT);
-        BufferedImage strip = StarterTextures.image(java.util.List.of(art, dirt));
+        BufferedImage strip = image(java.util.List.of(art, dirt));
         assertEquals(2 * image.getWidth(), strip.getWidth());
         assertEquals(image.getRGB(3, 5), strip.getRGB(3, 5));
         assertEquals(
-                StarterTextures.image(java.util.List.of(dirt)).getRGB(3, 5),
-                strip.getRGB(image.getWidth() + 3, 5));
+                image(java.util.List.of(dirt)).getRGB(3, 5), strip.getRGB(image.getWidth() + 3, 5));
+    }
+
+    /**
+     * 16x16 RGBA tiles side by side in one image.
+     *
+     * @param tiles Each tile's pixels, rows from the top, red, green, blue and alpha bytes each.
+     * @return The image.
+     */
+    private static BufferedImage image(java.util.List<byte[]> tiles) {
+        final int size = 16;
+        BufferedImage image =
+                new BufferedImage(size * tiles.size(), size, BufferedImage.TYPE_INT_ARGB);
+        for (int tile = 0; tile < tiles.size(); ++tile) {
+            byte[] pixels = tiles.get(tile);
+            for (int y = 0; y < size; ++y) {
+                for (int x = 0; x < size; ++x) {
+                    int at = (y * size + x) * 4;
+                    int argb =
+                            (pixels[at + 3] & 0xFF) << 24
+                                    | (pixels[at] & 0xFF) << 16
+                                    | (pixels[at + 1] & 0xFF) << 8
+                                    | pixels[at + 2] & 0xFF;
+                    image.setRGB(tile * size + x, y, argb);
+                }
+            }
+        }
+        return image;
     }
 }

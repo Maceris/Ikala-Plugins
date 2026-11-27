@@ -1,11 +1,17 @@
 package com.ikalagaming.converter.workbench;
 
+import com.ikalagaming.converter.texgraph.Baker;
+import com.ikalagaming.converter.texgraph.CoreNodes;
+import com.ikalagaming.converter.texgraph.Evaluator;
+import com.ikalagaming.converter.texgraph.OutputNodes;
+import com.ikalagaming.converter.texgraph.TextureGraph;
+import com.ikalagaming.converter.texgraph.TextureLibraries;
+import com.ikalagaming.converter.texgraph.TextureLibrary;
 import com.ikalagaming.graphics.UI;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.IkString;
 import com.ikalagaming.graphics.gui.flags.InputTextFlags;
 import com.ikalagaming.graphics.gui.flags.TableFlags;
-import com.ikalagaming.graphics.gui.util.Color;
 import com.ikalagaming.graphics.ui.Column;
 import com.ikalagaming.graphics.ui.Immediate;
 import com.ikalagaming.graphics.ui.Node;
@@ -13,10 +19,8 @@ import com.ikalagaming.graphics.ui.Sizing;
 import com.ikalagaming.graphics.ui.UiFrame;
 import com.ikalagaming.graphics.ui.graph.GraphEditor;
 import com.ikalagaming.graphics.ui.graph.model.Graph;
-import com.ikalagaming.graphics.ui.graph.model.GraphFile;
 import com.ikalagaming.graphics.ui.graph.model.GraphHistory;
 import com.ikalagaming.graphics.ui.graph.model.NodeTypes;
-import com.ikalagaming.graphics.ui.graph.model.PinTypes;
 
 import lombok.Getter;
 import lombok.NonNull;
@@ -33,33 +37,32 @@ import java.util.function.Consumer;
 import javax.annotation.Nullable;
 
 /**
- * The workbench's graph panel: the generic graph editor on a small demo set of math and color
- * nodes, opening and saving {@code *.graph.yml} files. It stands in for texture graphs until they
- * have their own nodes, so the editor can be used and checked in the real workbench. Render thread
- * only.
+ * The workbench's graph panel: the graph editor on texture graphs, opening and saving {@code
+ * *.texgraph.yml} files and baking them to the maps the game reads. Node errors come from
+ * evaluating the graph. Holding 1, A, M or L and clicking places a constant, add, multiply or lerp.
+ * Render thread only.
  */
 @Slf4j
 public class GraphTool {
-    /** What a demo graph file's name ends with. */
-    public static final String SUFFIX = ".graph.yml";
+    /** What a texture graph file's name ends with. */
+    public static final String SUFFIX = TextureGraph.SUFFIX;
 
     /** The toolbar's height. */
     private static final float TOOLBAR_HEIGHT = 30;
 
-    /** A pin type's ID. */
-    static final String SCALAR = "scalar";
-
-    /** A pin type's ID. */
-    static final String MASK = "mask";
-
-    /** A pin type's ID. */
-    static final String COLOR = "color";
-
-    /** The output node type's ID. */
-    static final String OUTPUT = "out/output";
+    /** The node types and what they do. */
+    private final TextureLibrary library = TextureLibraries.standard();
 
     /** The UI, for the file dialogs. */
     private final UI ui;
+
+    /**
+     * The texture graph: its nodes and its size, seed and bake target. -- GETTER -- The texture
+     * graph.
+     *
+     * @return The texture graph.
+     */
+    @Getter private final TextureGraph texture;
 
     /**
      * The graph's history, through which every edit goes. -- GETTER -- The history.
@@ -76,6 +79,14 @@ public class GraphTool {
     @Getter private final GraphEditor editor;
 
     /**
+     * Evaluates the graph, keeping each node's outputs until something upstream changes. -- GETTER
+     * -- The evaluator.
+     *
+     * @return The evaluator.
+     */
+    @Getter private final Evaluator evaluator = new Evaluator(library);
+
+    /**
      * The file the graph was opened from or saved to. -- GETTER -- The file.
      *
      * @return The file, or null for a new graph.
@@ -88,6 +99,9 @@ public class GraphTool {
     /** Reports what happened, to the workbench's status line. */
     private final Consumer<String> report;
 
+    /** Shows a baked texture, in the viewer. */
+    private final Consumer<Path> show;
+
     /** The parameter fields, by node and parameter, while a node is selected. */
     private final Map<String, IkString> fields = new HashMap<>();
 
@@ -99,171 +113,66 @@ public class GraphTool {
      *
      * @param ui The UI, for the file dialogs.
      * @param report Shows what happened in the workbench's status line.
+     * @param show Shows a baked texture.
      */
-    public GraphTool(@NonNull UI ui, @NonNull Consumer<String> report) {
+    public GraphTool(
+            @NonNull UI ui, @NonNull Consumer<String> report, @NonNull Consumer<Path> show) {
         this.ui = ui;
         this.report = report;
-        history = new GraphHistory(new Graph(nodeTypes(), pinTypes()));
-        editor = new GraphEditor("graph-canvas", history).validator(GraphTool::validate);
-    }
-
-    /**
-     * The demo's pin types: scalars, masks that are scalars from 0 to 1, and colors. A mask links
-     * into a scalar as it is, and a scalar into a color through a Gray node.
-     *
-     * @return The types.
-     */
-    static PinTypes pinTypes() {
-        return new PinTypes()
-                .register(
-                        new PinTypes.PinType(SCALAR, "Scalar", Color.rgba(0.62f, 0.64f, 0.68f, 1)))
-                .register(new PinTypes.PinType(MASK, "Mask", Color.rgba(0.95f, 0.95f, 0.95f, 1)))
-                .register(new PinTypes.PinType(COLOR, "Color", Color.rgba(1.0f, 0.78f, 0.25f, 1)))
-                .convertDirectly(MASK, SCALAR)
-                .convertWith(SCALAR, COLOR, "convert/gray");
-    }
-
-    /**
-     * The demo's node types. Holding 1, A, M or L and clicking empty space places a constant, add,
-     * multiply or lerp.
-     *
-     * @return The types.
-     */
-    static NodeTypes nodeTypes() {
-        return new NodeTypes()
-                .register(
-                        type(
-                                "math/constant",
-                                "Constant",
-                                "Inputs",
-                                List.of(),
-                                List.of(pin("value", SCALAR)),
-                                List.of(new NodeTypes.Param("value", "0"))))
-                .register(
-                        type(
-                                "math/color",
-                                "Color",
-                                "Inputs",
-                                List.of(),
-                                List.of(pin("color", COLOR)),
-                                List.of(
-                                        new NodeTypes.Param("r", "1"),
-                                        new NodeTypes.Param("g", "1"),
-                                        new NodeTypes.Param("b", "1"))))
-                .register(
-                        type(
-                                "math/checker",
-                                "Checker",
-                                "Inputs",
-                                List.of(),
-                                List.of(pin("mask", MASK)),
-                                List.of(new NodeTypes.Param("size", "4"))))
-                .register(binary("math/add", "Add"))
-                .register(binary("math/multiply", "Multiply"))
-                .register(
-                        type(
-                                "math/lerp",
-                                "Lerp",
-                                "Math",
-                                List.of(pin("a", COLOR), pin("b", COLOR), pin("t", SCALAR)),
-                                List.of(pin("color", COLOR)),
-                                List.of()))
-                .register(
-                        type(
-                                "convert/gray",
-                                "Gray",
-                                "Convert",
-                                List.of(pin("value", SCALAR)),
-                                List.of(pin("color", COLOR)),
-                                List.of()))
-                .register(
-                        type(
-                                OUTPUT,
-                                "Output",
-                                "Output",
-                                List.of(pin("color", COLOR)),
-                                List.of(),
-                                List.of()))
-                .bindKey('1', "math/constant")
+        this.show = show;
+        library.getNodeTypes()
+                .bindKey('1', CoreNodes.CONSTANT)
                 .bindKey('A', "math/add")
                 .bindKey('M', "math/multiply")
                 .bindKey('L', "math/lerp");
+        texture = new TextureGraph(library);
+        history = new GraphHistory(texture.getGraph());
+        editor = new GraphEditor("graph-canvas", history).validator(this::validate);
     }
 
     /**
-     * A node type at version 1.
-     *
-     * @param id The ID.
-     * @param title The title.
-     * @param category The category.
-     * @param inputs The inputs.
-     * @param outputs The outputs.
-     * @param params The parameters.
-     * @return The type.
-     */
-    private static NodeTypes.NodeType type(
-            String id,
-            String title,
-            String category,
-            List<NodeTypes.Pin> inputs,
-            List<NodeTypes.Pin> outputs,
-            List<NodeTypes.Param> params) {
-        return new NodeTypes.NodeType(id, title, category, inputs, outputs, params, 1);
-    }
-
-    /**
-     * A math node of two scalars.
-     *
-     * @param id The ID.
-     * @param title The title.
-     * @return The type.
-     */
-    private static NodeTypes.NodeType binary(String id, String title) {
-        return type(
-                id,
-                title,
-                "Math",
-                List.of(pin("a", SCALAR), pin("b", SCALAR)),
-                List.of(pin("result", SCALAR)),
-                List.of());
-    }
-
-    /**
-     * A pin.
-     *
-     * @param name The name.
-     * @param type The type.
-     * @return The pin.
-     */
-    private static NodeTypes.Pin pin(String name, String type) {
-        return new NodeTypes.Pin(name, type);
-    }
-
-    /**
-     * The demo's checks: every input linked, and one output.
+     * The graph's problems by node: what evaluation reports, and Outputs beyond the first.
      *
      * @param graph The graph.
      * @return Each node's problem.
      */
-    static Map<String, String> validate(@NonNull Graph graph) {
+    Map<String, String> validate(@NonNull Graph graph) {
         final Map<String, String> errors = new LinkedHashMap<>();
+        final Evaluator.Settings settings = texture.settings(folder());
         int outputs = 0;
         for (Graph.Node node : graph.nodes()) {
             final NodeTypes.NodeType type = graph.typeOf(node.getId());
             if (type == null) {
                 continue;
             }
-            if (OUTPUT.equals(type.id()) && ++outputs > 1) {
-                errors.put(node.getId(), "A graph has one output");
-            }
-            for (NodeTypes.Pin input : type.inputs()) {
-                if (graph.linkInto(node.getId(), input.name()) == null) {
-                    errors.put(node.getId(), "Input " + input.name() + " isn't linked");
-                    break;
+            if (OutputNodes.isOutput(type.id())) {
+                if (++outputs > 1) {
+                    errors.put(node.getId(), "A graph has one Output");
                 }
+                for (NodeTypes.Pin pin : type.inputs()) {
+                    evaluator.input(graph, settings, node.getId(), pin.name());
+                }
+                continue;
+            }
+            if (!type.outputs().isEmpty() && !NodeTypes.isEditorType(type.id())) {
+                evaluator.output(graph, settings, node.getId(), type.outputs().getFirst().name());
+            }
+        }
+        for (Map.Entry<String, String> error : evaluator.getErrors().entrySet()) {
+            if (graph.node(error.getKey()) != null) {
+                errors.putIfAbsent(error.getKey(), error.getValue());
             }
         }
         return errors;
+    }
+
+    /**
+     * The folder relative file names start from: the graph file's.
+     *
+     * @return The folder, or null for a graph not saved yet.
+     */
+    private @Nullable Path folder() {
+        return file == null ? null : file.getParent();
     }
 
     /**
@@ -281,7 +190,7 @@ public class GraphTool {
     }
 
     /**
-     * Draw the toolbar: new, open, save, undo and redo, and the file.
+     * Draw the toolbar: new, open, save, bake, undo and redo, and the file.
      *
      * @param frame The current frame.
      */
@@ -294,7 +203,7 @@ public class GraphTool {
             frame.fire(
                     () ->
                             ui.openFile(
-                                    "Open graph",
+                                    "Open texture graph",
                                     file == null ? null : file.toAbsolutePath().getParent(),
                                     chosen -> {
                                         if (chosen != null) {
@@ -308,6 +217,10 @@ public class GraphTool {
             frame.fire(this::askToSave);
         }
         IkGui.sameLine();
+        if (IkGui.button("Bake")) {
+            frame.fire(this::bake);
+        }
+        IkGui.sameLine();
         final String undo = history.nextUndo();
         if (IkGui.button(undo == null ? "Undo" : "Undo " + undo + "###undo")) {
             frame.fire(editor::undo);
@@ -319,13 +232,14 @@ public class GraphTool {
         }
         IkGui.sameLine();
         IkGui.textDisabled(
-                (file == null ? "New graph" : file.getFileName().toString())
+                (file == null ? "New texture graph" : file.getFileName().toString())
                         + (history.isDirty() ? " *" : "")
                         + (status.isEmpty() ? "" : "  " + status));
     }
 
     /**
-     * Draw the selected node's details and parameters, for the properties panel.
+     * Draw the selected node's details and parameters, or the graph's settings when no node is
+     * selected, for the properties panel.
      *
      * @param frame The current frame.
      */
@@ -338,10 +252,11 @@ public class GraphTool {
                                 + " Right-click for more.",
                         graph.nodes().size(), graph.links().size()));
         if (editor.getSelection().size() != 1) {
-            IkGui.textDisabled(
-                    editor.getSelection().isEmpty()
-                            ? "Select a node to see its parameters"
-                            : editor.getSelection().size() + " nodes selected");
+            if (editor.getSelection().isEmpty()) {
+                drawGraphSettings(frame);
+            } else {
+                IkGui.textDisabled(editor.getSelection().size() + " nodes selected");
+            }
             return;
         }
         final String id = editor.getSelection().iterator().next();
@@ -361,69 +276,184 @@ public class GraphTool {
         }
         if (IkGui.beginTable("params", 2, TableFlags.ROW_BACKGROUND)) {
             for (NodeTypes.Param param : type.params()) {
-                IkGui.tableNextRow();
-                IkGui.tableNextColumn();
-                IkGui.textUnformatted(param.name());
-                IkGui.tableNextColumn();
                 final String value = graph.param(id, param.name());
-                final String key = id + "/" + param.name();
-                final IkString field = fields.computeIfAbsent(key, k -> new IkString(64));
-                if (!key.equals(activeField) && !field.get().equals(value)) {
-                    // Undo, or another edit, changed it while it wasn't being typed in
-                    field.set(value, true);
-                }
-                IkGui.setNextItemWidth(-1);
-                final boolean entered =
-                        IkGui.inputText(
-                                "##" + param.name(), field, InputTextFlags.ENTER_RETURNS_TRUE);
-                if (IkGui.isItemActive()) {
-                    activeField = key;
-                } else if (key.equals(activeField)) {
-                    activeField = null;
-                }
-                if ((entered || IkGui.isItemDeactivatedAfterEdit()) && !field.get().equals(value)) {
-                    final String edited = field.get();
-                    frame.fire(() -> editor.setParam(id, param.name(), edited));
-                }
+                field(
+                        id + "/" + param.name(),
+                        param.name(),
+                        value,
+                        edited -> frame.fire(() -> editor.setParam(id, param.name(), edited)));
             }
             IkGui.endTable();
         }
     }
 
+    /**
+     * Draw the graph's own settings: tile size, seed and what it bakes to.
+     *
+     * @param frame The current frame.
+     */
+    private void drawGraphSettings(UiFrame frame) {
+        IkGui.separator();
+        IkGui.textUnformatted("Texture graph");
+        if (!IkGui.beginTable("graph-settings", 2, TableFlags.ROW_BACKGROUND)) {
+            return;
+        }
+        field(
+                "graph/width",
+                "Width",
+                Integer.toString(texture.getWidth()),
+                edited -> frame.fire(() -> setSize(edited, true)));
+        field(
+                "graph/height",
+                "Height",
+                Integer.toString(texture.getHeight()),
+                edited -> frame.fire(() -> setSize(edited, false)));
+        field(
+                "graph/seed",
+                "Seed",
+                Long.toString(texture.getSeed()),
+                edited ->
+                        frame.fire(
+                                () -> {
+                                    try {
+                                        texture.setSeed(Long.parseLong(edited.trim()));
+                                        settingsChanged();
+                                    } catch (NumberFormatException e) {
+                                        report.accept("A seed is a whole number");
+                                    }
+                                }));
+        field(
+                "graph/data",
+                "Content folder",
+                texture.getData() == null ? "" : texture.getData(),
+                edited ->
+                        frame.fire(
+                                () -> {
+                                    texture.setData(edited.isBlank() ? null : edited.trim());
+                                    settingsChanged();
+                                }));
+        field(
+                "graph/texture",
+                "Texture",
+                texture.getTexture() == null ? "" : texture.getTexture(),
+                edited ->
+                        frame.fire(
+                                () -> {
+                                    texture.setTexture(edited.isBlank() ? null : edited.trim());
+                                    settingsChanged();
+                                }));
+        field(
+                "graph/model",
+                "Model",
+                texture.getModel() == null ? "" : texture.getModel(),
+                edited ->
+                        frame.fire(
+                                () -> {
+                                    texture.setModel(edited.isBlank() ? null : edited.trim());
+                                    settingsChanged();
+                                }));
+        IkGui.endTable();
+    }
+
+    /**
+     * Set the tile's width or height.
+     *
+     * @param text The size, in pixels.
+     * @param width Whether it is the width.
+     */
+    private void setSize(String text, boolean width) {
+        try {
+            final int size = Math.clamp(Integer.parseInt(text.trim()), 1, TextureGraph.MAX_SIZE);
+            if (width) {
+                texture.setWidth(size);
+            } else {
+                texture.setHeight(size);
+            }
+            settingsChanged();
+        } catch (NumberFormatException e) {
+            report.accept("A size is a whole number of pixels");
+        }
+    }
+
+    /** The graph's settings changed: they are saved with it, so it is now unsaved. */
+    private void settingsChanged() {
+        history.markDirty();
+    }
+
+    /**
+     * One editable row of a two column table, keeping its text while it is typed in.
+     *
+     * @param key Which field, unique in the panel.
+     * @param label The row's label.
+     * @param value The value now.
+     * @param edited Gets the new text once the field is left or Enter is pressed.
+     */
+    private void field(String key, String label, String value, Consumer<String> edited) {
+        IkGui.tableNextRow();
+        IkGui.tableNextColumn();
+        IkGui.textUnformatted(label);
+        IkGui.tableNextColumn();
+        final IkString text = fields.computeIfAbsent(key, k -> new IkString(256));
+        if (!key.equals(activeField) && !text.get().equals(value)) {
+            // Undo, or another edit, changed it while it wasn't being typed in
+            text.set(value, true);
+        }
+        IkGui.setNextItemWidth(-1);
+        final boolean entered =
+                IkGui.inputText("##" + key, text, InputTextFlags.ENTER_RETURNS_TRUE);
+        if (IkGui.isItemActive()) {
+            activeField = key;
+        } else if (key.equals(activeField)) {
+            activeField = null;
+        }
+        if ((entered || IkGui.isItemDeactivatedAfterEdit()) && !text.get().equals(value)) {
+            edited.accept(text.get());
+        }
+    }
+
     /** Start a new, empty graph. */
     public void newGraph() {
-        history.getGraph()
-                .restore(
-                        new Graph(
-                                history.getGraph().getNodeTypes(),
-                                history.getGraph().getPinTypes()));
+        history.getGraph().restore(library.newGraph());
         history.clear();
         editor.select(List.of());
+        texture.setWidth(TextureGraph.DEFAULT_SIZE);
+        texture.setHeight(TextureGraph.DEFAULT_SIZE);
+        texture.setSeed(1);
+        texture.setData(null);
+        texture.setTexture(null);
+        texture.setModel(null);
+        evaluator.clear();
         file = null;
         status = "";
         fields.clear();
     }
 
     /**
-     * Open a graph file.
+     * Open a texture graph file.
      *
      * @param path The file.
      * @return True if it was read.
      */
     public boolean open(@NonNull Path path) {
-        final Graph read =
-                new Graph(history.getGraph().getNodeTypes(), history.getGraph().getPinTypes());
+        final TextureGraph read = new TextureGraph(library);
         final List<String> problems;
         try {
-            problems = GraphFile.read(Files.readString(path), read, (type, from, params) -> {});
+            problems = read.read(Files.readString(path));
         } catch (IOException | RuntimeException e) {
-            log.warn("Could not open the graph {}", path, e);
+            log.warn("Could not open the texture graph {}", path, e);
             status = "Can't open " + path.getFileName() + ": " + e.getMessage();
             report.accept(status);
             return false;
         }
-        history.getGraph().restore(read);
+        history.getGraph().restore(read.getGraph());
         history.clear();
+        texture.setWidth(read.getWidth());
+        texture.setHeight(read.getHeight());
+        texture.setSeed(read.getSeed());
+        texture.setData(read.getData());
+        texture.setTexture(read.getTexture());
+        texture.setModel(read.getModel());
+        evaluator.clear();
         editor.select(List.of());
         fields.clear();
         file = path.toAbsolutePath();
@@ -446,24 +476,67 @@ public class GraphTool {
      */
     public boolean save(@NonNull Path path) {
         try {
-            Files.writeString(path, GraphFile.write(history.getGraph()));
+            Files.writeString(path, texture.write());
         } catch (IOException e) {
-            log.warn("Could not save the graph to {}", path, e);
+            log.warn("Could not save the texture graph to {}", path, e);
             status = "Can't save: " + e.getMessage();
             report.accept(status);
             return false;
         }
+        final boolean moved = file == null || !file.equals(path.toAbsolutePath());
         file = path.toAbsolutePath();
+        if (moved) {
+            // Relative file names now start somewhere else
+            evaluator.clear();
+        }
         history.markSaved();
         status = "";
         report.accept("Saved " + path.getFileName());
         return true;
     }
 
+    /**
+     * Bake the graph to its maps, and show the baked texture.
+     *
+     * @return What the bake did.
+     */
+    public Baker.Result bake() {
+        if (file == null) {
+            final Baker.Result result =
+                    new Baker.Result(
+                            List.of(), List.of(), List.of("Save the graph before baking it"));
+            status = result.problems().getFirst();
+            report.accept(status);
+            return result;
+        }
+        // Image files may have changed on disk since they were read
+        evaluator.clear();
+        final Baker.Result result = Baker.bake(texture, evaluator, file.getParent(), null);
+        if (!result.ok()) {
+            status = "Can't bake: " + String.join("; ", result.problems());
+            report.accept(status);
+            return result;
+        }
+        status =
+                "Baked: "
+                        + result.written().size()
+                        + " written, "
+                        + result.unchanged().size()
+                        + " unchanged";
+        report.accept(status);
+        final List<Path> files = new java.util.ArrayList<>(result.written());
+        files.addAll(result.unchanged());
+        files.stream()
+                .filter(f -> !f.getFileName().toString().matches(".*\\.[a-z]+\\.png"))
+                .findFirst()
+                .ifPresent(show);
+        return result;
+    }
+
     /** Ask where to save, then save. */
     private void askToSave() {
         ui.saveFile(
-                "Save graph",
+                "Save texture graph",
                 file == null ? null : file.getParent(),
                 file == null ? "untitled" + SUFFIX : file.getFileName().toString(),
                 chosen -> {

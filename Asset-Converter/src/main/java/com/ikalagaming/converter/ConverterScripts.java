@@ -469,7 +469,9 @@ public final class ConverterScripts {
      * fromNode.pin toNode.pin x y"; "frame title"; "collapse id..."; "expand id..."; "hide id...";
      * "show id..."; "comment id text"; "align left|right|top|middle"; "straighten id"; "upstream
      * id"; "downstream id"; "unused"; "find text"; "focus id"; "minimap on|off"; "describe id",
-     * which logs a node's or frame's state and the selection.
+     * which logs a node's or frame's state and the selection; "setting
+     * width|height|seed|data|texture|model value", a texture graph setting; "bake", which bakes the
+     * saved graph and logs what it wrote.
      *
      * @param command The command and its words, separated by spaces.
      */
@@ -559,6 +561,31 @@ public final class ConverterScripts {
                                 log.info("Script: Graph found {}", editor.find(rest(words, 1)));
                         case "focus" -> editor.focus(words[1]);
                         case "minimap" -> editor.setMinimap("on".equals(words[1]));
+                        case "setting" -> {
+                            final var texture = tool.getTexture();
+                            final String value = rest(words, 2);
+                            switch (words[1]) {
+                                case "width" -> texture.setWidth(Integer.parseInt(value));
+                                case "height" -> texture.setHeight(Integer.parseInt(value));
+                                case "seed" -> texture.setSeed(Long.parseLong(value));
+                                case "data" -> texture.setData(value);
+                                case "texture" -> texture.setTexture(value);
+                                case "model" -> texture.setModel(value);
+                                default -> log.warn("Script: no graph setting {}", words[1]);
+                            }
+                            tool.getHistory().markDirty();
+                        }
+                        case "bake" -> {
+                            final var result = tool.bake();
+                            log.info(
+                                    "Script: Graph baked {}, {} written, {} unchanged, problems {}",
+                                    result.ok(),
+                                    result.written().stream()
+                                            .map(file -> file.getFileName().toString())
+                                            .toList(),
+                                    result.unchanged().size(),
+                                    result.problems());
+                        }
                         case "describe" -> {
                             final var graph = tool.getHistory().getGraph();
                             final Graph.Node node = graph.node(words[1]);

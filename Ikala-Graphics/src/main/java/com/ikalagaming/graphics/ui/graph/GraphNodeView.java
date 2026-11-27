@@ -9,6 +9,7 @@ import com.ikalagaming.graphics.ui.Node;
 import com.ikalagaming.graphics.ui.Sizing;
 import com.ikalagaming.graphics.ui.UiFrame;
 import com.ikalagaming.graphics.ui.graph.model.Graph;
+import com.ikalagaming.graphics.ui.graph.model.GraphFile;
 import com.ikalagaming.graphics.ui.graph.model.NodeTypes;
 import com.ikalagaming.graphics.ui.graph.model.PinTypes;
 
@@ -30,6 +31,12 @@ import javax.annotation.Nullable;
 public class GraphNodeView extends Node<GraphNodeView> {
     /** How wide a node is, in units. */
     public static final float WIDTH = 160;
+
+    /** Text size as a part of a row's height: the title and pin names. */
+    static final float TEXT_SIZE = 0.62f;
+
+    /** Space between a pin's dot and its name, and around the title, in units. */
+    static final float TEXT_PAD = 8;
 
     /** How tall its title bar is. */
     public static final float TITLE = 24;
@@ -94,6 +101,9 @@ public class GraphNodeView extends Node<GraphNodeView> {
      */
     @Getter private int shape = -1;
 
+    /** How wide the node is, in units: wide enough for its title and pin names. */
+    private float unitsWide = WIDTH;
+
     /**
      * Show a graph node.
      *
@@ -132,12 +142,52 @@ public class GraphNodeView extends Node<GraphNodeView> {
             width(Sizing.fixed(REROUTE_SIZE));
             height(Sizing.fixed(REROUTE_SIZE));
         } else if (isCollapsed()) {
-            width(Sizing.fixed(WIDTH));
+            unitsWide = wideEnough();
+            width(Sizing.fixed(unitsWide));
             height(Sizing.fixed(TITLE));
         } else {
-            width(Sizing.fixed(WIDTH));
+            unitsWide = wideEnough();
+            width(Sizing.fixed(unitsWide));
             height(Sizing.fixed(height(Math.max(shownPins(true).size(), shownPins(false).size()))));
         }
+    }
+
+    /**
+     * How wide the node must be for its title and each row's input and output names, at least
+     * {@link #WIDTH}.
+     *
+     * @return The width, in units.
+     */
+    private float wideEnough() {
+        final NodeTypes.NodeType type = editor.getGraph().typeOf(nodeId);
+        if (type == null) {
+            return WIDTH;
+        }
+        final String title = isCollapsed() ? type.title() + "  ..." : type.title();
+        // Room for the title, and the error mark after it
+        float wide = textUnits(title) + 3 * TEXT_PAD + ROW * TEXT_SIZE;
+        if (!isCollapsed()) {
+            final List<NodeTypes.Pin> inputs = shownPins(true);
+            final List<NodeTypes.Pin> outputs = shownPins(false);
+            final float pinRoom = 2 * (PIN_RADIUS + 5);
+            for (int row = 0; row < Math.max(inputs.size(), outputs.size()); ++row) {
+                final float in = row < inputs.size() ? textUnits(inputs.get(row).name()) : 0;
+                final float out = row < outputs.size() ? textUnits(outputs.get(row).name()) : 0;
+                wide = Math.max(wide, in + out + pinRoom + 2 * TEXT_PAD);
+            }
+        }
+        // Whole grid steps, so nodes line up as their files round them
+        return Math.max(WIDTH, (float) Math.ceil(wide / GraphFile.GRID) * GraphFile.GRID);
+    }
+
+    /**
+     * How wide text is drawn, in units.
+     *
+     * @param text The text.
+     * @return The width.
+     */
+    private static float textUnits(String text) {
+        return IkGui.calcTextSize(text).x / IkGui.getFontSize() * ROW * TEXT_SIZE;
     }
 
     /**
@@ -210,7 +260,7 @@ public class GraphNodeView extends Node<GraphNodeView> {
      */
     float scale() {
         final RectFloat rect = getRect();
-        return rect.getWidth() / (isReroute() ? REROUTE_SIZE : WIDTH);
+        return rect.getWidth() / (isReroute() ? REROUTE_SIZE : unitsWide);
     }
 
     /**
@@ -334,8 +384,8 @@ public class GraphNodeView extends Node<GraphNodeView> {
                     inner,
                     DrawFlags.ROUND_CORNERS_TOP);
         }
-        final int font = Math.max(1, Math.round(ROW * scale * 0.62f));
-        final float textInset = 8 * scale;
+        final int font = Math.max(1, Math.round(ROW * scale * TEXT_SIZE));
+        final float textInset = TEXT_PAD * scale;
         final String title = collapsed ? type.title() + "  ..." : type.title();
         drawList.addText(font, left + textInset, top + (TITLE * scale - font) / 2, TEXT, title, 0);
         if (editor.errorOf(nodeId) != null) {
