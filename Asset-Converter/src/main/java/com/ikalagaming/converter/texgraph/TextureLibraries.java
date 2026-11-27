@@ -7,7 +7,7 @@ public final class TextureLibraries {
 
     /**
      * The standard library: the core nodes, the Outputs, the parameter nodes, patterns, operations,
-     * color nodes and the Expression node.
+     * color nodes, the Expression node and subgraphs' Input and Output nodes.
      *
      * @return A new library.
      */
@@ -20,6 +20,7 @@ public final class TextureLibraries {
         OperationNodes.register(library);
         ColorNodes.register(library);
         Expression.register(library);
+        SubgraphNodes.register(library);
         return library;
     }
 }

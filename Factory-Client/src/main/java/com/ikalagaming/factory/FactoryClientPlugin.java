@@ -13,6 +13,7 @@ import com.ikalagaming.graphics.gui.windows.GraphicsDebug;
 import com.ikalagaming.graphics.gui.windows.IkGuiDemo;
 import com.ikalagaming.graphics.gui.windows.IkScriptDebugger;
 import com.ikalagaming.graphics.gui.windows.ScriptMonitor;
+import com.ikalagaming.graphics.ui.script.StartupScripts;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 import com.ikalagaming.plugins.config.ConfigManager;
@@ -142,15 +143,14 @@ public class FactoryClientPlugin extends Plugin {
      */
     private void startTestScript() {
         final String script = System.getProperty(SCRIPT_PROPERTY);
-        if (script != null
-                && ScriptManager.start(
-                                ScriptLaunch.file(Path.of(script))
-                                        .owner(getName())
-                                        .global(
-                                                "args",
-                                                System.getProperty(SCRIPT_ARGS_PROPERTY, "")))
-                        .isEmpty()) {
-            log.warn("Could not start the startup script {}", script);
+        if (script != null) {
+            ScriptManager.start(
+                            ScriptLaunch.file(Path.of(script))
+                                    .owner(getName())
+                                    .global("args", System.getProperty(SCRIPT_ARGS_PROPERTY, "")))
+                    .ifPresentOrElse(
+                            runtime -> StartupScripts.exitWhenDone(runtime, getName()),
+                            () -> log.warn("Could not start the startup script {}", script));
         }
     }
 

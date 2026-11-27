@@ -46,6 +46,13 @@ public final class NodeContext {
     @Getter private final long seed;
 
     /**
+     * The graph's seed, which the node's is made from. -- GETTER -- The graph's seed.
+     *
+     * @return The seed.
+     */
+    @Getter private final long outerSeed;
+
+    /**
      * The folder relative file names start from, or null. -- GETTER -- The folder.
      *
      * @return The folder, or null when the graph isn't saved anywhere.
@@ -58,6 +65,9 @@ public final class NodeContext {
     /** Gives an input's plane, or null if nothing is linked into it. */
     private final Function<String, Plane> inputs;
 
+    /** Gives what a subgraph's Input node of a name is fed, or null. */
+    private final Function<String, Plane> graphInputs;
+
     /** The outputs, by pin. */
     private final Map<String, Plane> outputs = new HashMap<>();
 
@@ -68,25 +78,41 @@ public final class NodeContext {
      * @param width Pixels across.
      * @param height Pixels down.
      * @param seed The node's seed.
+     * @param outerSeed The graph's seed.
      * @param folder Where relative file names start, or null.
      * @param params The parameters, with defaults filled in.
      * @param inputs Gives an input's plane, converted, or null if nothing is linked into it.
+     * @param graphInputs Gives what a subgraph's Input node of a name is fed, or null.
      */
     NodeContext(
             NodeTypes.NodeType type,
             int width,
             int height,
             long seed,
+            long outerSeed,
             @Nullable Path folder,
             Map<String, String> params,
-            Function<String, Plane> inputs) {
+            Function<String, Plane> inputs,
+            Function<String, Plane> graphInputs) {
         this.type = type;
         this.width = width;
         this.height = height;
         this.seed = seed;
+        this.outerSeed = outerSeed;
         this.folder = folder;
         this.params = params;
         this.inputs = inputs;
+        this.graphInputs = graphInputs;
+    }
+
+    /**
+     * What the graph is fed for one of its Input nodes, when it is evaluated as a subgraph.
+     *
+     * @param name The Input node's name.
+     * @return The plane, or null when the graph is evaluated on its own or nothing is linked there.
+     */
+    public @Nullable Plane graphInput(@NonNull String name) {
+        return graphInputs.apply(name);
     }
 
     /**

@@ -5,6 +5,8 @@ import com.ikalagaming.converter.texgraph.CoreNodes;
 import com.ikalagaming.converter.texgraph.Evaluator;
 import com.ikalagaming.converter.texgraph.GraphParameter;
 import com.ikalagaming.converter.texgraph.OutputNodes;
+import com.ikalagaming.converter.texgraph.SubgraphMaker;
+import com.ikalagaming.converter.texgraph.SubgraphNodes;
 import com.ikalagaming.converter.texgraph.TextureGraph;
 import com.ikalagaming.converter.texgraph.TextureLibraries;
 import com.ikalagaming.converter.texgraph.TextureLibrary;
@@ -34,11 +36,15 @@ import org.joml.Vector2f;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 import javax.annotation.Nullable;
@@ -148,6 +154,18 @@ public class GraphTool {
     /** The starter graphs, found when first asked for. */
     private @Nullable List<Path> starterFiles;
 
+    /** How often subgraph files are checked for changes, in nanoseconds. */
+    private static final long SUBGRAPH_CHECK_NANOS = 1_000_000_000L;
+
+    /** The graphs a subgraph was opened from, the latest first, for going back. */
+    private final Deque<Path> parents = new ArrayDeque<>();
+
+    /** Each subgraph type registered, with its file's version when registered. */
+    private final Map<String, String> subgraphVersions = new HashMap<>();
+
+    /** When subgraph files were last checked. */
+    private long subgraphsChecked;
+
     /**
      * The graph's parameters and the shared files it reads. -- GETTER -- The parameter section.
      *
@@ -248,10 +266,164 @@ public class GraphTool {
             report.accept(
                     result == null ? id + " has nothing to measure yet" : "Measured " + result);
         }
+        final Graph.Node node = history.getGraph().node(id);
+        if (node != null && node.getType().startsWith(SubgraphNodes.TYPE_PREFIX)) {
+            IkGui.separator();
+            if (IkGui.menuItem("Open subgraph")) {
+                openSubgraph(node.getType());
+            }
+        }
+        if (IkGui.menuItem("Make subgraph from selection...", null, false, file != null)) {
+            askToMakeSubgraph();
+        }
+    }
+
+    /**
+     * Open the subgraph a node places, remembering this graph to go back to.
+     *
+     * @param id The node.
+     * @return True if it was opened.
+     */
+    public boolean openSubgraphOf(@NonNull String id) {
+        final Graph.Node node = history.getGraph().node(id);
+        if (node == null || !node.getType().startsWith(SubgraphNodes.TYPE_PREFIX)) {
+            return false;
+        }
+        openSubgraph(node.getType());
+        return !parents.isEmpty();
+    }
+
+    /**
+     * Open the subgraph a node type places, remembering this graph to go back to.
+     *
+     * @param type The node's type.
+     */
+    private void openSubgraph(String type) {
+        final Path subgraph = SubgraphNodes.fileOf(folder(), type);
+        if (subgraph == null || file == null) {
+            return;
+        }
+        if (history.isDirty()) {
+            report.accept("Save the graph before opening one of its subgraphs");
+            return;
+        }
+        final Path parent = file;
+        if (open(subgraph)) {
+            parents.push(parent);
+        }
+    }
+
+    /** Go back to the graph the open subgraph was opened from. */
+    public void back() {
+        if (parents.isEmpty()) {
+            return;
+        }
+        if (history.isDirty()) {
+            report.accept("Save the subgraph before going back");
+            return;
+        }
+        open(parents.pop());
+    }
+
+    /** Ask where to save a subgraph made from the selection, then make it. */
+    private void askToMakeSubgraph() {
+        final Set<String> chosen = new HashSet<>(editor.getSelection());
+        if (chosen.isEmpty() || file == null) {
+            report.accept("Select the nodes to make a subgraph of, in a saved graph");
+            return;
+        }
+        ui.saveFile(
+                "Save subgraph",
+                file.getParent(),
+                "subgraph" + SUFFIX,
+                target -> {
+                    if (target != null) {
+                        makeSubgraph(chosen, target);
+                    }
+                },
+                "yml");
+    }
+
+    /**
+     * Make a subgraph from nodes and put it in their place, as one step to undo.
+     *
+     * @param chosen The nodes.
+     * @param target The subgraph file to write.
+     * @return The node placing it, or null if it couldn't be made.
+     */
+    public @Nullable String makeSubgraph(@NonNull Set<String> chosen, @NonNull Path target) {
+        final Path folder = folder();
+        if (folder == null) {
+            report.accept("Save the graph before making a subgraph");
+            return null;
+        }
+        final SubgraphMaker.Made made;
+        try {
+            made = SubgraphMaker.make(texture, folder, chosen, target.toAbsolutePath());
+        } catch (IOException | IllegalArgumentException e) {
+            status = "Can't make the subgraph: " + e.getMessage();
+            report.accept(status);
+            return null;
+        }
+        SubgraphNodes.refresh(made.type(), folder, library, history.getGraph());
+        subgraphVersions.put(
+                made.type(), SubgraphNodes.version(SubgraphNodes.fileOf(folder, made.type())));
+        final String[] placed = new String[1];
+        history.edit("Make subgraph", graph -> placed[0] = SubgraphMaker.replace(graph, made));
+        editor.select(List.of(placed[0]));
+        editor.revalidate();
+        status = "";
+        report.accept("Made " + target.getFileName() + " from " + made.nodes().size() + " nodes");
+        return placed[0];
+    }
+
+    /**
+     * Keep the subgraph node types up to date: those the graph places and those the search offers,
+     * registered again when their files change, so their pins, parameters and every swatch reading
+     * them follow; those no longer near the graph leave the search. Done every second on its own.
+     */
+    public void refreshSubgraphs() {
+        final Path folder = folder();
+        final Graph graph = history.getGraph();
+        final Set<String> wanted = new HashSet<>();
+        for (Graph.Node node : graph.nodes()) {
+            if (node.getType().startsWith(SubgraphNodes.TYPE_PREFIX)) {
+                wanted.add(node.getType());
+            }
+        }
+        if (folder != null) {
+            for (Path near : SubgraphNodes.near(folder, file)) {
+                wanted.add(SubgraphNodes.typeFor(folder, near));
+            }
+        }
+        boolean changed = false;
+        for (String type : wanted) {
+            final Path subgraph = SubgraphNodes.fileOf(folder, type);
+            final String version = subgraph == null ? "" : SubgraphNodes.version(subgraph);
+            if (!version.equals(subgraphVersions.get(type))
+                    || library.getNodeTypes().get(type) == null) {
+                SubgraphNodes.refresh(type, folder, library, graph);
+                subgraphVersions.put(type, version);
+                changed = true;
+            }
+        }
+        for (NodeTypes.NodeType type : List.copyOf(library.getNodeTypes().all())) {
+            if (type.id().startsWith(SubgraphNodes.TYPE_PREFIX) && !wanted.contains(type.id())) {
+                library.unregister(type.id());
+                subgraphVersions.remove(type.id());
+            }
+        }
+        if (changed) {
+            editor.revalidate();
+        }
+        subgraphsChecked = System.nanoTime();
     }
 
     /** Keep the swatches up to date, and save the view while it changes. */
     private void updatePreviews() {
+        if (System.nanoTime() - subgraphsChecked > SUBGRAPH_CHECK_NANOS) {
+            refreshSubgraphs();
+        }
         previews.update();
         if (file == null) {
             return;
@@ -307,6 +479,10 @@ public class GraphTool {
             if (type == null) {
                 continue;
             }
+            if (type.id().startsWith(SubgraphNodes.OUTPUT_PREFIX)) {
+                evaluator.input(graph, settings, node.getId(), SubgraphNodes.OUTPUT_IN);
+                continue;
+            }
             if (OutputNodes.isOutput(type.id())) {
                 if (++outputs > 1) {
                     errors.put(node.getId(), "A graph has one Output");
@@ -358,8 +534,19 @@ public class GraphTool {
      */
     private void drawToolbar(UiFrame frame) {
         updatePreviews();
+        if (!parents.isEmpty()) {
+            if (IkGui.button(
+                    "Back to " + SubgraphNodes.titleOf(parents.peek().getFileName().toString()))) {
+                frame.fire(this::back);
+            }
+            IkGui.sameLine();
+        }
         if (IkGui.button("New")) {
-            frame.fire(this::newGraph);
+            frame.fire(
+                    () -> {
+                        parents.clear();
+                        newGraph();
+                    });
         }
         IkGui.sameLine();
         if (IkGui.button("Open...")) {
@@ -370,6 +557,7 @@ public class GraphTool {
                                     file == null ? null : file.toAbsolutePath().getParent(),
                                     chosen -> {
                                         if (chosen != null) {
+                                            parents.clear();
                                             open(chosen);
                                         }
                                     },
@@ -388,7 +576,11 @@ public class GraphTool {
         if (IkGui.beginCombo("##starter", "From a starter")) {
             for (Path starter : starters()) {
                 if (IkGui.selectable(starterName(starter))) {
-                    frame.fire(() -> openStarter(starter));
+                    frame.fire(
+                            () -> {
+                                parents.clear();
+                                openStarter(starter);
+                            });
                 }
             }
             IkGui.endCombo();
@@ -567,9 +759,9 @@ public class GraphTool {
         try (java.util.stream.Stream<Path> files = Files.walk(root)) {
             for (Path graphFile :
                     files.filter(f -> f.toString().endsWith(SUFFIX)).sorted().toList()) {
-                final TextureGraph other = new TextureGraph(library);
+                final TextureGraph other = new TextureGraph(TextureLibraries.standard());
                 try {
-                    other.read(Files.readString(graphFile));
+                    other.read(Files.readString(graphFile), graphFile.getParent());
                 } catch (IOException | RuntimeException e) {
                     continue;
                 }
@@ -587,7 +779,11 @@ public class GraphTool {
                     continue;
                 }
                 final Baker.Result result =
-                        Baker.bake(other, new Evaluator(library), graphFile.getParent(), null);
+                        Baker.bake(
+                                other,
+                                new Evaluator(other.getLibrary()),
+                                graphFile.getParent(),
+                                null);
                 if (result.ok()) {
                     ++baked;
                 } else {
@@ -755,7 +951,7 @@ public class GraphTool {
         final TextureGraph read = new TextureGraph(library);
         final List<String> problems;
         try {
-            problems = read.read(Files.readString(path));
+            problems = read.read(Files.readString(path), path.toAbsolutePath().getParent());
         } catch (IOException | RuntimeException e) {
             log.warn("Could not open the texture graph {}", path, e);
             status = "Can't open " + path.getFileName() + ": " + e.getMessage();
@@ -784,6 +980,10 @@ public class GraphTool {
         editor.select(List.of());
         fields.clear();
         file = path.toAbsolutePath();
+        subgraphVersions.clear();
+        refreshSubgraphs();
+        // The history starts over, so its change count can't tell the editor to check again
+        editor.revalidate();
         restoreView();
         status =
                 problems.isEmpty()
@@ -803,8 +1003,22 @@ public class GraphTool {
      * @return True if it was written.
      */
     public boolean save(@NonNull Path path) {
+        final Path oldFolder = folder();
+        final Path newFolder = path.toAbsolutePath().getParent();
+        String text = texture.write();
+        boolean rebased = false;
+        if (oldFolder != null && !oldFolder.equals(newFolder)) {
+            // Subgraphs are named from the graph's folder
+            for (Graph.Node node : history.getGraph().nodes()) {
+                final Path placed = SubgraphNodes.fileOf(oldFolder, node.getType());
+                if (placed != null) {
+                    text = text.replace(node.getType(), SubgraphNodes.typeFor(newFolder, placed));
+                    rebased = true;
+                }
+            }
+        }
         try {
-            Files.writeString(path, texture.write());
+            Files.writeString(path, text);
         } catch (IOException e) {
             log.warn("Could not save the texture graph to {}", path, e);
             status = "Can't save: " + e.getMessage();
@@ -818,6 +1032,11 @@ public class GraphTool {
             evaluator.clear();
         }
         history.markSaved();
+        if (rebased) {
+            // Read back, so the nodes have the types their new folder names them by
+            open(path);
+        }
+        refreshSubgraphs();
         status = "";
         report.accept("Saved " + path.getFileName());
         return true;

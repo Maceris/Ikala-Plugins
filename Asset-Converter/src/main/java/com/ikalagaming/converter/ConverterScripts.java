@@ -477,7 +477,10 @@ public final class ConverterScripts {
      * "previews", which logs the swatches, the shown node and each node's cost; "swatches on|off";
      * "starter name", opening a starter graph as a new one; "view x y zoom", centering the canvas;
      * "where", logging the view's middle; "param add name kind", "param set name value" and "param
-     * shared file...", which change the graph's parameters and log them.
+     * shared file...", which change the graph's parameters and log them; "subgraph make file
+     * id...", making a subgraph file (in the graph's folder) of nodes; "subgraph open id", opening
+     * the subgraph a node places; "subgraph back"; "subgraph check", reading changed subgraph files
+     * now.
      *
      * @param command The command and its words, separated by spaces.
      */
@@ -683,6 +686,34 @@ public final class ConverterScripts {
                                                                 rest(words, 1),
                                                                 tool.starters().size()));
                         case "swatches" -> tool.setSwatches("on".equals(words[1]));
+                        case "subgraph" -> {
+                            switch (words[1]) {
+                                case "make" -> {
+                                    final Path graphFile = tool.getFile();
+                                    final String made =
+                                            graphFile == null
+                                                    ? null
+                                                    : tool.makeSubgraph(
+                                                            new java.util.LinkedHashSet<>(
+                                                                    List.of(words)
+                                                                            .subList(
+                                                                                    3,
+                                                                                    words.length)),
+                                                            graphFile.resolveSibling(words[2]));
+                                    log.info("Script: Graph subgraph made {}", made);
+                                }
+                                case "open" ->
+                                        log.info(
+                                                "Script: Graph subgraph opened {}",
+                                                tool.openSubgraphOf(words[2]));
+                                case "back" -> {
+                                    tool.back();
+                                    log.info("Script: Graph back to {}", tool.getFile());
+                                }
+                                case "check" -> tool.refreshSubgraphs();
+                                default -> log.warn("Script: no subgraph command {}", words[1]);
+                            }
+                        }
                         case "previews" ->
                                 log.info(
                                         "Script: Graph previews {}", tool.getPreviews().describe());

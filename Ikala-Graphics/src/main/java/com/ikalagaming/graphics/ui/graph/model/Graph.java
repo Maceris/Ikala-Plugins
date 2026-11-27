@@ -271,8 +271,12 @@ public final class Graph {
      * @return The ID.
      */
     private String freshId(String type) {
-        final String base =
-                type.substring(type.lastIndexOf('/') + 1).replaceAll("[^A-Za-z0-9_]", "_");
+        // The last part, and for a type naming a file, like a subgraph's, the file's name alone
+        String last = type.substring(Math.max(type.lastIndexOf('/'), type.lastIndexOf(':')) + 1);
+        if (last.indexOf('.') > 0) {
+            last = last.substring(0, last.indexOf('.'));
+        }
+        final String base = last.replaceAll("[^A-Za-z0-9_]", "_");
         int number = 1;
         while (nodes.containsKey(base + number)) {
             ++number;

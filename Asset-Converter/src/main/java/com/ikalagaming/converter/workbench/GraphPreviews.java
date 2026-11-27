@@ -6,6 +6,7 @@ import com.ikalagaming.converter.texgraph.OutputNodes;
 import com.ikalagaming.converter.texgraph.Plane;
 import com.ikalagaming.converter.texgraph.PlaneViews;
 import com.ikalagaming.converter.texgraph.Srgb;
+import com.ikalagaming.converter.texgraph.SubgraphNodes;
 import com.ikalagaming.converter.texgraph.TextureGraph;
 import com.ikalagaming.converter.texgraph.TextureLibrary;
 import com.ikalagaming.converter.texgraph.TexturePins;
@@ -281,6 +282,11 @@ public class GraphPreviews {
         final NodeTypes.NodeType type = graph.typeOf(id);
         if (type == null || NodeTypes.isEditorType(type.id())) {
             return null;
+        }
+        if (type.id().startsWith(SubgraphNodes.OUTPUT_PREFIX)) {
+            final Plane plane = evaluator.input(graph, settings(), id, SubgraphNodes.OUTPUT_IN);
+            final String pinType = type.id().substring(SubgraphNodes.OUTPUT_PREFIX.length());
+            return plane == null ? null : new Shown(plane, pinType);
         }
         if (OutputNodes.isOutput(type.id())) {
             NodeTypes.Pin chosen = null;

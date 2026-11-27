@@ -70,6 +70,14 @@ public final class TextureGraph {
     @Getter private final Graph graph;
 
     /**
+     * The node types the graph uses, which the subgraphs it places are registered in. -- GETTER --
+     * The library.
+     *
+     * @return The library.
+     */
+    @Getter private final TextureLibrary library;
+
+    /**
      * Pixels across a tile. -- GETTER -- Pixels across. -- SETTER -- Set pixels across.
      *
      * @param width The width.
@@ -246,6 +254,7 @@ public final class TextureGraph {
      * @param library The node types it uses.
      */
     public TextureGraph(@NonNull TextureLibrary library) {
+        this.library = library;
         graph = library.newGraph();
     }
 
@@ -293,7 +302,23 @@ public final class TextureGraph {
     }
 
     /**
-     * Read a file's text into this graph, which should be empty.
+     * Read a file's text into this graph, which should be empty, first registering the subgraphs it
+     * places in its library, found from its file's folder.
+     *
+     * @param text The YAML.
+     * @param folder The file's folder, or null for text from no file, whose subgraphs can't be
+     *     found.
+     * @return Problems met, each of which was left out.
+     * @throws IllegalArgumentException If the text isn't a texture graph.
+     */
+    public List<String> read(@NonNull String text, @Nullable Path folder) {
+        SubgraphNodes.prepare(text, folder, library);
+        return read(text);
+    }
+
+    /**
+     * Read a file's text into this graph, which should be empty. Subgraphs it places must be
+     * registered already; see {@link #read(String, Path)}.
      *
      * @param text The YAML.
      * @return Problems met, each of which was left out.

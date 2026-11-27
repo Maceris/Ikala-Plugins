@@ -106,6 +106,33 @@ match the blocks' within about a percent; only where the random pixels fall diff
 opens one as a new graph, unsaved, to change and save somewhere with a bake target. They aren't a game look's
 source: the block textures stay painted.
 
+## Subgraphs are graphs placed as one node
+
+A texture graph with Input and Output nodes (one type of each per pin type, each named) can be placed in another
+graph as one node: its inputs and outputs are the Input and Output nodes, top to bottom as they stand, and its
+parameters its own graph parameters. Subgraph files are authoring sources like any graph, never shipped, and a graph
+names one by its path relative to the graph's own file, which is the node's type (`subgraph:../subgraphs/mortar
+.texgraph.yml`), as it names shared parameter files. So each graph's library is its own: the bake, `BakeTextures` and
+`BuildTextures` read every graph with a library of its own, and Save As to another folder rewrites the paths. The node
+search offers the subgraphs in the graph's folder and below it, and in a `subgraphs` folder beside any of its
+ancestors.
+
+A placed subgraph runs at the outer graph's size and with its seed, moved only by the node's `seed variation`, with
+its inputs fed to the Input nodes. Each parameter the subgraph reads is the node's own value if set, else the outer
+graph's parameter of that name and kind, else the subgraph's own. That is what lets Make subgraph (the node menu)
+take part of a graph out without changing a pixel: the nodes keep their IDs inside, so their seeds, and they read the
+same parameters. A selection that feeds an outside node feeding it back is refused, since the placed node would be in
+a loop. The node's cache key holds a fingerprint of the subgraph file and everything it reads (shared parameter files,
+nested subgraphs, images), and the editor checks subgraph files every second, so an edit to one, saved anywhere,
+shows in every swatch reading it.
+
+A link to a pin the subgraph no longer has, or a value for a parameter it dropped, is kept: the node's type gets the
+lost pin or parameter back from the graph using it, and evaluating it is an error naming what was lost. Nothing is
+unlinked behind the user's back. A subgraph placing itself, at any depth, is an error on the node.
+
+Relative file names inside a subgraph, like an Image node's, start from the subgraph's folder; Make subgraph doesn't
+rewrite them, so a subgraph made into another folder may need them fixed.
+
 ## What ships is converted from PNGs
 
 Graphs bake PNG maps, and a separate step turns a texture's PNG maps, baked or painted, into the one `.ika` a game
@@ -126,4 +153,5 @@ and a test fails when a block graph and the `.ika` shipped from it disagree.
 `*.texgraph.yml`: the graph's settings first (format, size, seed, the content folder it bakes to relative to the
 file, the folder of textures its maps bake under when not the content folder's, the texture's name under its
 textures folder, the model whose UVs give the layout, the shared parameter files
-it reads, and its parameters, one line each without their defaults), then the graph as `GraphFile` writes it. Graph files for the base game's blocks live in Lotomation's `art/textures/block/`.
+it reads, and its parameters, one line each without their defaults), then the graph as `GraphFile` writes it. A
+placed subgraph's node type is `subgraph:` and the file's path relative to the graph. Graph files for the base game's blocks live in Lotomation's `art/textures/block/`.

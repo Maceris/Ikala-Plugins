@@ -36,6 +36,13 @@ public final class Evaluator {
     /** A choice parameter's options a node reads, one per line, among its parameters. */
     public static final String READ_CHOICES = "@choices";
 
+    /**
+     * What each graph parameter a node reads through {@link TextureNode#parametersRead} is listed
+     * under among its parameters, then the name; the value is the kind, a colon and the value, or
+     * empty if the graph has no such parameter.
+     */
+    public static final String READ_PREFIX = "@read:";
+
     /** The library the nodes come from. */
     private final TextureLibrary library;
 
@@ -88,13 +95,16 @@ public final class Evaluator {
      * @param seed The graph's seed, which each node's seed is made from.
      * @param folder Where relative file names start, or null when the graph isn't saved.
      * @param parameters The parameters Parameter nodes read, by name.
+     * @param inputs What a subgraph's Input nodes give, by name, as the node placing it reads its
+     *     inputs; empty for a graph evaluated on its own.
      */
     public record Settings(
             int width,
             int height,
             long seed,
             @Nullable Path folder,
-            @NonNull Map<String, GraphParameter> parameters) {
+            @NonNull Map<String, GraphParameter> parameters,
+            @NonNull Map<String, Plane> inputs) {
         /**
          * Check the settings.
          *
@@ -106,6 +116,25 @@ public final class Evaluator {
                         "A texture is at least 1x1, not " + width + "x" + height);
             }
             parameters = Map.copyOf(parameters);
+            inputs = Map.copyOf(inputs);
+        }
+
+        /**
+         * Settings for a graph evaluated on its own.
+         *
+         * @param width Pixels across.
+         * @param height Pixels down.
+         * @param seed The graph's seed.
+         * @param folder Where relative file names start, or null.
+         * @param parameters The parameters Parameter nodes read, by name.
+         */
+        public Settings(
+                int width,
+                int height,
+                long seed,
+                @Nullable Path folder,
+                @NonNull Map<String, GraphParameter> parameters) {
+            this(width, height, seed, folder, parameters, Map.of());
         }
 
         /**
@@ -127,7 +156,7 @@ public final class Evaluator {
          * @return The settings.
          */
         public Settings withSeed(long newSeed) {
-            return new Settings(width, height, newSeed, folder, parameters);
+            return new Settings(width, height, newSeed, folder, parameters, inputs);
         }
     }
 
@@ -341,9 +370,11 @@ public final class Evaluator {
                         settings.width(),
                         settings.height(),
                         nodeSeed(settings.seed(), id),
+                        settings.seed(),
                         settings.folder(),
                         params,
-                        pin -> unused.contains(pin) ? null : read(pass, id, pin));
+                        pin -> unused.contains(pin) ? null : read(pass, id, pin),
+                        settings.inputs()::get);
         final long start = System.nanoTime();
         try {
             node.evaluate(context);
@@ -441,6 +472,14 @@ public final class Evaluator {
     private static Map<String, String> paramsFor(
             Pass pass, String id, NodeTypes.NodeType type, @Nullable TextureNode node) {
         final Map<String, String> params = paramsOf(pass.graph(), id, type);
+        if (node != null) {
+            for (String name : node.parametersRead(params)) {
+                final GraphParameter parameter = pass.settings().parameters().get(name);
+                params.put(
+                        READ_PREFIX + name,
+                        parameter == null ? "" : parameter.kind().id + ":" + parameter.value());
+            }
+        }
         final String read = node == null ? null : node.parameterRead(params);
         if (read != null) {
             final GraphParameter parameter = pass.settings().parameters().get(read);

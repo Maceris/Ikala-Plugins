@@ -202,6 +202,17 @@ public final class NodeTypes {
     }
 
     /**
+     * Take a type out, as when what it stood for is gone. Nodes of it already in graphs stay, and
+     * show as of an unknown type until it is registered again.
+     *
+     * @param id The type's ID.
+     * @return True if there was one.
+     */
+    public boolean remove(@NonNull String id) {
+        return types.remove(id) != null;
+    }
+
+    /**
      * A type by ID.
      *
      * @param id The ID.

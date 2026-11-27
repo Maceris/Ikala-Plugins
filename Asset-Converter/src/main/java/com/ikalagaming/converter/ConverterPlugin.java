@@ -13,6 +13,7 @@ import com.ikalagaming.graphics.UI;
 import com.ikalagaming.graphics.gui.WindowManager;
 import com.ikalagaming.graphics.gui.windows.GraphicsDebug;
 import com.ikalagaming.graphics.gui.windows.IkGuiDemo;
+import com.ikalagaming.graphics.ui.script.StartupScripts;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 import com.ikalagaming.scripting.HostClass;
@@ -131,15 +132,14 @@ public class ConverterPlugin extends Plugin {
 
         guiManager.setToolbar(graphics, new DebugToolbar(guiManager));
         final String script = System.getProperty(SCRIPT_PROPERTY);
-        if (script != null
-                && ScriptManager.start(
-                                ScriptLaunch.file(Path.of(script))
-                                        .owner(getName())
-                                        .global(
-                                                "args",
-                                                System.getProperty(SCRIPT_ARGS_PROPERTY, "")))
-                        .isEmpty()) {
-            log.warn("Could not start the startup script {}", script);
+        if (script != null) {
+            ScriptManager.start(
+                            ScriptLaunch.file(Path.of(script))
+                                    .owner(getName())
+                                    .global("args", System.getProperty(SCRIPT_ARGS_PROPERTY, "")))
+                    .ifPresentOrElse(
+                            runtime -> StartupScripts.exitWhenDone(runtime, getName()),
+                            () -> log.warn("Could not start the startup script {}", script));
         }
         return true;
     }

@@ -4,7 +4,6 @@ import com.ikalagaming.converter.texgraph.Baker;
 import com.ikalagaming.converter.texgraph.Evaluator;
 import com.ikalagaming.converter.texgraph.TextureGraph;
 import com.ikalagaming.converter.texgraph.TextureLibraries;
-import com.ikalagaming.converter.texgraph.TextureLibrary;
 
 import lombok.NonNull;
 
@@ -72,7 +71,6 @@ public final class BuildTextures {
         }
         final Path sources = folders.get(0).toAbsolutePath().normalize();
         final Path shipped = folders.get(1).toAbsolutePath().normalize();
-        final TextureLibrary library = TextureLibraries.standard();
         final List<Path> bakedMaps = new ArrayList<>();
         int failed = 0;
         int baked = 0;
@@ -87,9 +85,10 @@ public final class BuildTextures {
             return 1;
         }
         for (Path file : graphs) {
-            final TextureGraph graph = new TextureGraph(library);
+            // A library each, as subgraphs are named by paths relative to each graph
+            final TextureGraph graph = new TextureGraph(TextureLibraries.standard());
             try {
-                final List<String> problems = graph.read(Files.readString(file));
+                final List<String> problems = graph.read(Files.readString(file), file.getParent());
                 if (!problems.isEmpty()) {
                     err.println(file + ": " + String.join("; ", problems));
                     ++failed;
@@ -104,7 +103,7 @@ public final class BuildTextures {
                 continue;
             }
             final Baker.Result result =
-                    Baker.bake(graph, new Evaluator(library), file.getParent(), null);
+                    Baker.bake(graph, new Evaluator(graph.getLibrary()), file.getParent(), null);
             if (!result.ok()) {
                 err.println(file + ": " + String.join("; ", result.problems()));
                 ++failed;

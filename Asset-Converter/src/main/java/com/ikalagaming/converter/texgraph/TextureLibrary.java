@@ -47,6 +47,16 @@ public final class TextureLibrary {
     }
 
     /**
+     * Take a node type out, as when the subgraph it placed is gone from the search.
+     *
+     * @param type The type's ID.
+     */
+    public void unregister(@NonNull String type) {
+        nodeTypes.remove(type);
+        nodes.remove(type);
+    }
+
+    /**
      * What a node type does.
      *
      * @param type The type's ID.

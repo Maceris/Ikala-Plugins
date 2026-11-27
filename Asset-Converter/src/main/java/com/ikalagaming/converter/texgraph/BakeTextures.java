@@ -78,22 +78,28 @@ public final class BakeTextures {
                 return 1;
             }
         }
-        final TextureLibrary library = TextureLibraries.standard();
         int failed = 0;
         int written = 0;
         int unchanged = 0;
         for (Path file : graphs) {
             final Path absolute = file.toAbsolutePath().normalize();
-            final TextureGraph graph = new TextureGraph(library);
+            // A library each, as subgraphs are named by paths relative to each graph
+            final TextureGraph graph = new TextureGraph(TextureLibraries.standard());
             final Baker.Result result;
             try {
-                final List<String> problems = graph.read(Files.readString(absolute));
+                final List<String> problems =
+                        graph.read(Files.readString(absolute), absolute.getParent());
                 if (!problems.isEmpty()) {
                     err.println(file + ": " + String.join("; ", problems));
                     ++failed;
                     continue;
                 }
-                result = Baker.bake(graph, new Evaluator(library), absolute.getParent(), data);
+                result =
+                        Baker.bake(
+                                graph,
+                                new Evaluator(graph.getLibrary()),
+                                absolute.getParent(),
+                                data);
             } catch (IOException | RuntimeException e) {
                 err.println(file + ": " + e.getMessage());
                 ++failed;

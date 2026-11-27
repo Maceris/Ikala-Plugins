@@ -640,6 +640,7 @@ public final class ScriptAutomation {
                                     path,
                                     owner.getOwner(),
                                     error.getMessage());
+                            StartupScripts.failed(owner.getOwner());
                             ScriptManager.terminate(runtime);
                         });
         return tag;
@@ -755,6 +756,7 @@ public final class ScriptAutomation {
                                     "UI check failed in a script from {}, stopping it: {}",
                                     owner.getOwner(),
                                     cause.getMessage());
+                            StartupScripts.failed(owner.getOwner());
                             ScriptManager.terminate(runtime);
                         });
         return tag;

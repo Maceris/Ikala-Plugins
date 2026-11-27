@@ -49,6 +49,19 @@ public interface TextureNode {
     }
 
     /**
+     * Graph parameters the node reads, more than {@link #parameterRead} gives: each is added to its
+     * parameters under {@link Evaluator#READ_PREFIX} and its name, as its kind, a colon and its
+     * value, or empty if the graph has none by that name, so a change to any of them evaluates the
+     * node again.
+     *
+     * @param params The node's own parameters.
+     * @return The graph parameters' names.
+     */
+    default Set<String> parametersRead(@NonNull Map<String, String> params) {
+        return Set.of();
+    }
+
+    /**
      * Inputs the node won't read with these parameters, which are then neither evaluated nor part
      * of its key, like the branch a switch turns off.
      *
