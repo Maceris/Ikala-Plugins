@@ -141,7 +141,9 @@ public class EnvironmentUpdate implements RenderStage {
         final Vector3f sun;
         final double radius;
         if (physical != null) {
-            sun = AtmosphereMath.towardSun(scene.getSceneLights().getDirLight().getDirection());
+            sun =
+                    AtmosphereMath.towardSun(
+                            physical, scene.getSceneLights().getDirLight().getDirection());
             radius = AtmosphereMath.cameraRadius(physical, scene.getCamera().getPosition().y());
             fillTables(commandBuffer, state, physical, sun, radius);
             skyTexture = Environment.PHYSICAL_SKY;

@@ -84,6 +84,20 @@ class AtmosphereMathTest {
                 "Never below the ground");
     }
 
+    @Test
+    void aSkyCanBeLitFromItsOwnDirection() {
+        final PhysicalSky sky = new PhysicalSky();
+        final Vector3f low = new Vector3f(0, -0.1f, 1);
+        assertEquals(
+                new Vector3f(low).negate().normalize(),
+                AtmosphereMath.towardSun(sky, low),
+                "Follows the sun without one");
+        sky.setSunDirection(new Vector3f(0, -2, 0));
+        assertTrue(
+                new Vector3f(0, 1, 0).equals(AtmosphereMath.towardSun(sky, low), (float) EPSILON),
+                "Its own, unit");
+    }
+
     private static Vector3f toward(double elevation, double azimuth) {
         final double e = Math.toRadians(elevation);
         final double a = Math.toRadians(azimuth);

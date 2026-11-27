@@ -8,12 +8,11 @@ import com.ikalagaming.graphics.Instances;
 import com.ikalagaming.graphics.LightHandle;
 import com.ikalagaming.graphics.Lights;
 import com.ikalagaming.graphics.RenderConfig;
-import com.ikalagaming.graphics.TextureHandle;
-import com.ikalagaming.graphics.Textures;
 import com.ikalagaming.graphics.UI;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.LightUnits;
+import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
@@ -21,7 +20,6 @@ import com.ikalagaming.graphics.ui.Tool;
 import com.ikalagaming.graphics.ui.spec.SpecBindings;
 import com.ikalagaming.graphics.ui.spec.SpecInstance;
 import com.ikalagaming.graphics.ui.spec.UiSpec;
-import com.ikalagaming.launcher.PluginFolder;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -67,12 +65,6 @@ public class MainMenu {
 
     /** Where the rows added behind the demo's first row start, along z. */
     private static final int BEHIND_FIRST_ROW = -1;
-
-    /**
-     * The demo's ambient light intensity: the sky's light, as the workbench uses, so metals reflect
-     * the skybox rather than black.
-     */
-    private static final float AMBIENT_INTENSITY = LightUnits.physical(0.3f);
 
     /** The startup property that opens the sphere demo as soon as the menu opens. */
     private static final String SPHERE_DEMO_PROPERTY = "ikala.test.sphereDemo";
@@ -137,6 +129,7 @@ public class MainMenu {
         final RenderConfig previousPipeline = GraphicsManager.getPipelineConfig();
         final DirectionalLight previousSun = scene.getSceneLights().getDirLight();
         final AmbientLight previousAmbient = scene.getSceneLights().getAmbientLight();
+        final PhysicalSky previousSky = scene.getPhysicalSky();
 
         Model ballModel =
                 ModelConverter.loadModel(
@@ -151,9 +144,11 @@ public class MainMenu {
         Material material = ballModel.getMeshDataList().get(0).getMaterial();
 
         Objects.requireNonNull(material);
-        material.setTexture(null);
-        material.setNormalMap(null);
-        material.getBaseColor().set(0.75f, 0.0f, 0.0f, 1.0f);
+        for (Material part : SphereDemoLod.parts(ballModel)) {
+            part.setTexture(null);
+            part.setNormalMap(null);
+            part.getBaseColor().set(0.75f, 0.0f, 0.0f, 1.0f);
+        }
         scene.getMaterialCache().setDirty(true);
         scene.addModel(ballModel);
 
@@ -173,7 +168,7 @@ public class MainMenu {
             customMaterial.setRoughness(0.40f);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            instances.setMaterial(ball, 0, customMaterial);
+            SphereDemoLod.paint(instances, ball, ballModel, customMaterial);
             demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
         demo.nameRow(zPos, "Anisotropy 0 to 1");
@@ -188,7 +183,7 @@ public class MainMenu {
             customMaterial.setClearcoat(0.1f * i);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            instances.setMaterial(ball, 0, customMaterial);
+            SphereDemoLod.paint(instances, ball, ballModel, customMaterial);
             demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
         demo.nameRow(zPos, "Clearcoat 0 to 1");
@@ -204,7 +199,7 @@ public class MainMenu {
             customMaterial.setRoughness(0.40f);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            instances.setMaterial(ball, 0, customMaterial);
+            SphereDemoLod.paint(instances, ball, ballModel, customMaterial);
             demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
         demo.nameRow(zPos, "Clearcoat gloss 0 to 1");
@@ -219,7 +214,7 @@ public class MainMenu {
             customMaterial.setMetallic(0.1f * i);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            instances.setMaterial(ball, 0, customMaterial);
+            SphereDemoLod.paint(instances, ball, ballModel, customMaterial);
             demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
         demo.nameRow(zPos, "Metallic 0 to 1");
@@ -234,7 +229,7 @@ public class MainMenu {
             customMaterial.setRoughness(0.1f * i);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            instances.setMaterial(ball, 0, customMaterial);
+            SphereDemoLod.paint(instances, ball, ballModel, customMaterial);
             demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
         demo.nameRow(zPos, "Roughness 0 to 1");
@@ -250,7 +245,7 @@ public class MainMenu {
             customMaterial.setRoughness(1.0f);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            instances.setMaterial(ball, 0, customMaterial);
+            SphereDemoLod.paint(instances, ball, ballModel, customMaterial);
             demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
         demo.nameRow(zPos, "Sheen 0 to 1");
@@ -266,7 +261,7 @@ public class MainMenu {
             customMaterial.setRoughness(1.0f);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            instances.setMaterial(ball, 0, customMaterial);
+            SphereDemoLod.paint(instances, ball, ballModel, customMaterial);
             demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
         demo.nameRow(zPos, "Sheen tint 0 to 1");
@@ -282,7 +277,7 @@ public class MainMenu {
             customMaterial.setRoughness(0.40f);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            instances.setMaterial(ball, 0, customMaterial);
+            SphereDemoLod.paint(instances, ball, ballModel, customMaterial);
             demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
         demo.nameRow(zPos, "Specular 0 to 1");
@@ -298,7 +293,7 @@ public class MainMenu {
             customMaterial.setRoughness(0.40f);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            instances.setMaterial(ball, 0, customMaterial);
+            SphereDemoLod.paint(instances, ball, ballModel, customMaterial);
             demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
         demo.nameRow(zPos, "Specular tint 0 to 1");
@@ -313,7 +308,7 @@ public class MainMenu {
             customMaterial.setRoughness(0.40f);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            instances.setMaterial(ball, 0, customMaterial);
+            SphereDemoLod.paint(instances, ball, ballModel, customMaterial);
             demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
         demo.nameRow(zPos, "White");
@@ -334,7 +329,7 @@ public class MainMenu {
             customMaterial.setRoughness(0.1f * i);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            instances.setMaterial(ball, 0, customMaterial);
+            SphereDemoLod.paint(instances, ball, ballModel, customMaterial);
             demo.add(new Vector3d(i, 0, BEHIND_FIRST_ROW), customMaterial, ball);
         }
         demo.nameRow(BEHIND_FIRST_ROW, "Metal, roughness 0 to 1");
@@ -354,19 +349,20 @@ public class MainMenu {
             customMaterial.setRoughness(0.20f);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            instances.setMaterial(ball, 0, customMaterial);
+            SphereDemoLod.paint(instances, ball, ballModel, customMaterial);
             demo.add(new Vector3d(i, 0, BEHIND_FIRST_ROW - 1), customMaterial, ball);
         }
         demo.nameRow(BEHIND_FIRST_ROW - 1, "Translucent, opacity 1/11 to 1");
 
+        // Lit by the physical sky, which the demo's window turns the sun and sky in
         scene.getSceneLights()
                 .setDirLight(
                         new DirectionalLight(
                                 new Vector3f(1.0f, 1.0f, 1.0f),
-                                new Vector3f(0.247f, -0.848f, 0.785f),
+                                new Vector3f(0, -1, 0),
                                 LightUnits.physical(4)));
-        scene.getSceneLights()
-                .setAmbientLight(new AmbientLight(new Vector3f(1, 1, 1), AMBIENT_INTENSITY));
+        scene.getSceneLights().setAmbientLight(new AmbientLight(new Vector3f(1), 0));
+        scene.setPhysicalSky(new PhysicalSky());
 
         // The demo has always lit to 10 m; brighter lights would otherwise reach further
         final float lightRange = 10;
@@ -388,22 +384,12 @@ public class MainMenu {
         scene.getCamera().setPosition(5.12f, 6.75f, 10.42f);
         scene.getCamera().setRotation(0.94f, 6.28f);
 
-        var texturePath =
-                PluginFolder.getResource(
-                                ConverterPlugin.PLUGIN_NAME,
-                                PluginFolder.ResourceType.DATA,
-                                "textures/skybox.png")
-                        .getAbsolutePath();
-        final Textures textures = GraphicsManager.forPlugin(ConverterPlugin.PLUGIN_NAME).textures();
-        final TextureHandle skybox = textures.load(texturePath);
-        scene.setSkyboxTexture(skybox);
         demo.open(
                 () -> {
                     // The demo's balls are gone; take out the rest and show the menu again
                     lights.remove(red);
                     lights.remove(blue);
-                    scene.setSkyboxTexture(null);
-                    textures.release(skybox);
+                    scene.setPhysicalSky(previousSky);
                     scene.removeModel(ballModel.getId());
                     GraphicsManager.forPlugin(ConverterPlugin.PLUGIN_NAME)
                             .meshes()

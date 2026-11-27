@@ -40,6 +40,7 @@ import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
+import com.ikalagaming.graphics.scene.lights.LightAngles;
 import com.ikalagaming.graphics.vulkan.ClusterMath;
 import com.ikalagaming.graphics.vulkan.FilterView;
 import com.ikalagaming.graphics.vulkan.FrameTimings;
@@ -75,6 +76,24 @@ public class GraphicsDebug extends GuiWindow {
 
     /** The ambient light color picker's value, red, green, blue. */
     private final float[] ambientColor = new float[3];
+
+    /** Whether the directional light's direction is picked as angles rather than X, Y and Z. */
+    private final IkBoolean lightAngles = new IkBoolean(true);
+
+    /** Where around the vertical axis the directional light comes from, in degrees. */
+    private final float[] lightAround = new float[1];
+
+    /** How high above the horizon the directional light comes from, in degrees. */
+    private final float[] lightIncline = new float[1];
+
+    /**
+     * The direction the angles were last read from or set, so they are read again only once
+     * something else moves the light: near straight up or down, reading them would lose around.
+     */
+    private final Vector3f anglesDirection = new Vector3f(Float.NaN);
+
+    /** The hour the physical sky is lit at while it doesn't follow the sun. */
+    private static final float[] SKY_HOUR = {12};
 
     /** The point shadow budget slider's value. Render thread only. */
     private static final int[] POINT_SHADOW_BUDGET = new int[1];
@@ -531,9 +550,7 @@ public class GraphicsDebug extends GuiWindow {
                 }
                 exposure.draw(width, height);
                 wireframeEnabled.draw(width, height);
-                directionalLightX.draw(width, height);
-                directionalLightY.draw(width, height);
-                directionalLightZ.draw(width, height);
+                drawLightDirection(width, height);
                 directionalLightIntensity.draw(width, height);
                 drawAmbientControls();
                 if (!renderingScene) {
@@ -703,14 +720,22 @@ public class GraphicsDebug extends GuiWindow {
         if (exposure.checkResult()) {
             scene.setExposureValue(exposure.getValue());
         }
+        boolean lightMoved = false;
         if (directionalLightX.checkResult()) {
             directionalLightDir.setComponent(0, directionalLightX.getValue());
+            lightMoved = true;
         }
         if (directionalLightY.checkResult()) {
             directionalLightDir.setComponent(1, directionalLightY.getValue());
+            lightMoved = true;
         }
         if (directionalLightZ.checkResult()) {
             directionalLightDir.setComponent(2, directionalLightZ.getValue());
+            lightMoved = true;
+        }
+        if (lightMoved) {
+            // The sky's time keeps around where the light is
+            followSkyTime(scene);
         }
         if (directionalLightIntensity.checkResult()) {
             directionalLight.setIntensity(directionalLightIntensity.getValue());
@@ -933,6 +958,9 @@ public class GraphicsDebug extends GuiWindow {
                 "Draw Earth's atmosphere lit by the sun in place of the skybox, and light the"
                         + " scene from it, as bright as the sun makes it; the ambient light is not"
                         + " used.");
+        if (skyScene != null) {
+            drawSkyTime(skyScene);
+        }
         if (skyScene != null && IkGui.checkbox("Auto exposure", skyScene.isAutoExposure())) {
             skyScene.setAutoExposure(!skyScene.isAutoExposure());
         }
@@ -1221,6 +1249,111 @@ public class GraphicsDebug extends GuiWindow {
     }
 
     /** Edit the scene's ambient light: how bright it is, and its color. */
+    /**
+     * The directional light's direction: as angles, around the vertical axis and above the horizon,
+     * or as X, Y and Z.
+     *
+     * @param width The window's width.
+     * @param height The window's height.
+     */
+    private void drawLightDirection(int width, int height) {
+        IkGui.checkbox("Light direction as angles", lightAngles);
+        IkGui.setItemTooltip(
+                "Pick where the directional light comes from as angles, around the vertical axis"
+                        + " and above the horizon, rather than as the X, Y and Z it travels"
+                        + " along.");
+        final Scene scene = GraphicsManager.getScene();
+        if (!lightAngles.get() || scene == null) {
+            directionalLightX.draw(width, height);
+            directionalLightY.draw(width, height);
+            directionalLightZ.draw(width, height);
+            return;
+        }
+        final Vector3f direction = scene.getSceneLights().getDirLight().getDirection();
+        if (!direction.equals(anglesDirection)) {
+            lightAround[0] = (float) LightAngles.around(direction);
+            lightIncline[0] = (float) LightAngles.incline(direction);
+            anglesDirection.set(direction);
+        }
+        boolean moved =
+                IkGui.sliderFloat(
+                        "Light around (deg)",
+                        lightAround,
+                        0,
+                        (float) LightAngles.FULL_TURN,
+                        "%.0f");
+        IkGui.setItemTooltip(
+                "Where around the vertical axis the light comes from: 0 from -z, where the"
+                        + " default camera looks, 90 from +x.");
+        moved |=
+                IkGui.sliderFloat(
+                        "Light incline (deg)",
+                        lightIncline,
+                        (float) -LightAngles.MAX_INCLINE,
+                        (float) LightAngles.MAX_INCLINE,
+                        "%.0f");
+        IkGui.setItemTooltip(
+                "How high above the horizon the light comes from: 90 shines straight down, below 0"
+                        + " from under the horizon.");
+        if (moved) {
+            direction.set(LightAngles.direction(lightAround[0], lightIncline[0]));
+            anglesDirection.set(direction);
+            followSkyTime(scene);
+        }
+    }
+
+    /**
+     * Whether the physical sky follows the sun, and if not, the time it is lit at.
+     *
+     * @param scene The scene.
+     */
+    private static void drawSkyTime(@NonNull Scene scene) {
+        final PhysicalSky sky = scene.getPhysicalSky();
+        if (sky == null) {
+            return;
+        }
+        final boolean follows = sky.getSunDirection() == null;
+        if (IkGui.checkbox("Sky follows the sun", follows)) {
+            sky.setSunDirection(
+                    follows
+                            ? LightAngles.atHour(
+                                    SKY_HOUR[0],
+                                    scene.getSceneLights().getDirLight().getDirection())
+                            : null);
+        }
+        IkGui.setItemTooltip(
+                "Light the sky, and color the sun's light, from where the sun is. Off, they are"
+                        + " lit by the time below, so the sun can shine from anywhere without the"
+                        + " sky going to twilight.");
+        if (sky.getSunDirection() == null) {
+            return;
+        }
+        if (IkGui.sliderFloat("Sky time (h)", SKY_HOUR, 0, (float) LightAngles.DAY_HOURS, "%.1f")) {
+            followSkyTime(scene);
+        }
+        IkGui.setItemTooltip(
+                "The hour the sky is lit at, around where the sun is: it rises at 6, is "
+                        + (int) LightAngles.NOON_INCLINE
+                        + " degrees up at noon and sets at 18.");
+    }
+
+    /**
+     * Light the physical sky at its time again, around where the sun now is, if it doesn't follow
+     * the sun.
+     *
+     * @param scene The scene.
+     */
+    private static void followSkyTime(@NonNull Scene scene) {
+        final PhysicalSky sky = scene.getPhysicalSky();
+        if (sky != null && sky.getSunDirection() != null) {
+            sky.getSunDirection()
+                    .set(
+                            LightAngles.atHour(
+                                    SKY_HOUR[0],
+                                    scene.getSceneLights().getDirLight().getDirection()));
+        }
+    }
+
     private void drawAmbientControls() {
         final Scene scene = GraphicsManager.getScene();
         if (scene == null) {

@@ -24,8 +24,10 @@ import com.ikalagaming.graphics.lod.LodDag;
 import com.ikalagaming.graphics.lod.LodDagCache;
 import com.ikalagaming.graphics.lod.LodMesh;
 import com.ikalagaming.graphics.lod.MaterialAverages;
+import com.ikalagaming.graphics.scene.PhysicalSky;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugLabel;
+import com.ikalagaming.graphics.scene.lights.LightAngles;
 import com.ikalagaming.graphics.vulkan.FrameTimings;
 import com.ikalagaming.graphics.vulkan.LodRenderer;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
@@ -46,7 +48,9 @@ import java.util.function.IntPredicate;
  * The sphere demo's window, with the way back to the menu and a level of detail switch: draws its
  * opaque balls as instances of one level of detail model of the shader ball, each with its own
  * material, instead of whole meshes, and can scatter rows of white copies behind them to see what
- * that saves. Translucent balls stay meshes, since level of detail draws only opaque surfaces.
+ * that saves. Translucent balls stay meshes, since level of detail draws only opaque surfaces. It
+ * also turns the sun, and can light the physical sky from high above it, so a low sun behind the
+ * balls shows their highlights without the sky going to twilight.
  */
 @Slf4j
 final class SphereDemoLod {
@@ -90,8 +94,23 @@ final class SphereDemoLod {
     /** Nanoseconds in a second. */
     private static final double NANOS_PER_SECOND = 1e9;
 
-    /** How often the frame time is logged. */
-    private static final long LOG_INTERVAL_NANOS = 5_000_000_000L;
+    /** How high the sun is to start with, in degrees: low, so highlights face the camera. */
+    private static final float SUN_HEIGHT = 15;
+
+    /**
+     * Where around the sun is to start with, in degrees: 0 straight behind the balls, shining
+     * toward the camera; a little to the side shows anisotropic highlights stretched.
+     */
+    private static final float SUN_AROUND = 20;
+
+    /** How high the sky's own sun is, in degrees, while it is lit apart from the sun: day. */
+    private static final float SKY_SUN_HEIGHT = 60;
+
+    /** The highest the sun goes, in degrees. */
+    private static final float MAX_HEIGHT = 90;
+
+    /** The furthest around the sun goes either way, in degrees. */
+    private static final float MAX_AROUND = 180;
 
     /** Where each row's name is, before its first ball along x, and above the ground. */
     private static final double LABEL_X = -1;
@@ -161,6 +180,18 @@ final class SphereDemoLod {
     /** Whether debug shapes are drawn for the names now. Render thread. */
     private boolean namesShown;
 
+    /** How high the sun is, in degrees above the horizon. */
+    private final float[] sunHeight = {SUN_HEIGHT};
+
+    /** Where around the sun is, in degrees, 0 behind the balls. */
+    private final float[] sunAround = {SUN_AROUND};
+
+    /**
+     * Whether the sky is lit from high above where the sun is rather than by the sun itself, so a
+     * low sun doesn't make it twilight.
+     */
+    private final IkBoolean skyApart = new IkBoolean(true);
+
     /** The error threshold. */
     private final float[] threshold = {
         Float.parseFloat(System.getProperty(ERROR_PROPERTY, String.valueOf(DEFAULT_THRESHOLD)))
@@ -177,9 +208,6 @@ final class SphereDemoLod {
 
     /** Whether the balls are drawn through level of detail now. Render thread. */
     private boolean drawnLod;
-
-    /** When the frame time was last logged. Render thread. */
-    private long lastLog = System.nanoTime();
 
     /** Takes out the rest of the demo and shows the menu again, once the balls are gone. */
     private Runnable back = () -> {};
@@ -200,6 +228,42 @@ final class SphereDemoLod {
         copyMaterial.getBaseColor().set(0.9f, 0.9f, 0.9f, 1.0f);
         copyMaterial.setRoughness(0.5f);
         GraphicsManager.getScene().getMaterialCache().addMaterial(copyMaterial);
+    }
+
+    /**
+     * Draw a whole mesh instance with one material. The shader ball is several meshes, one per part
+     * of the file, so changing only the first leaves the rest drawn with the ball's own material.
+     *
+     * @param instances Where the instance is.
+     * @param instance The instance.
+     * @param model Its model.
+     * @param material What every mesh of it is drawn with.
+     */
+    static void paint(
+            @NonNull Instances instances,
+            @NonNull InstanceHandle instance,
+            @NonNull Model model,
+            @NonNull Material material) {
+        for (int mesh = 0; mesh < model.getMeshDataList().size(); ++mesh) {
+            instances.setMaterial(instance, mesh, material);
+        }
+    }
+
+    /**
+     * The distinct materials a model's meshes are drawn with.
+     *
+     * @param model The model.
+     * @return Its meshes' materials, each once.
+     */
+    static List<Material> parts(@NonNull Model model) {
+        final List<Material> parts = new ArrayList<>();
+        for (MeshData mesh : model.getMeshDataList()) {
+            final Material material = mesh.getMaterial();
+            if (material != null && !parts.contains(material)) {
+                parts.add(material);
+            }
+        }
+        return parts;
     }
 
     /**
@@ -235,10 +299,25 @@ final class SphereDemoLod {
         this.back = back;
         GraphicsManager.getWindowManager().addWindow(graphics, WINDOW, new DemoWindow());
         GraphicsManager.getWindowManager().show(WINDOW);
+        light();
         rows[0] = Math.clamp(Integer.getInteger(ROWS_PROPERTY, 0), 0, MAX_ROWS);
         scatter();
         if (Boolean.getBoolean(LOD_PROPERTY)) {
             useLod.set(true);
+        }
+    }
+
+    /** Point the sun, and the physical sky's own sun while the sky is lit apart from it. */
+    private void light() {
+        final Scene scene = GraphicsManager.getScene();
+        scene.getSceneLights()
+                .getDirLight()
+                .getDirection()
+                .set(LightAngles.direction(sunAround[0], sunHeight[0]));
+        final PhysicalSky sky = scene.getPhysicalSky();
+        if (sky != null) {
+            sky.setSunDirection(
+                    skyApart.get() ? LightAngles.direction(sunAround[0], SKY_SUN_HEIGHT) : null);
         }
     }
 
@@ -270,11 +349,14 @@ final class SphereDemoLod {
         if (lod && target.opaque) {
             final Lods lods = graphics.lods();
             target.lod = lods.place(model, target.position, new Quaternionf(), SCALE);
-            lods.setMaterial(target.lod, ballMaterial, target.material);
+            // Every part of the ball, as each mesh's material is remapped by itself
+            for (Material part : parts(ball)) {
+                lods.setMaterial(target.lod, part, target.material);
+            }
         } else {
             final Instances instances = graphics.instances();
             target.plain = instances.place(ball, target.position, new Quaternionf(), SCALE);
-            instances.setMaterial(target.plain, 0, target.material);
+            paint(instances, target.plain, ball, target.material);
         }
     }
 
@@ -473,6 +555,20 @@ final class SphereDemoLod {
             final boolean leave = IkGui.button("Back to the menu") || !windowOpen.get();
             IkGui.checkbox("Level of detail", useLod);
             IkGui.checkbox("Row names", showNames);
+            boolean turned = IkGui.sliderFloat("Sun height", sunHeight, 0, MAX_HEIGHT);
+            IkGui.setItemTooltip("How high the sun is, in degrees above the horizon.");
+            turned |= IkGui.sliderFloat("Sun around", sunAround, -MAX_AROUND, MAX_AROUND);
+            IkGui.setItemTooltip(
+                    "Where around the sun is, in degrees: 0 straight behind the balls, 180 behind"
+                            + " the camera.");
+            turned |= IkGui.checkbox("Daylight sky", skyApart);
+            IkGui.setItemTooltip(
+                    "Light the sky as if the sun stood high above where it is, so a low sun is as"
+                            + " bright and white as at midday and the sky stays blue. Off, the"
+                            + " sky and the sun's color follow the sun.");
+            if (turned) {
+                light();
+            }
             if (IkGui.sliderInt("Rows of copies", rows, 0, MAX_ROWS)) {
                 scatter();
             }
@@ -506,19 +602,6 @@ final class SphereDemoLod {
                         String.format(
                                 "GPU: %.2f ms a frame, %.2f ms at the 95th percentile.",
                                 gpu.average(), gpu.p95()));
-                if (System.nanoTime() - lastLog >= LOG_INTERVAL_NANOS) {
-                    lastLog = System.nanoTime();
-                    log.info(
-                            "Sphere demo: {} balls, level of detail {}, {} triangles, GPU {} ms"
-                                    + " (p95 {} ms)",
-                            count,
-                            drawnLod ? "on" : "off",
-                            drawnLod
-                                    ? graphics.lods().stats().selectedTriangles()
-                                    : meshTriangles(),
-                            String.format("%.2f", gpu.average()),
-                            String.format("%.2f", gpu.p95()));
-                }
             }
             IkGui.end();
             if (leave) {

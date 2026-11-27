@@ -87,6 +87,19 @@ public final class AtmosphereMath {
     }
 
     /**
+     * The unit direction toward the sun the sky is lit by: its own direction if it has one, else
+     * the scene's sun's, see {@link PhysicalSky#getSunDirection()}.
+     *
+     * @param sky The physical sky.
+     * @param lightDirection The scene's sun's direction, the way its light travels.
+     * @return The unit direction toward the sun the sky sees, straight up for none.
+     */
+    public static Vector3f towardSun(@NonNull PhysicalSky sky, @NonNull Vector3fc lightDirection) {
+        final Vector3fc own = sky.getSunDirection();
+        return towardSun(own != null ? own : lightDirection);
+    }
+
+    /**
      * The steps the sun's direction and the camera's height are in, so the environment is captured
      * again only once they move one.
      *

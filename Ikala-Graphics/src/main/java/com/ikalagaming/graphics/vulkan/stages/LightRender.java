@@ -324,7 +324,7 @@ public class LightRender implements RenderStage {
         final Vector3f sunColor = new Vector3f(dirLight.getColor());
         final PhysicalSky atmosphere = scene.getPhysicalSky();
         if (atmosphere != null) {
-            final Vector3f toward = AtmosphereMath.towardSun(dirLight.getDirection());
+            final Vector3f toward = AtmosphereMath.towardSun(atmosphere, dirLight.getDirection());
             sunColor.mul(
                     AtmosphereMath.transmittance(
                             AtmosphereMath.cameraRadius(

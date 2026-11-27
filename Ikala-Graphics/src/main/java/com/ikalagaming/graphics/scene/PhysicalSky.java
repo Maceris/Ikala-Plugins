@@ -6,11 +6,14 @@ import lombok.Setter;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
+import javax.annotation.Nullable;
+
 /**
  * A physical sky in place of the skybox: Earth's atmosphere lit by the scene's sun, drawn as the
  * sky and lighting the scene from it, see {@link Scene#setPhysicalSky}. Its light follows the sun:
  * it scales with the sun's color and intensity, goes red near the horizon and dark once the sun is
- * down. The ambient light is not used while it is on.
+ * down. The ambient light is not used while it is on. A sky can be lit from a direction of its own
+ * instead, see {@link #sunDirection}.
  *
  * <p>Changes take effect from the next frame.
  */
@@ -80,4 +83,17 @@ public class PhysicalSky {
      * @return The rotation.
      */
     @NonNull private Quaternionf starRotation = new Quaternionf();
+
+    /**
+     * The direction the sky is lit along, the way the light travels as a {@link
+     * com.ikalagaming.graphics.scene.lights.DirectionalLight}'s direction is, or null for the
+     * scene's sun's. With one, the sky is drawn and lights the scene as if the sun were there, and
+     * the sun's light is colored by the air as if it came from there, while it still shines along
+     * its own direction at its own intensity: a scene can be lit from low behind it without the sky
+     * turning to twilight. Not normalized. Null by default.
+     *
+     * @param sunDirection The direction, or null to follow the sun.
+     * @return The direction, or null when the sky follows the sun.
+     */
+    @Nullable private Vector3f sunDirection;
 }

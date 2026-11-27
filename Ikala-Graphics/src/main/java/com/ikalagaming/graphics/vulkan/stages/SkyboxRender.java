@@ -283,7 +283,7 @@ public class SkyboxRender implements RenderStage {
         if (physicalSky != null) {
             final DirectionalLight sun = scene.getSceneLights().getDirLight();
             new Vector4f(
-                            AtmosphereMath.towardSun(sun.getDirection()),
+                            AtmosphereMath.towardSun(physicalSky, sun.getDirection()),
                             (float)
                                     AtmosphereMath.cameraRadius(
                                             physicalSky, scene.getCamera().getPosition().y()))
