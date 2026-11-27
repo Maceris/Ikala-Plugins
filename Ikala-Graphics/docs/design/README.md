@@ -14,6 +14,7 @@ way, so later work doesn't undo a choice without knowing what it was for. Plans 
 | [Water](Water.md) | Water tiles, the bio-optical model, waves, flow, sides, underwater, spray and rain rings |
 | [Retained UI](Retained%20UI.md) | The retained layer over IkGui, layout, themes, specs, scripting, ownership |
 | [Preview Views](Preview%20Views.md) | Small scenes drawn into textures, one a frame, and what they leave alone |
+| [Graph Editor](Graph%20Editor.md) | Editing node graphs whose types the caller gives: linking, history, the file format |
 | [Performance](Performance.md) | Frame pacing, GPU memory, garbage collection, streaming, and the rules each found |
 
 Every note keeps to Graphics' own rule: Graphics knows nothing about blocks, items or other game concepts, so a

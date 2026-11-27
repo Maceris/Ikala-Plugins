@@ -77,6 +77,12 @@ world, after `requestFrames()`, and `capture(path)` saves one to PNG. Lights, de
 worlds and particles can be given to one preview, and a preview can show a g-buffer view or be supersampled.
 See docs/design/Preview Views.md.
 
+Node graphs are edited with `ui.graph.GraphEditor`: the caller registers node types and pin types
+(`NodeTypes`, `PinTypes`) and the editor draws the graph on a `Canvas`, links pins by type (through a
+conversion node where one is registered), selects, moves, copies, pastes and deletes, and undoes every
+edit through `GraphHistory`. `GraphFile` reads and writes graphs as diff-friendly YAML. See
+docs/design/Graph Editor.md.
+
 Tools use `Panel`s (`context.ui().panel(id, title)`, or `panel:` in place of `surface:` in a spec):
 titled windows the user moves, resizes, docks and drags out of the main window, with the layout saved
 in `gui.ini`. A `DockSpace` node (`type: dock-space` in specs) holds them, starting from a `DockLayout`

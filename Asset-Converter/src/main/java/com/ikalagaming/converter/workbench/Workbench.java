@@ -24,6 +24,7 @@ import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.enums.MouseButton;
+import com.ikalagaming.graphics.gui.flags.HoveredFlags;
 import com.ikalagaming.graphics.texture.DdsFile;
 import com.ikalagaming.graphics.ui.Align;
 import com.ikalagaming.graphics.ui.Anchors;
@@ -107,6 +108,9 @@ public class Workbench {
     /** The ID of the scene panel, the 3D viewer. */
     static final String SCENE_ID = "converter/workbench-scene";
 
+    /** The ID of the graph panel. */
+    static final String GRAPH_ID = "converter/workbench-graph";
+
     /** Every surface and panel, for showing and hiding them together. */
     private static final List<String> SURFACES =
             List.of(
@@ -117,6 +121,7 @@ public class Workbench {
                     PROPERTIES_ID,
                     VIEWER_ID,
                     SCENE_ID,
+                    GRAPH_ID,
                     PREVIEWS_ID);
 
     /** The height of the top bar: one row, for going back, the layout and the status. */
@@ -131,7 +136,7 @@ public class Workbench {
                     .split(DockLayout.Side.LEFT, 0.17f, FILES_ID)
                     .splitPrevious(DockLayout.Side.BOTTOM, 0.35f, OUTLINER_ID)
                     .split(DockLayout.Side.RIGHT, 0.25f, PROPERTIES_ID)
-                    .center(VIEWER_ID, SCENE_ID, PREVIEWS_ID);
+                    .center(VIEWER_ID, SCENE_ID, GRAPH_ID, PREVIEWS_ID);
 
     /** The dock space the panels dock into. */
     private final DockSpace dockSpace = new DockSpace("dock", LAYOUT);
@@ -151,7 +156,9 @@ public class Workbench {
         /** The viewer of the open file. */
         VIEWER,
         /** The scene. */
-        SCENE
+        SCENE,
+        /** The graph. */
+        GRAPH
     }
 
     /** The plugin's graphics context, which owns the textures. */
@@ -198,6 +205,19 @@ public class Workbench {
 
     /** The UI frame the scene panel was last drawn in. */
     private int sceneDrawn = -2;
+
+    /** The UI frame the graph panel was last drawn in. */
+    private int graphDrawn = -2;
+
+    /**
+     * The graph panel's tool. -- GETTER -- The graph tool.
+     *
+     * @return The tool.
+     */
+    @Getter private final GraphTool graphTool;
+
+    /** The panel the graph tool is in. */
+    private Panel graphPanel;
 
     /** Reads files off the render thread, one at a time. */
     private final ExecutorService loader =
@@ -270,6 +290,7 @@ public class Workbench {
         // Shown from the start, so its toolbar offers the scenes before one is open
         sceneHost.show(sceneView);
         status = new Label("status", "");
+        graphTool = new GraphTool(ui, status::text);
         refresh();
     }
 
@@ -399,6 +420,16 @@ public class Workbench {
                         new Column("scene-root")
                                 .align(Align.STRETCH)
                                 .add(new Immediate("scene", this::drawScene)));
+        graphPanel =
+                panel(
+                        GRAPH_ID,
+                        "Graph",
+                        new Column("graph-panel")
+                                .align(Align.STRETCH)
+                                .add(
+                                        new Immediate("graph-seen", this::noteGraphDrawn)
+                                                .height(Sizing.fixed(0)),
+                                        graphTool.content()));
         panel(PREVIEWS_ID, "Previews", previewPanel.content());
         for (String surface : SURFACES) {
             ui.setVisible(surface, false);
@@ -429,6 +460,42 @@ public class Workbench {
             mode = sceneView.getPlacement() != null ? Mode.SCENE : mode;
         }
         sceneHost.draw(frame);
+    }
+
+    /**
+     * Note that the graph panel shows, and that a click in it makes the properties its.
+     *
+     * @param frame The current frame.
+     */
+    private void noteGraphDrawn(UiFrame frame) {
+        graphDrawn = IkGui.getFrameCount();
+        if (IkGui.isWindowHovered(HoveredFlags.ROOT_AND_CHILD_WINDOWS)
+                && IkGui.isMouseClicked(MouseButton.LEFT)) {
+            mode = Mode.GRAPH;
+        }
+    }
+
+    /**
+     * Whether the properties are the graph's: when its panel shows and the viewer's and scene's
+     * don't, or it was clicked last.
+     *
+     * @return True for the graph's properties.
+     */
+    private boolean propertiesForGraph() {
+        final int now = IkGui.getFrameCount();
+        if (now - graphDrawn > 1) {
+            return false;
+        }
+        final boolean othersShow = now - sceneDrawn <= 1 || now - viewerDrawn <= 1;
+        return !othersShow || mode == Mode.GRAPH;
+    }
+
+    /** Bring the graph panel to the front. */
+    private void showGraphPanel() {
+        mode = Mode.GRAPH;
+        if (graphPanel != null) {
+            graphPanel.bringToFront();
+        }
     }
 
     /**
@@ -493,6 +560,10 @@ public class Workbench {
      * @param frame The current frame.
      */
     private void drawProperties(UiFrame frame) {
+        if (propertiesForGraph()) {
+            graphTool.drawProperties(frame);
+            return;
+        }
         if (propertiesForScene()) {
             sceneHost.drawProperties(frame);
             if (host.getViewer() != null) {
@@ -586,8 +657,19 @@ public class Workbench {
             status.text(
                     "Can't open "
                             + absolute.getFileName()
-                            + ", it isn't an image, model, container, material, look or"
-                            + " particle effect");
+                            + ", it isn't an image, model, container, material, look, graph"
+                            + " or particle effect");
+            return;
+        }
+        if (kind == AssetKind.GRAPH) {
+            openFile = absolute;
+            final Path folder = absolute.getParent();
+            if (folder != null && !folder.equals(browser.getDirectory())) {
+                browser.navigate(folder);
+            }
+            refresh();
+            graphTool.open(absolute);
+            showGraphPanel();
             return;
         }
         if (kind == AssetKind.LOOK) {

@@ -6,6 +6,7 @@ import com.ikalagaming.converter.scene.MeshExport;
 import com.ikalagaming.converter.scene.SceneImporter;
 import com.ikalagaming.converter.workbench.Comparison;
 import com.ikalagaming.converter.workbench.ContainerViewer;
+import com.ikalagaming.converter.workbench.GraphTool;
 import com.ikalagaming.converter.workbench.PreviewHost;
 import com.ikalagaming.converter.workbench.SceneView;
 import com.ikalagaming.converter.workbench.Swatch;
@@ -18,6 +19,7 @@ import com.ikalagaming.graphics.PreviewView;
 import com.ikalagaming.graphics.asset.MaterialSection;
 import com.ikalagaming.graphics.asset.MeshSection;
 import com.ikalagaming.graphics.scene.Camera;
+import com.ikalagaming.graphics.ui.graph.GraphEditor;
 import com.ikalagaming.graphics.vulkan.FrameTimings;
 import com.ikalagaming.plugins.PluginInfo;
 import com.ikalagaming.plugins.PluginManager;
@@ -28,6 +30,7 @@ import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.function.Consumer;
 
 /**
@@ -455,6 +458,92 @@ public final class ConverterScripts {
                     } else {
                         log.warn("Script: no scene called {}", name);
                     }
+                });
+    }
+
+    /**
+     * Change the workbench's graph as the editor does, for checks, and log "Script: Graph" with
+     * what happened: "new"; "add type x y"; "link fromNode.pin toNode.pin"; "select id id...";
+     * "delete"; "duplicate"; "undo"; "redo"; "set node param value"; "save path"; "log".
+     *
+     * @param command The command and its words, separated by spaces.
+     */
+    public static void graph(String command) {
+        onWorkbench(
+                workbench -> {
+                    showMenu(false);
+                    workbench.setVisible(true);
+                    final GraphTool tool = workbench.getGraphTool();
+                    final GraphEditor editor = tool.getEditor();
+                    final String[] words = command.trim().split("\\s+");
+                    switch (words[0]) {
+                        case "new" -> tool.newGraph();
+                        case "add" ->
+                                log.info(
+                                        "Script: Graph added {}",
+                                        editor.addNode(
+                                                words[1],
+                                                Float.parseFloat(words[2]),
+                                                Float.parseFloat(words[3])));
+                        case "link" -> {
+                            final String[] from = words[1].split("\\.");
+                            final String[] to = words[2].split("\\.");
+                            log.info(
+                                    "Script: Graph link {}",
+                                    editor.link(from[0], from[1], to[0], to[1]));
+                        }
+                        case "select" -> editor.select(List.of(words).subList(1, words.length));
+                        case "delete" -> editor.deleteSelection();
+                        case "duplicate" ->
+                                log.info(
+                                        "Script: Graph duplicated {}", editor.duplicateSelection());
+                        case "undo" -> editor.undo();
+                        case "redo" -> editor.redo();
+                        case "set" -> editor.setParam(words[1], words[2], words[3]);
+                        case "save" -> tool.save(Path.of(words[1]));
+                        case "log" -> {
+                            final var graph = tool.getHistory().getGraph();
+                            log.info(
+                                    "Script: Graph has {} nodes, {} links, {} errors",
+                                    graph.nodes().size(),
+                                    graph.links().size(),
+                                    graph.nodes().stream()
+                                            .filter(node -> editor.errorOf(node.getId()) != null)
+                                            .count());
+                        }
+                        default -> log.warn("Script: no graph command {}", words[0]);
+                    }
+                });
+    }
+
+    /**
+     * Save the workbench's graph to a file, logging "Script: Graph saved" with it.
+     *
+     * @param folder The folder.
+     * @param name The file name.
+     */
+    public static void graphSave(String folder, String name) {
+        onWorkbench(
+                workbench -> {
+                    if (workbench.getGraphTool().save(Path.of(folder, name))) {
+                        log.info("Script: Graph saved {}", name);
+                    }
+                });
+    }
+
+    /**
+     * Open a graph file in the workbench's graph panel, logging "Script: Graph opened" with it.
+     *
+     * @param folder The folder.
+     * @param name The file name.
+     */
+    public static void graphOpen(String folder, String name) {
+        onWorkbench(
+                workbench -> {
+                    showMenu(false);
+                    workbench.setVisible(true);
+                    workbench.open(Path.of(folder, name));
+                    log.info("Script: Graph opened {}", name);
                 });
     }
 

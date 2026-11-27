@@ -19,6 +19,7 @@ import org.joml.Vector2f;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * A view of children placed freely, at positions set with {@link Node#position(float, float)}, that
@@ -61,6 +62,18 @@ public class Canvas extends Container<Canvas> {
 
     /** Whether the user can drag children. */
     private boolean draggable;
+
+    /** Whether a left drag on empty space pans, as well as a middle drag. */
+    private boolean leftDragPans = true;
+
+    /** Draws over the grid and edges and under the children, in the canvas's window, or null. */
+    private Consumer<UiFrame> underlay;
+
+    /**
+     * Runs after the children are drawn and before the canvas reads the mouse, in its window: draws
+     * over them and can claim the mouse, as an editor does. Or null.
+     */
+    private Consumer<UiFrame> overlay;
 
     /** Told when the user finishes dragging a child, or null. */
     private MoveListener onMoved;
@@ -320,6 +333,54 @@ public class Canvas extends Container<Canvas> {
         return new Vector2f(origin.x + x * unit, origin.y + y * unit);
     }
 
+    /**
+     * Where a point on the screen is on the canvas, from the last frame drawn.
+     *
+     * @param x The point across the screen, in pixels.
+     * @param y The point down the screen, in pixels.
+     * @return The point in canvas units.
+     */
+    public Vector2f fromScreen(float x, float y) {
+        return new Vector2f((x - origin.x) / unit, (y - origin.y) / unit);
+    }
+
+    /**
+     * Whether a left drag on empty space pans the view. An editor that drags a selection box there
+     * turns it off; the middle button still pans.
+     *
+     * @param pans Whether it pans.
+     * @return This canvas.
+     */
+    public Canvas leftDragPans(boolean pans) {
+        leftDragPans = pans;
+        return this;
+    }
+
+    /**
+     * Draw over the grid and edges and under the children each frame, in the canvas's window, as an
+     * editor's links are.
+     *
+     * @param draw Draws, or null for nothing.
+     * @return This canvas.
+     */
+    public Canvas underlay(Consumer<UiFrame> draw) {
+        underlay = draw;
+        return this;
+    }
+
+    /**
+     * Run after the children are drawn and before the canvas reads the mouse each frame, in the
+     * canvas's window: an editor draws over the children here and takes the mouse for its own drags
+     * by making its own item active, which the canvas then leaves alone.
+     *
+     * @param action Runs, or null for nothing.
+     * @return This canvas.
+     */
+    public Canvas overlay(Consumer<UiFrame> action) {
+        overlay = action;
+        return this;
+    }
+
     @Override
     public String styleType() {
         return "canvas";
@@ -445,8 +506,14 @@ public class Canvas extends Container<Canvas> {
             DrawList drawList = IkGui.getWindowDrawList();
             drawGrid(drawList, frame);
             CanvasEdges.draw(this, drawList, context);
+            if (underlay != null) {
+                underlay.accept(frame);
+            }
             for (Node<?> child : children) {
                 child.submitTree(frame);
+            }
+            if (overlay != null) {
+                overlay.accept(frame);
             }
             handleInput(frame, mouse, windowHovered);
             panToNavigatedChild();
@@ -564,7 +631,10 @@ public class Canvas extends Container<Canvas> {
         if (windowHovered && IkGui.isMouseClicked(MouseButton.LEFT)) {
             if (draggable && hoveredChild != null) {
                 dragging = hoveredChild;
-            } else if (hoveredChild == null && !IkGui.isAnyItemHovered()) {
+            } else if (leftDragPans
+                    && hoveredChild == null
+                    && !IkGui.isAnyItemHovered()
+                    && !IkGui.isAnyItemActive()) {
                 panning = true;
                 // Claim the drag, or IkGui would drag the surface's window along with the view
                 IkGuiInternal.setActiveID(panID, IkGuiInternal.getCurrentWindow());

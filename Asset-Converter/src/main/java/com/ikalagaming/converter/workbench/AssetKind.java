@@ -24,6 +24,8 @@ public enum AssetKind {
     PARTICLE_EFFECT(Set.of()),
     /** A material as text, named *.material.yml, shown on a sphere in the 3D viewer. */
     MATERIAL(Set.of()),
+    /** A graph for the graph panel, named *.graph.yml. */
+    GRAPH(Set.of()),
     /** A game content definition, like a block's look, as KVT text. */
     LOOK(Set.of("kvt")),
     /** Anything else. */
@@ -34,6 +36,9 @@ public enum AssetKind {
 
     /** What a material's text file name ends with. */
     public static final String MATERIAL_SUFFIX = ".material.yml";
+
+    /** What a graph's file name ends with. */
+    public static final String GRAPH_SUFFIX = ".graph.yml";
 
     /** The extensions of this kind, lower case and without the dot. */
     private final Set<String> extensions;
@@ -59,6 +64,9 @@ public enum AssetKind {
         }
         if (text.toLowerCase(Locale.ROOT).endsWith(MATERIAL_SUFFIX)) {
             return MATERIAL;
+        }
+        if (text.toLowerCase(Locale.ROOT).endsWith(GRAPH_SUFFIX)) {
+            return GRAPH;
         }
         final int dot = text.lastIndexOf('.');
         if (dot < 0) {

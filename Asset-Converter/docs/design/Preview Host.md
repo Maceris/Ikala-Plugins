@@ -35,6 +35,14 @@ What it opens:
 - **Scenes from the list**: the shapes and shader ball to try materials on, the particle stage, and the context
   scenes.
 
+## The graph panel
+
+The Graph panel holds Ikala-Graphics' graph editor on a small demo set of math and color nodes (constant, color,
+checker, add, multiply, lerp, a Gray conversion and an output), opening and saving `*.graph.yml`. It lets the editor
+be used and checked in the workbench before texture graphs (E5) give it real nodes; their node set replaces the
+demo's. The properties panel shows the selected node's parameters, and the demo's check flags unlinked inputs and a
+second output.
+
 ## Decisions
 
 - **The container viewer replaced the asset inspector window.** Browsing was already the workbench's job, so
