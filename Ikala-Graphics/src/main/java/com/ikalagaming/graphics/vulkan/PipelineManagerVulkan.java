@@ -457,14 +457,21 @@ public class PipelineManagerVulkan {
      * @param stages The list to add to.
      */
     private void addPreviewStages(@NonNull List<RenderStage> stages) {
+        // Particles, which run only in the preview they were given to, see Previews.particles
+        stages.add(stageParticleUpdate);
+        // Level of detail worlds placed in the preview, like a model's built levels, and their
+        // baked tiles; nothing runs for a preview without any
+        stages.add(stageLodBake);
         stages.add(stageInstanceDrawUpdate);
         stages.add(stageInstanceTransform);
         stages.add(stageInstanceCull);
+        stages.add(stageLodCull);
         stages.add(stageAnimationRender);
         stages.add(stageShadowRender);
         stages.add(stageSceneRender);
         stages.add(stageDepthPyramidBuild);
         stages.add(stageInstanceCullLate);
+        stages.add(stageLodCullLate);
         stages.add(stageSceneRender.getLate());
         stages.add(stageLightCull);
         stages.add(stageEnvironmentUpdate);

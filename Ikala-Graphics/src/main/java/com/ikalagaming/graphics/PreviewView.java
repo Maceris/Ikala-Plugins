@@ -3,6 +3,7 @@ package com.ikalagaming.graphics;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.FilterView;
 import com.ikalagaming.graphics.vulkan.InstanceTable;
 
 import lombok.Getter;
@@ -30,6 +31,20 @@ import java.util.function.Supplier;
 public final class PreviewView {
     /** How many frames a change asks for, enough for temporal anti-aliasing to settle. */
     public static final int SETTLE_FRAMES = 16;
+
+    /**
+     * How much larger a supersampled preview is drawn, each way, as far as the render targets
+     * allow.
+     */
+    public static final int SUPERSAMPLE = 2;
+
+    /**
+     * Whether it is drawn larger and filtered down, without temporal anti-aliasing, for still
+     * images without jitter or ghosts. -- GETTER -- Whether it is supersampled.
+     *
+     * @return True if supersampled.
+     */
+    @Getter private volatile boolean supersampled;
 
     /** The key of the plugin that owns it. */
     @Getter private final String owner;
@@ -76,14 +91,22 @@ public final class PreviewView {
      */
     @Getter private volatile TextureHandle texture;
 
+    /**
+     * The stages it is drawn with: {@link RenderConfig#PREVIEW}, with the debug stage while debug
+     * shapes are drawn. -- GETTER -- The stages it is drawn with.
+     *
+     * @return The configuration.
+     */
+    @Getter private volatile RenderConfig renderConfig = RenderConfig.PREVIEW;
+
     /** How many more frames to draw it for. */
     private final AtomicInteger framesWanted = new AtomicInteger(SETTLE_FRAMES);
 
     /** Guards {@link #captures}. */
     private final ReentrantLock lock = new ReentrantLock();
 
-    /** Saves asked for, taken once it has settled. */
-    private final List<Capture> captures = new ArrayList<>();
+    /** Saves asked for, each taken once it has been drawn enough frames since. */
+    private final List<Pending> captures = new ArrayList<>();
 
     /** The instances placed in it, removed when it closes. Guarded by {@link #lock}. */
     private final List<InstanceHandle> placed = new ArrayList<>();
@@ -102,6 +125,24 @@ public final class PreviewView {
      * @param done Completes with the path once written.
      */
     public record Capture(@NonNull Path path, @NonNull CompletableFuture<Path> done) {}
+
+    /** A save waiting for frames to be drawn. Guarded by {@link #lock}. */
+    private static final class Pending {
+        /** The save. */
+        private final Capture capture;
+
+        /** How many more frames to draw before it is taken. */
+        private int framesLeft = SETTLE_FRAMES;
+
+        /**
+         * Wait to save.
+         *
+         * @param capture The save.
+         */
+        private Pending(Capture capture) {
+            this.capture = capture;
+        }
+    }
 
     /**
      * Create a preview. Use {@code GraphicsContext.previews().create} instead.
@@ -166,6 +207,42 @@ public final class PreviewView {
         return handle;
     }
 
+    /**
+     * Draw debug shapes placed in it, like a selection's outline, and its scene's debug
+     * visualizers, or stop.
+     *
+     * @param drawsDebug Whether to draw them.
+     */
+    public void setDrawsDebug(boolean drawsDebug) {
+        renderConfig = renderConfig.withDebug(drawsDebug);
+        requestFrames();
+    }
+
+    /**
+     * Draw it larger and filter it down, with temporal anti-aliasing off, or go back to temporal
+     * anti-aliasing. Supersampling costs about four times the pixels, and is limited by the render
+     * targets' size, so a preview as large as the window gains nothing.
+     *
+     * @param on Whether to supersample.
+     */
+    public void setSupersampled(boolean on) {
+        supersampled = on;
+        scene.setTemporalAa(!on);
+        requestFrames();
+    }
+
+    /**
+     * Show the lit scene, or one of the g-buffer debug views in its place, like the roughness.
+     *
+     * @param view What to show; {@link FilterView#DEFAULT} for the lit scene.
+     */
+    public void setFilterView(@NonNull FilterView view) {
+        final boolean lit = view == FilterView.DEFAULT;
+        scene.setFilterView(lit ? null : view);
+        renderConfig = renderConfig.withFilters(!lit);
+        requestFrames();
+    }
+
     /** Ask for it to be drawn again until it settles, after something it shows changed. */
     public void requestFrames() {
         requestFrames(SETTLE_FRAMES);
@@ -191,11 +268,19 @@ public final class PreviewView {
     }
 
     /**
-     * Note that it was drawn a frame. Render thread.
+     * Note that it was drawn a frame, bringing waiting saves a frame closer. Render thread.
      *
      * @return How many frames it still wants after this one.
      */
     public int frameDrawn() {
+        lock.lock();
+        try {
+            for (Pending pending : captures) {
+                --pending.framesLeft;
+            }
+        } finally {
+            lock.unlock();
+        }
         return framesWanted.updateAndGet(left -> Math.max(0, left - 1));
     }
 
@@ -218,7 +303,8 @@ public final class PreviewView {
     }
 
     /**
-     * Save the image to a PNG file once it has settled.
+     * Save the image to a PNG file once it has settled: after {@link #SETTLE_FRAMES} more frames
+     * are drawn, even while it keeps asking for frames, like a view drawn every frame.
      *
      * @param path Where to save it.
      * @return Completes with the path once written, or exceptionally if the preview closes first.
@@ -227,7 +313,7 @@ public final class PreviewView {
         final CompletableFuture<Path> done = new CompletableFuture<>();
         lock.lock();
         try {
-            captures.add(new Capture(path, done));
+            captures.add(new Pending(new Capture(path, done)));
         } finally {
             lock.unlock();
         }
@@ -236,15 +322,33 @@ public final class PreviewView {
     }
 
     /**
-     * Take the saves asked for. Render thread.
+     * Take the saves that have waited their frames, to save from the frame just drawn. Render
+     * thread.
      *
      * @return The saves, oldest first.
      */
     public List<Capture> takeCaptures() {
+        return take(false);
+    }
+
+    /**
+     * Take saves.
+     *
+     * @param all Whether to take every save, not only those that have waited their frames.
+     * @return The saves, oldest first.
+     */
+    private List<Capture> take(boolean all) {
         lock.lock();
         try {
-            final List<Capture> taken = List.copyOf(captures);
-            captures.clear();
+            final List<Capture> taken = new ArrayList<>();
+            captures.removeIf(
+                    pending -> {
+                        if (all || pending.framesLeft <= 0) {
+                            taken.add(pending.capture);
+                            return true;
+                        }
+                        return false;
+                    });
             return taken;
         } finally {
             lock.unlock();
@@ -280,7 +384,7 @@ public final class PreviewView {
                 }
             }
         }
-        for (Capture capture : takeCaptures()) {
+        for (Capture capture : take(true)) {
             capture.done().completeExceptionally(new IllegalStateException("The preview closed"));
         }
     }

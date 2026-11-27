@@ -485,13 +485,14 @@ public class GraphicsManager {
     }
 
     /**
-     * Hand every debug shape that plugins want drawn this frame to a consumer, emptying their
-     * queues of immediate shapes. Render thread only.
+     * Hand every debug shape that plugins want drawn in a view this frame to a consumer, emptying
+     * their queues of immediate shapes when the world is drawn. Render thread only.
      *
+     * @param viewID The view being drawn, 0 for the world.
      * @param consumer Receives each shape.
      */
-    public static void collectDebugShapes(@NonNull Consumer<DebugShape> consumer) {
-        contexts.values().forEach(context -> context.collectDebugShapes(consumer));
+    public static void collectDebugShapes(int viewID, @NonNull Consumer<DebugShape> consumer) {
+        contexts.values().forEach(context -> context.collectDebugShapes(viewID, consumer));
     }
 
     /**

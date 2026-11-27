@@ -27,8 +27,12 @@ class DebugDrawTest {
     }
 
     private List<DebugShape> collect() {
+        return collect(0);
+    }
+
+    private List<DebugShape> collect(int viewID) {
         List<DebugShape> shapes = new ArrayList<>();
-        context.collectDebugShapes(shapes::add);
+        context.collectDebugShapes(viewID, shapes::add);
         return shapes;
     }
 
@@ -59,6 +63,18 @@ class DebugDrawTest {
 
         context.debug().clear();
         assertEquals(0, collect().size());
+    }
+
+    @Test
+    void shapesStayInTheirView() {
+        context.debug().draw(line(1));
+        context.debug().add(line(2));
+        context.debug().add(line(3), 5);
+
+        assertEquals(List.of(line(3)), collect(5), "Immediate shapes are the world's");
+        assertEquals(2, collect(0).size());
+        assertEquals(List.of(line(2)), collect(0));
+        assertEquals(0, collect(6).size());
     }
 
     private List<DebugLabel> collectLabels() {

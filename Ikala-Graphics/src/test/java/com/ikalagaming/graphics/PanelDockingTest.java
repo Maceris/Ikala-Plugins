@@ -231,6 +231,22 @@ class PanelDockingTest {
     }
 
     @Test
+    void bringToFrontWorksAsThePanelsShowAgain() {
+        showWorkspace();
+        String hiddenID = window("details").dockTabIsVisible ? "notes" : "details";
+        String frontID = "notes".equals(hiddenID) ? "details" : "notes";
+        manager.setVisible(owner, "details", false);
+        manager.setVisible(owner, "notes", false);
+        driver.frames(2);
+        manager.setVisible(owner, "details", true);
+        manager.setVisible(owner, "notes", true);
+        ((Panel) manager.get(hiddenID)).bringToFront();
+        driver.frames(4);
+        assertTrue(window(hiddenID).dockTabIsVisible, "its tab is picked");
+        assertFalse(window(frontID).dockTabIsVisible, "the other tab is behind it");
+    }
+
+    @Test
     void resetPutsUndockedPanelsBack() {
         showWorkspace();
         IkGuiInternal.dockContextQueueUndockWindow(window("files"));

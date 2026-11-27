@@ -119,7 +119,7 @@ public class ParticleDraw {
             int height,
             boolean voxelWeights,
             @NonNull MemoryStack stack) {
-        final ParticlePool pool = state.particlePool;
+        final ParticlePool pool = state.particlesFor(scene);
         if (pool == null) {
             return;
         }

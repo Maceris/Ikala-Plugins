@@ -4,6 +4,8 @@ import com.ikalagaming.graphics.EffectHandle;
 import com.ikalagaming.graphics.EmitterHandle;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.Particles;
+import com.ikalagaming.graphics.PreviewView;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.flags.TableFlags;
 import com.ikalagaming.graphics.scene.Fog;
@@ -122,6 +124,12 @@ public class ParticleViewer {
         this.graphics = graphics;
     }
 
+    /** The preview's particles, while watching. */
+    private Particles particles;
+
+    /** The preview's scene, while watching. */
+    private Scene scene;
+
     /**
      * Whether the particle stage is shown.
      *
@@ -131,16 +139,23 @@ public class ParticleViewer {
         return active;
     }
 
-    /** Start watching: place the emitter and start particle time afresh. Render thread. */
-    public void start() {
+    /**
+     * Start watching in a preview: take the renderer's particles for it, place the emitter and
+     * start particle time afresh. Render thread.
+     *
+     * @param preview The preview the stage is shown in.
+     */
+    public void start(@NonNull PreviewView preview) {
         if (active) {
             return;
         }
         active = true;
-        final ParticleClock clock = graphics.particles().clock();
+        particles = graphics.previews().particles(preview);
+        scene = preview.getScene();
+        final ParticleClock clock = particles.clock();
         clock.setPaused(false);
         clock.setTimeScale(1);
-        graphics.particles().setHotReload(true);
+        particles.setHotReload(true);
         if (shown == FILE_ENTRY && fileEffect == null) {
             shown = 0;
         }
@@ -153,14 +168,14 @@ public class ParticleViewer {
             return;
         }
         active = false;
-        graphics.particles().stop(emitter);
+        particles.stop(emitter);
         emitter = null;
         closeFile();
-        final ParticleClock clock = graphics.particles().clock();
+        final ParticleClock clock = particles.clock();
         clock.setPaused(false);
         clock.setTimeScale(1);
         clock.clear();
-        graphics.particles().setHotReload(false);
+        particles.setHotReload(false);
         clock.setFixedStep(false);
         measuring = 0;
         setFog(false);
@@ -175,7 +190,7 @@ public class ParticleViewer {
         closeFile();
         file = effectFile;
         try {
-            fileEffect = graphics.particles().loadEffect(effectFile);
+            fileEffect = particles.loadEffect(effectFile);
             fileError = "";
             shown = FILE_ENTRY;
         } catch (ParticleEffectException | UncheckedIOException e) {
@@ -189,7 +204,7 @@ public class ParticleViewer {
 
     /** Forget the open file, if any. */
     private void closeFile() {
-        graphics.particles().unloadEffect(fileEffect);
+        particles.unloadEffect(fileEffect);
         fileEffect = null;
         file = null;
         fileError = "";
@@ -200,7 +215,7 @@ public class ParticleViewer {
 
     /** Draw the viewer's controls, in the scene view's properties. */
     public void draw() {
-        final ParticleClock clock = graphics.particles().clock();
+        final ParticleClock clock = particles.clock();
         drawEffectList();
         if (IkGui.button(clock.isPaused() ? "Play" : "Pause")) {
             clock.setPaused(!clock.isPaused());
@@ -266,13 +281,12 @@ public class ParticleViewer {
 
     /** Start a measured run. */
     private void startMeasuring() {
-        final Scene scene = GraphicsManager.getScene();
         if (scene == null) {
             return;
         }
         scene.getCamera().setPosition(MEASURE_CAMERA.x, MEASURE_CAMERA.y, MEASURE_CAMERA.z);
         scene.getCamera().setRotation(MEASURE_PITCH, 0);
-        final ParticleClock clock = graphics.particles().clock();
+        final ParticleClock clock = particles.clock();
         clock.setPaused(false);
         clock.setTimeScale(1);
         clock.setFixedStep(true);
@@ -283,7 +297,7 @@ public class ParticleViewer {
 
     /** Read the timings at the end of a measured run, show them and log them. */
     private void finishMeasuring() {
-        graphics.particles().clock().setFixedStep(false);
+        particles.clock().setFixedStep(false);
         final VulkanInstance renderer = GraphicsManager.getRenderInstance();
         if (renderer == null || renderer.getState().frameTimings == null) {
             measurement = "The GPU can't time the passes";
@@ -294,7 +308,7 @@ public class ParticleViewer {
                         .append(
                                 String.format(
                                         "%,d particles. Average and p95 ms:",
-                                        graphics.particles().clock().getLiveParticles()));
+                                        particles.clock().getLiveParticles()));
         for (String name : MEASURED) {
             for (FrameTimings.Timing timing : renderer.getState().frameTimings.snapshot()) {
                 if (name.equals(timing.name())) {
@@ -346,7 +360,7 @@ public class ParticleViewer {
             IkGui.textWrapped("Can't open " + fileLabel(file) + ": " + fileError);
         }
         if (shown == FILE_ENTRY) {
-            final String error = graphics.particles().effectError(fileEffect);
+            final String error = particles.effectError(fileEffect);
             if (error != null) {
                 IkGui.textWrapped("The last save didn't load, so the one before shows: " + error);
             } else {
@@ -403,13 +417,12 @@ public class ParticleViewer {
 
     /** Remove every particle and place the emitter again, so its burst shows from the start. */
     private void restart() {
-        graphics.particles().stop(emitter);
-        graphics.particles().clock().clear();
+        particles.stop(emitter);
+        particles.clock().clear();
         emitter =
                 shown == FILE_ENTRY
-                        ? graphics.particles().spawn(fileEffect, EMITTER)
-                        : graphics.particles()
-                                .spawn(ParticleSamples.ALL.get(shown).effect(), EMITTER);
+                        ? particles.spawn(fileEffect, EMITTER)
+                        : particles.spawn(ParticleSamples.ALL.get(shown).effect(), EMITTER);
     }
 
     /**
@@ -418,7 +431,6 @@ public class ParticleViewer {
      * @param on True to turn it on.
      */
     private void setFog(boolean on) {
-        final Scene scene = GraphicsManager.getScene();
         if (scene == null || on == fog) {
             return;
         }

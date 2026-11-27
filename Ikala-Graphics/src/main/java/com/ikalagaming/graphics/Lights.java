@@ -10,14 +10,15 @@ import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.joml.Vector3fc;
 
+import java.util.function.Supplier;
 import javax.annotation.Nullable;
 
 /**
- * Places point lights and spotlights in the scene for one plugin. Every light placed here is owned
- * by the plugin's {@link GraphicsContext}, and is removed automatically when the plugin unloads if
- * it wasn't removed before then. A plugin can only change or remove its own lights; anything else
- * is ignored with a warning. The sun and the ambient light are scene-wide, set through {@link
- * com.ikalagaming.graphics.scene.lights.SceneLights}.
+ * Places point lights and spotlights in the world, or in one preview's scene, for one plugin. Every
+ * light placed here is owned by the plugin's {@link GraphicsContext}, and is removed automatically
+ * when the plugin unloads if it wasn't removed before then. A plugin can only change or remove its
+ * own lights; anything else is ignored with a warning. The sun and the ambient light are
+ * scene-wide, set through {@link com.ikalagaming.graphics.scene.lights.SceneLights}.
  *
  * <p>Intensities are luminous intensity in candela: a candle is 1, a 60 W bulb about 70. A light
  * reaches a limited distance, its range. Without one given, the range follows the intensity, so a
@@ -39,13 +40,27 @@ public final class Lights {
     /** The context these lights belong to. */
     private final GraphicsContext context;
 
+    /** Finds the scene the lights are placed in, or null while graphics isn't running. */
+    private final Supplier<Scene> scene;
+
     /**
-     * Create the lights API for a context.
+     * Create the lights API for a context, placing lights in the world.
      *
      * @param context The owning context.
      */
     Lights(@NonNull GraphicsContext context) {
+        this(context, GraphicsManager::getScene);
+    }
+
+    /**
+     * Create the lights API for a context, placing lights in a given scene.
+     *
+     * @param context The owning context.
+     * @param scene Finds the scene, or null while graphics isn't running.
+     */
+    Lights(@NonNull GraphicsContext context, @NonNull Supplier<Scene> scene) {
         this.context = context;
+        this.scene = scene;
     }
 
     /**
@@ -340,9 +355,9 @@ public final class Lights {
      *
      * @return The registry, or null.
      */
-    private static LightRegistry registryOrNull() {
-        Scene scene = GraphicsManager.getScene();
-        return scene == null ? null : scene.getLightRegistry();
+    private LightRegistry registryOrNull() {
+        final Scene target = scene.get();
+        return target == null ? null : target.getLightRegistry();
     }
 
     /**
@@ -351,7 +366,7 @@ public final class Lights {
      * @return The registry.
      * @throws IllegalStateException If graphics isn't running.
      */
-    private static LightRegistry registry() {
+    private LightRegistry registry() {
         LightRegistry registry = registryOrNull();
         if (registry == null) {
             throw new IllegalStateException("Graphics is not running");

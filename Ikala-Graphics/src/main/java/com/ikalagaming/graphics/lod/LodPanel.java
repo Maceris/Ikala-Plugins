@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.lod;
 
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.PreviewView;
 import com.ikalagaming.graphics.Sections;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.IkBoolean;
@@ -111,6 +112,9 @@ public final class LodPanel implements AutoCloseable {
 
     /** Whether it was closed. */
     private volatile boolean closed;
+
+    /** The preview the cut is shown in, or null for the world. */
+    private volatile PreviewView preview;
 
     /**
      * The thread building the DAG and measuring it, owned by the plugin, so unloading the plugin
@@ -226,7 +230,7 @@ public final class LodPanel implements AutoCloseable {
                                 post(
                                         () -> {
                                             if (!closed) {
-                                                view = new LodView(graphics, name, dag);
+                                                view = new LodView(graphics, name, dag, preview);
                                             }
                                         });
                                 if (cells || !options.keepLineage()) {
@@ -311,6 +315,28 @@ public final class LodPanel implements AutoCloseable {
     }
 
     /**
+     * Show the cut in a preview rather than the world, following its camera. Call right after
+     * making the panel, before the build finishes.
+     *
+     * @param target The preview.
+     * @return This panel.
+     */
+    public LodPanel inPreview(@NonNull PreviewView target) {
+        preview = target;
+        return this;
+    }
+
+    /**
+     * The scene whose observer the cut follows: the preview's, or the world's.
+     *
+     * @return The scene.
+     */
+    private Scene viewScene() {
+        final PreviewView target = preview;
+        return target == null ? GraphicsManager.getScene() : target.getScene();
+    }
+
+    /**
      * Whether the build is done and its cut is being shown.
      *
      * @return True once built. Render thread.
@@ -370,7 +396,7 @@ public final class LodPanel implements AutoCloseable {
                 borderLevel[0] < 0 ? "none" : "level %d");
         IkGui.checkbox("Cluster bounds", showBounds);
         if (IkGui.checkbox("Freeze observer", freeze)) {
-            final Scene scene = GraphicsManager.getScene();
+            final Scene scene = viewScene();
             if (freeze.get()) {
                 scene.freezeObserver();
             } else {
@@ -521,7 +547,10 @@ public final class LodPanel implements AutoCloseable {
             view = null;
         }
         if (freeze.get()) {
-            GraphicsManager.getScene().unfreezeObserver();
+            final Scene scene = viewScene();
+            if (scene != null) {
+                scene.unfreezeObserver();
+            }
         }
     }
 }

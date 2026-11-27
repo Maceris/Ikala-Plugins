@@ -9,6 +9,7 @@ import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.bake.BakeSources;
 import com.ikalagaming.graphics.graph.SkyOcclusion;
 import com.ikalagaming.graphics.graph.SunShadowCache;
+import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.stages.LightCull;
 
 import lombok.NonNull;
@@ -121,6 +122,22 @@ public class VulkanState {
 
     /** The GPU's particles, kept across frames, see {@link ParticlePool}. */
     public ParticlePool particlePool = null;
+
+    /**
+     * The view the particles simulate and draw in: 0 for the world, or a preview's, see {@code
+     * Previews.particles}.
+     */
+    public volatile int particleView;
+
+    /**
+     * The particles, if they are a scene's: the pool simulates and draws in one view at a time.
+     *
+     * @param scene The scene being drawn.
+     * @return The pool, or null if there is none or it belongs to another view.
+     */
+    public ParticlePool particlesFor(@NonNull Scene scene) {
+        return scene.getViewID() == particleView ? particlePool : null;
+    }
 
     /** Where the water is around the camera, see {@link WaterVolume}. */
     public WaterVolume waterVolume = null;

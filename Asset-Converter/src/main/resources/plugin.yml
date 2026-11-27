@@ -5,4 +5,6 @@ description: Handles converting assets for games.
 authors: [maceris]
 main-class: com.ikalagaming.converter.ConverterPlugin
 dependencies: [Ikala-Graphics]
+# Reads game content, like block looks, when it is there
+soft-dependencies: [Factory-Core]
 libraries: [joml, lwjgl-assimp]

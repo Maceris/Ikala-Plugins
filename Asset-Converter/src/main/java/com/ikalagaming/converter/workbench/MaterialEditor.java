@@ -488,15 +488,16 @@ public class MaterialEditor {
      *
      * @param placement The scene.
      * @param file The file, binary or text.
+     * @return The material, or null if the file couldn't be read.
      */
-    void open(@NonNull ScenePlacement placement, @NonNull Path file) {
+    @Nullable Material open(@NonNull ScenePlacement placement, @NonNull Path file) {
         final MaterialSection.Stored stored;
         try {
             stored = AssetConvert.readMaterial(file);
         } catch (RuntimeException e) {
             log.warn("Couldn't open the material {}", file, e);
             fileStatus = "Couldn't open " + file.getFileName() + ": " + e.getMessage();
-            return;
+            return null;
         }
         final Material material = new Material().setValues(stored.material());
         selected = placement.addMaterial(materialName(file), material);
@@ -524,6 +525,7 @@ public class MaterialEditor {
                     });
         }
         fileStatus = "Opened " + file.getFileName();
+        return material;
     }
 
     /**

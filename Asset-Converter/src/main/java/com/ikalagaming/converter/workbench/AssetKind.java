@@ -22,11 +22,18 @@ public enum AssetKind {
     CONTAINER(Set.of("ika")),
     /** A particle effect, a YAML file named *.effect.yml, shown on the particle stage. */
     PARTICLE_EFFECT(Set.of()),
+    /** A material as text, named *.material.yml, shown on a sphere in the 3D viewer. */
+    MATERIAL(Set.of()),
+    /** A game content definition, like a block's look, as KVT text. */
+    LOOK(Set.of("kvt")),
     /** Anything else. */
     UNKNOWN(Set.of());
 
     /** What a particle effect's file name ends with. */
     public static final String PARTICLE_EFFECT_SUFFIX = ".effect.yml";
+
+    /** What a material's text file name ends with. */
+    public static final String MATERIAL_SUFFIX = ".material.yml";
 
     /** The extensions of this kind, lower case and without the dot. */
     private final Set<String> extensions;
@@ -49,6 +56,9 @@ public enum AssetKind {
         final String text = name.toString();
         if (text.toLowerCase(Locale.ROOT).endsWith(PARTICLE_EFFECT_SUFFIX)) {
             return PARTICLE_EFFECT;
+        }
+        if (text.toLowerCase(Locale.ROOT).endsWith(MATERIAL_SUFFIX)) {
+            return MATERIAL;
         }
         final int dot = text.lastIndexOf('.');
         if (dot < 0) {

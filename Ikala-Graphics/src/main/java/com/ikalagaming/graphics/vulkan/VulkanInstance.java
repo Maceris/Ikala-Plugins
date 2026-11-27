@@ -2206,7 +2206,7 @@ public class VulkanInstance {
         state.bakedGeometry.record(state, commandBuffer);
         // Each frame samples its pixels a little apart, which temporal anti-aliasing gathers up;
         // set before anything reads the projection
-        if (GraphicsManager.getSettings().taa) {
+        if (GraphicsManager.getSettings().taa && scene.isTemporalAa()) {
             final double[] jitter = TaaMath.jitter(state.frameNumber);
             scene.getProjection().setJitter((float) jitter[0], (float) jitter[1]);
         } else {
@@ -2220,20 +2220,20 @@ public class VulkanInstance {
         state.geometry.record(state, commandBuffer);
         state.lods.record(state, commandBuffer);
         state.skins.record(state, commandBuffer);
+        // Before the shadows, the first to draw them; a preview draws only its own worlds
+        state.lods.prepare(
+                state,
+                state.perFrameData[state.frameIndex],
+                scene.getCamera().getPosition(),
+                scene.getObserver(),
+                target.height(),
+                scene.getDebugVisualizers().getLodColors(),
+                scene.getViewID());
         if (preview) {
-            // The world's clusters and skinned instances aren't in a preview
-            state.perFrameData[state.frameIndex].lodWorldCount = 0;
+            // The world's skinned instances aren't in a preview
             state.skins.skipFrame(state.frameIndex);
             state.perFrameData[state.frameIndex].waterGated = false;
         } else {
-            // Before the shadows, the first to draw them
-            state.lods.prepare(
-                    state,
-                    state.perFrameData[state.frameIndex],
-                    scene.getCamera().getPosition(),
-                    scene.getObserver(),
-                    target.height(),
-                    scene.getDebugVisualizers().getLodColors());
             // Before the shadows too, and cheap: skinned instances are culled on the CPU
             state.skins.prepare(
                     state,
@@ -2254,13 +2254,28 @@ public class VulkanInstance {
      * @param commandBuffer The frame's command buffer.
      */
     private void recordPreview(@NonNull PreviewView view, @NonNull VkCommandBuffer commandBuffer) {
-        final int width = Math.min(view.getWidth(), state.realSize.width());
-        final int height = Math.min(view.getHeight(), state.realSize.height());
+        // A supersampled preview is drawn larger, as far as the render targets allow, and the
+        // copy into its texture filters it down
+        final double scale =
+                view.isSupersampled()
+                        ? Math.max(
+                                1,
+                                Math.min(
+                                        PreviewView.SUPERSAMPLE,
+                                        Math.min(
+                                                (double) state.realSize.width() / view.getWidth(),
+                                                (double) state.realSize.height()
+                                                        / view.getHeight())))
+                        : 1;
+        final int width =
+                Math.min((int) Math.round(view.getWidth() * scale), state.realSize.width());
+        final int height =
+                Math.min((int) Math.round(view.getHeight() * scale), state.realSize.height());
         recordScene(
                 view.getScene(),
                 new SceneTarget(width, height, null),
                 commandBuffer,
-                pipelineManager.getPipeline(RenderConfig.PREVIEW),
+                pipelineManager.getPipeline(view.getRenderConfig()),
                 true);
         previews.copy(commandBuffer, state, pipelineManager, view, width, height);
     }

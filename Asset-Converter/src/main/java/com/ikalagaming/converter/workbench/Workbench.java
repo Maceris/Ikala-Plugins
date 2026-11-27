@@ -1,8 +1,11 @@
 package com.ikalagaming.converter.workbench;
 
 import com.ikalagaming.converter.ConverterPlugin;
+import com.ikalagaming.converter.content.ContextScene;
+import com.ikalagaming.converter.content.GameContent;
 import com.ikalagaming.converter.inspector.AssetSamples;
 import com.ikalagaming.converter.inspector.ContainerFile;
+import com.ikalagaming.converter.scene.BlockScenes;
 import com.ikalagaming.converter.scene.ImportedScene;
 import com.ikalagaming.converter.scene.PreviewShapes;
 import com.ikalagaming.converter.scene.SceneImporter;
@@ -14,7 +17,13 @@ import com.ikalagaming.graphics.TextureFilter;
 import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.TextureWrap;
 import com.ikalagaming.graphics.UI;
+import com.ikalagaming.graphics.asset.AssetFile;
+import com.ikalagaming.graphics.asset.MaterialSection;
+import com.ikalagaming.graphics.asset.MeshSection;
+import com.ikalagaming.graphics.graph.Material;
+import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.gui.IkGui;
+import com.ikalagaming.graphics.gui.enums.MouseButton;
 import com.ikalagaming.graphics.texture.DdsFile;
 import com.ikalagaming.graphics.ui.Align;
 import com.ikalagaming.graphics.ui.Anchors;
@@ -47,6 +56,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
@@ -61,10 +71,11 @@ import javax.imageio.stream.ImageInputStream;
 
 /**
  * The asset workbench: browse for raw assets and open them. Images, DDS textures included, and
- * {@code .ika} containers show in a {@link PreviewHost}, through a {@link TextureViewer} or a
- * {@link ContainerViewer}; models and whole scenes are put in the world and shown through a {@link
- * SceneView}, with an outliner of their nodes. Built on retained UI, as separate surfaces around
- * the edges of the screen, so the scene shows in the middle and the mouse reaches it there.
+ * {@code .ika} containers show in the Viewer panel's {@link PreviewHost}, through a {@link
+ * TextureViewer} or a {@link ContainerViewer}; models and whole scenes show in the Scene panel's
+ * host, through a {@link SceneView} drawing its own preview view, with an outliner of their nodes.
+ * An image and a scene can be open at once, so an image can be put on the scene's materials. Built
+ * on retained UI, as docked panels; the world isn't drawn.
  *
  * <p>Files are read on a background thread, so a large file doesn't stall the editor, and results
  * are handed to the render thread through {@link UI#post}. Everything else is render thread only,
@@ -93,6 +104,9 @@ public class Workbench {
     /** The ID of the panel of preview views. */
     static final String PREVIEWS_ID = "converter/workbench-previews";
 
+    /** The ID of the scene panel, the 3D viewer. */
+    static final String SCENE_ID = "converter/workbench-scene";
+
     /** Every surface and panel, for showing and hiding them together. */
     private static final List<String> SURFACES =
             List.of(
@@ -102,10 +116,11 @@ public class Workbench {
                     OUTLINER_ID,
                     PROPERTIES_ID,
                     VIEWER_ID,
+                    SCENE_ID,
                     PREVIEWS_ID);
 
-    /** The height of the top bar. */
-    private static final float TOP_HEIGHT = 74;
+    /** The height of the top bar: one row, for going back, the layout and the status. */
+    private static final float TOP_HEIGHT = 36;
 
     /** The shader ball model, in the plugin's data folder. */
     private static final String SHADER_BALL = "models/shader_ball.obj";
@@ -116,7 +131,7 @@ public class Workbench {
                     .split(DockLayout.Side.LEFT, 0.17f, FILES_ID)
                     .splitPrevious(DockLayout.Side.BOTTOM, 0.35f, OUTLINER_ID)
                     .split(DockLayout.Side.RIGHT, 0.25f, PROPERTIES_ID)
-                    .center(VIEWER_ID, PREVIEWS_ID);
+                    .center(VIEWER_ID, SCENE_ID, PREVIEWS_ID);
 
     /** The dock space the panels dock into. */
     private final DockSpace dockSpace = new DockSpace("dock", LAYOUT);
@@ -129,13 +144,13 @@ public class Workbench {
      */
     @Getter private final PreviewPanel previewPanel;
 
-    /** What the middle of the screen shows. */
+    /** Which panel the properties are for, when both could be. */
     enum Mode {
         /** Nothing open. */
         NONE,
-        /** A viewer of the open file, over the scene if one is open. */
+        /** The viewer of the open file. */
         VIEWER,
-        /** A scene. */
+        /** The scene. */
         SCENE
     }
 
@@ -161,8 +176,28 @@ public class Workbench {
     /** The panel the host draws in, brought to the front when something opens in it. */
     private Panel viewerPanel;
 
-    /** Shows the open scene. */
-    private final SceneView sceneView;
+    /**
+     * Shows the open scene. -- GETTER -- The 3D viewer.
+     *
+     * @return The scene view.
+     */
+    @Getter private final SceneView sceneView;
+
+    /**
+     * Shows the scene view in the scene panel. -- GETTER -- The scene panel's host.
+     *
+     * @return The host.
+     */
+    @Getter private final PreviewHost sceneHost;
+
+    /** The panel the scene host draws in. */
+    private Panel scenePanel;
+
+    /** The UI frame the viewer panel was last drawn in, to tell which panels show. */
+    private int viewerDrawn = -2;
+
+    /** The UI frame the scene panel was last drawn in. */
+    private int sceneDrawn = -2;
 
     /** Reads files off the render thread, one at a time. */
     private final ExecutorService loader =
@@ -217,18 +252,23 @@ public class Workbench {
         this.graphics = graphics;
         this.ui = ui;
         this.back = back;
-        host = new PreviewHost(ui);
+        host = new PreviewHost(ui, "Pick an image or a .ika file in the file list to view it");
+        sceneHost = new PreviewHost(ui, "Open a model, or try materials on a shape");
         previewPanel = new PreviewPanel(graphics);
         sceneView =
                 new SceneView(
                         graphics,
                         new MaterialEditor(graphics.ui(), this::loadTexture, this::shownImage));
+        sceneView.setCloseScene(this::closeScene);
         browser = new FileBrowser(Path.of(""));
         sceneView.getParticles().setFolder(browser::getDirectory);
         sceneView.getParticles().setSaved(saved -> refresh());
         path = new TextInput("path", "").onSubmit(this::openPath).width(Sizing.grow());
         files = new Column("files").align(Align.STRETCH);
         filter = new Button("filter", "").onClick(this::toggleFilter);
+        sceneView.setSceneChoices(new Scenes());
+        // Shown from the start, so its toolbar offers the scenes before one is open
+        sceneHost.show(sceneView);
         status = new Label("status", "");
         refresh();
     }
@@ -264,43 +304,28 @@ public class Workbench {
 
     /** Make the surfaces and show them hidden, so later toggles keep their state. */
     public void install() {
-        Row toolbar =
-                new Row("toolbar")
-                        .gap(8)
-                        .add(
-                                new Button("back", "Back").onClick(this::goBack),
-                                path,
-                                new Button("up", "Up").onClick(this::up),
-                                new Button("open", "Open").onClick(() -> openPath(path.text())),
-                                filter,
-                                new Button("reset-layout", "Reset layout")
-                                        .tooltip("Put every panel back where it started")
-                                        .onClick(dockSpace::resetLayout));
+        // Shapes, stages and context scenes are picked in the 3D view's toolbar
         Column top =
                 new Column("top")
                         .padding(Insets.all(4))
-                        .gap(4)
                         .align(Align.STRETCH)
                         .add(
-                                toolbar,
-                                new Row("status-bar")
+                                new Row("toolbar")
                                         .gap(8)
                                         .add(
-                                                status.width(Sizing.grow()),
-                                                new Label("preview-label", "Try materials on:"),
-                                                previewButton(PreviewShapes.Shape.SPHERE),
-                                                previewButton(PreviewShapes.Shape.CUBE),
-                                                previewButton(PreviewShapes.Shape.PLANE),
-                                                new Button("shader-ball", "Shader ball")
-                                                        .onClick(this::openShaderBall),
-                                                new Button("particle-stage", "Particles")
-                                                        .onClick(() -> openParticleStage(null))));
+                                                new Button("back", "Back").onClick(this::goBack),
+                                                new Button("reset-layout", "Reset layout")
+                                                        .tooltip(
+                                                                "Put every panel back where it"
+                                                                        + " started")
+                                                        .onClick(dockSpace::resetLayout),
+                                                status.width(Sizing.grow())));
         ui.show(
                 ui.surface(SURFACE_ID)
                         .anchors(band(0, -1))
                         .height(Sizing.fixed(TOP_HEIGHT))
                         .content(top));
-        // Behind the panels, see-through, so the scene shows where no panel is docked
+        // Behind the panels, see-through where no panel is docked
         ui.show(
                 ui.surface(DOCK_ID)
                         .anchors(band(TOP_HEIGHT, 0))
@@ -309,15 +334,24 @@ public class Workbench {
                         .style(Style.builder().set(StyleKey.PADDING, Insets.NONE).build())
                         .content(new Column("root").add(dockSpace)));
 
-        Row drives =
-                new Row("drives")
+        Row where =
+                new Row("where")
                         .gap(4)
                         .add(
+                                path,
+                                new Button("up", "Up").onClick(this::up),
+                                new Button("open", "Open").onClick(() -> openPath(path.text())));
+        Row tools =
+                new Row("file-tools")
+                        .gap(4)
+                        .add(
+                                filter,
                                 new Button("samples", "Write samples")
                                         .tooltip(
                                                 "Write sample .ika containers, good and broken,"
                                                         + " and browse their folder")
                                         .onClick(this::writeSamples));
+        Row drives = new Row("drives").gap(4);
         List<Path> roots = browser.roots();
         if (roots.size() > 1) {
             for (int i = 0; i < roots.size(); ++i) {
@@ -332,6 +366,8 @@ public class Workbench {
                         .gap(4)
                         .align(Align.STRETCH)
                         .add(
+                                where,
+                                tools,
                                 drives,
                                 new Scroll("list")
                                         .border(true)
@@ -355,7 +391,14 @@ public class Workbench {
                         "Viewer",
                         new Column("middle")
                                 .align(Align.STRETCH)
-                                .add(new Immediate("view", host::draw)));
+                                .add(new Immediate("view", this::drawViewer)));
+        scenePanel =
+                panel(
+                        SCENE_ID,
+                        "3D view",
+                        new Column("scene-root")
+                                .align(Align.STRETCH)
+                                .add(new Immediate("scene", this::drawScene)));
         panel(PREVIEWS_ID, "Previews", previewPanel.content());
         for (String surface : SURFACES) {
             ui.setVisible(surface, false);
@@ -363,7 +406,56 @@ public class Workbench {
     }
 
     /**
-     * Show or hide the workbench. Hiding it closes any open scene, putting the renderer back.
+     * Draw the viewer panel, noting that it shows and that a click in it makes the properties its.
+     *
+     * @param frame The current frame.
+     */
+    private void drawViewer(UiFrame frame) {
+        viewerDrawn = IkGui.getFrameCount();
+        if (IkGui.isWindowHovered() && IkGui.isMouseClicked(MouseButton.LEFT)) {
+            mode = host.getViewer() != null ? Mode.VIEWER : mode;
+        }
+        host.draw(frame);
+    }
+
+    /**
+     * Draw the scene panel, noting that it shows and that a click in it makes the properties its.
+     *
+     * @param frame The current frame.
+     */
+    private void drawScene(UiFrame frame) {
+        sceneDrawn = IkGui.getFrameCount();
+        if (IkGui.isWindowHovered() && IkGui.isMouseClicked(MouseButton.LEFT)) {
+            mode = sceneView.getPlacement() != null ? Mode.SCENE : mode;
+        }
+        sceneHost.draw(frame);
+    }
+
+    /**
+     * Whether the properties are the scene's: when only the scene panel shows, or both show and the
+     * scene was the last opened or clicked.
+     *
+     * @return True for the scene's properties, false for the viewer's.
+     */
+    private boolean propertiesForScene() {
+        if (sceneView.getPlacement() == null) {
+            return false;
+        }
+        if (host.getViewer() == null) {
+            return true;
+        }
+        // Panels are drawn in any order, so drawn last frame counts as showing
+        final int now = IkGui.getFrameCount();
+        final boolean sceneShows = now - sceneDrawn <= 1;
+        final boolean viewerShows = now - viewerDrawn <= 1;
+        if (sceneShows != viewerShows) {
+            return sceneShows;
+        }
+        return mode == Mode.SCENE;
+    }
+
+    /**
+     * Show or hide the workbench. Hiding it closes any open scene.
      *
      * @param visible Whether to show it.
      */
@@ -388,16 +480,11 @@ public class Workbench {
         back.run();
     }
 
-    /** Show the surfaces the mode needs, if the workbench is showing. */
+    /** Show the surfaces, if the workbench is showing. */
     private void updateSurfaces() {
-        ui.setVisible(SURFACE_ID, showing);
-        ui.setVisible(DOCK_ID, showing);
-        ui.setVisible(FILES_ID, showing);
-        ui.setVisible(OUTLINER_ID, showing);
-        ui.setVisible(PROPERTIES_ID, showing);
-        // A hidden viewer leaves the middle of the dock empty, so the scene shows through it
-        ui.setVisible(VIEWER_ID, showing && mode != Mode.SCENE);
-        ui.setVisible(PREVIEWS_ID, showing && mode != Mode.SCENE);
+        for (String surface : SURFACES) {
+            ui.setVisible(surface, showing);
+        }
     }
 
     /**
@@ -406,8 +493,14 @@ public class Workbench {
      * @param frame The current frame.
      */
     private void drawProperties(UiFrame frame) {
-        if (mode == Mode.SCENE) {
-            sceneView.drawProperties(frame, this::closeScene);
+        if (propertiesForScene()) {
+            sceneHost.drawProperties(frame);
+            if (host.getViewer() != null) {
+                IkGui.separator();
+                if (IkGui.button("Back to the viewer")) {
+                    frame.fire(this::showViewerPanel);
+                }
+            }
             return;
         }
         host.drawProperties(frame);
@@ -419,10 +512,20 @@ public class Workbench {
         }
     }
 
-    /** Show the open scene in the middle again, after looking at an image. */
+    /** Bring the scene panel to the front again, after looking at an image. */
     private void showScene() {
         mode = Mode.SCENE;
-        updateSurfaces();
+        if (scenePanel != null) {
+            scenePanel.bringToFront();
+        }
+    }
+
+    /** Bring the viewer panel to the front again, after looking at the scene. */
+    private void showViewerPanel() {
+        mode = Mode.VIEWER;
+        if (viewerPanel != null) {
+            viewerPanel.bringToFront();
+        }
     }
 
     /** Close the open scene. */
@@ -430,7 +533,6 @@ public class Workbench {
         scenes.incrementAndGet();
         sceneView.close();
         mode = host.getViewer() != null ? Mode.VIEWER : Mode.NONE;
-        updateSurfaces();
         status.text("Closed the scene");
     }
 
@@ -484,7 +586,29 @@ public class Workbench {
             status.text(
                     "Can't open "
                             + absolute.getFileName()
-                            + ", it isn't an image, model, container or particle effect");
+                            + ", it isn't an image, model, container, material, look or"
+                            + " particle effect");
+            return;
+        }
+        if (kind == AssetKind.LOOK) {
+            openFile = absolute;
+            final Path folder = absolute.getParent();
+            if (folder != null && !folder.equals(browser.getDirectory())) {
+                browser.navigate(folder);
+            }
+            refresh();
+            openLook(absolute);
+            return;
+        }
+        if (kind == AssetKind.MATERIAL) {
+            sceneShown = -1;
+            openFile = absolute;
+            final Path folder = absolute.getParent();
+            if (folder != null && !folder.equals(browser.getDirectory())) {
+                browser.navigate(folder);
+            }
+            refresh();
+            openPreview(PreviewShapes.Shape.SPHERE, () -> wearMaterial(absolute));
             return;
         }
         if (kind == AssetKind.PARTICLE_EFFECT) {
@@ -511,6 +635,7 @@ public class Workbench {
         status.text("Loading " + absolute.getFileName() + "...");
         refresh();
         if (kind == AssetKind.MODEL) {
+            sceneShown = -1;
             loader.execute(() -> loadScene(absolute, request));
         } else if (kind == AssetKind.CONTAINER) {
             loader.execute(() -> loadContainer(absolute, request));
@@ -532,15 +657,181 @@ public class Workbench {
         }
     }
 
+    /** The scenes made in code, first in the 3D view's list, before the context scenes. */
+    private static final List<String> BUILT_IN_SCENES =
+            List.of(
+                    PreviewShapes.Shape.SPHERE.label,
+                    PreviewShapes.Shape.CUBE.label,
+                    PreviewShapes.Shape.PLANE.label,
+                    "Shader ball",
+                    "Particle stage");
+
+    /** The index in the scene list of the particle stage. */
+    private static final int PARTICLE_STAGE_INDEX = 4;
+
+    /** The index in the scene list of the shader ball. */
+    private static final int SHADER_BALL_INDEX = 3;
+
+    /** The context scenes, read the first time the list is shown. */
+    private List<ContextScene> contexts;
+
+    /** The scene list's entry shown, or -1 for a file. */
+    private int sceneShown = -1;
+
+    /** The look of the block context scenes show, or null for gray stand-ins. */
+    private @Nullable Path subjectLook;
+
     /**
-     * A button that shows a preview shape.
+     * The context scenes in the converter's data folder, read once; none without game content to
+     * draw their blocks with.
      *
-     * @param shape The shape.
-     * @return The button.
+     * @return The scenes.
      */
-    private Button previewButton(PreviewShapes.Shape shape) {
-        return new Button("preview-" + shape.name().toLowerCase(Locale.ROOT), shape.label)
-                .onClick(() -> openPreview(shape));
+    private List<ContextScene> contexts() {
+        if (contexts == null) {
+            contexts =
+                    GameContent.available()
+                            ? ContextScene.loadAll(
+                                    PluginFolder.getResource(
+                                                    ConverterPlugin.PLUGIN_NAME,
+                                                    PluginFolder.ResourceType.DATA,
+                                                    ContextScene.FOLDER)
+                                            .toPath())
+                            : List.of();
+        }
+        return contexts;
+    }
+
+    /**
+     * Show a scene from the 3D view's list, by name, as picking it does.
+     *
+     * @param name The scene's name, ignoring case.
+     * @return True if there is one by that name.
+     */
+    public boolean pickScene(@NonNull String name) {
+        final Scenes scenes = new Scenes();
+        final String[] names = scenes.names();
+        for (int i = 0; i < names.length; ++i) {
+            if (names[i].equalsIgnoreCase(name)) {
+                scenes.pick(i);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The 3D view's scene list: the built-in scenes, then the context scenes. */
+    private final class Scenes implements SceneView.SceneChoices {
+        @Override
+        public String[] names() {
+            final List<String> names = new ArrayList<>(BUILT_IN_SCENES);
+            for (ContextScene context : contexts()) {
+                names.add(context.name());
+            }
+            return names.toArray(new String[0]);
+        }
+
+        @Override
+        public int current() {
+            return sceneShown;
+        }
+
+        @Override
+        public void pick(int index) {
+            if (index < 0) {
+                return;
+            }
+            if (index < SHADER_BALL_INDEX) {
+                sceneShown = index;
+                openPreview(PreviewShapes.Shape.values()[index]);
+            } else if (index == SHADER_BALL_INDEX) {
+                openShaderBall();
+                sceneShown = index;
+            } else if (index == PARTICLE_STAGE_INDEX) {
+                sceneShown = index;
+                openParticleStage(null);
+            } else if (index - BUILT_IN_SCENES.size() < contexts().size()) {
+                sceneShown = index;
+                openContext(contexts().get(index - BUILT_IN_SCENES.size()));
+            }
+        }
+    }
+
+    /**
+     * Show a context scene around the block whose look was opened last, building it in the
+     * background from the game's content.
+     *
+     * @param context The scene.
+     */
+    private void openContext(ContextScene context) {
+        final int request = requests.incrementAndGet();
+        final Path look = subjectLook;
+        status.text("Making " + context.name() + "...");
+        loader.execute(
+                () -> {
+                    try {
+                        final BlockScenes.Built built = BlockScenes.build(context, look);
+                        final ScenePlacement placement =
+                                ScenePlacement.prepare(graphics, built.scene());
+                        post(
+                                () -> {
+                                    sceneLoaded(request, placement);
+                                    if (request != requests.get()) {
+                                        return;
+                                    }
+                                    // The render materials' own values, over the plain ones the
+                                    // scene was placed with; the textures come from the scene
+                                    final List<Material> materials = placement.getMaterials();
+                                    for (int i = 0; i < built.values().size(); ++i) {
+                                        final Material values = built.values().get(i);
+                                        if (values != null && i < materials.size()) {
+                                            materials.get(i).setValues(values);
+                                        }
+                                    }
+                                    status.text(
+                                            built.missing().isEmpty()
+                                                    ? "Showing " + context.name()
+                                                    : "Showing "
+                                                            + context.name()
+                                                            + "; not found, drawn gray: "
+                                                            + String.join(", ", built.missing()));
+                                });
+                    } catch (RuntimeException e) {
+                        log.warn("Could not make the scene {}", context.name(), e);
+                        final String message =
+                                "Can't make " + context.name() + ": " + e.getMessage();
+                        post(() -> failed(request, message));
+                    }
+                });
+    }
+
+    /**
+     * Open a block's look: show it in the first context scene that has a place for it.
+     *
+     * @param file The look file.
+     */
+    private void openLook(Path file) {
+        if (!GameContent.available()) {
+            status.text("Looks need " + GameContent.CORE_PLUGIN + ", which isn't loaded");
+            return;
+        }
+        if (BlockScenes.blockId(file).isEmpty()) {
+            status.text(
+                    file.getFileName()
+                            + " isn't a block's look: those are in a content folder's"
+                            + " looks/block folder");
+            return;
+        }
+        subjectLook = file;
+        final List<ContextScene> all = contexts();
+        for (int i = 0; i < all.size(); ++i) {
+            if (all.get(i).hasSubject()) {
+                sceneShown = BUILT_IN_SCENES.size() + i;
+                openContext(all.get(i));
+                return;
+            }
+        }
+        status.text("No context scene has a place for the block; add one to the data folder");
     }
 
     /**
@@ -559,13 +850,16 @@ public class Workbench {
      */
     public void openNamed(@NonNull String what) {
         if (what.equals(PREVIEW_PREFIX + PARTICLE_PREVIEW)) {
+            sceneShown = PARTICLE_STAGE_INDEX;
             openParticleStage(null);
             return;
         }
         if (what.startsWith(PREVIEW_PREFIX)) {
             final String name = what.substring(PREVIEW_PREFIX.length()).toUpperCase(Locale.ROOT);
             try {
-                openPreview(PreviewShapes.Shape.valueOf(name));
+                final PreviewShapes.Shape shape = PreviewShapes.Shape.valueOf(name);
+                sceneShown = shape.ordinal();
+                openPreview(shape);
             } catch (IllegalArgumentException e) {
                 status.text("No preview shape called " + name.toLowerCase(Locale.ROOT));
             }
@@ -580,14 +874,84 @@ public class Workbench {
      * @param shape The shape.
      */
     private void openPreview(PreviewShapes.Shape shape) {
+        openPreview(shape, () -> {});
+    }
+
+    /**
+     * Show a preview shape on a floor, then do something with it, like put a material on it.
+     *
+     * @param shape The shape.
+     * @param then Run on the render thread once the shape shows.
+     */
+    private void openPreview(PreviewShapes.Shape shape, Runnable then) {
         final int request = requests.incrementAndGet();
         status.text("Making a " + shape.label.toLowerCase(Locale.ROOT) + "...");
         loader.execute(
                 () -> {
                     final ScenePlacement placement =
                             ScenePlacement.prepare(graphics, PreviewShapes.scene(shape));
-                    post(() -> sceneLoaded(request, placement));
+                    post(
+                            () -> {
+                                sceneLoaded(request, placement);
+                                if (request == requests.get() && showing) {
+                                    then.run();
+                                }
+                            });
                 });
+    }
+
+    /**
+     * Show a container's mesh in the 3D viewer, standing on a floor, or its material on a sphere.
+     *
+     * @param file The container.
+     * @param tag {@code MeshSection.TAG} or {@code MaterialSection.TAG}.
+     */
+    private void containerInThreeD(Path file, int tag) {
+        if (tag == MaterialSection.TAG) {
+            openPreview(PreviewShapes.Shape.SPHERE, () -> wearMaterial(file));
+            return;
+        }
+        final int request = requests.incrementAndGet();
+        status.text("Reading the mesh in " + file.getFileName() + "...");
+        loader.execute(
+                () -> {
+                    try {
+                        final MeshData mesh =
+                                MeshSection.decode(
+                                        AssetFile.open(file)
+                                                .section(MeshSection.TAG)
+                                                .orElseThrow(
+                                                        () ->
+                                                                new IllegalArgumentException(
+                                                                        "it has no mesh")));
+                        final String name = PreviewHost.stem(file.getFileName().toString());
+                        final ScenePlacement placement =
+                                ScenePlacement.prepare(
+                                        graphics, PreviewShapes.meshScene(name, mesh));
+                        post(() -> sceneLoaded(request, placement));
+                    } catch (RuntimeException e) {
+                        log.warn("Could not show the mesh in {}", file, e);
+                        final String message =
+                                "Can't show the mesh in "
+                                        + file.getFileName()
+                                        + ": "
+                                        + e.getMessage();
+                        post(() -> failed(request, message));
+                    }
+                });
+    }
+
+    /**
+     * Put a material file on the shape shown, saying how it went.
+     *
+     * @param file The material.
+     */
+    private void wearMaterial(Path file) {
+        if (sceneView.wearMaterial(file)) {
+            status.text("Showing " + file.getFileName() + " on a sphere");
+        } else {
+            status.text("Can't show " + file.getFileName());
+        }
     }
 
     /**
@@ -664,7 +1028,7 @@ public class Workbench {
      * @param file The image.
      * @return The filter; smooth if its size can't be read.
      */
-    static TextureFilter filterFor(@NonNull Path file) {
+    public static TextureFilter filterFor(@NonNull Path file) {
         try (ImageInputStream in = ImageIO.createImageInputStream(file.toFile())) {
             if (in == null) {
                 return TextureFilter.SMOOTH;
@@ -718,8 +1082,8 @@ public class Workbench {
     }
 
     /**
-     * Put a read scene in the world and show it, unless a newer file was asked for, then start
-     * loading its textures. Render thread.
+     * Show a read scene in the scene panel, unless a newer file was asked for, then start loading
+     * its textures. Render thread.
      *
      * @param request Which request this was.
      * @param placement The scene, ready to place.
@@ -729,10 +1093,9 @@ public class Workbench {
             return;
         }
         final int scene = scenes.incrementAndGet();
-        placement.place();
         sceneView.show(placement);
-        mode = Mode.SCENE;
-        updateSurfaces();
+        sceneHost.show(sceneView);
+        showScene();
         final ImportedScene imported = placement.getImported();
         status.text(
                 String.format(
@@ -781,7 +1144,7 @@ public class Workbench {
                         if (request != requests.get()) {
                             return;
                         }
-                        showViewer(new ContainerViewer(container));
+                        showViewer(new ContainerViewer(container, this::containerInThreeD));
                         status.text("Opened " + file.getFileName() + ": " + container.status());
                     });
         } catch (IOException | RuntimeException e) {

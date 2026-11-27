@@ -50,4 +50,37 @@ public final class Previews {
         return renderer.getPreviews()
                 .create(context.getOwnerKey(), width, height, renderer.getState());
     }
+
+    /**
+     * The particles API for one preview: emitters placed in its scene, with its own particle clock
+     * and effects. The renderer's particles simulate and draw in one view at a time, so from now
+     * until the preview closes they are this preview's, and the world draws none; the particles
+     * alive are cleared.
+     *
+     * @param preview The preview.
+     * @return Its particles API.
+     * @throws IllegalStateException If the plugin was unloaded or the renderer isn't running.
+     */
+    public Particles particles(@NonNull PreviewView preview) {
+        context.checkOpen();
+        final VulkanInstance renderer = GraphicsManager.getRenderInstance();
+        if (renderer == null) {
+            throw new IllegalStateException("The renderer is not running");
+        }
+        renderer.getState().particleView = preview.getViewID();
+        preview.getScene().getParticleClock().clear();
+        return new Particles(context, () -> preview.isClosed() ? null : preview.getScene());
+    }
+
+    /**
+     * The lights API for one preview: point lights and spotlights placed in its scene, lighting
+     * nothing else. They go when the preview closes.
+     *
+     * @param preview The preview.
+     * @return Its lights API.
+     */
+    public Lights lights(@NonNull PreviewView preview) {
+        context.checkOpen();
+        return new Lights(context, () -> preview.isClosed() ? null : preview.getScene());
+    }
 }

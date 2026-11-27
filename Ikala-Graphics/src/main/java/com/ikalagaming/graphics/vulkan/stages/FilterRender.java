@@ -116,6 +116,18 @@ public class FilterRender implements RenderStage {
         descriptorSetLayout = VK_NULL_HANDLE;
     }
 
+    /**
+     * What to show for a scene: its own view if it has one, like a preview showing roughness, else
+     * this stage's.
+     *
+     * @param scene The scene drawn.
+     * @return The view.
+     */
+    private FilterView shownView(Scene scene) {
+        final FilterView own = scene == null ? null : scene.getFilterView();
+        return own == null ? view : own;
+    }
+
     @Override
     public void render(
             Scene scene,
@@ -191,7 +203,9 @@ public class FilterRender implements RenderStage {
 
             if (width > 0 && height > 0) {
                 vkCmdBindPipeline(
-                        commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[view.ordinal()]);
+                        commandBuffer,
+                        VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        pipelines[shownView(scene).ordinal()]);
 
                 Commands.viewport(commandBuffer, 0, 0, width, height);
                 Commands.scissor(commandBuffer, 0, 0, width, height);
@@ -314,6 +328,9 @@ public class FilterRender implements RenderStage {
         }
         uniformData.putInt(
                 ShaderBindings.Filter.DEPTH_INDEX_OFFSET, frameData.gBuffer.depth().bindlessIndex);
+        uniformData.putLong(
+                ShaderBindings.Filter.MATERIALS_ADDRESS_OFFSET,
+                frameData.materials == null ? 0 : frameData.materials.deviceAddress);
     }
 
     /**

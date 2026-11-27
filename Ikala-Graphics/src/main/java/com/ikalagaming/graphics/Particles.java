@@ -16,6 +16,7 @@ import org.joml.Vector3dc;
 
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
+import java.util.function.Supplier;
 import javax.annotation.Nullable;
 
 /**
@@ -47,13 +48,27 @@ public final class Particles {
     /** The context these emitters belong to. */
     private final GraphicsContext context;
 
+    /** Finds the scene the emitters are placed in, or null while graphics isn't running. */
+    private final Supplier<Scene> target;
+
     /**
-     * Create the particles API for a context.
+     * Create the particles API for a context, placing emitters in the world.
      *
      * @param context The owning context.
      */
     Particles(@NonNull GraphicsContext context) {
+        this(context, GraphicsManager::getScene);
+    }
+
+    /**
+     * Create the particles API for a context, placing emitters in a given scene.
+     *
+     * @param context The owning context.
+     * @param target Finds the scene, or null while graphics isn't running.
+     */
+    Particles(@NonNull GraphicsContext context, @NonNull Supplier<Scene> target) {
         this.context = context;
+        this.target = target;
     }
 
     /**
@@ -123,7 +138,7 @@ public final class Particles {
      * @return The effect, or null if the handle is stale.
      */
     public @Nullable ParticleEffect effectOf(@Nullable EffectHandle effect) {
-        final Scene scene = GraphicsManager.getScene();
+        final Scene scene = target.get();
         return scene == null ? null : scene.getEffectLibrary().effectOf(effect);
     }
 
@@ -135,7 +150,7 @@ public final class Particles {
      * @return The problem, or null if the last edit loaded or the handle is stale.
      */
     public @Nullable String effectError(@Nullable EffectHandle effect) {
-        final Scene scene = GraphicsManager.getScene();
+        final Scene scene = target.get();
         return scene == null ? null : scene.getEffectLibrary().errorOf(effect);
     }
 
@@ -145,7 +160,7 @@ public final class Particles {
      * @param effect The loaded effect's handle.
      */
     public void unloadEffect(@Nullable EffectHandle effect) {
-        final Scene scene = GraphicsManager.getScene();
+        final Scene scene = target.get();
         if (scene == null) {
             return;
         }
@@ -332,8 +347,8 @@ public final class Particles {
      *
      * @return The registry, or null.
      */
-    private static EmitterRegistry registryOrNull() {
-        final Scene scene = GraphicsManager.getScene();
+    private EmitterRegistry registryOrNull() {
+        final Scene scene = target.get();
         return scene == null ? null : scene.getEmitterRegistry();
     }
 
@@ -343,7 +358,7 @@ public final class Particles {
      * @return The registry.
      * @throws IllegalStateException If graphics isn't running.
      */
-    private static EmitterRegistry registry() {
+    private EmitterRegistry registry() {
         return scene().getEmitterRegistry();
     }
 
@@ -353,8 +368,8 @@ public final class Particles {
      * @return The scene.
      * @throws IllegalStateException If graphics isn't running.
      */
-    private static Scene scene() {
-        final Scene scene = GraphicsManager.getScene();
+    private Scene scene() {
+        final Scene scene = target.get();
         if (scene == null) {
             throw new IllegalStateException("Graphics is not running");
         }

@@ -7,6 +7,7 @@ import com.ikalagaming.converter.scene.SceneLod;
 import com.ikalagaming.converter.scene.ScenePlacement;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.PreviewView;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.gui.IkGui;
@@ -138,14 +139,16 @@ final class LodSection {
      *
      * @param shown The scene.
      * @param selected The selected node, or null.
+     * @param preview The preview the scene is shown in, which a build is shown in too.
      */
-    void draw(@NonNull ScenePlacement shown, @Nullable Node selected) {
+    void draw(
+            @NonNull ScenePlacement shown, @Nullable Node selected, @NonNull PreviewView preview) {
         if (panel != null && builtIn != shown) {
             close();
         }
         final LodPanel current = panel;
         if (current == null) {
-            drawBuild(shown, selected);
+            drawBuild(shown, selected, preview);
             return;
         }
         IkGui.text("Level of detail of " + builtFrom);
@@ -164,8 +167,10 @@ final class LodSection {
      *
      * @param shown The scene.
      * @param selected The selected node, or null.
+     * @param preview The preview a build is shown in.
      */
-    private void drawBuild(@NonNull ScenePlacement shown, @Nullable Node selected) {
+    private void drawBuild(
+            @NonNull ScenePlacement shown, @Nullable Node selected, @NonNull PreviewView preview) {
         IkGui.combo("Build from", scope, SCOPES);
         final Node top = scope.get() == WHOLE_SCENE ? shown.getImported().root() : selected;
         if (top == null) {
@@ -192,7 +197,7 @@ final class LodSection {
                         + " tested; see-through ones stay as they are. Bistro's exterior takes a"
                         + " few minutes and about 11 GB.");
         if (IkGui.button("Build level of detail")) {
-            build(shown, top);
+            build(shown, top, preview);
         }
     }
 
@@ -201,8 +206,10 @@ final class LodSection {
      *
      * @param shown The scene.
      * @param top The node.
+     * @param preview The preview the build is shown in.
      */
-    private void build(@NonNull ScenePlacement shown, @NonNull Node top) {
+    private void build(
+            @NonNull ScenePlacement shown, @NonNull Node top, @NonNull PreviewView preview) {
         final ImportedScene imported = shown.getImported();
         final MaterialCache cache = GraphicsManager.getScene().getMaterialCache();
         // The build reads materials on its own thread, so it gets a copy of who has which
@@ -258,6 +265,8 @@ final class LodSection {
                         options(LodLooks.averages(graphics, indices))
                                 .withCutOut(withCutOut ? LodLooks.cutOut(indices) : null)
                                 .withVolumes(volumes.get()));
+        // Before the build finishes, which is handed over on this thread
+        panel.inPreview(preview);
     }
 
     /**

@@ -375,7 +375,7 @@ public class FogRender {
         final int groupsX = (tilesX + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
         final int groupsY = (tilesY + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
         // Volumetric particles, splatted into the froxels for the injection to add
-        final ParticlePool pool = state.particlePool;
+        final ParticlePool pool = state.particlesFor(scene);
         final boolean particles = pool != null && pool.readVolumetricCount() > 0;
         try (MemoryStack stack = MemoryStack.stackPush()) {
             if (particles) {

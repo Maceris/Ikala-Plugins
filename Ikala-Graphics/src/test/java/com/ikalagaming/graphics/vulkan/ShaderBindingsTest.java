@@ -152,7 +152,8 @@ class ShaderBindingsTest {
         assertEquals(272, ShaderBindings.Filter.HAS_GBUFFER_OFFSET);
         assertEquals(276, ShaderBindings.Filter.BASE_COLOR_INDEX_OFFSET);
         assertEquals(292, ShaderBindings.Filter.DEPTH_INDEX_OFFSET);
-        assertEquals(296, ShaderBindings.Filter.UNIFORMS_BUFFER_SIZE);
+        assertEquals(296, ShaderBindings.Filter.MATERIALS_ADDRESS_OFFSET);
+        assertEquals(304, ShaderBindings.Filter.UNIFORMS_BUFFER_SIZE);
     }
 
     @Test

@@ -7,6 +7,7 @@ import com.ikalagaming.graphics.Format;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.PreviewView;
 import com.ikalagaming.graphics.TextureHandle;
+import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -159,6 +160,14 @@ public class PreviewRenderer {
                     views.remove(i);
                     usedViews.clear(view.getViewID());
                     free(state, view, targets.remove(view));
+                    if (state.particleView == view.getViewID()) {
+                        // The particles go back to the world, without the preview's
+                        state.particleView = 0;
+                        final Scene world = GraphicsManager.getScene();
+                        if (world != null) {
+                            world.getParticleClock().clear();
+                        }
+                    }
                 }
             }
             open = List.copyOf(views);
@@ -255,9 +264,12 @@ public class PreviewRenderer {
         target.drawn = true;
         target.lastDrawn = state.frameNumber;
         view.setTexture(target.handle);
-        // The last frame of a settle is the one saved, read from the final image still in place
-        if (view.frameDrawn() == 0) {
-            for (PreviewView.Capture capture : view.takeCaptures()) {
+        // The frame a save has waited for is the one saved, read from the final image still in
+        // place
+        view.frameDrawn();
+        final List<PreviewView.Capture> captures = view.takeCaptures();
+        if (!captures.isEmpty()) {
+            for (PreviewView.Capture capture : captures) {
                 target.capture
                         .request(capture.path())
                         .whenComplete(

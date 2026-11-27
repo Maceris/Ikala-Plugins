@@ -759,6 +759,9 @@ public class LodRenderer {
         /** Whether it is drawn. */
         volatile boolean visible = true;
 
+        /** The view it is drawn in, 0 for the world or a preview's view ID. */
+        volatile int viewID;
+
         /** The most error a drawn cluster may have, in pixels. */
         volatile double thresholdPixels;
 
@@ -1918,6 +1921,20 @@ public class LodRenderer {
         final World world = world(id);
         if (world != null) {
             world.thresholdPixels = thresholdPixels;
+        }
+    }
+
+    /**
+     * Draw a world in one view only: the world's, 0, or a preview's. Its cut and streaming follow
+     * that view's camera.
+     *
+     * @param id The world.
+     * @param viewID The view.
+     */
+    public void setView(long id, int viewID) {
+        final World world = world(id);
+        if (world != null) {
+            world.viewID = viewID;
         }
     }
 
@@ -3488,6 +3505,8 @@ public class LodRenderer {
      * @param observer Where the cut is seen from, which may be frozen away from the camera.
      * @param heightPixels The height the scene is drawn at.
      * @param colors What the clusters are colored by, for debugging.
+     * @param viewID The view being drawn, 0 for the world: only its worlds are drawn, and only
+     *     theirs follow the camera. Instances of models are the world's.
      */
     public void prepare(
             @NonNull VulkanState state,
@@ -3495,7 +3514,8 @@ public class LodRenderer {
             @NonNull Vector3dc camera,
             @NonNull Observer observer,
             int heightPixels,
-            DebugVisualizers.@NonNull LodColors colors) {
+            DebugVisualizers.@NonNull LodColors colors,
+            int viewID) {
         frameData.lodCounts.ensureCapacity((long) COUNTER_COUNT * Integer.BYTES, state);
         final IntBuffer counts =
                 MemoryUtil.memIntBuffer(
@@ -3547,12 +3567,12 @@ public class LodRenderer {
                 Math.abs(observer.getProjectionMatrix().m11()) * heightPixels / 2;
         final Vector3dc eye = observer.getPosition();
         final List<World> all = snapshotWorlds();
-        final List<Instance> placed = snapshotInstances();
+        final List<Instance> placed = viewID == 0 ? snapshotInstances() : List.of();
         int slots = 0;
         int drawn = 0;
         for (World world : all) {
             slots = Math.max(slots, world.slot + 1);
-            if (world.visible && world.shown && world.settled) {
+            if (world.viewID == viewID && world.visible && world.shown && world.settled) {
                 ++drawn;
             }
         }
@@ -3579,24 +3599,28 @@ public class LodRenderer {
                         Math.max(1, slots) * LodCullMath.WORLD_ENTRY_SIZE);
         MemoryUtil.memSet(MemoryUtil.memAddress(table), 0, table.capacity());
         for (World world : all) {
-            world.eye =
-                    new double[] {
-                        eye.x() - world.origin[0],
-                        eye.y() - world.origin[1],
-                        eye.z() - world.origin[2]
-                    };
-            world.pixelsPerUnit = pixelsPerUnit;
+            // A world of another view keeps the eye its own view last gave it, and isn't drawn
+            final boolean inView = world.viewID == viewID;
+            if (inView) {
+                world.eye =
+                        new double[] {
+                            eye.x() - world.origin[0],
+                            eye.y() - world.origin[1],
+                            eye.z() - world.origin[2]
+                        };
+                world.pixelsPerUnit = pixelsPerUnit;
+            }
             putWorld(
                     table,
                     world.slot * LodCullMath.WORLD_ENTRY_SIZE,
                     world,
                     camera,
                     eye,
-                    world.visible && world.shown && world.settled,
+                    inView && world.visible && world.shown && world.settled,
                     (float) world.thresholdPixels,
                     pixelsPerUnit,
                     colors);
-            if (world.modelClusters < 0) {
+            if (inView && world.modelClusters < 0) {
                 world.eyes = new double[][] {world.eye};
             }
         }
@@ -3644,9 +3668,12 @@ public class LodRenderer {
                 instance.shadowed = placement;
             }
         }
-        for (World world : all) {
-            if (world.modelClusters >= 0) {
-                world.eyes = modelEyes.getOrDefault(world, List.of()).toArray(new double[0][]);
+        // Instances are the world's, so a preview leaves their models' eyes as they were
+        if (viewID == 0) {
+            for (World world : all) {
+                if (world.modelClusters >= 0) {
+                    world.eyes = modelEyes.getOrDefault(world, List.of()).toArray(new double[0][]);
+                }
             }
         }
         frameData.lodWorldCount = drawn;

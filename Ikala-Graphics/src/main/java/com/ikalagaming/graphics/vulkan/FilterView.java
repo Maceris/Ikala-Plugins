@@ -30,6 +30,18 @@ public enum FilterView {
             "shaders/filters/gbuffer_material.frag"),
     /** The g-buffer depth, on a log scale. */
     DEPTH("Depth", RenderStage.Type.FILTER_DEPTH, "shaders/filters/gbuffer_depth.frag"),
+    /** The roughness each pixel is lit with: its material's, or a texture's in its place. */
+    ROUGHNESS(
+            "Roughness",
+            RenderStage.Type.FILTER_ROUGHNESS,
+            "shaders/filters/gbuffer_roughness.frag"),
+    /** The metalness each pixel is lit with. */
+    METALLIC("Metallic", RenderStage.Type.FILTER_METALLIC, "shaders/filters/gbuffer_metallic.frag"),
+    /** Each material's averaged color, the flat color far levels of detail draw it with. */
+    FAR_COLOR(
+            "Far flat color",
+            RenderStage.Type.FILTER_FAR_COLOR,
+            "shaders/filters/gbuffer_average.frag"),
     /** Every g-buffer texture side by side, in vertical strips in the order above. */
     SPLIT("All (split)", RenderStage.Type.FILTER_SPLIT, "shaders/filters/gbuffer_split.frag");
 

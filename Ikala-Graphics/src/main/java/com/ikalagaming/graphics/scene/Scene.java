@@ -10,6 +10,7 @@ import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
 import com.ikalagaming.graphics.scene.lights.LightRegistry;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
 import com.ikalagaming.graphics.vulkan.DeletionQueue;
+import com.ikalagaming.graphics.vulkan.FilterView;
 import com.ikalagaming.graphics.vulkan.GeometryArena;
 import com.ikalagaming.graphics.vulkan.InstanceTable;
 import com.ikalagaming.graphics.vulkan.SharedBuffer;
@@ -210,6 +211,24 @@ public class Scene {
      * @return The pre-exposure.
      */
     @Setter private volatile float preExposure;
+
+    /**
+     * What the filter stage shows for this scene, like a preview showing its roughness, or null for
+     * the renderer's own choice. It shows only while the pipeline drawing the scene runs filters.
+     *
+     * @param filterView The view, or null.
+     * @return The view, or null.
+     */
+    @Setter private volatile FilterView filterView;
+
+    /**
+     * Whether temporal anti-aliasing runs for this scene, when the settings turn it on. A preview
+     * drawn supersampled turns it off, so a still image has no jitter to settle.
+     *
+     * @param temporalAa Whether it may run.
+     * @return Whether it may run.
+     */
+    @Setter private volatile boolean temporalAa = true;
 
     /** The observer while it is frozen, or null while it follows the camera. */
     @Getter(AccessLevel.NONE)

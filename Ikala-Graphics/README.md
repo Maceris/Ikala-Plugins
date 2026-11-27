@@ -73,7 +73,9 @@ built three ways, all making the same nodes:
 Tools can show small scenes through preview views: `context.previews().create(width, height)` gives a
 `PreviewView` with its own `Scene` (camera, lights, sky, exposure), models placed with `place`, and a texture
 for `IkGui.image` or the retained `Image` node. The renderer draws one preview a frame on frames without the
-world, after `requestFrames()`, and `capture(path)` saves one to PNG. See docs/design/Preview Views.md.
+world, after `requestFrames()`, and `capture(path)` saves one to PNG. Lights, debug shapes, level of detail
+worlds and particles can be given to one preview, and a preview can show a g-buffer view or be supersampled.
+See docs/design/Preview Views.md.
 
 Tools use `Panel`s (`context.ui().panel(id, title)`, or `panel:` in place of `surface:` in a spec):
 titled windows the user moves, resizes, docks and drags out of the main window, with the layout saved

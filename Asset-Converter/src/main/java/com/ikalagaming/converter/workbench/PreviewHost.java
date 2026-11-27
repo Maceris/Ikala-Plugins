@@ -23,6 +23,9 @@ public class PreviewHost {
     /** The UI, for the capture's save dialog. */
     private final UI ui;
 
+    /** What to show while no viewer is. */
+    private final String emptyText;
+
     /**
      * The viewer shown.
      *
@@ -37,9 +40,11 @@ public class PreviewHost {
      * Set up the host, showing nothing.
      *
      * @param ui The UI, for the capture's save dialog.
+     * @param emptyText What to show while no viewer is, like how to open something.
      */
-    public PreviewHost(@NonNull UI ui) {
+    public PreviewHost(@NonNull UI ui, @NonNull String emptyText) {
         this.ui = ui;
+        this.emptyText = emptyText;
     }
 
     /**
@@ -111,7 +116,7 @@ public class PreviewHost {
     public void draw(@NonNull UiFrame frame) {
         final Viewer shown = viewer;
         if (shown == null) {
-            IkGui.textDisabled("Pick an image or a .ika file in the file list to view it");
+            IkGui.textDisabled(emptyText);
             return;
         }
         final Path file = shown.file();

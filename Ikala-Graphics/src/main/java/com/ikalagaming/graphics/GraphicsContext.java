@@ -286,13 +286,15 @@ public final class GraphicsContext {
     }
 
     /**
-     * Hand every debug shape this context wants drawn this frame to a consumer. Render thread only.
+     * Hand every debug shape this context wants drawn in a view this frame to a consumer. Render
+     * thread only.
      *
+     * @param viewID The view being drawn, 0 for the world.
      * @param consumer Receives each shape.
      */
-    void collectDebugShapes(@NonNull Consumer<DebugShape> consumer) {
+    void collectDebugShapes(int viewID, @NonNull Consumer<DebugShape> consumer) {
         if (!closed) {
-            debug.collect(consumer);
+            debug.collect(viewID, consumer);
         }
     }
 

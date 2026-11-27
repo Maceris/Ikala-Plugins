@@ -5,6 +5,8 @@ import com.ikalagaming.converter.inspector.HexDump;
 import com.ikalagaming.graphics.asset.AssetHeader;
 import com.ikalagaming.graphics.asset.AssetMetadata;
 import com.ikalagaming.graphics.asset.AssetValidator;
+import com.ikalagaming.graphics.asset.MaterialSection;
+import com.ikalagaming.graphics.asset.MeshSection;
 import com.ikalagaming.graphics.asset.SectionTag;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.flags.SelectableFlags;
@@ -22,6 +24,7 @@ import lombok.NonNull;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.function.BiConsumer;
 import javax.annotation.Nullable;
 
 /**
@@ -81,7 +84,68 @@ public class ContainerViewer implements Viewer {
      * @param container What was read.
      */
     public ContainerViewer(@NonNull ContainerFile container) {
+        this(container, (file, tag) -> {});
+    }
+
+    /**
+     * Show a container, offering to show its mesh or material in the 3D viewer.
+     *
+     * @param container What was read.
+     * @param inThreeD Shows the container's mesh ({@code MeshSection.TAG}) or material ({@code
+     *     MaterialSection.TAG}) in the 3D viewer.
+     */
+    public ContainerViewer(
+            @NonNull ContainerFile container, @NonNull BiConsumer<Path, Integer> inThreeD) {
         this.container = container;
+        this.inThreeD = inThreeD;
+    }
+
+    /** Shows the container's mesh or material in the 3D viewer. */
+    private final BiConsumer<Path, Integer> inThreeD;
+
+    /**
+     * Whether the container has a section, so it can be shown.
+     *
+     * @param tag The section's tag.
+     * @return True if a section has the tag.
+     */
+    public boolean has(int tag) {
+        for (AssetValidator.Entry entry : container.inspection().entries()) {
+            if (entry.tag() == tag) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Show the mesh in the 3D viewer, or the material on a sphere, as the toolbar's buttons do.
+     *
+     * @param tag {@code MeshSection.TAG} or {@code MaterialSection.TAG}.
+     * @return True if the container has that section.
+     */
+    public boolean showInThreeD(int tag) {
+        if (!has(tag)) {
+            return false;
+        }
+        inThreeD.accept(container.path(), tag);
+        return true;
+    }
+
+    @Override
+    public void drawToolbar(@NonNull UiFrame frame) {
+        if (has(MeshSection.TAG)) {
+            IkGui.sameLine();
+            if (IkGui.button("Show the mesh in 3D")) {
+                frame.fire(() -> showInThreeD(MeshSection.TAG));
+            }
+        }
+        if (has(MaterialSection.TAG)) {
+            IkGui.sameLine();
+            if (IkGui.button("Show the material on a sphere")) {
+                frame.fire(() -> showInThreeD(MaterialSection.TAG));
+            }
+        }
     }
 
     /**

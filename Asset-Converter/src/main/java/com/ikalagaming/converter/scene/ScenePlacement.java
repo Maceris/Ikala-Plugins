@@ -4,13 +4,16 @@ import com.ikalagaming.converter.scene.ImportedScene.ImportedMaterial;
 import com.ikalagaming.converter.scene.ImportedScene.Node;
 import com.ikalagaming.converter.scene.ImportedScene.TextureRef;
 import com.ikalagaming.converter.scene.ImportedScene.TextureSlot;
+import com.ikalagaming.converter.workbench.Workbench;
 import com.ikalagaming.graphics.ColorSpace;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.InstanceHandle;
 import com.ikalagaming.graphics.LightHandle;
+import com.ikalagaming.graphics.Lights;
 import com.ikalagaming.graphics.PreviewView;
 import com.ikalagaming.graphics.TextureHandle;
+import com.ikalagaming.graphics.TextureWrap;
 import com.ikalagaming.graphics.asset.MaterialText;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
@@ -139,6 +142,9 @@ public final class ScenePlacement {
 
     /** The point and spot lights placed, in step with {@link #lightSources}. */
     private final List<LightHandle> lights = new ArrayList<>();
+
+    /** What placed the lights: the world's, or a preview's. */
+    private @Nullable Lights placedLights;
 
     /** What each placed light was read as, for its strength. */
     private final List<ImportedScene.ImportedLight> lightSources = new ArrayList<>();
@@ -513,7 +519,7 @@ public final class ScenePlacement {
                                         transform.position(),
                                         transform.rotation(),
                                         transform.scale()));
-        placeLights();
+        placeLights(graphics.lights());
     }
 
     /**
@@ -524,6 +530,18 @@ public final class ScenePlacement {
      * @param preview The preview to place it in.
      */
     public void placeIn(@NonNull PreviewView preview) {
+        placeIn(preview, null);
+    }
+
+    /**
+     * Put the scene in a preview, with its point and spot lights placed in the preview's scene.
+     * Render thread only.
+     *
+     * @param preview The preview to place it in.
+     * @param previewLights The preview's lights, from {@code previews().lights(preview)}, or null
+     *     to leave the scene's lights out.
+     */
+    public void placeIn(@NonNull PreviewView preview, @Nullable Lights previewLights) {
         place(
                 (model, transform) ->
                         preview.place(
@@ -531,6 +549,9 @@ public final class ScenePlacement {
                                 transform.position(),
                                 transform.rotation(),
                                 transform.scale()));
+        if (previewLights != null) {
+            placeLights(previewLights);
+        }
     }
 
     /**
@@ -562,28 +583,30 @@ public final class ScenePlacement {
         }
     }
 
-    /** Place the scene's point and spot lights. Directional lights are left for the sun. */
-    private void placeLights() {
+    /**
+     * Place the scene's point and spot lights. Directional lights are left for the sun.
+     *
+     * @param target Places the lights, in the world or a preview.
+     */
+    private void placeLights(@NonNull Lights target) {
+        placedLights = target;
         for (ImportedScene.ImportedLight light : imported.lights()) {
             final LightHandle handle =
                     switch (light.type()) {
                         case POINT ->
-                                graphics.lights()
-                                        .point(
-                                                light.position(),
-                                                light.color(),
-                                                LightUnits.physical(
-                                                        light.intensity() * lightScale));
+                                target.point(
+                                        light.position(),
+                                        light.color(),
+                                        LightUnits.physical(light.intensity() * lightScale));
                         case SPOT ->
-                                graphics.lights()
-                                        .spot(
-                                                light.position(),
-                                                light.direction(),
-                                                light.color(),
-                                                LightUnits.physical(light.intensity() * lightScale),
-                                                light.innerAngle(),
-                                                Math.max(light.outerAngle(), 1),
-                                                Float.NaN);
+                                target.spot(
+                                        light.position(),
+                                        light.direction(),
+                                        light.color(),
+                                        LightUnits.physical(light.intensity() * lightScale),
+                                        light.innerAngle(),
+                                        Math.max(light.outerAngle(), 1),
+                                        Float.NaN);
                         default -> null;
                     };
             if (handle != null) {
@@ -623,11 +646,13 @@ public final class ScenePlacement {
      */
     public void setLightScale(float scale) {
         lightScale = scale;
+        final Lights target = placedLights;
+        if (target == null) {
+            return;
+        }
         for (int i = 0; i < lights.size(); ++i) {
-            graphics.lights()
-                    .setIntensity(
-                            lights.get(i),
-                            LightUnits.physical(lightSources.get(i).intensity() * scale));
+            target.setIntensity(
+                    lights.get(i), LightUnits.physical(lightSources.get(i).intensity() * scale));
         }
     }
 
@@ -840,7 +865,14 @@ public final class ScenePlacement {
                     bytes = dds.getData().remaining();
                     texture = graphics.textures().load(dds, spaces.get(file));
                 } else {
-                    texture = graphics.textures().load(file.toString(), spaces.get(file));
+                    // Small textures are pixel art, like blocks', and stay sharp up close
+                    texture =
+                            graphics.textures()
+                                    .load(
+                                            file.toString(),
+                                            spaces.get(file),
+                                            TextureWrap.REPEAT,
+                                            Workbench.filterFor(file));
                     bytes = (long) texture.width() * texture.height() * 4;
                 }
             } catch (IOException | RuntimeException e) {
@@ -1029,9 +1061,13 @@ public final class ScenePlacement {
         }
         editorTextures.clear();
         textureNames.clear();
-        for (LightHandle light : lights) {
-            graphics.lights().remove(light);
+        final Lights target = placedLights;
+        if (target != null) {
+            for (LightHandle light : lights) {
+                target.remove(light);
+            }
         }
+        placedLights = null;
         lights.clear();
         lightSources.clear();
     }

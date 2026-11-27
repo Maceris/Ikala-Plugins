@@ -34,7 +34,15 @@ public final class DebugDraw {
     private final Queue<DebugShape> immediate = new ConcurrentLinkedQueue<>();
 
     /** Shapes to draw every frame until removed, by handle ID. */
-    private final Map<Long, DebugShape> persistent = new ConcurrentHashMap<>();
+    private final Map<Long, Placed> persistent = new ConcurrentHashMap<>();
+
+    /**
+     * A persistent shape and the view it is drawn in.
+     *
+     * @param shape The shape.
+     * @param viewID The view, 0 for the world.
+     */
+    private record Placed(@NonNull DebugShape shape, int viewID) {}
 
     /** Labels to draw in the next frame only. */
     private final Queue<DebugLabel> immediateLabels = new ConcurrentLinkedQueue<>();
@@ -71,9 +79,32 @@ public final class DebugDraw {
      * @return The handle for removing it.
      */
     public DebugShapeHandle add(@NonNull DebugShape shape) {
+        return add(shape, 0);
+    }
+
+    /**
+     * Draw a shape every frame in one preview, until it is removed. The preview's own space is
+     * used, and it draws debug shapes only while {@link PreviewView#setDrawsDebug} is on.
+     *
+     * @param shape The shape.
+     * @param preview The preview.
+     * @return The handle for removing it.
+     */
+    public DebugShapeHandle add(@NonNull DebugShape shape, @NonNull PreviewView preview) {
+        return add(shape, preview.getViewID());
+    }
+
+    /**
+     * Draw a shape every frame in a view until it is removed.
+     *
+     * @param shape The shape.
+     * @param viewID The view, 0 for the world.
+     * @return The handle for removing it.
+     */
+    DebugShapeHandle add(@NonNull DebugShape shape, int viewID) {
         context.checkOpen();
         final long id = NEXT_ID.incrementAndGet();
-        persistent.put(id, shape);
+        persistent.put(id, new Placed(shape, viewID));
         return new DebugShapeHandle(id);
     }
 
@@ -129,17 +160,25 @@ public final class DebugDraw {
     }
 
     /**
-     * Hand every shape to draw this frame to a consumer: the queued immediate shapes, which are
-     * removed, and the persistent shapes. Render thread only.
+     * Hand every shape to draw in a view this frame to a consumer: for the world, the queued
+     * immediate shapes, which are removed; and the persistent shapes placed in the view. Render
+     * thread only.
      *
+     * @param viewID The view being drawn, 0 for the world.
      * @param consumer Receives each shape.
      */
-    void collect(@NonNull Consumer<DebugShape> consumer) {
-        DebugShape shape;
-        while ((shape = immediate.poll()) != null) {
-            consumer.accept(shape);
+    void collect(int viewID, @NonNull Consumer<DebugShape> consumer) {
+        if (viewID == 0) {
+            DebugShape shape;
+            while ((shape = immediate.poll()) != null) {
+                consumer.accept(shape);
+            }
         }
-        persistent.values().forEach(consumer);
+        for (Placed placed : persistent.values()) {
+            if (placed.viewID() == viewID) {
+                consumer.accept(placed.shape());
+            }
+        }
     }
 
     /**

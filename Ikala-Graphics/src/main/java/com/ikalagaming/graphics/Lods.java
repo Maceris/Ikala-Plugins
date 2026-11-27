@@ -75,6 +75,22 @@ public final class Lods {
     }
 
     /**
+     * Put a world on the GPU to draw in one preview only, as {@link #add(LodDag)} does for the
+     * world. Its cut follows the preview's camera.
+     *
+     * @param dag The world.
+     * @param preview The preview it is drawn in.
+     * @return Its handle.
+     * @throws IllegalStateException If the plugin was unloaded, or the renderer isn't running.
+     */
+    public LodHandle add(@NonNull LodDag dag, @NonNull PreviewView preview) {
+        final LodHandle handle = add(dag);
+        // Set before the first batch is uploaded, so the world never shows in another view
+        renderer().getState().lods.setView(handle.id(), preview.getViewID());
+        return handle;
+    }
+
+    /**
      * Have this plugin's sections feed a live level of detail world, from now on and including the
      * sections it already has, which are baked again. Their opaque blocks are then drawn by level
      * of detail: region cells are rebuilt in the background as sections are submitted, rebaked and

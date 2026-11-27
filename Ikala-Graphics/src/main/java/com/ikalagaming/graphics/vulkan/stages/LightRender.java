@@ -166,8 +166,8 @@ public class LightRender implements RenderStage {
                         || scene.getMediumRegistry().getCount() > 0
                         || scene.getWaterRegistry().getCount() > 0
                         || !renderConfig.preview()
-                                && vulkanState.particlePool != null
-                                && vulkanState.particlePool.readVolumetricCount() > 0;
+                                && vulkanState.particlesFor(scene) != null
+                                && vulkanState.particlesFor(scene).readVolumetricCount() > 0;
         // The light cull stage wrote the lights and sorted them into clusters
         updateUniforms(scene, vulkanState, frameData, frameData.lightCount, renderConfig.preview());
         SceneRender.writeStorageBindings(

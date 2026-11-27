@@ -110,7 +110,7 @@ public class ParticleLight {
             @NonNull VulkanState state,
             long @NonNull [] lightSets,
             @NonNull Scene scene) {
-        final ParticlePool pool = state.particlePool;
+        final ParticlePool pool = state.particlesFor(scene);
         if (pool == null) {
             return;
         }

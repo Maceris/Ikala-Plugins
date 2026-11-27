@@ -155,7 +155,7 @@ public class DebugRender implements RenderStage {
         depthTested.clear();
         onTop.clear();
         final Vector3dc origin = scene.getCamera().getPosition();
-        GraphicsManager.collectDebugShapes(shape -> add(shape, origin));
+        GraphicsManager.collectDebugShapes(scene.getViewID(), shape -> add(shape, origin));
         DebugVisualizerShapes.collect(scene, frameData, shape -> add(shape, origin));
 
         final DebugVisualizers visualizers = scene.getDebugVisualizers();

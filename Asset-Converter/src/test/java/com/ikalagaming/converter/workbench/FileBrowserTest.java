@@ -23,6 +23,8 @@ class FileBrowserTest {
         assertEquals(AssetKind.IMAGE, AssetKind.of(Path.of("a", "Brick.PNG")));
         assertEquals(AssetKind.IMAGE, AssetKind.of(Path.of("sky.hdr")));
         assertEquals(AssetKind.CONTAINER, AssetKind.of(Path.of("stone.IKA")));
+        assertEquals(AssetKind.MATERIAL, AssetKind.of(Path.of("stone.Material.yml")));
+        assertEquals(AssetKind.UNKNOWN, AssetKind.of(Path.of("settings.yml")));
         assertEquals(AssetKind.UNKNOWN, AssetKind.of(Path.of("notes.txt")));
         assertEquals(AssetKind.UNKNOWN, AssetKind.of(Path.of("README")));
     }

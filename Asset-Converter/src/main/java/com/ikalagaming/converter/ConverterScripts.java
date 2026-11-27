@@ -4,13 +4,20 @@ import com.ikalagaming.converter.gui.window.MainMenu;
 import com.ikalagaming.converter.scene.ImportedScene;
 import com.ikalagaming.converter.scene.MeshExport;
 import com.ikalagaming.converter.scene.SceneImporter;
+import com.ikalagaming.converter.workbench.Comparison;
 import com.ikalagaming.converter.workbench.ContainerViewer;
+import com.ikalagaming.converter.workbench.PreviewHost;
+import com.ikalagaming.converter.workbench.SceneView;
 import com.ikalagaming.converter.workbench.Swatch;
 import com.ikalagaming.converter.workbench.TextureViewer;
 import com.ikalagaming.converter.workbench.Viewer;
 import com.ikalagaming.converter.workbench.Workbench;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.PreviewView;
+import com.ikalagaming.graphics.asset.MaterialSection;
+import com.ikalagaming.graphics.asset.MeshSection;
+import com.ikalagaming.graphics.scene.Camera;
 import com.ikalagaming.graphics.vulkan.FrameTimings;
 import com.ikalagaming.plugins.PluginInfo;
 import com.ikalagaming.plugins.PluginManager;
@@ -291,21 +298,194 @@ public final class ConverterScripts {
      * @param name The file's name, like "texture.png".
      */
     public static void captureViewer(String folder, String name) {
+        onWorkbench(workbench -> capture(workbench.getHost(), folder, name));
+    }
+
+    /**
+     * Light the workbench's 3D viewer by a lighting preset, as its toolbar list does, and log
+     * "Script: Lit by" with the preset, or that there is none by that name.
+     *
+     * @param name The preset's name, like "Noon" or "Torch cave".
+     */
+    public static void lightScene(String name) {
         onWorkbench(
-                workbench ->
-                        workbench
-                                .getHost()
-                                .capture(Path.of(folder, name))
-                                .whenComplete(
-                                        (saved, error) -> {
-                                            if (error == null) {
-                                                log.info("Script: Captured {}", saved);
-                                            } else {
-                                                log.warn(
-                                                        "Script: capture failed: {}",
-                                                        error.getMessage());
-                                            }
-                                        }));
+                workbench -> {
+                    if (workbench.getSceneView().usePreset(name)) {
+                        log.info("Script: Lit by {}", name);
+                    } else {
+                        log.warn("Script: no scene, or no lighting preset called {}", name);
+                    }
+                });
+    }
+
+    /**
+     * Show the lit scene in the workbench's 3D viewer, or what its pixels are lit with, as its
+     * toolbar list does, and log "Script: Showing" with the mode, or that there is none by that
+     * name.
+     *
+     * @param mode The mode, like "Lit", "Base color", "Roughness" or "Far flat color".
+     */
+    public static void showScene(String mode) {
+        onWorkbench(
+                workbench -> {
+                    if (workbench.getSceneView().useViewMode(mode)) {
+                        log.info("Script: Showing {}", mode);
+                    } else {
+                        log.warn("Script: no scene, or no view mode called {}", mode);
+                    }
+                });
+    }
+
+    /**
+     * Supersample the workbench's 3D viewer, with temporal anti-aliasing off, or go back to it.
+     *
+     * @param on Whether to supersample.
+     */
+    public static void supersampleScene(boolean on) {
+        onWorkbench(
+                workbench -> {
+                    workbench.getSceneView().setSupersampled(on);
+                    log.info("Script: Supersampling {}", on ? "on" : "off");
+                });
+    }
+
+    /**
+     * Draw one of the workbench's 3D viewer overlays, or stop: "grid", "bounds", "offgrid",
+     * "normals" or "wireframe". Logs "Script: Overlay" with the overlay, and for "offgrid" the
+     * count of vertices off the grid a frame later.
+     *
+     * @param name The overlay.
+     * @param on Whether to draw it.
+     */
+    public static void overlayScene(String name, boolean on) {
+        onWorkbench(
+                workbench -> {
+                    final SceneView view = workbench.getSceneView();
+                    final PreviewView preview = view.getPreview();
+                    switch (name) {
+                        case "grid" -> view.getOverlays().setGrid(on);
+                        case "bounds" -> view.getOverlays().setBounds(on);
+                        case "offgrid" -> view.getOverlays().setOffGrid(on);
+                        case "normals", "wireframe" -> {
+                            if (preview == null) {
+                                log.warn("Script: no scene for the {} overlay", name);
+                                return;
+                            }
+                            if ("normals".equals(name)) {
+                                preview.getScene().getDebugVisualizers().setNormals(on);
+                            } else {
+                                preview.getScene().getDebugVisualizers().setWireframe(on);
+                            }
+                        }
+                        default -> {
+                            log.warn("Script: no overlay called {}", name);
+                            return;
+                        }
+                    }
+                    log.info("Script: Overlay {} {}", name, on ? "on" : "off");
+                    if ("offgrid".equals(name) && on) {
+                        // Checked now rather than on the next frame the view is drawn
+                        view.getOverlays().update(view.getPlacement(), preview);
+                        log.info(
+                                "Script: {} vertices off the grid",
+                                view.getOverlays().getOffGridCount());
+                    }
+                });
+    }
+
+    /**
+     * Pin the workbench's 3D view as B, for A/B comparison, once it settles, and show A and B a
+     * given way: "side by side" or "split".
+     *
+     * @param mode How to show A and B.
+     */
+    public static void pinScene(String mode) {
+        onWorkbench(
+                workbench -> {
+                    final SceneView view = workbench.getSceneView();
+                    if (view.getPreview() == null) {
+                        log.warn("Script: no scene to pin");
+                        return;
+                    }
+                    view.getComparison().pin(view.getPreview());
+                    view.getComparison()
+                            .setMode(
+                                    "split".equalsIgnoreCase(mode)
+                                            ? Comparison.Mode.SPLIT
+                                            : Comparison.Mode.SIDE_BY_SIDE);
+                    log.info("Script: Pinning as B, {}", mode);
+                });
+    }
+
+    /**
+     * Show the open container's mesh in the 3D viewer, or its material on a sphere, as the
+     * container viewer's buttons do, and log "Script: Showing the container's" with which, or that
+     * it can't.
+     *
+     * @param what "mesh" or "material".
+     */
+    public static void containerInThreeD(String what) {
+        onWorkbench(
+                workbench -> {
+                    final ContainerViewer viewer =
+                            workbench.getHost().viewer(ContainerViewer.class);
+                    final int tag = "material".equals(what) ? MaterialSection.TAG : MeshSection.TAG;
+                    if (viewer != null && viewer.showInThreeD(tag)) {
+                        log.info("Script: Showing the container's {}", what);
+                    } else {
+                        log.warn("Script: no container with a {} is open", what);
+                    }
+                });
+    }
+
+    /**
+     * Show a scene from the 3D view's list, as picking it does: a shape like "Sphere", "Shader
+     * ball", "Particle stage", or a context scene like "Wall". Logs "Script: Picked" with the
+     * scene, or that there is none by that name.
+     *
+     * @param name The scene's name.
+     */
+    public static void pickScene(String name) {
+        onWorkbench(
+                workbench -> {
+                    showMenu(false);
+                    workbench.setVisible(true);
+                    if (workbench.pickScene(name)) {
+                        log.info("Script: Picked {}", name);
+                    } else {
+                        log.warn("Script: no scene called {}", name);
+                    }
+                });
+    }
+
+    /**
+     * Save what the workbench's 3D viewer shows to a PNG file, once its preview has settled, and
+     * log "Script: Captured" with the file, or why it failed.
+     *
+     * @param folder The folder to save in.
+     * @param name The file name.
+     */
+    public static void captureScene(String folder, String name) {
+        onWorkbench(workbench -> capture(workbench.getSceneHost(), folder, name));
+    }
+
+    /**
+     * Save what a host shows to a PNG file, logging how it went.
+     *
+     * @param host The host.
+     * @param folder The folder to save in.
+     * @param name The file name.
+     */
+    private static void capture(PreviewHost host, String folder, String name) {
+        host.capture(Path.of(folder, name))
+                .whenComplete(
+                        (saved, error) -> {
+                            if (error == null) {
+                                log.info("Script: Captured {}", saved);
+                            } else {
+                                log.warn("Script: capture failed: {}", error.getMessage());
+                            }
+                        });
     }
 
     /**
@@ -371,8 +551,8 @@ public final class ConverterScripts {
     }
 
     /**
-     * Put the camera somewhere, for checks to look at a scene from a known place. The scene view's
-     * orbit follows it.
+     * Put the camera somewhere, for checks to look at a scene from a known place: the workbench's
+     * 3D viewer's, while it shows a scene, else the world's. The viewer's orbit follows it.
      *
      * @param x Where it is.
      * @param y Where it is.
@@ -385,7 +565,7 @@ public final class ConverterScripts {
                 .ui()
                 .post(
                         () -> {
-                            final var camera = GraphicsManager.getScene().getCamera();
+                            final var camera = camera();
                             camera.setPosition(x, y, z);
                             camera.setRotation((float) pitch, (float) yaw);
                         });
@@ -402,7 +582,8 @@ public final class ConverterScripts {
     }
 
     /**
-     * Move the camera by some amount, for checks that fly through a scene a frame at a time.
+     * Move the camera by some amount, for checks that fly through a scene a frame at a time: the
+     * workbench's 3D viewer's, while it shows a scene, else the world's.
      *
      * @param dx How far along x.
      * @param dy How far along y.
@@ -413,10 +594,29 @@ public final class ConverterScripts {
                 .ui()
                 .post(
                         () -> {
-                            final var camera = GraphicsManager.getScene().getCamera();
+                            final var camera = camera();
                             final var at = camera.getPosition();
                             camera.setPosition(at.x + dx, at.y + dy, at.z + dz);
                         });
+    }
+
+    /**
+     * The camera checks move: the workbench's 3D viewer's, while it has a preview, else the
+     * world's. Render thread.
+     *
+     * @return The camera.
+     */
+    private static Camera camera() {
+        final PreviewView preview =
+                PluginManager.getInstance()
+                        .getPlugin(ConverterPlugin.PLUGIN_NAME)
+                        .filter(ConverterPlugin.class::isInstance)
+                        .map(plugin -> ((ConverterPlugin) plugin).getWorkbench())
+                        .map(workbench -> workbench.getSceneView().getPreview())
+                        .orElse(null);
+        return preview != null
+                ? preview.getScene().getCamera()
+                : GraphicsManager.getScene().getCamera();
     }
 
     /**

@@ -149,7 +149,7 @@ public class Taa implements RenderStage {
             @NonNull VulkanState state,
             RenderConfig renderConfig) {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
-        if (!GraphicsManager.getSettings().taa) {
+        if (!GraphicsManager.getSettings().taa || (scene != null && !scene.isTemporalAa())) {
             frameData.taaApplied = false;
             historyValid = false;
             return;

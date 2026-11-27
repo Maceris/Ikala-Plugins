@@ -204,8 +204,8 @@ public class ParticleUpdate implements RenderStage {
             @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState state,
             RenderConfig renderConfig) {
-        final ParticlePool pool = state.particlePool;
-        if (scene == null || pool == null) {
+        final ParticlePool pool = scene == null ? null : state.particlesFor(scene);
+        if (pool == null) {
             return;
         }
         preExposure = scene.getPreExposure();

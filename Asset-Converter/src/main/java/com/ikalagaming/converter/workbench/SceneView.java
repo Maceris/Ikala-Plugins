@@ -1,27 +1,31 @@
 package com.ikalagaming.converter.workbench;
 
+import com.ikalagaming.converter.ConverterPlugin;
 import com.ikalagaming.converter.scene.ImportedScene;
 import com.ikalagaming.converter.scene.ImportedScene.Node;
 import com.ikalagaming.converter.scene.PreviewShapes;
 import com.ikalagaming.converter.scene.ScenePicker;
 import com.ikalagaming.converter.scene.ScenePlacement;
-import com.ikalagaming.graphics.CameraManager;
 import com.ikalagaming.graphics.DebugShapeHandle;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.RenderConfig;
+import com.ikalagaming.graphics.LightHandle;
+import com.ikalagaming.graphics.Lights;
+import com.ikalagaming.graphics.PreviewView;
 import com.ikalagaming.graphics.TextureHandle;
+import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.gui.IkGui;
-import com.ikalagaming.graphics.gui.component.GuiWindow;
+import com.ikalagaming.graphics.gui.data.DrawList;
 import com.ikalagaming.graphics.gui.data.IkIO;
+import com.ikalagaming.graphics.gui.data.IkInt;
 import com.ikalagaming.graphics.gui.data.IkString;
 import com.ikalagaming.graphics.gui.data.ListClipper;
 import com.ikalagaming.graphics.gui.enums.MouseButton;
+import com.ikalagaming.graphics.gui.flags.ButtonFlags;
 import com.ikalagaming.graphics.gui.flags.SliderFlags;
 import com.ikalagaming.graphics.gui.flags.TableFlags;
 import com.ikalagaming.graphics.gui.flags.TreeNodeFlags;
-import com.ikalagaming.graphics.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.gui.util.Color;
 import com.ikalagaming.graphics.scene.LightUnits;
 import com.ikalagaming.graphics.scene.PhysicalSky;
@@ -31,6 +35,8 @@ import com.ikalagaming.graphics.scene.debug.DebugBox;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.ui.UiFrame;
+import com.ikalagaming.graphics.vulkan.FilterView;
+import com.ikalagaming.launcher.PluginFolder;
 
 import lombok.Getter;
 import lombok.NonNull;
@@ -41,23 +47,34 @@ import org.joml.Vector3d;
 import org.joml.Vector3f;
 import org.joml.Vector3fc;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import javax.annotation.Nullable;
 
 /**
- * Shows a scene put in the world by a {@link ScenePlacement}: switches the renderer to draw the
- * scene with a sun, lists the scene's nodes in an outliner, picks meshes with the mouse and
- * outlines them, shows details of the scene and the selection, edits the lighting and, through a
- * {@link MaterialEditor}, the materials, and turns the camera around the scene with the mouse.
- * Render thread only.
+ * The 3D viewer: shows a scene placed by a {@link ScenePlacement} in a {@link PreviewView} of its
+ * own, lit by its own sun and sky, so the world and the renderer's settings are left alone. Lists
+ * the scene's nodes in an outliner, picks meshes with the mouse and outlines them, shows details of
+ * the scene and the selection, edits the lighting and, through a {@link MaterialEditor}, the
+ * materials, and turns the camera around the scene with the mouse. Render thread only.
  */
-public class SceneView {
-    /** The window that reads the mouse for the orbit camera, drawing nothing. */
-    static final String INPUT_WINDOW = "Workbench scene input";
+public class SceneView implements Viewer {
+    /** How wide the view mode list is. */
+    private static final float VIEW_MODE_WIDTH = 140;
+
+    /** How wide the lighting preset list is. */
+    private static final float PRESET_WIDTH = 160;
+
+    /** The size the preview starts at, before the panel it is drawn in is measured. */
+    private static final int START_SIZE = 512;
+
+    /** Behind the preview before its first frame is drawn. */
+    private static final int BACKGROUND = Color.rgba(0.08f, 0.08f, 0.09f, 1.0f);
 
     /** The sun's color. */
     private static final Vector3fc SUN_COLOR = new Vector3f(1, 0.97f, 0.9f);
@@ -91,9 +108,6 @@ public class SceneView {
 
     private static final float MAX_EV = 18;
 
-    /** The most exposure compensation the slider offers, in stops either way. */
-    private static final float MAX_COMPENSATION = 6;
-
     /** The most the imported lights' strength can be scaled by. */
     private static final float MAX_LIGHT_SCALE = 20;
 
@@ -109,14 +123,126 @@ public class SceneView {
     /** Watches particles on the particle stage. */
     @Getter private final ParticleViewer particles;
 
+    /**
+     * The grid, bounds and other checks drawn over the scene. -- GETTER -- The overlays.
+     *
+     * @return The overlays.
+     */
+    @Getter private final SceneOverlays overlays;
+
+    /**
+     * The view beside a pinned image of it. -- GETTER -- The A/B comparison.
+     *
+     * @return The comparison.
+     */
+    @Getter private final Comparison comparison;
+
+    /** Whether a left drag that started on the split line is moving it. */
+    private boolean splitDragging;
+
+    /** How near the split line, in pixels, a press grabs it. */
+    private static final float SPLIT_GRAB = 8;
+
     /** The selected mesh of the selected node, a scene mesh index, or -1. */
     private int selectedMesh = -1;
 
-    /** The exposure before entering. */
-    private float previousExposure = LightUnits.DEFAULT_EV100;
+    /**
+     * What the scene is drawn into, made when the first scene is shown and kept until the viewer
+     * closes. -- GETTER -- The preview the scene is drawn into.
+     *
+     * @return The preview, or null before a scene is shown.
+     */
+    @Getter private @Nullable PreviewView preview;
 
-    /** The exposure compensation before the scene was shown. */
-    private float previousCompensation;
+    /** Places the scene's lights in the preview. */
+    private @Nullable Lights previewLights;
+
+    /** The skybox the preview started with, for going back to the plain sky. */
+    private @Nullable TextureHandle plainSkybox;
+
+    /** How the plain skybox lays the sky out. */
+    private SkyboxLayout plainSkyboxLayout = SkyboxLayout.CUBE_FACES;
+
+    /** Closes the scene, for the scene section's button. */
+    private Runnable closeScene = () -> {};
+
+    /** What can be shown: shapes, stages and context scenes, picked in the toolbar. */
+    public interface SceneChoices {
+        /**
+         * The scenes' names, in the list's order.
+         *
+         * @return The names.
+         */
+        String[] names();
+
+        /**
+         * The scene shown.
+         *
+         * @return Its index, or -1 for one opened from a file.
+         */
+        int current();
+
+        /**
+         * Show a scene.
+         *
+         * @param index Its index.
+         */
+        void pick(int index);
+    }
+
+    /** What the toolbar's scene list offers, or null for no list. */
+    private @Nullable SceneChoices choices;
+
+    /** Scratch for the scene list. */
+    private final IkInt choice = new IkInt(0);
+
+    /** How wide the scene list is. */
+    private static final float SCENE_WIDTH = 170;
+
+    /** The lighting presets, read the first time a scene is shown. */
+    private List<LightingPreset> presets;
+
+    /** Their names, for the toolbar's list. */
+    private String[] presetNames = new String[0];
+
+    /** The preset the scene is lit by, an index into {@link #presets}. */
+    private final IkInt preset = new IkInt(0);
+
+    /** What the view can show in place of the lit scene, in the toolbar's order. */
+    static final List<FilterView> VIEW_MODES =
+            List.of(
+                    FilterView.DEFAULT,
+                    FilterView.BASE_COLOR,
+                    FilterView.NORMAL,
+                    FilterView.ROUGHNESS,
+                    FilterView.METALLIC,
+                    FilterView.FAR_COLOR,
+                    FilterView.MATERIAL,
+                    FilterView.DEPTH);
+
+    /** The view modes' names, for the toolbar's list. */
+    private static final String[] VIEW_MODE_NAMES =
+            VIEW_MODES.stream()
+                    .map(mode -> mode == FilterView.DEFAULT ? "Lit" : mode.getDisplayName())
+                    .toArray(String[]::new);
+
+    /** Whether the view is supersampled, kept across previews. */
+    private boolean supersample;
+
+    /** What the view shows, an index into {@link #VIEW_MODES}. */
+    private final IkInt viewMode = new IkInt(0);
+
+    /** The point lights the preset placed, removed when another is picked. */
+    private final List<LightHandle> presetLights = new ArrayList<>();
+
+    /** Where the preview was drawn on screen last frame, for picking. */
+    private final Vector2f viewOrigin = new Vector2f();
+
+    /** The size the preview was drawn at on screen last frame. */
+    private final Vector2f viewSize = new Vector2f(START_SIZE, START_SIZE);
+
+    /** Scratch for the mouse position. */
+    private final Vector2f mouse = new Vector2f();
 
     /** Scratch for sliders. */
     private final float[] value = new float[1];
@@ -146,6 +272,9 @@ public class SceneView {
     /** Whether a left drag is turning the camera. */
     private boolean turning;
 
+    /** Whether the left button went down over the preview, so its release may pick. */
+    private boolean leftPressed;
+
     /**
      * Each outliner node's ID and label, made once rather than every frame, since a scene can have
      * thousands of nodes. Cleared when the scene changes.
@@ -155,41 +284,11 @@ public class SceneView {
     /** Clips long runs of leaf nodes in the outliner to the rows in view. */
     private final ListClipper outlinerClipper = new ListClipper();
 
-    /**
-     * Whether the left button went down over the scene rather than the UI, so only a click that
-     * starts on the scene picks or turns, not one that starts on a slider and ends over a mesh.
-     */
-    private boolean pressedOnScene;
-
     /** What the current turn swings around. */
     private final Vector3d pivot = new Vector3d();
 
     /** Filters the outliner by name. */
     private final IkString filter = new IkString(64);
-
-    /** Whether the renderer was switched to draw the scene, so it is switched back. */
-    private boolean entered;
-
-    /** The pipeline before entering. */
-    private RenderConfig previousPipeline;
-
-    /** The sun before entering. */
-    private DirectionalLight previousSun;
-
-    /** The ambient light before entering. */
-    private AmbientLight previousAmbient;
-
-    /** The physical sky before entering, or null for the skybox. */
-    private PhysicalSky previousPhysicalSky;
-
-    /** Whether the exposure adapted before entering. */
-    private boolean previousAutoExposure;
-
-    /** The skybox texture before entering. */
-    private TextureHandle previousSkybox;
-
-    /** How the skybox texture laid the sky out before entering. */
-    private SkyboxLayout previousSkyboxLayout = SkyboxLayout.CUBE_FACES;
 
     /** The environment map the sky shows, which the workbench owns, or null for the plain sky. */
     private TextureHandle sky;
@@ -199,12 +298,6 @@ public class SceneView {
 
     /** Goes back to the plain sky, releasing the map. */
     private Runnable clearSky = () -> {};
-
-    /** The camera position before entering. */
-    private final Vector3d previousPosition = new Vector3d();
-
-    /** The camera rotation before entering. */
-    private final Vector2f previousRotation = new Vector2f();
 
     /** How far texture loading has come, for the details. */
     private String textureProgress = "";
@@ -227,22 +320,72 @@ public class SceneView {
         lod = new LodSection(graphics);
         export = new ExportSection(graphics);
         particles = new ParticleViewer(graphics);
+        overlays = new SceneOverlays(graphics);
+        comparison = new Comparison(graphics.textures(), graphics.ui());
     }
 
     /**
-     * Show a placed scene, switching the renderer to draw it and framing it.
+     * Open a material file onto every mesh of the scene's first node that has any, as the shape of
+     * a preview scene is, and select that node. Render thread, with a scene shown.
      *
-     * @param newPlacement The scene, already placed.
+     * @param file The material, binary or text.
+     * @return True if it was read and put on a mesh.
+     */
+    public boolean wearMaterial(@NonNull Path file) {
+        final ScenePlacement shown = placement;
+        if (shown == null) {
+            return false;
+        }
+        final Material material = materials.open(shown, file);
+        if (material == null) {
+            return false;
+        }
+        for (Node node : shown.getImported().root().children()) {
+            if (node.meshes().length > 0) {
+                for (int mesh : node.meshes()) {
+                    shown.assign(node, mesh, material);
+                }
+                select(node, -1);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Offer scenes to show in the toolbar.
+     *
+     * @param offered The scenes.
+     */
+    public void setSceneChoices(@NonNull SceneChoices offered) {
+        choices = offered;
+    }
+
+    /**
+     * Set what the scene section's close button does.
+     *
+     * @param close Closes the scene.
+     */
+    public void setCloseScene(@NonNull Runnable close) {
+        closeScene = close;
+    }
+
+    /**
+     * Show a scene, placing it in the preview, made the first time, and framing it.
+     *
+     * @param newPlacement The scene, ready to place.
      */
     public void show(@NonNull ScenePlacement newPlacement) {
         clear();
+        final PreviewView view = openPreview();
+        newPlacement.placeIn(view, previewLights);
         placement = newPlacement;
         outlinerText.clear();
-        enter();
+        applyPreset();
         useFileSun();
         frame(newPlacement.getImported().root());
         if (PreviewShapes.PARTICLE_STAGE.equals(newPlacement.getImported().file())) {
-            particles.start();
+            particles.start(view);
         }
     }
 
@@ -256,8 +399,7 @@ public class SceneView {
         if (sun == null) {
             return;
         }
-        GraphicsManager.getScene()
-                .getSceneLights()
+        scene().getSceneLights()
                 .setDirLight(
                         new DirectionalLight(
                                 new Vector3f(sun.color()),
@@ -265,9 +407,10 @@ public class SceneView {
                                 SUN_INTENSITY * sun.intensity()));
     }
 
-    /** Take the shown scene out of the world, if there is one, leaving the renderer as it is. */
+    /** Take the shown scene out of the preview, if there is one, keeping the preview. */
     public void clear() {
         particles.stop();
+        overlays.clear();
         select(null, -1);
         materials.clear();
         lod.close();
@@ -279,10 +422,257 @@ public class SceneView {
         textureProgress = "";
     }
 
-    /** Take the scene out and put the renderer, lights and camera back as they were. */
+    /** Take the scene out and close the preview. */
+    @Override
     public void close() {
         clear();
-        leave();
+        comparison.release();
+        if (preview != null) {
+            preview.close();
+            preview = null;
+            previewLights = null;
+            presetLights.clear();
+        }
+    }
+
+    /**
+     * The lighting presets in the converter's data folder, read once.
+     *
+     * @return The presets, in their order.
+     */
+    private List<LightingPreset> presets() {
+        if (presets == null) {
+            presets =
+                    LightingPreset.loadAll(
+                            PluginFolder.getResource(
+                                            ConverterPlugin.PLUGIN_NAME,
+                                            PluginFolder.ResourceType.DATA,
+                                            LightingPreset.FOLDER)
+                                    .toPath());
+            presetNames = presets.stream().map(LightingPreset::name).toArray(String[]::new);
+        }
+        return presets;
+    }
+
+    /**
+     * Supersample the view, or go back to temporal anti-aliasing, as the toolbar's box does. Kept
+     * for the next scenes shown.
+     *
+     * @param on Whether to supersample.
+     */
+    public void setSupersampled(boolean on) {
+        supersample = on;
+        if (preview != null) {
+            preview.setSupersampled(on);
+        }
+    }
+
+    /**
+     * Show the lit scene or what its pixels are lit with, by name, as the toolbar's list does.
+     *
+     * @param name The mode's name, like "Lit" or "Roughness", ignoring case.
+     * @return True if there is such a mode and a scene to show it on.
+     */
+    public boolean useViewMode(@NonNull String name) {
+        for (int i = 0; i < VIEW_MODE_NAMES.length; ++i) {
+            if (VIEW_MODE_NAMES[i].equalsIgnoreCase(name) && preview != null) {
+                viewMode.set(i);
+                preview.setFilterView(VIEW_MODES.get(i));
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Light the scene by a preset, by name, as the toolbar's list does.
+     *
+     * @param name The preset's name, ignoring case.
+     * @return True if there is such a preset and a scene to light.
+     */
+    public boolean usePreset(@NonNull String name) {
+        final List<LightingPreset> all = presets();
+        for (int i = 0; i < all.size(); ++i) {
+            if (all.get(i).name().equalsIgnoreCase(name)) {
+                preset.set(i);
+                return applyPreset();
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Light the scene by the picked preset: its sun, sky, exposure and point lights, these placed
+     * around the middle of what is shown.
+     *
+     * @return True if it was applied: there is a preview and the preset exists.
+     */
+    private boolean applyPreset() {
+        final PreviewView view = preview;
+        final Lights lights = previewLights;
+        final List<LightingPreset> all = presets();
+        if (view == null || lights == null || all.isEmpty()) {
+            return false;
+        }
+        for (LightHandle handle : presetLights) {
+            lights.remove(handle);
+        }
+        presetLights.clear();
+        final int index = Math.clamp(preset.get(), 0, all.size() - 1);
+        final Vector3d middle = new Vector3d();
+        final ScenePlacement shown = placement;
+        if (shown != null && shown.getImported().bounds(shown.getImported().root(), min, max)) {
+            middle.set(min).add(max).mul(0.5);
+        }
+        presetLights.addAll(all.get(index).apply(view.getScene(), lights, middle));
+        if (sky != null) {
+            // An environment map the user picked still lights the scene, in place of the sky
+            view.getScene().setPhysicalSky(null);
+        }
+        return true;
+    }
+
+    /**
+     * Draw the lighting preset list.
+     *
+     * @param frame The current frame.
+     */
+    @Override
+    public void drawToolbar(@NonNull UiFrame frame) {
+        final SceneChoices offered = choices;
+        if (offered != null) {
+            final String[] names = offered.names();
+            final int current = offered.current();
+            IkGui.sameLine();
+            IkGui.setNextItemWidth(SCENE_WIDTH);
+            choice.set(current);
+            final String label = current < 0 ? "From a file" : names[current];
+            if (IkGui.beginCombo("##scene-list", label)) {
+                for (int i = 0; i < names.length; ++i) {
+                    if (IkGui.selectable(names[i] + "##scene" + i, i == current)) {
+                        final int picked = i;
+                        frame.fire(() -> offered.pick(picked));
+                    }
+                }
+                IkGui.endCombo();
+            }
+            IkGui.setItemTooltip(
+                    "Shapes to try materials on, the particle stage, and scenes to judge a block"
+                            + " in: walls, floors and neighbors. Context scenes are .context.yml"
+                            + " files in the converter's data folder.");
+        }
+        if (preview == null) {
+            return;
+        }
+        IkGui.sameLine();
+        IkGui.setNextItemWidth(VIEW_MODE_WIDTH);
+        if (IkGui.combo("##view-mode", viewMode, VIEW_MODE_NAMES)) {
+            preview.setFilterView(VIEW_MODES.get(viewMode.get()));
+        }
+        IkGui.setItemTooltip(
+                "The lit scene, or what each pixel is lit with: its base color, normal,"
+                        + " roughness and metalness, the flat color far levels of detail draw,"
+                        + " which material it is, or how far away");
+        IkGui.sameLine();
+        if (IkGui.checkbox("Supersample", preview.isSupersampled())) {
+            setSupersampled(!preview.isSupersampled());
+        }
+        IkGui.setItemTooltip(
+                "Draw larger and filter down, without temporal anti-aliasing: a still image with"
+                        + " no jitter or ghosting, as far as the window's size allows");
+        if (presets().isEmpty()) {
+            comparison.drawControls(preview);
+            return;
+        }
+        IkGui.sameLine();
+        IkGui.setNextItemWidth(PRESET_WIDTH);
+        if (IkGui.combo("##preset", preset, presetNames)) {
+            applyPreset();
+        }
+        IkGui.setItemTooltip(
+                "Light the scene the same way each time, in physical units with a fixed"
+                        + " exposure, to compare assets. Presets are .lighting.yml files in the"
+                        + " converter's data folder.");
+        comparison.drawControls(preview);
+    }
+
+    /**
+     * Make the preview the scene is drawn into, lit by a sun and a bright sky, at the world's
+     * exposure, unless it is already open.
+     *
+     * @return The preview.
+     */
+    private PreviewView openPreview() {
+        if (preview != null) {
+            return preview;
+        }
+        final PreviewView view = graphics.previews().create((int) viewSize.x, (int) viewSize.y);
+        // The debug stage draws the selection's outline
+        view.setDrawsDebug(true);
+        view.setFilterView(VIEW_MODES.get(viewMode.get()));
+        view.setSupersampled(supersample);
+        previewLights = graphics.previews().lights(view);
+        final Scene scene = view.getScene();
+        final Scene world = GraphicsManager.getScene();
+        if (world != null) {
+            scene.setExposureValue(world.getExposureValue());
+            scene.setPhysicalSky(world.getPhysicalSky());
+        }
+        plainSkybox = scene.getSkyboxTexture();
+        plainSkyboxLayout = scene.getSkyboxLayout();
+        if (sky != null) {
+            scene.setSkyboxTexture(sky, SkyboxLayout.EQUIRECTANGULAR);
+        }
+        scene.getSceneLights()
+                .setDirLight(
+                        new DirectionalLight(
+                                // Copies, since the lighting panel edits the light's in place
+                                new Vector3f(SUN_COLOR),
+                                new Vector3f(SUN_DIRECTION),
+                                SUN_INTENSITY));
+        scene.getSceneLights()
+                .setAmbientLight(new AmbientLight(new Vector3f(1, 1, 1), AMBIENT_INTENSITY));
+        preview = view;
+        return view;
+    }
+
+    /**
+     * The preview's scene.
+     *
+     * @return The scene.
+     * @throws IllegalStateException If no scene was shown yet.
+     */
+    private Scene scene() {
+        final PreviewView view = preview;
+        if (view == null) {
+            throw new IllegalStateException("No scene is shown");
+        }
+        return view.getScene();
+    }
+
+    @Override
+    public String kind() {
+        return "3D";
+    }
+
+    @Override
+    public @Nullable Path file() {
+        final ScenePlacement shown = placement;
+        return shown == null ? null : shown.getImported().file();
+    }
+
+    @Override
+    public boolean canCapture() {
+        return preview != null && placement != null;
+    }
+
+    @Override
+    public CompletableFuture<Path> capture(@NonNull Path file) {
+        final PreviewView view = preview;
+        if (view == null) {
+            return CompletableFuture.failedFuture(new IllegalStateException("No scene is shown"));
+        }
+        return view.capture(file);
     }
 
     /**
@@ -306,73 +696,14 @@ public class SceneView {
         clearSky = plainSky;
         sky = texture;
         skyName = name;
-        if (entered) {
-            final Scene scene = GraphicsManager.getScene();
+        final PreviewView view = preview;
+        if (view != null) {
             if (texture != null) {
-                scene.setSkyboxTexture(texture, SkyboxLayout.EQUIRECTANGULAR);
+                view.getScene().setSkyboxTexture(texture, SkyboxLayout.EQUIRECTANGULAR);
             } else {
-                scene.setSkyboxTexture(previousSkybox, previousSkyboxLayout);
+                view.getScene().setSkyboxTexture(plainSkybox, plainSkyboxLayout);
             }
         }
-    }
-
-    /** Switch the renderer to draw the scene, with a sun, remembering what to put back. */
-    private void enter() {
-        if (entered) {
-            return;
-        }
-        final Scene scene = GraphicsManager.getScene();
-        entered = true;
-        previousPipeline = GraphicsManager.getPipelineConfig();
-        previousSun = scene.getSceneLights().getDirLight();
-        previousAmbient = scene.getSceneLights().getAmbientLight();
-        previousExposure = scene.getExposureValue();
-        previousCompensation = scene.getExposureCompensation();
-        previousPhysicalSky = scene.getPhysicalSky();
-        previousAutoExposure = scene.isAutoExposure();
-        previousSkybox = scene.getSkyboxTexture();
-        previousSkyboxLayout = scene.getSkyboxLayout();
-        if (sky != null) {
-            scene.setSkyboxTexture(sky, SkyboxLayout.EQUIRECTANGULAR);
-        }
-        previousPosition.set(scene.getCamera().getPosition());
-        previousRotation.set(scene.getCamera().getRotation());
-        // The debug stage draws the selection's outline
-        GraphicsManager.swapPipeline(RenderConfig.WORLD.withDebug(true));
-        scene.getSceneLights()
-                .setDirLight(
-                        new DirectionalLight(
-                                // Copies, since the lighting panel edits the light's in place
-                                new Vector3f(SUN_COLOR),
-                                new Vector3f(SUN_DIRECTION),
-                                SUN_INTENSITY));
-        scene.getSceneLights()
-                .setAmbientLight(new AmbientLight(new Vector3f(1, 1, 1), AMBIENT_INTENSITY));
-        GraphicsManager.getWindowManager().addWindow(graphics, INPUT_WINDOW, new InputWindow());
-        GraphicsManager.getWindowManager().show(INPUT_WINDOW);
-    }
-
-    /** Put the renderer, lights and camera back as they were before entering. */
-    private void leave() {
-        if (!entered) {
-            return;
-        }
-        entered = false;
-        GraphicsManager.getWindowManager().removeWindow(INPUT_WINDOW);
-        final Scene scene = GraphicsManager.getScene();
-        if (scene == null) {
-            return;
-        }
-        scene.getSceneLights().setDirLight(previousSun);
-        scene.getSceneLights().setAmbientLight(previousAmbient);
-        scene.setExposureValue(previousExposure);
-        scene.setExposureCompensation(previousCompensation);
-        scene.setPhysicalSky(previousPhysicalSky);
-        scene.setAutoExposure(previousAutoExposure);
-        scene.setSkyboxTexture(previousSkybox, previousSkyboxLayout);
-        scene.getCamera().setPosition(previousPosition.x, previousPosition.y, previousPosition.z);
-        scene.getCamera().setRotation(previousRotation.x, previousRotation.y);
-        GraphicsManager.swapPipeline(previousPipeline);
     }
 
     /**
@@ -387,7 +718,7 @@ public class SceneView {
         }
         final Vector3d center = new Vector3d(min).add(max).mul(0.5);
         final double radius = Math.max(0.01, max.distance(min) / 2);
-        final var camera = GraphicsManager.getScene().getCamera();
+        final var camera = scene().getCamera();
         if (camera.getRotation().x < 0.05f) {
             // Looking level or up, so tip down to see the ground the scene stands on
             camera.setRotation(FRAMING_PITCH, camera.getRotation().y);
@@ -438,7 +769,10 @@ public class SceneView {
             half.mul(scale);
             final Vector3d center = node.world().transformPosition(localCenter);
             highlights.add(
-                    graphics.debug().add(new DebugBox(center, half, orientation, HIGHLIGHT, true)));
+                    graphics.debug()
+                            .add(
+                                    new DebugBox(center, half, orientation, HIGHLIGHT, true),
+                                    preview));
         }
     }
 
@@ -595,9 +929,9 @@ public class SceneView {
      * Draw details of the scene and the selected node, and buttons to frame and close.
      *
      * @param frame The current frame.
-     * @param closeScene Closes the scene.
      */
-    public void drawProperties(@NonNull UiFrame frame, @NonNull Runnable closeScene) {
+    @Override
+    public void drawProperties(@NonNull UiFrame frame) {
         final ScenePlacement shown = placement;
         if (shown == null) {
             IkGui.textDisabled("No scene open");
@@ -614,6 +948,9 @@ public class SceneView {
         if (IkGui.collapsingHeader("Lighting###lighting", TreeNodeFlags.DEFAULT_OPEN)) {
             drawLighting(shown);
         }
+        if (IkGui.collapsingHeader("Overlays###overlays") && preview != null) {
+            overlays.drawControls(preview);
+        }
         if (IkGui.collapsingHeader("Selected###selected", TreeNodeFlags.DEFAULT_OPEN)) {
             final Node node = selected;
             if (node == null) {
@@ -626,7 +963,7 @@ public class SceneView {
             materials.draw(frame, shown, selected, selectedMesh);
         }
         if (IkGui.collapsingHeader("Level of detail###lod", TreeNodeFlags.DEFAULT_OPEN)) {
-            lod.draw(shown, selected);
+            lod.draw(shown, selected, preview);
         }
         if (IkGui.collapsingHeader("Export###export")) {
             export.draw(shown, selected);
@@ -685,7 +1022,6 @@ public class SceneView {
             frame.fire(closeScene);
         }
         IkGui.textDisabled("Click picks, left drag turns, middle drag pans, wheel zooms");
-        IkGui.textWrapped(CameraManager.CONTROLS);
     }
 
     /**
@@ -720,7 +1056,7 @@ public class SceneView {
      * @param shown The scene.
      */
     private void drawLighting(ScenePlacement shown) {
-        final Scene scene = GraphicsManager.getScene();
+        final Scene scene = scene();
         final DirectionalLight sun = scene.getSceneLights().getDirLight();
         // The direction the light travels, down for a sun overhead
         final Vector3f direction = sun.getDirection();
@@ -764,24 +1100,13 @@ public class SceneView {
                 "Sky (cd/m^2)", value, 0, MAX_AMBIENT, "%.0f", SliderFlags.LOGARITHMIC)) {
             ambient.setIntensity(value[0]);
         }
-        if (scene.isAutoExposure()) {
-            value[0] = scene.getExposureCompensation();
-            if (IkGui.sliderFloat(
-                    "Compensation (stops)", value, -MAX_COMPENSATION, MAX_COMPENSATION, "%+.1f")) {
-                scene.setExposureCompensation(value[0]);
-            }
-        } else {
-            value[0] = scene.getExposureValue();
-            if (IkGui.sliderFloat("Exposure (EV100)", value, MIN_EV, MAX_EV, "%.1f")) {
-                scene.setExposureValue(value[0]);
-            }
+        value[0] = scene.getExposureValue();
+        if (IkGui.sliderFloat("Exposure (EV100)", value, MIN_EV, MAX_EV, "%.1f")) {
+            scene.setExposureValue(value[0]);
         }
+        IkGui.setItemTooltip("Fixed, so two assets compare under the same exposure");
         if (IkGui.checkbox("Physical sky", scene.getPhysicalSky() != null)) {
             scene.setPhysicalSky(scene.getPhysicalSky() == null ? new PhysicalSky() : null);
-        }
-        IkGui.sameLine();
-        if (IkGui.checkbox("Auto exposure", scene.isAutoExposure())) {
-            scene.setAutoExposure(!scene.isAutoExposure());
         }
         if (sky != null) {
             IkGui.text("Sky: " + skyName);
@@ -918,30 +1243,129 @@ public class SceneView {
     }
 
     /**
-     * Turn the camera around the scene with the mouse where no UI is: left drag turns, middle drag
-     * pans, and the wheel zooms. The right button still flies, as everywhere.
+     * Draw the preview, filling the immediate area, and turn the camera around the scene with the
+     * mouse over it: left drag turns, middle drag pans, and the wheel zooms. A left click picks.
+     *
+     * @param frame The current frame.
      */
-    private void handleMouse() {
-        final IkIO io = IkGui.getIO();
-        final var camera = GraphicsManager.getScene().getCamera();
-        orbit.follow(camera);
-        if (IkGui.isMouseClicked(MouseButton.LEFT)) {
-            pressedOnScene = !io.wantCaptureMouse;
+    @Override
+    public void drawContent(@NonNull UiFrame frame) {
+        final PreviewView view = preview;
+        if (view == null || placement == null) {
+            IkGui.textDisabled(
+                    "Pick a scene above, or open a model, a material, a look or a container");
+            return;
         }
-        if (io.wantCaptureMouse) {
+        IkGui.getCursorScreenPos(viewOrigin);
+        IkGui.getContentRegionAvailable(viewSize);
+        viewSize.x = Math.max(1, (float) Math.floor(viewSize.x));
+        viewSize.y = Math.max(1, (float) Math.floor(viewSize.y));
+        view.resize((int) viewSize.x, (int) viewSize.y);
+        // Drawn every frame while shown, as the world was: materials, textures and lights change
+        // in many places, and the editor draws nothing else
+        view.requestFrames(2);
+        plainSkyFromAmbient(view.getScene());
+
+        final DrawList drawList = IkGui.getWindowDrawList();
+        final float right = viewOrigin.x + viewSize.x;
+        final float bottom = viewOrigin.y + viewSize.y;
+        overlays.update(placement, view);
+        final TextureHandle texture = view.getTexture();
+        IkGui.getMousePos(mouse);
+        if (texture == null) {
+            drawList.addRectFilled(viewOrigin.x, viewOrigin.y, right, bottom, BACKGROUND);
+        } else {
+            comparison.draw(
+                    drawList,
+                    texture,
+                    viewOrigin.x,
+                    viewOrigin.y,
+                    viewSize.x,
+                    viewSize.y,
+                    mouse.x,
+                    splitDragging);
+        }
+        // Catches the mouse, so dragging turns the camera instead of moving the window
+        IkGui.invisibleButton(
+                "scene",
+                viewSize.x,
+                viewSize.y,
+                ButtonFlags.MOUSE_BUTTON_LEFT | ButtonFlags.MOUSE_BUTTON_MIDDLE);
+        handleMouse(view, IkGui.isItemHovered(), IkGui.isItemActive());
+    }
+
+    /**
+     * Draw the plain sky, with neither a physical sky nor a map, as bright as the ambient light, so
+     * it follows the exposure like everything it lights: black with no sky light, as in a cave. The
+     * renderer draws a plain sky at a fixed color otherwise.
+     *
+     * @param scene The preview's scene.
+     */
+    static void plainSkyFromAmbient(@NonNull Scene scene) {
+        if (scene.getPhysicalSky() != null || scene.getSkyboxTexture() != null) {
+            return;
+        }
+        final AmbientLight ambient = scene.getSceneLights().getAmbientLight();
+        final float scale = ambient.getIntensity() * scene.getPreExposure();
+        // The sky shader decodes the color as sRGB
+        scene.getSkyboxDiffuse()
+                .set(
+                        encodeSrgb(ambient.getColor().x * scale),
+                        encodeSrgb(ambient.getColor().y * scale),
+                        encodeSrgb(ambient.getColor().z * scale),
+                        1);
+    }
+
+    /**
+     * Encode a linear value as sRGB, beyond 1 too, unlike {@link TextureViewer#toSrgb}, since a sky
+     * can be brighter than white before the exposure.
+     *
+     * @param linear The linear value.
+     * @return The sRGB value.
+     */
+    static float encodeSrgb(float linear) {
+        if (linear <= 0.003_130_8f) {
+            return Math.max(0, linear * 12.92f);
+        }
+        return (float) (1.055 * Math.pow(linear, 1 / 2.4) - 0.055);
+    }
+
+    /**
+     * Turn, pan and zoom the camera, and pick, from the mouse over the preview.
+     *
+     * @param view The preview.
+     * @param hovered Whether the mouse is over the preview.
+     * @param active Whether a press that started over the preview is held.
+     */
+    private void handleMouse(PreviewView view, boolean hovered, boolean active) {
+        final IkIO io = IkGui.getIO();
+        final var camera = view.getScene().getCamera();
+        orbit.follow(camera);
+        if (hovered && IkGui.isMouseClicked(MouseButton.LEFT)) {
+            leftPressed = true;
+            // A press on the split line moves it rather than turning or picking
+            final float splitX = viewOrigin.x + viewSize.x * comparison.getSplit();
+            splitDragging =
+                    comparison.getMode() == Comparison.Mode.SPLIT
+                            && Math.abs(mouse.x - splitX) <= SPLIT_GRAB;
+        }
+        if (splitDragging) {
             if (!IkGui.isMouseDown(MouseButton.LEFT)) {
-                // A turn that ended over a panel is over
-                turning = false;
+                splitDragging = false;
+                leftPressed = false;
             }
             return;
         }
         // A press that never became a drag is a click; turning is still set on the release frame
-        if (IkGui.isMouseReleased(MouseButton.LEFT) && !turning && pressedOnScene) {
-            pick();
+        if (IkGui.isMouseReleased(MouseButton.LEFT)) {
+            if (leftPressed && !turning && hovered) {
+                pick();
+            }
+            leftPressed = false;
         }
         // Only a drag past the click slop turns or pans, so a click that wobbles a pixel or two
         // picks without moving the camera
-        if (pressedOnScene && IkGui.isMouseDragging(MouseButton.LEFT, CLICK_SLOP)) {
+        if (active && leftPressed && IkGui.isMouseDragging(MouseButton.LEFT, CLICK_SLOP)) {
             if (!turning) {
                 turning = true;
                 pivotPoint(pivot);
@@ -949,11 +1373,11 @@ public class SceneView {
             orbit.turn(camera, pivot, io.mouseDelta.x, io.mouseDelta.y);
         } else {
             turning = false;
-            if (IkGui.isMouseDragging(MouseButton.MIDDLE, CLICK_SLOP)) {
-                orbit.pan(camera, io.mouseDelta.x, io.mouseDelta.y, io.displaySize.y);
+            if (active && IkGui.isMouseDragging(MouseButton.MIDDLE, CLICK_SLOP)) {
+                orbit.pan(camera, io.mouseDelta.x, io.mouseDelta.y, viewSize.y);
             }
         }
-        if (io.mouseWheel != 0) {
+        if (hovered && io.mouseWheel != 0) {
             orbit.zoom(camera, io.mouseWheel);
         }
     }
@@ -996,8 +1420,8 @@ public class SceneView {
         if (placement == null) {
             return;
         }
-        final ScenePicker.Hit hit =
-                hitAt(IkGui.getMousePos().x, IkGui.getMousePos().y, new Vector3d());
+        IkGui.getMousePos(mouse);
+        final ScenePicker.Hit hit = hitAt(mouse.x, mouse.y, new Vector3d());
         if (hit == null) {
             select(null, -1);
         } else {
@@ -1018,17 +1442,17 @@ public class SceneView {
         if (shown == null) {
             return null;
         }
-        final IkIO io = IkGui.getIO();
-        final var camera = GraphicsManager.getScene().getCamera();
-        // With viewports on, mouse positions are on the desktop, so measure from the window's
-        // corner: a window moved off the desktop's origin, as onto another monitor, would
-        // otherwise pick by where the mouse is on the desktop
-        final Vector2f corner = IkGui.getMainViewport().position;
+        final PreviewView view = preview;
+        if (view == null) {
+            return null;
+        }
+        final var camera = view.getScene().getCamera();
+        // Measured from the preview's corner on screen, which the mouse shares
         final Vector3d direction =
                 rayDirection(
-                        (x - corner.x) / io.displaySize.x,
-                        (y - corner.y) / io.displaySize.y,
-                        io.displaySize.x / Math.max(1, io.displaySize.y),
+                        (x - viewOrigin.x) / viewSize.x,
+                        (y - viewOrigin.y) / viewSize.y,
+                        viewSize.x / Math.max(1, viewSize.y),
                         camera.getRotation().x,
                         camera.getRotation().y);
         final ScenePicker.Hit hit =
@@ -1055,25 +1479,5 @@ public class SceneView {
         final Vector3d view = new Vector3d((2 * x - 1) * tan * aspect, (1 - 2 * y) * tan, -1);
         // The camera's view is rotated by pitch then yaw; undo it
         return new Matrix3d().rotateX(pitch).rotateY(yaw).transpose().transform(view).normalize();
-    }
-
-    /** Reads the mouse each frame for the orbit camera. Draws no window. */
-    private final class InputWindow extends GuiWindow {
-        /** Set up the window. */
-        InputWindow() {
-            super(INPUT_WINDOW, WindowFlags.NO_SAVED_SETTINGS);
-        }
-
-        @Override
-        public void draw(final int width, final int height) {
-            if (placement != null) {
-                handleMouse();
-            }
-        }
-
-        @Override
-        public boolean handleGuiInput(@NonNull Scene scene) {
-            return false;
-        }
     }
 }

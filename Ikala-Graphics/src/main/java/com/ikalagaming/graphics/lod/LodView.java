@@ -5,6 +5,7 @@ import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.InstanceHandle;
 import com.ikalagaming.graphics.LodHandle;
+import com.ikalagaming.graphics.PreviewView;
 import com.ikalagaming.graphics.ThreadStops;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
@@ -30,6 +31,7 @@ import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.annotation.Nullable;
 
 /**
  * Draws a DAG's cut in the scene, picked on the CPU from the scene's observer by {@link LodCut}.
@@ -225,6 +227,9 @@ public final class LodView implements AutoCloseable {
     /** The name, for model IDs. */
     private final String name;
 
+    /** The preview it is shown in, or null for the world. */
+    private final @Nullable PreviewView preview;
+
     /**
      * The DAG.
      *
@@ -335,9 +340,27 @@ public final class LodView implements AutoCloseable {
      * @param dag The DAG.
      */
     public LodView(@NonNull GraphicsContext graphics, @NonNull String name, @NonNull LodDag dag) {
+        this(graphics, name, dag, null);
+    }
+
+    /**
+     * Set up a view of a DAG in a preview, or in the world. Nothing is drawn until {@link #update}.
+     *
+     * @param graphics The plugin's graphics context.
+     * @param name A name for its models.
+     * @param dag The DAG.
+     * @param preview The preview to show it in, whose camera the cut follows, or null for the
+     *     world.
+     */
+    public LodView(
+            @NonNull GraphicsContext graphics,
+            @NonNull String name,
+            @NonNull LodDag dag,
+            @Nullable PreviewView preview) {
         this.graphics = graphics;
         this.name = name;
         this.dag = dag;
+        this.preview = preview;
         worker =
                 ThreadStops.track(
                         Executors.newSingleThreadExecutor(
@@ -386,7 +409,10 @@ public final class LodView implements AutoCloseable {
                     if (closed || graphics.isClosed()) {
                         return;
                     }
-                    final LodHandle added = graphics.lods().add(dag);
+                    final LodHandle added =
+                            preview == null
+                                    ? graphics.lods().add(dag)
+                                    : graphics.lods().add(dag, preview);
                     // Hidden until a build in the materials coloring shows it
                     graphics.lods().setVisible(added, false);
                     post(
@@ -446,7 +472,7 @@ public final class LodView implements AutoCloseable {
         if (drawsTextured(settings) && !texturedShown) {
             builtSettings = null;
         }
-        final Scene scene = GraphicsManager.getScene();
+        final Scene scene = viewScene();
         final Observer observer = scene.getObserver();
         final Vector3d at = new Vector3d(observer.getPosition());
         if (settings.equals(builtSettings) && at.distance(builtAt) < moveStep) {
@@ -536,16 +562,30 @@ public final class LodView implements AutoCloseable {
     }
 
     /**
-     * Pixels per world unit at distance 1, from the observer's projection and the scene window
-     * height.
+     * Pixels per world unit at distance 1, from the observer's projection and the height the view
+     * is drawn at: the preview's, or the scene window's.
      *
      * @param observer The observer.
      * @return The scale.
      */
-    private static double pixelsPerUnit(@NonNull Observer observer) {
+    private double pixelsPerUnit(@NonNull Observer observer) {
         // m11 is 1 / tan(fov / 2), negative with Vulkan's y flip
         final double focal = Math.abs(observer.getProjectionMatrix().m11());
-        return focal * GraphicsManager.getSceneWindow().getHeight() / 2;
+        final int height =
+                preview == null
+                        ? GraphicsManager.getSceneWindow().getHeight()
+                        : preview.getHeight();
+        return focal * height / 2;
+    }
+
+    /**
+     * The scene the view is seen in, whose observer the cut follows and whose debug visualizers
+     * color the renderer's clusters: the preview's, or the world's.
+     *
+     * @return The scene.
+     */
+    private Scene viewScene() {
+        return preview == null ? GraphicsManager.getScene() : preview.getScene();
     }
 
     /**
@@ -856,7 +896,7 @@ public final class LodView implements AutoCloseable {
         if (world != null) {
             graphics.lods().setVisible(world, built.textured());
         }
-        setRendererColors(scene, built.textured() ? rendererColors(built.mode()) : null);
+        setRendererColors(viewScene(), built.textured() ? rendererColors(built.mode()) : null);
         if (built.textured()) {
             // The renderer picks and draws the cut; no model is needed
             if (previous != null) {
@@ -888,13 +928,11 @@ public final class LodView implements AutoCloseable {
         }
         scene.addModel(model);
         final double[] origin = dag.getOrigin();
+        final Vector3d at = new Vector3d(origin[0], origin[1], origin[2]);
         final InstanceHandle instance =
-                graphics.instances()
-                        .place(
-                                model,
-                                new Vector3d(origin[0], origin[1], origin[2]),
-                                new Quaternionf(),
-                                1);
+                preview == null
+                        ? graphics.instances().place(model, at, new Quaternionf(), 1)
+                        : preview.place(model, at, new Quaternionf(), 1);
         // The old model goes once the new meshes are uploaded; one still pending is dropped now
         if (previous != null) {
             scene.removeModel(previous.modelId());
@@ -915,7 +953,10 @@ public final class LodView implements AutoCloseable {
         }
         shapes.clear();
         for (DebugShape shape : built.shapes()) {
-            shapes.add(graphics.debug().add(shape));
+            shapes.add(
+                    preview == null
+                            ? graphics.debug().add(shape)
+                            : graphics.debug().add(shape, preview));
         }
         drawn = built.drawn();
         drawnClusters = built.clusters();
@@ -1006,7 +1047,7 @@ public final class LodView implements AutoCloseable {
         }
         world = null;
         shapes.clear();
-        setRendererColors(scene, null);
+        setRendererColors(viewScene(), null);
         for (Material material : palette) {
             scene.getMaterialCache().removeMaterial(material);
         }

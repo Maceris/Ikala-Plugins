@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.ui;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.IkGuiInternal;
 import com.ikalagaming.graphics.gui.data.IkBoolean;
+import com.ikalagaming.graphics.gui.data.Window;
 import com.ikalagaming.graphics.gui.enums.Condition;
 import com.ikalagaming.graphics.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.gui.util.Hash;
@@ -37,8 +38,11 @@ public class Panel extends Surface {
     /** Cleared by IkGui when the close button is pressed. */
     private final IkBoolean open = new IkBoolean(true);
 
-    /** Whether to focus the panel the next time it is drawn. */
-    private volatile boolean focusRequested;
+    /** How many more frames to ask for focus, until the panel's tab shows. */
+    private volatile int focusFrames;
+
+    /** How many frames a panel brought to the front keeps asking for focus until its tab shows. */
+    private static final int FOCUS_FRAMES = 10;
 
     /**
      * Create a panel with an empty column as its content.
@@ -81,7 +85,7 @@ public class Panel extends Surface {
      * @return This panel.
      */
     public Panel bringToFront() {
-        focusRequested = true;
+        focusFrames = FOCUS_FRAMES;
         return this;
     }
 
@@ -121,19 +125,38 @@ public class Panel extends Surface {
 
     @Override
     boolean beginWindow(@NonNull UiFrame frame) {
-        if (focusRequested) {
-            focusRequested = false;
+        final boolean focusing = focusFrames > 0;
+        if (focusing) {
             IkGui.setNextWindowFocus();
         }
+        final boolean shown;
         if (onClose == null) {
-            return IkGui.begin(windowName(), windowFlags());
+            shown = IkGui.begin(windowName(), windowFlags());
+        } else {
+            open.set(true);
+            shown = IkGui.begin(windowName(), open, windowFlags());
+            if (!open.get()) {
+                setVisible(false);
+                frame.fire(onClose);
+            }
         }
-        open.set(true);
-        final boolean shown = IkGui.begin(windowName(), open, windowFlags());
-        if (!open.get()) {
-            setVisible(false);
-            frame.fire(onClose);
+        if (focusing) {
+            focused();
         }
         return shown;
+    }
+
+    /**
+     * Stop asking for focus once the panel's tab shows, or it isn't docked. A panel shown again in
+     * the same frame it is brought to the front can lose the focus to its dock node's saved tab, so
+     * it asks again for a few frames.
+     */
+    private void focused() {
+        final Window window = IkGuiInternal.getCurrentWindow();
+        if (window == null || !window.dockIsActive || window.dockTabIsVisible) {
+            focusFrames = 0;
+        } else {
+            focusFrames -= 1;
+        }
     }
 }

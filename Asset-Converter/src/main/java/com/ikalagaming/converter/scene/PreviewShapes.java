@@ -140,6 +140,50 @@ public final class PreviewShapes {
     }
 
     /**
+     * Make a scene of one mesh, like a container's, standing on a floor at the origin, with a plain
+     * material.
+     *
+     * @param name What the mesh is called.
+     * @param data The mesh.
+     * @return The scene, named after the mesh.
+     */
+    public static ImportedScene meshScene(@NonNull String name, @NonNull MeshData data) {
+        final List<Mesh> meshes = new ArrayList<>();
+        meshes.add(new Mesh(name, data, 0));
+        meshes.add(new Mesh("Floor", plane(FLOOR_HALF, 0), 1));
+        final List<ImportedMaterial> materials = new ArrayList<>();
+        materials.add(
+                new ImportedMaterial(
+                        name,
+                        new Vector4f(0.8f, 0.8f, 0.8f, 1),
+                        0.5f,
+                        0,
+                        new Vector3f(),
+                        Map.of()));
+        materials.add(
+                new ImportedMaterial(
+                        "Floor",
+                        new Vector4f(0.35f, 0.35f, 0.35f, 1),
+                        0.8f,
+                        0,
+                        new Vector3f(),
+                        Map.of()));
+        final Matrix4d identity = new Matrix4d();
+        final Node root = new Node(name, identity, null, identity, new int[0]);
+        // Stand it on the floor, its middle over the origin
+        final Matrix4d place =
+                new Matrix4d()
+                        .translation(
+                                -(data.getAabbMin().x + data.getAabbMax().x) / 2,
+                                -data.getAabbMin().y,
+                                -(data.getAabbMin().z + data.getAabbMax().z) / 2);
+        root.addChild(new Node(name, place, root, root.world(), new int[] {0}));
+        root.addChild(new Node("Floor", identity, root, root.world(), new int[] {1}));
+        return new ImportedScene(
+                Path.of(name), meshes, materials, root, List.of(), 1, 1, List.of(), 0);
+    }
+
+    /**
      * Make the stage particles are watched on: a floor, a wall behind and one to the left, two
      * panes of blue glass, one in front of the emitter's left side and one behind its right, so
      * particles show in front of, behind and through translucent surfaces, and a roof over the back
@@ -332,7 +376,7 @@ public final class PreviewShapes {
      * @param half Half its size.
      * @return The mesh.
      */
-    static MeshData cube(float half) {
+    public static MeshData cube(float half) {
         // Each face: its normal, then the direction u runs, both as axis vectors
         final float[][] faces = {
             {1, 0, 0, 0, 0, -1},

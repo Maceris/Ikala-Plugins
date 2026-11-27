@@ -1065,8 +1065,14 @@ public class ShaderBindings {
         public static final int DEPTH_INDEX_OFFSET =
                 BASE_COLOR_INDEX_OFFSET + (GBuffer.MATERIAL + 1) * Integer.BYTES;
 
+        /**
+         * Offset in the uniforms of the material table's device address, a uvec2, for the views
+         * that show what pixels are lit with.
+         */
+        public static final int MATERIALS_ADDRESS_OFFSET = DEPTH_INDEX_OFFSET + Integer.BYTES;
+
         /** The size of the uniforms buffer. */
-        public static final int UNIFORMS_BUFFER_SIZE = DEPTH_INDEX_OFFSET + Integer.BYTES;
+        public static final int UNIFORMS_BUFFER_SIZE = MATERIALS_ADDRESS_OFFSET + Long.BYTES;
 
         /** Private constructor so this class is not instantiated. */
         private Filter() {

@@ -62,7 +62,15 @@ class PreviewViewTest {
     void capturesWaitUntilTakenAndFailOnClose() {
         PreviewView view = preview();
         CompletableFuture<Path> first = view.capture(Path.of("a.png"));
-        assertEquals(1, view.takeCaptures().size());
+        for (int i = 1; i < PreviewView.SETTLE_FRAMES; ++i) {
+            view.requestFrames(2);
+            view.frameDrawn();
+            assertTrue(view.takeCaptures().isEmpty(), "Waits its frames");
+        }
+        view.requestFrames(2);
+        view.frameDrawn();
+        assertTrue(view.getFramesWanted() > 0, "Still drawn every frame");
+        assertEquals(1, view.takeCaptures().size(), "Taken once it has waited");
         assertTrue(view.takeCaptures().isEmpty(), "Taken once");
         assertFalse(first.isDone(), "The renderer completes it");
 

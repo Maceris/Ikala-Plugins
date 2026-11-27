@@ -30,6 +30,9 @@ public final class LightUnits {
      */
     public static final float REFERENCE_PRE_EXPOSURE = REFERENCE_SUN / DAYLIGHT_LUX;
 
+    /** The light below which the pre-exposure grows: a tenth of daylight, in lux. */
+    private static final float PRE_EXPOSURE_LUX = DAYLIGHT_LUX / 10;
+
     /**
      * The EV100 that shows a scene at the reference pre-exposure as an exposure of 1 did before
      * light was physical: about 14.8, a sunny day's.
@@ -55,6 +58,20 @@ public final class LightUnits {
      */
     public static float ev100(float multiplier) {
         return (float) (Math.log(1 / (SATURATION * multiplier)) / Math.log(2));
+    }
+
+    /**
+     * The pre-exposure for a scene lit by about this much light: the reference one in daylight, and
+     * more in dimmer light, so a night keeps its precision on the GPU. A tenth of daylight or more
+     * keeps the reference. The exposure shown doesn't change with it, see {@code
+     * Scene.displayExposure}.
+     *
+     * @param lux About how much light reaches a lit surface.
+     * @return The pre-exposure.
+     */
+    public static float preExposure(float lux) {
+        return REFERENCE_PRE_EXPOSURE
+                * Math.max(PRE_EXPOSURE_LUX / Math.max(lux, Float.MIN_NORMAL), 1);
     }
 
     /**
