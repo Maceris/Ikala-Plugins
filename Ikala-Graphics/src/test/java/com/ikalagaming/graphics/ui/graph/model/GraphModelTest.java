@@ -99,6 +99,31 @@ class GraphModelTest {
     }
 
     @Test
+    void undoingBackToTheSavedGraphIsClean() {
+        GraphHistory history = new GraphHistory(graph);
+        final List<String> recorded = new java.util.ArrayList<>();
+        history.setOnRecord(recorded::add);
+        history.edit("Add", g -> g.add("math/constant", 0, 0));
+        history.markSaved();
+        history.edit("Move", g -> g.move("constant1", 50, 50));
+        assertTrue(history.isDirty());
+        history.undo();
+        assertFalse(history.isDirty(), "Back as saved");
+        history.undo();
+        assertTrue(history.isDirty(), "Before what was saved");
+        history.redo();
+        assertFalse(history.isDirty());
+        history.undo();
+        history.edit("Add", g -> g.add("math/add", 0, 0));
+        history.undo();
+        assertTrue(history.isDirty(), "The saved state was dropped with the redo");
+        history.markDirty();
+        history.markSaved();
+        assertFalse(history.isDirty());
+        assertEquals(List.of("Add", "Move", "Add"), recorded);
+    }
+
+    @Test
     void copiedNodesPasteUnderNewIdsWithTheirLinks() {
         graph.add("math/constant", 0, 0);
         graph.add("math/add", 100, 0);

@@ -89,6 +89,9 @@ public class GraphTool {
      */
     @Getter private final GraphHistory history;
 
+    /** The workbench's undo stack, if the graph's edits go on it, else null. */
+    private @Nullable EditHistory shared;
+
     /**
      * The editor. -- GETTER -- The editor.
      *
@@ -646,14 +649,15 @@ public class GraphTool {
             frame.fire(() -> setSwatches(!swatches));
         }
         IkGui.sameLine();
-        final String undo = history.nextUndo();
+        // With the workbench's stack, the last edit in any editor
+        final String undo = shared != null ? shared.nextUndo() : history.nextUndo();
         if (IkGui.button(undo == null ? "Undo" : "Undo " + undo + "###undo")) {
-            frame.fire(editor::undo);
+            frame.fire(shared != null ? shared::undo : editor::undo);
         }
         IkGui.sameLine();
-        final String redo = history.nextRedo();
+        final String redo = shared != null ? shared.nextRedo() : history.nextRedo();
         if (IkGui.button(redo == null ? "Redo" : "Redo " + redo + "###redo")) {
-            frame.fire(editor::redo);
+            frame.fire(shared != null ? shared::redo : editor::redo);
         }
         IkGui.sameLine();
         IkGui.textDisabled(
@@ -1238,11 +1242,85 @@ public class GraphTool {
         }
     }
 
+    /**
+     * Put the graph's edits on the workbench's undo stack among other editors', undone through it,
+     * with Ctrl+Z and Ctrl+Y handled by the workbench.
+     *
+     * @param shared The workbench's undo stack.
+     */
+    public void useHistory(@NonNull EditHistory shared) {
+        this.shared = shared;
+        history.setOnRecord(name -> shared.push(new GraphStep(name, editor), null, false));
+        editor.setUndoKeys(false);
+    }
+
+    /**
+     * An edit of the graph, undone through its own history, which keeps the graphs.
+     *
+     * @param name What it is called.
+     * @param editor The graph editor.
+     */
+    private record GraphStep(String name, GraphEditor editor) implements EditHistory.Step {
+        @Override
+        public void undo() {
+            editor.undo();
+        }
+
+        @Override
+        public void redo() {
+            editor.redo();
+        }
+    }
+
+    /** Forget the graph's edits, as when another graph is opened. */
+    private void clearHistory() {
+        history.clear();
+        if (shared != null) {
+            shared.forget(GraphStep.class::isInstance);
+        }
+    }
+
+    /**
+     * The file edits here are saved to: the open instance, else the graph.
+     *
+     * @return The file, or null for a new graph not saved yet.
+     */
+    public @Nullable Path editedFile() {
+        return instanceFile != null ? instanceFile : file;
+    }
+
+    /**
+     * Save the graph, or the open instance, to its own file.
+     *
+     * @return Whether it was written; false for a new graph without a file.
+     */
+    public boolean saveInPlace() {
+        final Path target = editedFile();
+        if (target == null) {
+            report.accept("Save the new texture graph from its toolbar, to give it a file");
+            return false;
+        }
+        return save(target);
+    }
+
+    /** Drop the edits not saved: open the instance or graph again, or start a new one. */
+    public void discard() {
+        final Path instance = instanceFile;
+        final Path graph = file;
+        if (instance != null) {
+            openInstance(instance);
+        } else if (graph != null) {
+            open(graph);
+        } else {
+            newGraph();
+        }
+    }
+
     /** Start a new, empty graph. */
     public void newGraph() {
         leaveInstance();
         history.getGraph().restore(library.newGraph());
-        history.clear();
+        clearHistory();
         editor.select(List.of());
         texture.setWidth(TextureGraph.DEFAULT_SIZE);
         texture.setHeight(TextureGraph.DEFAULT_SIZE);
@@ -1333,7 +1411,7 @@ public class GraphTool {
             return false;
         }
         history.getGraph().restore(read.getGraph());
-        history.clear();
+        clearHistory();
         texture.setWidth(read.getWidth());
         texture.setHeight(read.getHeight());
         texture.setSeed(read.getSeed());

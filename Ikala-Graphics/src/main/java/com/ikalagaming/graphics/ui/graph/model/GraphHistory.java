@@ -7,6 +7,7 @@ import lombok.Setter;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.function.Consumer;
+import javax.annotation.Nullable;
 
 /**
  * Undo and redo for a graph: every edit goes through {@link #edit}, which keeps a copy of the graph
@@ -27,12 +28,21 @@ public final class GraphHistory {
     private final Deque<Step> redo = new ArrayDeque<>();
 
     /**
-     * Whether the graph changed since {@link #markSaved()}. -- GETTER -- Whether there are unsaved
-     * changes.
-     *
-     * @return True if changed since saved.
+     * How many edits there were to undo when it was saved, so undoing back to it is clean again, or
+     * -1 when that state can't be reached any more.
      */
-    @Getter private boolean dirty;
+    private int savedAt;
+
+    /** Whether something outside the graph's edits changed since it was saved. */
+    private boolean forced;
+
+    /**
+     * Told the name of each edit recorded, so an editor-wide history can keep it among others' and
+     * undo it through this one. -- SETTER -- Set the listener.
+     *
+     * @param onRecord The listener, or null for none.
+     */
+    @Setter private @Nullable Consumer<String> onRecord;
 
     /** Counts changes, so a listener can tell the graph changed. */
     @Getter private long changes;
@@ -92,13 +102,30 @@ public final class GraphHistory {
             ++changes;
             return;
         }
+        if (savedAt > undo.size()) {
+            // The saved state was among the edits undone, which are gone now
+            savedAt = -1;
+        }
         undo.push(new Step(name, before));
         while (undo.size() > DEPTH) {
             undo.removeLast();
+            savedAt = savedAt > 0 ? savedAt - 1 : -1;
         }
         redo.clear();
-        dirty = true;
         ++changes;
+        if (onRecord != null) {
+            onRecord.accept(name);
+        }
+    }
+
+    /**
+     * Whether the graph differs from when it was last saved: an edit since, not undone, or a change
+     * outside its edits.
+     *
+     * @return True if changed since saved.
+     */
+    public boolean isDirty() {
+        return forced || undo.size() != savedAt;
     }
 
     /**
@@ -113,7 +140,6 @@ public final class GraphHistory {
         }
         redo.push(new Step(step.name(), graph.copy()));
         graph.restore(step.before());
-        dirty = true;
         ++changes;
         return step.name();
     }
@@ -130,7 +156,6 @@ public final class GraphHistory {
         }
         undo.push(new Step(step.name(), graph.copy()));
         graph.restore(step.before());
-        dirty = true;
         ++changes;
         return step.name();
     }
@@ -159,13 +184,15 @@ public final class GraphHistory {
     public void clear() {
         undo.clear();
         redo.clear();
-        dirty = false;
+        savedAt = 0;
+        forced = false;
         ++changes;
     }
 
     /** Note that the graph was saved as it is. */
     public void markSaved() {
-        dirty = false;
+        savedAt = undo.size();
+        forced = false;
     }
 
     /**
@@ -173,7 +200,7 @@ public final class GraphHistory {
      * changed, so the graph needs saving.
      */
     public void markDirty() {
-        dirty = true;
+        forced = true;
         ++changes;
     }
 }

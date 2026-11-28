@@ -533,8 +533,9 @@ public final class ConverterScripts {
                         case "duplicate" ->
                                 log.info(
                                         "Script: Graph duplicated {}", editor.duplicateSelection());
-                        case "undo" -> editor.undo();
-                        case "redo" -> editor.redo();
+                            // Through the workbench's stack, which holds the graph's edits
+                        case "undo" -> workbench.undo();
+                        case "redo" -> workbench.redo();
                         case "set" -> editor.setParam(words[1], words[2], words[3]);
                         case "save" -> tool.save(Path.of(words[1]));
                         case "reroute" -> {
@@ -1116,6 +1117,41 @@ public final class ConverterScripts {
                         case "files" -> logLookFiles(editor);
                         case "revert" -> editor.revert();
                         default -> log.warn("Script: no look command {}", words[0]);
+                    }
+                });
+    }
+
+    /**
+     * Drive the workbench's undo stack and saving, logging "Script: Edits ..." with what it did:
+     * "undo" and "redo" (the last edit in any editor), "saveAll", "back" (as the Back button: asks
+     * when files are unsaved), "discard" (drop every edit not saved), "stay", and "log label" (what
+     * undo and redo would do, the files not saved, and whether Back is asking).
+     *
+     * @param command The command and its words, separated by spaces.
+     */
+    public static void edits(String command) {
+        onWorkbench(
+                workbench -> {
+                    final String[] words = command.trim().split(SPACES);
+                    switch (words[0]) {
+                        case "undo" -> log.info("Script: Edits undid {}", workbench.undo());
+                        case "redo" -> log.info("Script: Edits redid {}", workbench.redo());
+                        case "saveAll" ->
+                                log.info("Script: Edits saved all {}", workbench.saveAll());
+                        case "back" -> workbench.goBack();
+                        case "discard" -> workbench.discardAll();
+                        case "stay" -> workbench.stay();
+                        case "log" ->
+                                log.info(
+                                        "Script: Edits {}: undo {}, redo {}, unsaved {}, asking {}",
+                                        rest(words, 1),
+                                        workbench.getEditHistory().nextUndo(),
+                                        workbench.getEditHistory().nextRedo(),
+                                        workbench.unsaved().stream()
+                                                .map(file -> file.getFileName().toString())
+                                                .toList(),
+                                        workbench.isLeaving());
+                        default -> log.warn("Script: no edits command {}", words[0]);
                     }
                 });
     }

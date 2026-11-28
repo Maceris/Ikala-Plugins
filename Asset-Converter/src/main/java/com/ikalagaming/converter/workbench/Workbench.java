@@ -247,6 +247,20 @@ public class Workbench {
     /** The panel the Details panel's state draws in. */
     private Panel detailsPanelNode;
 
+    /**
+     * The one undo stack every editor's edits go on, in the order they were made. -- GETTER -- The
+     * undo stack.
+     *
+     * @return The stack.
+     */
+    @Getter private final EditHistory editHistory = new EditHistory();
+
+    /** Whether Back was pressed with files unsaved, so the toolbar asks what to do with them. */
+    @Getter private boolean leaving;
+
+    /** The toolbar's width for undo, redo and Save All, or the question asked on Back. */
+    private static final float EDITS_WIDTH = 520;
+
     /** Bring the Details panel to the front. */
     public void showDetails() {
         if (detailsPanelNode != null) {
@@ -368,7 +382,12 @@ public class Workbench {
                 new ReferenceViewer(assets::getSnapshot, assetBrowser::thumbnail, this::open);
         assetBrowser.setShowReferences(this::showReferences);
         detailsPanel =
-                new DetailsPanel(assets::getSnapshot, assetBrowser::getSelection, this::showStatus);
+                new DetailsPanel(
+                        assets::getSnapshot,
+                        assetBrowser::getSelection,
+                        this::showStatus,
+                        editHistory);
+        assetBrowser.setUnsaved(() -> java.util.Set.copyOf(unsaved()));
         assetSlots =
                 new AssetSlot(
                         assets::getSnapshot,
@@ -384,7 +403,8 @@ public class Workbench {
                         this::open,
                         this::rebuildLook,
                         materialEditor,
-                        this::showStatus);
+                        this::showStatus,
+                        editHistory);
         sceneView.setHeader(lookEditor::drawStrip);
         assetBrowser.setStudio(
                 new ThumbnailStudio(
@@ -436,6 +456,7 @@ public class Workbench {
                                 showGraphPanel();
                             }
                         });
+        graphTool.useHistory(editHistory);
         refresh();
     }
 
@@ -485,6 +506,8 @@ public class Workbench {
                                                                 "Put every panel back where it"
                                                                         + " started")
                                                         .onClick(dockSpace::resetLayout),
+                                                new Immediate("edits", this::drawEdits)
+                                                        .width(Sizing.fixed(EDITS_WIDTH)),
                                                 status.width(Sizing.grow())));
         ui.show(
                 ui.surface(SURFACE_ID)
@@ -715,10 +738,216 @@ public class Workbench {
         updateSurfaces();
     }
 
+    /** Stop asking what to do with unsaved files, and stay in the workbench. */
+    public void stay() {
+        leaving = false;
+    }
+
+    /** Go back to the menu, or first ask what to do with files not saved. */
+    public void goBack() {
+        if (unsaved().isEmpty() && !newGraphUnsaved()) {
+            leave();
+        } else {
+            leaving = true;
+        }
+    }
+
     /** Hide the workbench and go back to the menu. */
-    private void goBack() {
+    private void leave() {
+        leaving = false;
         setVisible(false);
         back.run();
+    }
+
+    /**
+     * The files with edits not saved, in any editor: the Details panel's, the look's and its render
+     * material's, and the graph's or instance's.
+     *
+     * @return The files.
+     */
+    public List<Path> unsaved() {
+        final java.util.Set<Path> files = new java.util.LinkedHashSet<>(detailsPanel.unsaved());
+        if (lookEditor.isDirty() && lookEditor.getFile() != null) {
+            files.add(lookEditor.getFile());
+        }
+        final Path graph = graphTool.editedFile();
+        if (graph != null && graphTool.getHistory().isDirty()) {
+            files.add(graph.toAbsolutePath().normalize());
+        }
+        return List.copyOf(files);
+    }
+
+    /**
+     * Whether a new graph, which has no file yet, has edits.
+     *
+     * @return True if so.
+     */
+    private boolean newGraphUnsaved() {
+        return graphTool.editedFile() == null && graphTool.getHistory().isDirty();
+    }
+
+    /**
+     * Save every file with edits, in every editor.
+     *
+     * @return Whether all of them were written; a new graph needs a file chosen first.
+     */
+    public boolean saveAll() {
+        final int count = unsaved().size();
+        boolean ok = detailsPanel.saveAll();
+        if (lookEditor.isDirty()) {
+            ok &= lookEditor.save();
+        }
+        if (graphTool.editedFile() != null && graphTool.getHistory().isDirty()) {
+            ok &= graphTool.saveInPlace();
+        }
+        if (ok) {
+            showStatus(
+                    newGraphUnsaved()
+                            ? "Saved " + count + " files; the new graph needs a file to save to"
+                            : "Saved " + count + (count == 1 ? " file" : " files"));
+        }
+        return ok && !newGraphUnsaved();
+    }
+
+    /** Drop every editor's edits not saved: the files are as saved again. */
+    public void discardAll() {
+        detailsPanel.revertAll();
+        if (lookEditor.isDirty()) {
+            lookEditor.revert();
+        }
+        if (graphTool.getHistory().isDirty()) {
+            graphTool.discard();
+        }
+        showStatus("Dropped the edits not saved");
+    }
+
+    /**
+     * Undo the last edit, in whichever editor it was made.
+     *
+     * @return Its name, or null if there was none.
+     */
+    public @Nullable String undo() {
+        final String name = editHistory.undo();
+        showStatus(name == null ? "Nothing to undo" : "Undid " + name);
+        return name;
+    }
+
+    /**
+     * Redo the last edit undone.
+     *
+     * @return Its name, or null if there was none.
+     */
+    public @Nullable String redo() {
+        final String name = editHistory.redo();
+        showStatus(name == null ? "Nothing to redo" : "Redid " + name);
+        return name;
+    }
+
+    /**
+     * Draw undo, redo and Save All in the toolbar, or the question Back asks, and take the
+     * shortcuts every editor shares: Ctrl+Z, Ctrl+Y (or Ctrl+Shift+Z) and Ctrl+Shift+S. Each frame.
+     *
+     * @param frame The current frame.
+     */
+    private void drawEdits(UiFrame frame) {
+        if (!IkGui.isAnyItemActive()) {
+            // A drag ended: the next change is a step of its own
+            editHistory.endJoin();
+        }
+        final com.ikalagaming.graphics.gui.data.IkIO io = IkGui.getIO();
+        if (io.keyCtrl && !io.wantTextInput) {
+            if (IkGui.isKeyPressed(com.ikalagaming.graphics.gui.enums.Key.Z, false)) {
+                frame.fire(io.keyShift ? this::redo : this::undo);
+            } else if (IkGui.isKeyPressed(com.ikalagaming.graphics.gui.enums.Key.Y, false)) {
+                frame.fire(this::redo);
+            } else if (io.keyShift
+                    && IkGui.isKeyPressed(com.ikalagaming.graphics.gui.enums.Key.S, false)) {
+                frame.fire(this::saveAll);
+            }
+        }
+        final List<Path> unsaved = unsaved();
+        final int count = unsaved.size() + (newGraphUnsaved() ? 1 : 0);
+        if (leaving) {
+            if (count == 0) {
+                frame.fire(this::leave);
+                return;
+            }
+            IkGui.alignTextToFramePadding();
+            IkGui.textUnformatted(count + (count == 1 ? " file is" : " files are") + " not saved");
+            drawUnsavedTooltip(unsaved);
+            IkGui.sameLine();
+            if (IkGui.button("Save all and go back")) {
+                frame.fire(
+                        () -> {
+                            if (saveAll()) {
+                                leave();
+                            }
+                        });
+            }
+            IkGui.sameLine();
+            if (IkGui.button("Discard")) {
+                frame.fire(
+                        () -> {
+                            discardAll();
+                            leave();
+                        });
+            }
+            IkGui.sameLine();
+            if (IkGui.button("Stay")) {
+                stay();
+            }
+            return;
+        }
+        final String undo = editHistory.nextUndo();
+        IkGui.beginDisabled(undo == null);
+        if (IkGui.button("Undo##edits")) {
+            frame.fire(this::undo);
+        }
+        IkGui.endDisabled();
+        if (IkGui.isItemHovered(HoveredFlags.ALLOW_WHEN_DISABLED)) {
+            IkGui.setTooltip(undo == null ? "Nothing to undo" : "Undo " + undo + " (Ctrl+Z)");
+        }
+        IkGui.sameLine();
+        final String redo = editHistory.nextRedo();
+        IkGui.beginDisabled(redo == null);
+        if (IkGui.button("Redo##edits")) {
+            frame.fire(this::redo);
+        }
+        IkGui.endDisabled();
+        if (IkGui.isItemHovered(HoveredFlags.ALLOW_WHEN_DISABLED)) {
+            IkGui.setTooltip(redo == null ? "Nothing to redo" : "Redo " + redo + " (Ctrl+Y)");
+        }
+        IkGui.sameLine();
+        IkGui.beginDisabled(count == 0);
+        if (IkGui.button(
+                count == 0 ? "Save all###saveAll" : "Save all (" + count + ")###saveAll")) {
+            frame.fire(this::saveAll);
+        }
+        IkGui.endDisabled();
+        drawUnsavedTooltip(unsaved);
+    }
+
+    /**
+     * List the files not saved in a tooltip, when the last item is hovered.
+     *
+     * @param unsaved The files.
+     */
+    private void drawUnsavedTooltip(List<Path> unsaved) {
+        if (!IkGui.isItemHovered(HoveredFlags.ALLOW_WHEN_DISABLED)) {
+            return;
+        }
+        if (unsaved.isEmpty() && !newGraphUnsaved()) {
+            IkGui.setTooltip("Every file is saved (Ctrl+Shift+S saves all)");
+            return;
+        }
+        final StringBuilder text = new StringBuilder("Not saved (Ctrl+Shift+S saves all):");
+        for (Path file : unsaved) {
+            text.append('\n').append(file.getFileName());
+        }
+        if (newGraphUnsaved()) {
+            text.append("\nthe new texture graph, which needs a file");
+        }
+        IkGui.setTooltip(text.toString());
     }
 
     /** Show the surfaces, if the workbench is showing. */

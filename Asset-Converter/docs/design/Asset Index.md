@@ -146,6 +146,26 @@ its object's closing brace or taken out with its comma, a list whose length chan
 its place, and numbers keep how they were written (a float stays `0.5F`). Hand-laid-out files keep
 their layout and comments.
 
+## Undo and saving
+
+Every editor's edits go on one undo stack, the workbench's `EditHistory`, in the order they were
+made: the Details panel's, the look editor's (its pieces and its render material's values) and the
+graph tool's. Ctrl+Z and Ctrl+Y (or Ctrl+Shift+Z), and the Undo and Redo buttons in the top bar,
+undo and redo the last edit wherever it was made; a text field being typed in keeps them for its own
+text. A step knows how to undo itself: the Details panel keeps each field's value before and after,
+which is enough as values are replaced, never changed in place; the look editor keeps the look, or
+a copy of the material's values; a graph step undoes through the graph's own `GraphHistory`, which
+keeps copies of the graph and tells the stack of each edit it records. Changes to the same thing
+while a control is held join one step, so a slider's drag undoes in one go. Steps that can't be
+undone any more are forgotten: a graph's when another is opened, a look's when another look is
+opened or it is reverted, a file's when its edits are reverted.
+
+A file is unsaved while it differs from what was saved, so undoing back to it is saved again; a
+graph's history remembers the step it was saved at. Unsaved files have an asterisk on their tiles
+in the Assets panel, and Save all in the top bar (Ctrl+Shift+S) saves every one, each through its
+editor, listing them in its tooltip. A new graph needs a file chosen first. Back, with files
+unsaved, asks in the top bar whether to save them all, discard them or stay.
+
 ## The References panel
 
 The References panel (`ReferenceViewer`) answers "what uses this" and "what does this use" for one file at a time,

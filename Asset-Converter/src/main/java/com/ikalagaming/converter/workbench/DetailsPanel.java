@@ -91,6 +91,9 @@ public final class DetailsPanel {
     /** Says what happened, in the status line. */
     private final Consumer<String> report;
 
+    /** The workbench's undo stack, which every edit here goes on. */
+    private final EditHistory history;
+
     /** Files read, and maybe edited, by path. */
     private final Map<Path, Edited> files = new LinkedHashMap<>();
 
@@ -115,14 +118,148 @@ public final class DetailsPanel {
      * @param index The asset index, as of now.
      * @param selection The Assets panel's selection.
      * @param report Says what happened.
+     * @param history The workbench's undo stack.
      */
     public DetailsPanel(
             @NonNull Supplier<AssetIndex.Snapshot> index,
             @NonNull Supplier<List<Path>> selection,
-            @NonNull Consumer<String> report) {
+            @NonNull Consumer<String> report,
+            @NonNull EditHistory history) {
         this.index = index;
         this.selection = selection;
         this.report = report;
+        this.history = history;
+    }
+
+    /**
+     * One file's field changed by an edit.
+     *
+     * @param file The file.
+     * @param key The field's name.
+     * @param before Its value before, or null if it had none.
+     * @param after Its value after, or null if it has none.
+     */
+    private record Change(Path file, String key, @Nullable Object before, @Nullable Object after) {}
+
+    /**
+     * An edit of the fields of files, undone by putting each value back. Values are never changed
+     * in place, only replaced, so keeping them keeps the state.
+     *
+     * @param name What it is called.
+     * @param changes What changed.
+     * @param panel The panel whose files they are.
+     */
+    private record ValueStep(String name, List<Change> changes, DetailsPanel panel)
+            implements EditHistory.Step {
+        @Override
+        public void undo() {
+            for (Change change : changes.reversed()) {
+                panel.put(change.file(), change.key(), change.before());
+            }
+        }
+
+        @Override
+        public void redo() {
+            for (Change change : changes) {
+                panel.put(change.file(), change.key(), change.after());
+            }
+        }
+
+        @Override
+        public EditHistory.Step join(EditHistory.@NonNull Step later) {
+            if (!(later instanceof ValueStep next) || next.changes.size() != changes.size()) {
+                return null;
+            }
+            final List<Change> joined = new ArrayList<>();
+            for (int i = 0; i < changes.size(); ++i) {
+                final Change first = changes.get(i);
+                final Change last = next.changes.get(i);
+                if (!first.file().equals(last.file()) || !first.key().equals(last.key())) {
+                    return null;
+                }
+                joined.add(new Change(first.file(), first.key(), first.before(), last.after()));
+            }
+            return new ValueStep(name, joined, panel);
+        }
+
+        /**
+         * Whether it changed a file.
+         *
+         * @param file The file.
+         * @return True if so.
+         */
+        boolean touches(Path file) {
+            return changes.stream().anyMatch(change -> change.file().equals(file));
+        }
+    }
+
+    /**
+     * Put a field's value back, for undo and redo, reading the file if it was saved since.
+     *
+     * @param file The file.
+     * @param key The field.
+     * @param value The value, or null for none.
+     */
+    private void put(Path file, String key, @Nullable Object value) {
+        final Edited state = edited(file, index.get());
+        if (state == null) {
+            return;
+        }
+        if (value == null) {
+            state.current().remove(key);
+        } else {
+            state.current().put(key, value);
+        }
+    }
+
+    /**
+     * Set a field on files, as one step to undo.
+     *
+     * @param states The files.
+     * @param key The field.
+     * @param value The value, or null to take it out.
+     * @param name What the edit is called.
+     * @param held Whether the control is still held, so the next change joins this step.
+     */
+    private void change(
+            List<Edited> states, String key, @Nullable Object value, String name, boolean held) {
+        final List<Change> changes = new ArrayList<>();
+        for (Edited state : states) {
+            final Object before = state.current().get(key);
+            if (Objects.equals(before, value)) {
+                continue;
+            }
+            changes.add(new Change(state.file(), key, before, value));
+            if (value == null) {
+                state.current().remove(key);
+            } else {
+                state.current().put(key, value);
+            }
+        }
+        if (changes.isEmpty()) {
+            return;
+        }
+        final List<Path> paths = changes.stream().map(Change::file).toList();
+        history.push(new ValueStep(name, List.copyOf(changes), this), List.of(key, paths), held);
+    }
+
+    /**
+     * The files with edits not saved.
+     *
+     * @return Their paths.
+     */
+    public List<Path> unsaved() {
+        return files.values().stream().filter(Edited::dirty).map(Edited::file).toList();
+    }
+
+    /**
+     * Save every file with edits.
+     *
+     * @return Whether all of them were written.
+     */
+    public boolean saveAll() {
+        final List<Edited> dirty = files.values().stream().filter(Edited::dirty).toList();
+        return dirty.isEmpty() || save(dirty) == dirty.size();
     }
 
     /**
@@ -310,22 +447,19 @@ public final class DetailsPanel {
         if (differs && !field.required()) {
             IkGui.sameLine();
             if (IkGui.button("Reset")) {
-                for (Edited state : shown) {
-                    state.current().remove(field.name());
-                }
+                change(shown, field.name(), null, "Reset " + label(field.name()), false);
             }
             if (IkGui.isItemHovered()) {
                 IkGui.setTooltip("Back to the default: " + describe(field.defaultValue()));
             }
         }
         if (changed) {
-            for (Edited state : shown) {
-                if (change[0] == null) {
-                    state.current().remove(field.name());
-                } else {
-                    state.current().put(field.name(), change[0]);
-                }
-            }
+            change(
+                    shown,
+                    field.name(),
+                    change[0],
+                    "Set " + label(field.name()),
+                    IkGui.isAnyItemActive());
         }
         IkGui.popID();
     }
@@ -370,11 +504,12 @@ public final class DetailsPanel {
         final Object old = state.current().get(field.name());
         final Object now = drawChild(field, old);
         if (now != old) {
-            if (now == null || now == REMOVED) {
-                state.current().remove(field.name());
-            } else {
-                state.current().put(field.name(), now);
-            }
+            change(
+                    shown,
+                    field.name(),
+                    now == REMOVED ? null : now,
+                    "Edit " + label(field.name()),
+                    IkGui.isAnyItemActive());
         }
     }
 
@@ -1007,7 +1142,15 @@ public final class DetailsPanel {
     public void revert(@NonNull List<Edited> states) {
         for (Edited state : states) {
             files.remove(state.file());
+            // Its edits are gone, so undoing them would make edits of their own
+            history.forget(
+                    step -> step instanceof ValueStep values && values.touches(state.file()));
         }
+    }
+
+    /** Drop every file's edits. */
+    public void revertAll() {
+        revert(List.copyOf(files.values()));
     }
 
     /**
@@ -1022,13 +1165,7 @@ public final class DetailsPanel {
         if (shown.isEmpty() || shown.getFirst().format().schema().field(name) == null) {
             return false;
         }
-        for (Edited state : shown) {
-            if (value == null) {
-                state.current().remove(name);
-            } else {
-                state.current().put(name, value);
-            }
-        }
+        change(shown, name, value, (value == null ? "Reset " : "Set ") + label(name), false);
         return true;
     }
 
@@ -1062,7 +1199,7 @@ public final class DetailsPanel {
         final Map<String, Object> current = shown.getFirst().current();
         try {
             final Object changed = changeAt(current.get(field), steps, 1, value, append);
-            current.put(field, changed);
+            change(shown, field, changed, "Edit " + label(field), false);
             return true;
         } catch (RuntimeException e) {
             log.debug("No value at {}: {}", path, e.getMessage());
@@ -1135,6 +1272,16 @@ public final class DetailsPanel {
             }
         }
         return out.toString();
+    }
+
+    /**
+     * A field's name as it reads in an edit's name: "Set specular tint".
+     *
+     * @param key The field's name.
+     * @return The words, in lower case.
+     */
+    private static String label(String key) {
+        return words(key).toLowerCase(Locale.ROOT);
     }
 
     /**

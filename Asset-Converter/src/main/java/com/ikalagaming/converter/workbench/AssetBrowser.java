@@ -91,6 +91,19 @@ public final class AssetBrowser implements AutoCloseable {
     /** Shows a file's references, from a tile's menu, or null for no such item. */
     @Setter private @Nullable Consumer<Path> showReferences;
 
+    /**
+     * The files with edits not saved, marked on their tiles. -- SETTER -- Set where they come from.
+     *
+     * @param unsaved The files, as of now.
+     */
+    @Setter private java.util.function.@NonNull Supplier<Set<Path>> unsaved = Set::of;
+
+    /** The files marked on the tiles, to name them again when that changes. */
+    private Set<Path> marked = Set.of();
+
+    /** The names on the tiles made, by their place among the files shown. */
+    private final Map<Integer, Selectable> names = new HashMap<>();
+
     /** Renders thumbnails of materials, models and looks, or null without one. */
     private @Nullable ThumbnailStudio studio;
 
@@ -318,6 +331,12 @@ public final class AssetBrowser implements AutoCloseable {
             refreshChoices(snapshot);
             dirty = true;
         }
+        final Set<Path> now = unsaved.get();
+        if (!now.equals(marked)) {
+            // Named again in place, so thumbnails being made aren't dropped with their tiles
+            marked = Set.copyOf(now);
+            names.forEach((index, name) -> name.text(nameOf(shown.get(index))));
+        }
         if (dirty) {
             dirty = false;
             refilter(snapshot);
@@ -425,6 +444,7 @@ public final class AssetBrowser implements AutoCloseable {
                             return true;
                         });
         grid.releaseAll();
+        names.clear();
         grid.items(
                 shown.size(),
                 new VirtualGrid.Factory() {
@@ -435,6 +455,7 @@ public final class AssetBrowser implements AutoCloseable {
 
                     @Override
                     public void release(int index, @NonNull Node<?> node) {
+                        names.remove(index);
                         // A render not started for a tile scrolled away isn't wanted now
                         if (studio != null && index < shown.size()) {
                             studio.cancel(shown.get(index).file());
@@ -465,6 +486,21 @@ public final class AssetBrowser implements AutoCloseable {
     }
 
     /**
+     * The name on a file's tile or row: in a list with its type and ID, marked when it has edits
+     * not saved.
+     *
+     * @param entry The file.
+     * @return The name.
+     */
+    private String nameOf(AssetIndex.Entry entry) {
+        final String name =
+                entry.file().getFileName() + (marked.contains(entry.file()) ? " *" : "");
+        return listed
+                ? name + "    " + entry.type() + (entry.id() == null ? "" : "    " + entry.id())
+                : name;
+    }
+
+    /**
      * Make a tile or row.
      *
      * @param index The file's place among those shown.
@@ -475,20 +511,14 @@ public final class AssetBrowser implements AutoCloseable {
         final Path file = entry.file();
         final String name = file.getFileName().toString();
         final Selectable label =
-                new Selectable(
-                                "asset-name" + index,
-                                listed
-                                        ? name
-                                                + "    "
-                                                + entry.type()
-                                                + (entry.id() == null ? "" : "    " + entry.id())
-                                        : name)
+                new Selectable("asset-name" + index, nameOf(entry))
                         .selected(selection.contains(file))
                         .onClick(() -> click(file))
                         .onDoubleClick(() -> open.accept(file))
                         .tooltip(file + (entry.id() == null ? "" : "\n" + entry.id()))
                         .contextMenu(menu(file))
                         .dragSource(DRAG_TYPE, () -> file, name);
+        names.put(index, label);
         if (listed) {
             return label;
         }

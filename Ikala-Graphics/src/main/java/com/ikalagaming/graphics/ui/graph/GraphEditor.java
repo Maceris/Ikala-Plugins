@@ -22,6 +22,7 @@ import com.ikalagaming.graphics.ui.graph.model.NodeTypes;
 
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 import org.joml.Vector2f;
 
 import java.util.ArrayList;
@@ -227,6 +228,14 @@ public class GraphEditor {
      * @return The history.
      */
     @Getter private final GraphHistory history;
+
+    /**
+     * Whether Ctrl+Z and Ctrl+Y undo and redo here, false when the window it is in handles them for
+     * every editor at once. -- SETTER -- Set whether it handles them.
+     *
+     * @param undoKeys True to handle them here.
+     */
+    @Setter private boolean undoKeys = true;
 
     /** The views of the graph's nodes, by node ID. */
     private final Map<String, GraphNodeView> views = new HashMap<>();
@@ -1276,6 +1285,10 @@ public class GraphEditor {
                     bound.getValue().accept(target);
                 }
             }
+            return;
+        }
+        if (!undoKeys && (IkGui.isKeyPressed(Key.Z, false) || IkGui.isKeyPressed(Key.Y, false))) {
+            // Undone by the window, among other editors' edits
             return;
         }
         if (IkGui.isKeyPressed(Key.Z, false)) {

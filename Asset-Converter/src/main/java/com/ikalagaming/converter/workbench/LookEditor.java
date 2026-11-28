@@ -122,6 +122,75 @@ public final class LookEditor {
     /** The material file {@link #pending} belongs to. */
     private @Nullable Path pendingFile;
 
+    /** The workbench's undo stack, which every edit here goes on. */
+    private final EditHistory history;
+
+    /** A copy of the live material's values as of the last step, to undo the next one to. */
+    private @Nullable Material stepped;
+
+    /** {@link #stepped}'s values as text, to tell when the live material changed. */
+    private String steppedValues = "";
+
+    /**
+     * A change of the look's pieces, undone by putting the look back.
+     *
+     * @param name What it is called.
+     * @param file The look file.
+     * @param before The look before.
+     * @param after The look after.
+     * @param editor The editor.
+     */
+    private record LookStep(
+            String name,
+            Path file,
+            BlockContent.Look before,
+            BlockContent.Look after,
+            LookEditor editor)
+            implements EditHistory.Step {
+        @Override
+        public void undo() {
+            editor.putLook(file, before);
+        }
+
+        @Override
+        public void redo() {
+            editor.putLook(file, after);
+        }
+    }
+
+    /**
+     * A change of the render material's values, undone by setting them back.
+     *
+     * @param file The render material file.
+     * @param before A copy of the values before.
+     * @param after A copy of the values after.
+     * @param editor The editor.
+     */
+    private record MaterialStep(Path file, Material before, Material after, LookEditor editor)
+            implements EditHistory.Step {
+        @Override
+        public String name() {
+            return "Edit " + file.getFileName();
+        }
+
+        @Override
+        public void undo() {
+            editor.putMaterial(file, before);
+        }
+
+        @Override
+        public void redo() {
+            editor.putMaterial(file, after);
+        }
+
+        @Override
+        public EditHistory.Step join(EditHistory.@NonNull Step later) {
+            return later instanceof MaterialStep next && next.file.equals(file)
+                    ? new MaterialStep(file, before, next.after, editor)
+                    : null;
+        }
+    }
+
     /**
      * Make the editor.
      *
@@ -132,6 +201,7 @@ public final class LookEditor {
      * @param rebuild Builds the scene again from the look as edited, keeping the view.
      * @param materials Draws a material's values.
      * @param report Says what happened.
+     * @param history The workbench's undo stack.
      */
     public LookEditor(
             @NonNull AssetSlot slots,
@@ -140,7 +210,8 @@ public final class LookEditor {
             @NonNull Consumer<Path> open,
             @NonNull Runnable rebuild,
             @NonNull MaterialEditor materials,
-            @NonNull Consumer<String> report) {
+            @NonNull Consumer<String> report,
+            @NonNull EditHistory history) {
         this.slots = slots;
         this.index = index;
         this.thumbnails = thumbnails;
@@ -148,6 +219,7 @@ public final class LookEditor {
         this.rebuild = rebuild;
         this.materials = materials;
         this.report = report;
+        this.history = history;
     }
 
     /**
@@ -171,7 +243,42 @@ public final class LookEditor {
         live = null;
         pending = null;
         showing = false;
+        // The last look's edits were dropped with it
+        history.forget(step -> step instanceof LookStep || step instanceof MaterialStep);
         return true;
+    }
+
+    /**
+     * Put the look back as a step had it, for undo and redo.
+     *
+     * @param lookFile The look file.
+     * @param look The look.
+     */
+    private void putLook(Path lookFile, BlockContent.Look look) {
+        if (!lookFile.equals(file) || look.equals(edited)) {
+            return;
+        }
+        rememberPending();
+        edited = look;
+        rebuild.run();
+    }
+
+    /**
+     * Put the render material's values back as a step had them, for undo and redo: on the live
+     * material if it is shown, else kept until it is.
+     *
+     * @param materialFile The render material file.
+     * @param values The values.
+     */
+    private void putMaterial(Path materialFile, Material values) {
+        if (live != null && materialFile.equals(liveFile)) {
+            live.setValues(values);
+            stepped = MaterialEditor.copy(values);
+            steppedValues = valuesOf(stepped);
+        } else {
+            pending = MaterialEditor.copy(values);
+            pendingFile = materialFile;
+        }
     }
 
     /**
@@ -209,6 +316,8 @@ public final class LookEditor {
             live.setValues(pending);
         }
         pending = null;
+        stepped = MaterialEditor.copy(live);
+        steppedValues = valuesOf(live);
     }
 
     /** Note that the 3D view shows something else. */
@@ -224,7 +333,7 @@ public final class LookEditor {
      * @return True if either does.
      */
     public boolean isDirty() {
-        return lookDirty() || materialDirty();
+        return lookDirty() || materialDirty() || pending != null;
     }
 
     /**
@@ -377,6 +486,17 @@ public final class LookEditor {
         rememberPending();
         edited = changed;
         chosen = piece;
+        if (file != null) {
+            history.push(
+                    new LookStep(
+                            "Set " + piece.name().toLowerCase(java.util.Locale.ROOT),
+                            file,
+                            look,
+                            changed,
+                            this),
+                    null,
+                    false);
+        }
         rebuild.run();
     }
 
@@ -519,6 +639,17 @@ public final class LookEditor {
             return;
         }
         materials.drawValues(material);
+        final String values = valuesOf(material);
+        final Path materialFile = liveFile;
+        if (!values.equals(steppedValues) && stepped != null && materialFile != null) {
+            final Material now = MaterialEditor.copy(material);
+            history.push(
+                    new MaterialStep(materialFile, stepped, now, this),
+                    materialFile,
+                    IkGui.isAnyItemActive());
+            stepped = now;
+            steppedValues = values;
+        }
     }
 
     /** Put the look and its material back as saved. */
@@ -534,6 +665,11 @@ public final class LookEditor {
             }
         }
         pending = null;
+        if (live != null) {
+            stepped = MaterialEditor.copy(live);
+            steppedValues = valuesOf(live);
+        }
+        history.forget(step -> step instanceof LookStep || step instanceof MaterialStep);
         if (lookDirty()) {
             edited = saved;
             rebuild.run();
@@ -565,6 +701,10 @@ public final class LookEditor {
             if (materialDirty()) {
                 saveMaterial(Objects.requireNonNull(live), Objects.requireNonNull(liveFile));
                 savedValues = valuesOf(live);
+            } else if (live == null && pending != null && pendingFile != null) {
+                // Edited, then the view moved on: the values kept for it
+                saveMaterial(pending, pendingFile);
+                pending = null;
             }
         } catch (IOException | RuntimeException e) {
             log.warn("Could not save the look {}", lookFile, e);
