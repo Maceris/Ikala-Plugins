@@ -343,6 +343,7 @@ public final class WorldgenCompiler implements FieldReader.Problems {
                     }
                     node = new Sources.Constant(0);
                 } else {
+                    warnUnknown(reader, WorldgenTypes.DENSITY, type);
                     node = factory.get().create(reader, this);
                 }
             } else {
@@ -460,6 +461,7 @@ public final class WorldgenCompiler implements FieldReader.Problems {
             }
             return null;
         }
+        warnUnknown(reader, WorldgenTypes.NOISE, type);
         String fileId = reader.getFile();
         fileId = fileId.substring(fileId.indexOf('/') + 1);
         final String saltText = salt != null ? salt : reader.get("salt").string(fileId);
@@ -479,7 +481,7 @@ public final class WorldgenCompiler implements FieldReader.Problems {
                 id,
                 from,
                 root -> {
-                    root.warnUnknownFields(Set.of("density", "display_range"));
+                    root.warnUnknownFields(WorldgenSchemas.PARAMETER);
                     final DensityNode density = density(root.get("density"));
                     Interval display = Interval.UNIT;
                     if (root.has("display_range")) {
@@ -521,8 +523,7 @@ public final class WorldgenCompiler implements FieldReader.Problems {
      */
     private TerrainStyle buildTerrainStyle(@NonNull String id, @NonNull FieldReader root) {
         // tags is read by later steps
-        root.warnUnknownFields(
-                Set.of("kind", "weight", "density", "op", "priority", "interpolation", "tags"));
+        root.warnUnknownFields(WorldgenSchemas.TERRAIN_STYLE);
         final FieldReader kindField = root.get("kind");
         final String kind = kindField.string();
         final boolean shape = "shape".equals(kind);
@@ -603,8 +604,7 @@ public final class WorldgenCompiler implements FieldReader.Problems {
                 from,
                 root -> {
                     // visual is read by a later step
-                    root.warnUnknownFields(
-                            Set.of("climate", "weight", "block_rules", "visual", "tags"));
+                    root.warnUnknownFields(WorldgenSchemas.BIOME);
                     final FieldReader climateField = root.get("climate");
                     Map<String, ParameterRange> climate = new TreeMap<>();
                     for (String name : climateField.keys()) {
@@ -669,14 +669,14 @@ public final class WorldgenCompiler implements FieldReader.Problems {
      * @return The rules.
      */
     private BlockRules buildRules(@NonNull FieldReader reader, @NonNull String id) {
-        reader.warnUnknownFields(Set.of("rules"));
+        reader.warnUnknownFields(WorldgenSchemas.BLOCK_RULES);
         List<BlockRules.Rule> rules = new ArrayList<>();
         for (FieldReader ruleField : reader.get("rules").list()) {
-            ruleField.warnUnknownFields(Set.of("if", "then"));
+            ruleField.warnUnknownFields(WorldgenSchemas.RULE);
             final BlockRules.Condition condition =
                     ruleField.has("if") ? condition(ruleField.get("if")) : null;
             final FieldReader then = ruleField.get("then");
-            then.warnUnknownFields(Set.of("block", "rules"));
+            then.warnUnknownFields(WorldgenSchemas.THEN);
             if (then.has("block") == then.has("rules")) {
                 then.error("WORLDGEN_RULE_NEEDS_ONE");
                 continue;
@@ -714,6 +714,7 @@ public final class WorldgenCompiler implements FieldReader.Problems {
             }
             return context -> false;
         }
+        warnUnknown(reader, WorldgenTypes.CONDITION, type);
         return factory.get().create(reader, this);
     }
 
@@ -800,6 +801,7 @@ public final class WorldgenCompiler implements FieldReader.Problems {
             }
             return null;
         }
+        warnUnknown(reader, WorldgenTypes.FLUIDS, type);
         return factory.get().create(reader, this);
     }
 
@@ -823,21 +825,7 @@ public final class WorldgenCompiler implements FieldReader.Problems {
      */
     private WorldType buildWorldType(@NonNull String id, @NonNull FieldReader root) {
         // structure_sets is read by a later step
-        root.warnUnknownFields(
-                Set.of(
-                        "border",
-                        "density",
-                        "interpolation",
-                        "default_block",
-                        "parameters",
-                        "biomes",
-                        "fallback_biome",
-                        "styles",
-                        "fallback_style",
-                        "style_fade",
-                        "fluids",
-                        "structure_sets",
-                        "spawn"));
+        root.warnUnknownFields(WorldgenSchemas.WORLD_TYPE);
         final boolean styled = root.has("styles");
         DensityNode density = null;
         if (!styled || root.has("density")) {
@@ -866,7 +854,7 @@ public final class WorldgenCompiler implements FieldReader.Problems {
         int killDistance = WorldType.DEFAULT_KILL_DISTANCE;
         if (root.has("border")) {
             final FieldReader borderField = root.get("border");
-            borderField.warnUnknownFields(Set.of("min", "max", "kill_distance"));
+            borderField.warnUnknownFields(WorldgenSchemas.BORDER);
             final double[] min = borderField.get("min").numbers(DensityNode.AXIS_COUNT);
             final double[] max = borderField.get("max").numbers(DensityNode.AXIS_COUNT);
             for (int axis = 0; axis < min.length; ++axis) {
@@ -1007,7 +995,8 @@ public final class WorldgenCompiler implements FieldReader.Problems {
         final FieldReader typeField = reader.get(KEY_TYPE);
         final String type = typeField.string();
         if (FEATURE_TREE.equals(type)) {
-            reader.warnUnknownFields(Set.of(KEY_TYPE, "species"));
+            reader.warnUnknownFields(
+                    WorldgenSchemas.FEATURE_TYPES.schemaOf(FEATURE_TREE).orElseThrow(), KEY_TYPE);
             final FieldReader speciesField = reader.get("species");
             return treeSpecies(speciesField.string(), speciesField)
                     .map(Feature.Tree::new)
@@ -1019,11 +1008,12 @@ public final class WorldgenCompiler implements FieldReader.Problems {
             }
             return null;
         }
-        reader.warnUnknownFields(Set.of(KEY_TYPE, "blocks"));
+        reader.warnUnknownFields(
+                WorldgenSchemas.FEATURE_TYPES.schemaOf(FEATURE_BLOCK).orElseThrow(), KEY_TYPE);
         final List<Block> blocks = new ArrayList<>();
         final List<Double> weights = new ArrayList<>();
         for (FieldReader entry : reader.get("blocks").list()) {
-            entry.warnUnknownFields(Set.of("block", "weight"));
+            entry.warnUnknownFields(WorldgenSchemas.BLOCK_ENTRY);
             final Block block = block(entry.get("block"));
             final FieldReader weightField = entry.get("weight");
             final double weight = weightField.number(1);
@@ -1061,15 +1051,7 @@ public final class WorldgenCompiler implements FieldReader.Problems {
      * @return The species, or null after an error.
      */
     private TreeSpecies buildTreeSpecies(@NonNull String id, @NonNull FieldReader root) {
-        root.warnUnknownFields(
-                Set.of(
-                        KEY_TYPE,
-                        "trunk",
-                        "leaves",
-                        "height",
-                        "crown_start",
-                        "crown_radius",
-                        "leaf_radius"));
+        root.warnUnknownFields(WorldgenSchemas.TREE_SPECIES);
         final FieldReader typeField = root.get(KEY_TYPE);
         final String type = typeField.string();
         if (!SHAPE_BROADLEAF.equals(type)) {
@@ -1117,7 +1099,7 @@ public final class WorldgenCompiler implements FieldReader.Problems {
      * @return The placed feature, or null after an error.
      */
     private PlacedFeature buildPlacedFeature(@NonNull String id, @NonNull FieldReader root) {
-        root.warnUnknownFields(Set.of("feature", "biomes", "layer", "priority", "placement"));
+        root.warnUnknownFields(WorldgenSchemas.PLACED_FEATURE);
         final Optional<Feature> feature = featureValue(root.get("feature"));
         final Set<String> biomes = biomeSet(root.get("biomes"));
         final FieldReader layerField = root.get("layer");
@@ -1141,7 +1123,9 @@ public final class WorldgenCompiler implements FieldReader.Problems {
             final String type = typeField.string();
             switch (type) {
                 case PLACEMENT_EACH_FLOOR -> {
-                    step.warnUnknownFields(Set.of(KEY_TYPE, "chance"));
+                    step.warnUnknownFields(
+                            WorldgenSchemas.PLACEMENT_TYPES.schemaOf("each_floor").orElseThrow(),
+                            KEY_TYPE);
                     if (chance >= 0) {
                         step.error("WORLDGEN_PLACEMENT_TWICE", type);
                     }
@@ -1159,14 +1143,18 @@ public final class WorldgenCompiler implements FieldReader.Problems {
                     cells = cellPlacement(step);
                 }
                 case PLACEMENT_ATTACH -> {
-                    step.warnUnknownFields(Set.of(KEY_TYPE, "to"));
+                    step.warnUnknownFields(
+                            WorldgenSchemas.PLACEMENT_TYPES.schemaOf("attach").orElseThrow(),
+                            KEY_TYPE);
                     final FieldReader to = step.get("to");
                     if (!ATTACH_FLOOR.equals(to.string(ATTACH_FLOOR))) {
                         to.error("WORLDGEN_ATTACH_NOT_BUILT", to.string(), ATTACH_FLOOR);
                     }
                 }
                 case PLACEMENT_CONDITION -> {
-                    step.warnUnknownFields(Set.of(KEY_TYPE, "if"));
+                    step.warnUnknownFields(
+                            WorldgenSchemas.PLACEMENT_TYPES.schemaOf("condition").orElseThrow(),
+                            KEY_TYPE);
                     conditions.add(condition(step.get("if")));
                 }
                 default -> {
@@ -1222,7 +1210,8 @@ public final class WorldgenCompiler implements FieldReader.Problems {
      * @return The cells, or null after an error.
      */
     private PlacedFeature.Cells cellPlacement(@NonNull FieldReader step) {
-        step.warnUnknownFields(Set.of(KEY_TYPE, "size", "candidates", "spacing"));
+        step.warnUnknownFields(
+                WorldgenSchemas.PLACEMENT_TYPES.schemaOf("cells").orElseThrow(), KEY_TYPE);
         final FieldReader sizeField = step.get("size");
         final int[] size;
         if (sizeField.isNumber()) {
@@ -1239,7 +1228,7 @@ public final class WorldgenCompiler implements FieldReader.Problems {
         DensityNode by = null;
         if (step.has("spacing")) {
             final FieldReader spacing = step.get("spacing");
-            spacing.warnUnknownFields(Set.of("min", "max", "by"));
+            spacing.warnUnknownFields(WorldgenSchemas.SPACING);
             min = spacing.get("min").number(0);
             max = spacing.get("max").number(min);
             if (spacing.has("by")) {
@@ -1297,11 +1286,11 @@ public final class WorldgenCompiler implements FieldReader.Problems {
      * @return The rule.
      */
     private static SpawnRule spawnRule(@NonNull FieldReader field) {
-        field.warnUnknownFields(Set.of("anchor", "origin", "radius", "y_range"));
+        field.warnUnknownFields(WorldgenSchemas.SPAWN);
         int minAir = SpawnRule.DEFAULT_MIN_AIR;
         if (field.has("anchor")) {
             final FieldReader anchor = field.get("anchor");
-            anchor.warnUnknownFields(Set.of("type", "min_air"));
+            anchor.warnUnknownFields(WorldgenSchemas.ANCHOR);
             final String type = anchor.get("type").string(SpawnRule.FLOOR);
             if (!SpawnRule.FLOOR.equals(type)) {
                 anchor.get("type").warn("WORLDGEN_SPAWN_ANCHOR", type, SpawnRule.FLOOR);
@@ -1542,5 +1531,17 @@ public final class WorldgenCompiler implements FieldReader.Problems {
      */
     public long getSeed() {
         return seed;
+    }
+
+    /**
+     * Warn about an object's fields its type's schema doesn't declare, if it declares one.
+     *
+     * @param reader The object.
+     * @param registry Its kind's types.
+     * @param type Its type.
+     */
+    private static void warnUnknown(
+            @NonNull FieldReader reader, @NonNull TypeRegistry<?> registry, @NonNull String type) {
+        registry.schemaOf(type).ifPresent(schema -> reader.warnUnknownFields(schema, KEY_TYPE));
     }
 }

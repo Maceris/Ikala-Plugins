@@ -5,6 +5,8 @@ import com.ikalagaming.factory.world.gen.Fluids;
 import com.ikalagaming.factory.world.gen.density.*;
 import com.ikalagaming.factory.world.gen.noise.Noise;
 import com.ikalagaming.factory.world.gen.noise.SimplexNoise;
+import com.ikalagaming.util.schema.Field;
+import com.ikalagaming.util.schema.Schema;
 
 import lombok.NonNull;
 
@@ -77,16 +79,16 @@ public final class WorldgenTypes {
     }
 
     /** Density node types. */
-    public static final TypeRegistry<DensityFactory> DENSITY = new TypeRegistry<>();
+    public static final TypeRegistry<DensityFactory> DENSITY = new TypeRegistry<>("density");
 
     /** Noise types. */
-    public static final TypeRegistry<NoiseFactory> NOISE = new TypeRegistry<>();
+    public static final TypeRegistry<NoiseFactory> NOISE = new TypeRegistry<>("noise");
 
     /** Block rule condition types. */
-    public static final TypeRegistry<ConditionFactory> CONDITION = new TypeRegistry<>();
+    public static final TypeRegistry<ConditionFactory> CONDITION = new TypeRegistry<>("condition");
 
     /** Fluid filling types. */
-    public static final TypeRegistry<FluidsFactory> FLUIDS = new TypeRegistry<>();
+    public static final TypeRegistry<FluidsFactory> FLUIDS = new TypeRegistry<>("fluids");
 
     /** The default size of a noise's features, in blocks. */
     public static final double DEFAULT_WAVELENGTH = 64;
@@ -109,6 +111,32 @@ public final class WorldgenTypes {
     /** Degrees in a half turn, for converting to radians. */
     private static final double HALF_TURN_DEGREES = 180;
 
+    /** A spline's point. */
+    private static final Schema SPLINE_POINT =
+            Schema.of(
+                    "spline point",
+                    WorldgenFields.number("x", "Where it is"),
+                    WorldgenFields.number("y", "What the spline gives there"));
+
+    /** A noise's octaves. */
+    private static final Schema FRACTAL =
+            Schema.of(
+                    "fractal",
+                    Field.choice("mode", "fbm", "How octaves add up", "fbm", "ridged", "billow"),
+                    Field.integer("octaves", 1, 1, MAX_OCTAVES, "How many octaves"),
+                    Field.number(
+                            "lacunarity",
+                            DEFAULT_LACUNARITY,
+                            Double.MIN_VALUE,
+                            Double.MAX_VALUE,
+                            "How much finer each octave is"),
+                    Field.number(
+                            "gain",
+                            DEFAULT_GAIN,
+                            Double.MIN_VALUE,
+                            Double.MAX_VALUE,
+                            "How much fainter each octave is"));
+
     /** The field every typed object has. */
     private static final String TYPE = "type";
 
@@ -127,18 +155,6 @@ public final class WorldgenTypes {
         registerNoise();
         registerConditions();
         registerFluids();
-    }
-
-    /**
-     * The fields a type reads, for unknown-field warnings.
-     *
-     * @param fields The fields besides {@code type}.
-     * @return Every field it knows.
-     */
-    private static Set<String> fields(String... fields) {
-        Set<String> known = new HashSet<>(Arrays.asList(fields));
-        known.add(TYPE);
-        return known;
     }
 
     /**
@@ -216,14 +232,28 @@ public final class WorldgenTypes {
     private static void registerSources() {
         DENSITY.register(
                 "constant",
+                Schema.of("constant", WorldgenFields.number("value", "The value everywhere")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields("value"));
                     return new Sources.Constant(r.get("value").number());
                 });
         DENSITY.register(
                 "noise",
+                Schema.of(
+                        "noise",
+                        WorldgenFields.noise("noise", "The noise sampled"),
+                        Field.text(
+                                "channel",
+                                Noise.VALUE_CHANNEL,
+                                "Which of the noise's values to use"),
+                        Field.text(
+                                "salt",
+                                null,
+                                "Changes the noise's pattern without changing its kind"),
+                        WorldgenFields.optional(
+                                WorldgenFields.perAxis(
+                                        "wavelength",
+                                        "The size of its features, in blocks, in place of the noise's own"))),
                 (r, c) -> {
-                    r.warnUnknownFields(fields("noise", "channel", "salt", "wavelength"));
                     final String salt = r.has("salt") ? r.get("salt").string() : null;
                     final double[] wavelength =
                             r.has("wavelength") ? perAxis(r.get("wavelength"), 0, false) : null;
@@ -246,15 +276,26 @@ public final class WorldgenTypes {
                 });
         DENSITY.register(
                 "axis",
+                Schema.of("axis", WorldgenFields.axis("axis", "The coordinate it gives")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields("axis"));
                     return new Sources.Axis(axis(r.get("axis")));
                 });
         for (String type : List.of("ref", "parameter")) {
             DENSITY.register(
                     type,
+                    "ref".equals(type)
+                            ? Schema.of(
+                                    "ref",
+                                    WorldgenFields.id("id", Kind.DENSITY, "The density file"))
+                            : Schema.of(
+                                    "parameter",
+                                    Field.reference(
+                                                    "id",
+                                                    WorldgenFields.folder(Kind.PARAMETER),
+                                                    null,
+                                                    "The parameter, or style: and a terrain style")
+                                            .asRequired()),
                     (r, c) -> {
-                        r.warnUnknownFields(fields("id"));
                         final FieldReader id = r.get("id");
                         return c.reference(type, id.string(), id);
                     });
@@ -268,8 +309,15 @@ public final class WorldgenTypes {
                     op == Arithmetic.FoldOp.SMOOTH_MIN || op == Arithmetic.FoldOp.SMOOTH_MAX;
             DENSITY.register(
                     op.name().toLowerCase(Locale.ROOT),
+                    smooth
+                            ? Schema.of(
+                                    "smooth fold",
+                                    WorldgenFields.densities(ARGS, "The values it combines"),
+                                    WorldgenFields.number("k", "How smoothly, above 0"))
+                            : Schema.of(
+                                    "fold",
+                                    WorldgenFields.densities(ARGS, "The values it combines")),
                     (r, c) -> {
-                        r.warnUnknownFields(smooth ? fields(ARGS, "k") : fields(ARGS));
                         final List<DensityNode> args = densities(r.get(ARGS), c);
                         final double k = smooth ? positive(r.get("k")) : 0;
                         return new Arithmetic.Fold(op, args, k);
@@ -278,15 +326,19 @@ public final class WorldgenTypes {
         for (Arithmetic.UnaryOp op : Arithmetic.UnaryOp.values()) {
             DENSITY.register(
                     op.name().toLowerCase(Locale.ROOT),
+                    Schema.of("unary", WorldgenFields.density(ARG, "The value it works on")),
                     (r, c) -> {
-                        r.warnUnknownFields(fields(ARG));
                         return new Arithmetic.Unary(op, c.density(r.get(ARG)));
                     });
         }
         DENSITY.register(
                 "clamp",
+                Schema.of(
+                        "clamp",
+                        WorldgenFields.density(ARG, "The value it works on"),
+                        WorldgenFields.number("min", "The least it gives"),
+                        WorldgenFields.number("max", "The most it gives")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields(ARG, "min", "max"));
                     final double min = r.get("min").number();
                     final double max = r.get("max").number();
                     if (max < min) {
@@ -296,8 +348,12 @@ public final class WorldgenTypes {
                 });
         DENSITY.register(
                 "remap",
+                Schema.of(
+                        "remap",
+                        WorldgenFields.density(ARG, "The value it works on"),
+                        WorldgenFields.range("from", "The range of values it takes"),
+                        WorldgenFields.range("to", "The range that range becomes")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields(ARG, "from", "to"));
                     final double[] from = r.get("from").numbers(RANGE_LENGTH);
                     final double[] to = r.get("to").numbers(RANGE_LENGTH);
                     if (from[0] == from[1]) {
@@ -309,8 +365,18 @@ public final class WorldgenTypes {
                 });
         DENSITY.register(
                 "spline",
+                Schema.of(
+                        "spline",
+                        WorldgenFields.density(ARG, "The value it works on"),
+                        WorldgenFields.objects(
+                                "points", SPLINE_POINT, "The points it passes through, x rising"),
+                        Field.choice(
+                                "interp",
+                                "linear",
+                                "How it curves between points",
+                                "linear",
+                                "cubic")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields(ARG, "points", "interp"));
                     final FieldReader interp = r.get("interp");
                     final String mode = interp.string("linear");
                     if (!"linear".equals(mode) && !"cubic".equals(mode)) {
@@ -325,7 +391,7 @@ public final class WorldgenTypes {
                     double[] ys = new double[points.size()];
                     for (int i = 0; i < points.size(); ++i) {
                         final FieldReader point = points.get(i);
-                        point.warnUnknownFields(Set.of("x", "y"));
+                        point.warnUnknownFields(SPLINE_POINT);
                         xs[i] = point.get("x").number();
                         ys[i] = point.get("y").number();
                         if (i > 0 && xs[i] <= xs[i - 1]) {
@@ -337,15 +403,24 @@ public final class WorldgenTypes {
                 });
         DENSITY.register(
                 "lerp",
+                Schema.of(
+                        "lerp",
+                        WorldgenFields.density("t", "How far from a to b, 0 to 1"),
+                        WorldgenFields.density("a", "The value at 0"),
+                        WorldgenFields.density("b", "The value at 1")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields("t", "a", "b"));
                     return new Arithmetic.Lerp(
                             c.density(r.get("t")), c.density(r.get("a")), c.density(r.get("b")));
                 });
         DENSITY.register(
                 "step",
+                Schema.of(
+                        "step",
+                        WorldgenFields.density(ARG, "The value it works on"),
+                        WorldgenFields.number("threshold", "Where it steps"),
+                        WorldgenFields.number("below", "What it gives below the threshold"),
+                        WorldgenFields.number("above", "What it gives at or above it")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields(ARG, "threshold", "below", "above"));
                     return new Arithmetic.Step(
                             c.density(r.get(ARG)),
                             r.get("threshold").number(),
@@ -354,8 +429,18 @@ public final class WorldgenTypes {
                 });
         DENSITY.register(
                 "range_mask",
+                Schema.of(
+                        "range_mask",
+                        WorldgenFields.density(ARG, "The value it works on"),
+                        WorldgenFields.number("min", "Where the range starts"),
+                        WorldgenFields.number("max", "Where it ends"),
+                        Field.number(
+                                "falloff",
+                                0,
+                                0,
+                                Double.MAX_VALUE,
+                                "How far it fades out past the ends")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields(ARG, "min", "max", "falloff"));
                     final double min = r.get("min").number();
                     final double max = r.get("max").number();
                     if (max < min) {
@@ -374,15 +459,21 @@ public final class WorldgenTypes {
     private static void registerTransforms() {
         DENSITY.register(
                 "translate",
+                Schema.of(
+                        "translate",
+                        WorldgenFields.density(ARG, "The value it works on"),
+                        WorldgenFields.perAxis("offset", "How far it moves the value")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields(ARG, "offset"));
                     return new Transforms.Translate(
                             c.density(r.get(ARG)), r.get("offset").numbers(DensityNode.AXIS_COUNT));
                 });
         DENSITY.register(
                 "scale",
+                Schema.of(
+                        "scale",
+                        WorldgenFields.density(ARG, "The value it works on"),
+                        WorldgenFields.perAxis("factor", "How much it stretches the value; not 0")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields(ARG, "factor"));
                     final FieldReader factorField = r.get("factor");
                     final double[] factor = factorField.numbers(DensityNode.AXIS_COUNT);
                     for (int i = 0; i < factor.length; ++i) {
@@ -395,8 +486,12 @@ public final class WorldgenTypes {
                 });
         DENSITY.register(
                 "rotate",
+                Schema.of(
+                        "rotate",
+                        WorldgenFields.density(ARG, "The value it works on"),
+                        WorldgenFields.axis("axis", "What it turns about"),
+                        WorldgenFields.number("degrees", "How far it turns")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields(ARG, "axis", "degrees"));
                     final double radians =
                             r.get("degrees").number() * StrictMath.PI / HALF_TURN_DEGREES;
                     return new Transforms.Rotate(
@@ -407,8 +502,12 @@ public final class WorldgenTypes {
                 });
         DENSITY.register(
                 "warp",
+                Schema.of(
+                        "warp",
+                        WorldgenFields.density(ARG, "The value it works on"),
+                        WorldgenFields.densities("by", "How far to move x, y and z: three values"),
+                        WorldgenFields.number("amplitude", "How strongly")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields(ARG, "by", "amplitude"));
                     final FieldReader byField = r.get("by");
                     List<DensityNode> by = densities(byField, c);
                     if (by.size() != DensityNode.AXIS_COUNT) {
@@ -424,15 +523,27 @@ public final class WorldgenTypes {
                 });
         DENSITY.register(
                 "repeat",
+                Schema.of(
+                        "repeat",
+                        WorldgenFields.density(ARG, "The value it works on"),
+                        WorldgenFields.perAxis(
+                                "period",
+                                "How often it repeats, in blocks; 0 for never on an axis")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields(ARG, "period"));
                     return new Transforms.Repeat(
                             c.density(r.get(ARG)), perAxis(r.get("period"), 1, true));
                 });
         DENSITY.register(
                 "mirror",
+                Schema.of(
+                        "mirror",
+                        WorldgenFields.density(ARG, "The value it works on"),
+                        Field.list(
+                                        "axes",
+                                        WorldgenFields.axis("axis", "An axis"),
+                                        "The axes it mirrors across")
+                                .asRequired()),
                 (r, c) -> {
-                    r.warnUnknownFields(fields(ARG, "axes"));
                     int mirrored = 0;
                     for (FieldReader axisField : r.get("axes").list()) {
                         mirrored |= axis(axisField);
@@ -441,8 +552,12 @@ public final class WorldgenTypes {
                 });
         DENSITY.register(
                 "quantize",
+                Schema.of(
+                        "quantize",
+                        WorldgenFields.density(ARG, "The value it works on"),
+                        WorldgenFields.perAxis(
+                                "step", "The size of its steps, in blocks; 0 for none on an axis")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields(ARG, "step"));
                     return new Transforms.Quantize(
                             c.density(r.get(ARG)), perAxis(r.get("step"), 1, true));
                 });
@@ -452,16 +567,28 @@ public final class WorldgenTypes {
     private static void registerShapes() {
         DENSITY.register(
                 "sphere",
+                Schema.of(
+                        "sphere",
+                        WorldgenFields.perAxis("center", "Where it is"),
+                        WorldgenFields.number("radius", "How big it is; above 0")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields("center", "radius"));
                     return new Shapes.Sphere(
                             r.get("center").numbers(DensityNode.AXIS_COUNT),
                             positive(r.get("radius")));
                 });
         DENSITY.register(
                 "box",
+                Schema.of(
+                        "box",
+                        WorldgenFields.perAxis("center", "Where it is"),
+                        WorldgenFields.perAxis("half_size", "Half its size on each axis; above 0"),
+                        Field.number(
+                                "rounding",
+                                0,
+                                0,
+                                Double.MAX_VALUE,
+                                "How round its edges are, up to its smallest half size")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields("center", "half_size", "rounding"));
                     final double[] half = perAxis(r.get("half_size"), Double.MIN_VALUE, false);
                     final FieldReader roundingField = r.get("rounding");
                     final double rounding = roundingField.number(0);
@@ -476,8 +603,13 @@ public final class WorldgenTypes {
                 });
         DENSITY.register(
                 "cylinder",
+                Schema.of(
+                        "cylinder",
+                        WorldgenFields.perAxis("center", "Where it is"),
+                        WorldgenFields.axis("axis", "Which way it stands"),
+                        WorldgenFields.number("radius", "How wide it is; above 0"),
+                        WorldgenFields.number("half_height", "Half how tall it is; above 0")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields("center", "axis", "radius", "half_height"));
                     return new Shapes.Cylinder(
                             r.get("center").numbers(DensityNode.AXIS_COUNT),
                             axis(r.get("axis")),
@@ -486,8 +618,12 @@ public final class WorldgenTypes {
                 });
         DENSITY.register(
                 "plane",
+                Schema.of(
+                        "plane",
+                        WorldgenFields.perAxis("normal", "Which way it faces; not 0"),
+                        WorldgenFields.number(
+                                "offset", 0, "How far it is from the origin along the normal")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields("normal", "offset"));
                     final FieldReader normalField = r.get("normal");
                     double[] normal = normalField.numbers(DensityNode.AXIS_COUNT);
                     final double length = Shapes.length(normal[0], normal[1], normal[2]);
@@ -507,8 +643,13 @@ public final class WorldgenTypes {
     private static void registerSampling() {
         DENSITY.register(
                 "interpolated",
+                Schema.of(
+                        "interpolated",
+                        WorldgenFields.density(ARG, "The value it works on"),
+                        WorldgenFields.perAxis(
+                                "cell",
+                                "The size of the cells it samples and blends between, at least 1")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields(ARG, "cell"));
                     return new Interpolated(
                             c.density(r.get(ARG)),
                             perAxis(r.get("cell"), 1, false),
@@ -517,8 +658,11 @@ public final class WorldgenTypes {
                 });
         DENSITY.register(
                 "blur",
+                Schema.of(
+                        "blur",
+                        WorldgenFields.density(ARG, "The value it works on"),
+                        WorldgenFields.number("radius", "How far it blurs, at least 1")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields(ARG, "radius"));
                     final FieldReader radiusField = r.get("radius");
                     final double radius = radiusField.number();
                     if (radius < 1) {
@@ -537,8 +681,21 @@ public final class WorldgenTypes {
     private static void registerNoise() {
         NOISE.register(
                 "simplex",
+                Schema.of(
+                        "simplex",
+                        Field.integer(
+                                "dimensions",
+                                DensityNode.AXIS_COUNT,
+                                FLAT_DIMENSIONS,
+                                DensityNode.AXIS_COUNT,
+                                "2 to ignore y, or 3"),
+                        WorldgenFields.optional(
+                                WorldgenFields.perAxis(
+                                        "wavelength",
+                                        "The size of its features, in blocks; 64 by default")),
+                        Field.text("salt", null, "Changes the pattern; the file's ID by default"),
+                        Field.object("fractal", FRACTAL, "Octaves of finer noise added on")),
                 (r, seed, wavelengthOverride, c) -> {
-                    r.warnUnknownFields(fields("dimensions", "wavelength", "salt", "fractal"));
                     final FieldReader dimensionsField = r.get("dimensions");
                     final int dimensions = dimensionsField.integer(DensityNode.AXIS_COUNT);
                     if (dimensions != FLAT_DIMENSIONS && dimensions != DensityNode.AXIS_COUNT) {
@@ -561,7 +718,7 @@ public final class WorldgenTypes {
                     double gain = DEFAULT_GAIN;
                     if (r.has("fractal")) {
                         final FieldReader fractal = r.get("fractal");
-                        fractal.warnUnknownFields(Set.of("mode", "octaves", "lacunarity", "gain"));
+                        fractal.warnUnknownFields(FRACTAL);
                         final FieldReader modeField = fractal.get("mode");
                         try {
                             mode =
@@ -598,8 +755,17 @@ public final class WorldgenTypes {
         for (String type : List.of("air_above", "air_below")) {
             CONDITION.register(
                     type,
+                    Schema.of(
+                            "air",
+                            Field.integer(
+                                    "min", 0, 0, BlockRules.EXPOSURE_CAP, "The least open blocks"),
+                            Field.integer(
+                                    "max",
+                                    BlockRules.EXPOSURE_CAP,
+                                    0,
+                                    BlockRules.EXPOSURE_CAP,
+                                    "The most open blocks")),
                     (r, c) -> {
-                        r.warnUnknownFields(fields("min", "max"));
                         final int min = r.get("min").integer(0);
                         final int max = r.get("max").integer(BlockRules.EXPOSURE_CAP);
                         if (min < 0 || max > BlockRules.EXPOSURE_CAP || max < min) {
@@ -612,8 +778,14 @@ public final class WorldgenTypes {
         }
         CONDITION.register(
                 "biome",
+                Schema.of(
+                        "biome",
+                        Field.textList(
+                                        "ids",
+                                        WorldgenFields.folder(Kind.BIOME),
+                                        "The biomes it is true in")
+                                .asRequired()),
                 (r, c) -> {
-                    r.warnUnknownFields(fields("ids"));
                     Set<String> ids = new TreeSet<>();
                     for (FieldReader idField : r.get("ids").list()) {
                         final String id = idField.string();
@@ -624,8 +796,28 @@ public final class WorldgenTypes {
                 });
         CONDITION.register(
                 "density",
+                Schema.of(
+                        "density",
+                        Field.reference(
+                                "id",
+                                WorldgenFields.folder(Kind.DENSITY),
+                                null,
+                                "A density file; this or density"),
+                        WorldgenFields.optional(
+                                WorldgenFields.density("density", "A density value; this or id")),
+                        Field.number(
+                                "min",
+                                Double.NEGATIVE_INFINITY,
+                                Double.NEGATIVE_INFINITY,
+                                Double.POSITIVE_INFINITY,
+                                "The least value it is true for"),
+                        Field.number(
+                                "max",
+                                Double.POSITIVE_INFINITY,
+                                Double.NEGATIVE_INFINITY,
+                                Double.POSITIVE_INFINITY,
+                                "The most value it is true for")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields("id", "density", "min", "max"));
                     if (r.has("id") == r.has("density")) {
                         r.error("WORLDGEN_DENSITY_NEEDS_ONE");
                     }
@@ -639,8 +831,8 @@ public final class WorldgenTypes {
                 });
         CONDITION.register(
                 "below",
+                Schema.of("below", WorldgenFields.blocks("blocks", "The blocks it is true above")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields("blocks"));
                     Set<String> names = new TreeSet<>();
                     for (FieldReader blockField : r.get("blocks").list()) {
                         names.add(c.block(blockField).getName());
@@ -649,16 +841,24 @@ public final class WorldgenTypes {
                 });
         CONDITION.register(
                 "fluid",
+                Schema.of(
+                        "fluid",
+                        Field.flag("adjacent", true, "True next to fluid, or false away from it")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields("adjacent"));
                     final boolean wanted = r.get("adjacent").bool(true);
                     return new BlockRules.FluidAdjacent(wanted);
                 });
         for (BlockRules.Logic logic : BlockRules.Logic.values()) {
             CONDITION.register(
                     logic.name().toLowerCase(Locale.ROOT),
+                    Schema.of(
+                            "logic",
+                            Field.list(
+                                            "of",
+                                            WorldgenFields.condition("condition", "A condition"),
+                                            "The conditions it combines")
+                                    .asRequired()),
                     (r, c) -> {
-                        r.warnUnknownFields(fields("of"));
                         List<BlockRules.Condition> of = new ArrayList<>();
                         for (FieldReader element : r.get("of").list()) {
                             of.add(c.condition(element));
@@ -672,14 +872,17 @@ public final class WorldgenTypes {
     private static void registerFluids() {
         FLUIDS.register(
                 "none",
+                Schema.of("none"),
                 (r, c) -> {
-                    r.warnUnknownFields(fields());
                     return new Fluids.None();
                 });
         FLUIDS.register(
                 "level",
+                Schema.of(
+                        "level",
+                        WorldgenFields.density("level", "The height fluid fills up to"),
+                        WorldgenFields.block("fluid", "The fluid's block")),
                 (r, c) -> {
-                    r.warnUnknownFields(fields("level", "fluid"));
                     return new Fluids.Level(c.density(r.get("level")), c.block(r.get("fluid")));
                 });
     }

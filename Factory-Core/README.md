@@ -25,6 +25,16 @@ Lotomation plugin's data folder is `lotomation:overworld/terrain`). The kinds ar
 configures and combines them. KVT accepts `/* ... */` comments. Chunks are cubic, 16^3, and
 generation is a pure function of the seed, the chunk position and the data.
 
+Every type is registered with a `Schema` of its fields (Ikala-Core's `util.schema`), declared
+beside its factory: each field's kind, default, range and meaning. The compiler warns about an
+object's unknown fields against its type's schema before the factory reads it, and the kinds the
+compiler builds itself (parameters, biomes, block rules, features and the rest) declare theirs in
+`WorldgenSchemas`, whose `root(kind)` is a whole file as one field, for editors. Fields can be
+nested objects, lists, maps with free keys, typed objects whose `type` picks their schema from a
+registry (so a mod's types have theirs), and unions, like a density value: a number, a density
+file's ID, or a node. A mod registering a type without a schema still works; its fields just go
+unchecked.
+
 The tools run the same code the game generates with. From this folder:
 
 ```bash

@@ -2,11 +2,13 @@ package com.ikalagaming.factory.world.gen.data;
 
 import com.ikalagaming.factory.kvt.Node;
 import com.ikalagaming.factory.kvt.NodeType;
+import com.ikalagaming.util.schema.Schema;
 
 import lombok.Getter;
 import lombok.NonNull;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -153,6 +155,21 @@ public final class FieldReader {
      */
     public List<String> keys() {
         return value instanceof Node node ? node.getKeys() : List.of();
+    }
+
+    /**
+     * Warn about fields this object has that its schema doesn't declare, which are usually
+     * misspellings.
+     *
+     * @param schema The object's fields.
+     * @param also Keys that mean something here besides, like a typed object's {@code type}.
+     */
+    public void warnUnknownFields(@NonNull Schema schema, @NonNull String... also) {
+        final Set<String> known = new java.util.HashSet<>(Arrays.asList(also));
+        for (com.ikalagaming.util.schema.Field field : schema.fields()) {
+            known.add(field.name());
+        }
+        warnUnknownFields(known);
     }
 
     /**

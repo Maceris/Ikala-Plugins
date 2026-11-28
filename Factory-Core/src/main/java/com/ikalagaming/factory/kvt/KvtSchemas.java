@@ -53,7 +53,12 @@ public final class KvtSchemas {
         if (value instanceof Float number) {
             return Double.parseDouble(number.toString());
         }
-        if (value instanceof List<?> list && list.stream().anyMatch(Float.class::isInstance)) {
+        if (value instanceof Node node) {
+            // Nested objects as maps, for schemas of objects
+            return raw(node);
+        }
+        if (value instanceof List<?> list
+                && list.stream().anyMatch(v -> v instanceof Float || v instanceof Node)) {
             return list.stream().map(KvtSchemas::decimal).toList();
         }
         return value;
@@ -166,6 +171,9 @@ public final class KvtSchemas {
     private static String valueText(
             Field field, Object value, Optional<NodeType> had, NodeType numbers) {
         return switch (field.kind()) {
+            case OBJECT, LIST, TYPED, UNION, MAP ->
+                    throw new UnsupportedOperationException(
+                            "Writing nested values isn't done yet: " + field.name());
             case TEXT, CHOICE, REFERENCE ->
                     new ValueNode<>(NodeType.STRING, (String) value).toString();
             case FLAG -> value.toString();
