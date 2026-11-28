@@ -111,6 +111,9 @@ public class Workbench {
     /** The ID of the graph panel. */
     static final String GRAPH_ID = "converter/workbench-graph";
 
+    /** The ID of the asset browser panel. */
+    static final String ASSETS_ID = "converter/workbench-assets";
+
     /** The ID of the panel listing the asset index's problems. */
     static final String PROBLEMS_ID = "converter/workbench-problems";
 
@@ -136,7 +139,8 @@ public class Workbench {
                     SCENE_ID,
                     GRAPH_ID,
                     PREVIEWS_ID,
-                    PROBLEMS_ID);
+                    PROBLEMS_ID,
+                    ASSETS_ID);
 
     /** The height of the top bar: one row, for going back, the layout and the status. */
     private static final float TOP_HEIGHT = 36;
@@ -150,6 +154,7 @@ public class Workbench {
                     .split(DockLayout.Side.LEFT, 0.17f, FILES_ID)
                     .splitPrevious(DockLayout.Side.BOTTOM, 0.35f, OUTLINER_ID, PROBLEMS_ID)
                     .split(DockLayout.Side.RIGHT, 0.25f, PROPERTIES_ID)
+                    .split(DockLayout.Side.BOTTOM, 0.3f, ASSETS_ID)
                     .center(VIEWER_ID, SCENE_ID, GRAPH_ID, PREVIEWS_ID);
 
     /** The dock space the panels dock into. */
@@ -193,6 +198,13 @@ public class Workbench {
      * @return The index service.
      */
     @Getter private final AssetIndexService assets = new AssetIndexService();
+
+    /**
+     * The Assets panel. -- GETTER -- The asset browser.
+     *
+     * @return The asset browser.
+     */
+    @Getter private final AssetBrowser assetBrowser;
 
     /**
      * Shows the open file, unless it is a scene. -- GETTER -- The preview host.
@@ -302,6 +314,7 @@ public class Workbench {
                         new MaterialEditor(graphics.ui(), this::loadTexture, this::shownImage));
         sceneView.setCloseScene(this::closeScene);
         browser = new FileBrowser(Path.of(""));
+        assetBrowser = new AssetBrowser(assets, graphics.textures(), this::open);
         sceneView.getParticles().setFolder(browser::getDirectory);
         sceneView.getParticles().setSaved(saved -> refresh());
         path = new TextInput("path", "").onSubmit(this::openPath).width(Sizing.grow());
@@ -485,6 +498,7 @@ public class Workbench {
                                                 .height(Sizing.fixed(0)),
                                         graphTool.content()));
         panel(PREVIEWS_ID, "Previews", previewPanel.content());
+        panel(ASSETS_ID, "Assets", assetBrowser.content());
         panel(
                 PROBLEMS_ID,
                 "Problems",
@@ -1702,6 +1716,7 @@ public class Workbench {
      */
     public void stop() {
         assets.close();
+        assetBrowser.close();
         requests.incrementAndGet();
         scenes.incrementAndGet();
         loader.shutdownNow();

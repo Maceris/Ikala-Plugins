@@ -567,8 +567,10 @@ public class GraphTool {
      * @return The content.
      */
     public Node<?> content() {
+        // Grows to the panel, so the canvas is laid out as tall as it is drawn and centers right
         return new Column("graph-root")
                 .gap(4)
+                .height(Sizing.grow())
                 .add(
                         new Immediate("graph-toolbar", this::drawToolbar)
                                 .height(Sizing.fixed(TOOLBAR_HEIGHT)),

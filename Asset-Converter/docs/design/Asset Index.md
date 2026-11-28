@@ -45,3 +45,19 @@ The file list shows the roots (jump, add the folder shown, remove it) and how mu
 beside the Outliner, lists every problem, a click opening its file; and the properties of any open file end with its
 references: its type and ID, every folder providing that ID with the winner marked, what it uses (missing ones in the
 error color) and what uses it, each a link to the file.
+
+## The Assets panel
+
+The Assets panel (`AssetBrowser`) shows the index: the roots and their folders as a tree beside a `VirtualGrid` of
+tiles or rows, so only what is in view is made. It finds files by type, namespace, folder and fuzzy text
+(`AssetSearch`: the query's letters in order in the name or ID, runs, word starts and early matches first), and keeps
+collections (`AssetCollections`) in the state folder: saved searches, which find again each time, and hand-picked sets
+of files. A click selects a tile, which is what a slot's "use selected" will take; a double click opens it; a drag
+carries its path as `asset-file`; right-click adds it to a set or takes it out. Tags wait for something to give them.
+
+Textures and images have thumbnails (`Thumbnails`), made on the CPU in the background as their tiles are shown: tiled
+3x3 at a whole-number scale, pixel-sharp, so seams show, or one tile shrunk when that is too big. A thumbnail's file
+name hashes the file's path, size and time, those of what it uses, and a version, so a change makes a new one; using
+one marks it, and the folder keeps under 64 MiB by dropping the least recently used. Tiles upload their thumbnail
+when first drawn, and a new search lets go of those no longer shown. Materials, models and looks get rendered
+thumbnails in E7b2; until then their tiles show their type.

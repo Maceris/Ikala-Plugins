@@ -4,6 +4,7 @@ import com.ikalagaming.converter.gui.window.MainMenu;
 import com.ikalagaming.converter.scene.ImportedScene;
 import com.ikalagaming.converter.scene.MeshExport;
 import com.ikalagaming.converter.scene.SceneImporter;
+import com.ikalagaming.converter.workbench.AssetBrowser;
 import com.ikalagaming.converter.workbench.Comparison;
 import com.ikalagaming.converter.workbench.ContainerViewer;
 import com.ikalagaming.converter.workbench.GraphTool;
@@ -33,6 +34,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Consumer;
+import javax.annotation.Nullable;
 
 /**
  * What the converter's scripts can call, through the global {@code converter}, like {@code
@@ -666,10 +668,11 @@ public final class ConverterScripts {
                                         Float.parseFloat(words[3]));
                         case "where" ->
                                 log.info(
-                                        "Script: Graph view at {}, zoom {}, canvas {}",
+                                        "Script: Graph view at {}, zoom {}, canvas {} x {}",
                                         editor.getViewCenter(),
-                                        editor.getCanvas().getRect(),
-                                        editor.getCanvas().getZoom());
+                                        editor.getCanvas().getZoom(),
+                                        editor.getCanvas().getRect().getWidth(),
+                                        editor.getCanvas().getRect().getHeight());
                         case "starter" ->
                                 tool.starters().stream()
                                         .filter(
@@ -906,6 +909,89 @@ public final class ConverterScripts {
                         default -> log.warn("Script: no index command {}", words[0]);
                     }
                 });
+    }
+
+    /**
+     * Drive the workbench's Assets panel, logging "Script: Browser ..." with what it did: "search
+     * text", "type name|any", "folder path|all", "collection name|none", "mode list|tiles", "select
+     * file name", "save name" (the search shown as a collection), "pick name" (the selected file
+     * into a set), "list" (what is shown), "cached file name" (whether its thumbnail is in the
+     * cache), "thumbnails" (waits for the shown files' thumbnails), "uploaded file name" (whether
+     * its thumbnail is shown).
+     *
+     * @param command The command and its words, separated by spaces; a name or path is the rest.
+     */
+    public static void browser(String command) {
+        onWorkbench(
+                workbench -> {
+                    workbench.getAssets().start();
+                    final AssetBrowser assets = workbench.getAssetBrowser();
+                    final String[] words = command.trim().split("\\s+");
+                    final String rest = rest(words, 1);
+                    switch (words[0]) {
+                        case "search" -> assets.search(rest);
+                        case "type" -> assets.setType("any".equals(rest) ? null : rest);
+                        case "folder" ->
+                                assets.setFolder("all".equals(rest) ? null : Path.of(rest));
+                        case "collection" ->
+                                assets.showCollection("none".equals(rest) ? null : rest);
+                        case "mode" -> assets.setListed("list".equals(rest));
+                        case "select" -> {
+                            final Path file = shownNamed(assets, rest);
+                            assets.select(file);
+                            log.info("Script: Browser selected {}", file);
+                        }
+                        case "save" -> assets.saveSearch(rest);
+                        case "pick" -> {
+                            if (assets.getSelected() != null) {
+                                assets.pick(rest, assets.getSelected());
+                            }
+                        }
+                        case "list" ->
+                                log.info(
+                                        "Script: Browser shows {} files: {}",
+                                        assets.getShown().size(),
+                                        assets.getShown().stream()
+                                                .limit(12)
+                                                .map(entry -> entry.file().getFileName().toString())
+                                                .toList());
+                        case "thumbnails" ->
+                                log.info(
+                                        "Script: Browser has {} thumbnails, {} made this run",
+                                        assets.awaitThumbnails(),
+                                        assets.thumbnailsMade());
+                        case "cached" -> {
+                            final Path file = shownNamed(assets, rest);
+                            log.info(
+                                    "Script: Browser thumbnail of {} cached {}",
+                                    rest,
+                                    file != null && assets.isCached(file));
+                        }
+                        case "uploaded" -> {
+                            final Path file = shownNamed(assets, rest);
+                            log.info(
+                                    "Script: Browser thumbnail of {} shown {}",
+                                    rest,
+                                    file != null && assets.hasThumbnail(file));
+                        }
+                        default -> log.warn("Script: no browser command {}", words[0]);
+                    }
+                });
+    }
+
+    /**
+     * A shown file with a name.
+     *
+     * @param assets The Assets panel.
+     * @param name The file's name.
+     * @return The file, or null if none shown has it.
+     */
+    private static @Nullable Path shownNamed(AssetBrowser assets, String name) {
+        return assets.getShown().stream()
+                .map(entry -> entry.file())
+                .filter(file -> file.getFileName().toString().equals(name))
+                .findFirst()
+                .orElse(null);
     }
 
     /**

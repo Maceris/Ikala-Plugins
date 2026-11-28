@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.ui.automation;
 
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.gui.IkGui;
+import com.ikalagaming.graphics.gui.data.IkIO;
 import com.ikalagaming.graphics.gui.enums.MouseButton;
 import com.ikalagaming.graphics.ui.Surface;
 import com.ikalagaming.graphics.ui.UiManager;
@@ -113,6 +114,11 @@ public final class UiAutomation {
             Run next = waiting.poll();
             if (!next.getFuture().isDone()) {
                 current = next;
+                // Between runs, a real cursor outside the window takes the mouse away; put it back
+                // where the last run left it, so a key pressed next goes where the mouse was
+                if (lastMouseX > -Float.MAX_VALUE) {
+                    IkGui.getIO().addMousePosEvent(lastMouseX, lastMouseY);
+                }
             }
         }
         if (current == null) {
@@ -123,12 +129,24 @@ public final class UiAutomation {
         }
         items.install();
         items.prune();
+        final IkIO io = IkGui.getIO();
+        if (io.mousePosition.x > -Float.MAX_VALUE / 2
+                && io.mousePosition.y > -Float.MAX_VALUE / 2) {
+            lastMouseX = io.mousePosition.x;
+            lastMouseY = io.mousePosition.y;
+        }
         if (current.advance(shown)) {
             finished.add(current);
             releaseButtons();
             current = null;
         }
     }
+
+    /** Where the mouse was while a run last drove, or -Float.MAX_VALUE for nowhere yet. */
+    private float lastMouseX = -Float.MAX_VALUE;
+
+    /** Where the mouse was while a run last drove, down. */
+    private float lastMouseY = -Float.MAX_VALUE;
 
     /** Leave no mouse button held down for the player or the next run. */
     private static void releaseButtons() {
