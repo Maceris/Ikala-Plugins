@@ -17,6 +17,7 @@ import com.ikalagaming.graphics.PreviewView;
 import com.ikalagaming.graphics.TextureFilter;
 import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.TextureWrap;
+import com.ikalagaming.graphics.Textures;
 import com.ikalagaming.graphics.asset.AssetFile;
 import com.ikalagaming.graphics.asset.AssetFormat;
 import com.ikalagaming.graphics.asset.MaterialText;
@@ -838,6 +839,22 @@ public final class ScenePlacement {
      * @throws IOException If the file has no such map.
      */
     private TextureHandle loadTextureFile(Path path, ColorSpace colorSpace) throws IOException {
+        return loadTextureFile(graphics.textures(), path, colorSpace);
+    }
+
+    /**
+     * Load a map of a texture file with its mip levels: the base color, or the normal map when the
+     * path ends with {@link BlockContent#NORMAL_MAP}. Any thread the textures allow.
+     *
+     * @param textures Uploads the texture.
+     * @param path The file, maybe with the mark.
+     * @param colorSpace How its values are read.
+     * @return The texture.
+     * @throws IOException If the file can't be read or has no such map.
+     */
+    public static TextureHandle loadTextureFile(
+            @NonNull Textures textures, @NonNull Path path, @NonNull ColorSpace colorSpace)
+            throws IOException {
         final String text = path.toString();
         final boolean normal = text.endsWith(BlockContent.NORMAL_MAP);
         final Path file =
@@ -852,17 +869,14 @@ public final class ScenePlacement {
         final ByteBuffer buffer = MemoryUtil.memAlloc(map.pixels().length);
         try {
             buffer.put(map.pixels()).flip();
-            return graphics.textures()
-                    .load(
-                            buffer,
-                            colorSpace == ColorSpace.SRGB
-                                    ? Format.R8G8B8A8_SRGB
-                                    : Format.R8G8B8A8_UNORM,
-                            stored.width(),
-                            stored.height(),
-                            stored.levelOffsets(),
-                            TextureWrap.REPEAT,
-                            TextureFilter.PIXELS);
+            return textures.load(
+                    buffer,
+                    colorSpace == ColorSpace.SRGB ? Format.R8G8B8A8_SRGB : Format.R8G8B8A8_UNORM,
+                    stored.width(),
+                    stored.height(),
+                    stored.levelOffsets(),
+                    TextureWrap.REPEAT,
+                    TextureFilter.PIXELS);
         } finally {
             MemoryUtil.memFree(buffer);
         }

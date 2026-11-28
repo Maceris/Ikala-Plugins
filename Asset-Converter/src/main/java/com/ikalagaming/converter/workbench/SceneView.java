@@ -113,8 +113,12 @@ public class SceneView implements Viewer {
     /** The most the imported lights' strength can be scaled by. */
     private static final float MAX_LIGHT_SCALE = 20;
 
-    /** Edits the scene's materials. */
-    private final MaterialEditor materials;
+    /**
+     * Edits the scene's materials. -- GETTER -- The material editor.
+     *
+     * @return The editor.
+     */
+    @Getter private final MaterialEditor materials;
 
     /** Builds and shows level of detail of the scene. */
     private final LodSection lod;

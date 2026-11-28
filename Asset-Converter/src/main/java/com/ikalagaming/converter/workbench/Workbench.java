@@ -1,6 +1,7 @@
 package com.ikalagaming.converter.workbench;
 
 import com.ikalagaming.converter.ConverterPlugin;
+import com.ikalagaming.converter.content.BlockContent;
 import com.ikalagaming.converter.content.ContextScene;
 import com.ikalagaming.converter.content.GameContent;
 import com.ikalagaming.converter.inspector.AssetSamples;
@@ -217,6 +218,13 @@ public class Workbench {
      */
     @Getter private final ReferenceViewer referenceViewer;
 
+    /**
+     * Draws asset slots, in the material editor and wherever else they are. -- GETTER -- The slots.
+     *
+     * @return The slots.
+     */
+    @Getter private final AssetSlot assetSlots;
+
     /** The panel the reference viewer is in. */
     private Panel referencesPanel;
 
@@ -322,16 +330,21 @@ public class Workbench {
         host = new PreviewHost(ui, "Pick an image or a .ika file in the file list to view it");
         sceneHost = new PreviewHost(ui, "Open a model, or try materials on a shape");
         previewPanel = new PreviewPanel(graphics);
-        sceneView =
-                new SceneView(
-                        graphics,
-                        new MaterialEditor(graphics.ui(), this::loadTexture, this::shownImage));
+        final MaterialEditor materialEditor = new MaterialEditor(graphics.ui(), this::loadTexture);
+        sceneView = new SceneView(graphics, materialEditor);
         sceneView.setCloseScene(this::closeScene);
         browser = new FileBrowser(Path.of(""));
         assetBrowser = new AssetBrowser(assets, graphics.textures(), this::open);
         referenceViewer =
                 new ReferenceViewer(assets::getSnapshot, assetBrowser::thumbnail, this::open);
         assetBrowser.setShowReferences(this::showReferences);
+        assetSlots =
+                new AssetSlot(
+                        assets::getSnapshot,
+                        assetBrowser::thumbnail,
+                        assetBrowser::getSelected,
+                        this::open);
+        materialEditor.setSlots(assetSlots);
         assetBrowser.setStudio(
                 new ThumbnailStudio(
                         graphics,
@@ -339,8 +352,7 @@ public class Workbench {
                         new MaterialEditor(
                                 graphics.ui(),
                                 (file, colorSpace, loaded) ->
-                                        loadTexture(file, colorSpace, loaded, false),
-                                () -> null),
+                                        loadTexture(file, colorSpace, loaded, false)),
                         this::post));
         sceneView.getParticles().setFolder(browser::getDirectory);
         sceneView.getParticles().setSaved(saved -> refresh());
@@ -1431,14 +1443,19 @@ public class Workbench {
                     try {
                         final String name = file.getFileName().toString().toLowerCase(Locale.ROOT);
                         final TextureHandle texture =
-                                name.endsWith(".dds")
-                                        ? graphics.textures().load(DdsFile.read(file), colorSpace)
-                                        : graphics.textures()
-                                                .load(
-                                                        file.toString(),
-                                                        colorSpace,
-                                                        TextureWrap.REPEAT,
-                                                        filterFor(file));
+                                name.endsWith(".ika")
+                                                || name.endsWith(".ika" + BlockContent.NORMAL_MAP)
+                                        ? ScenePlacement.loadTextureFile(
+                                                graphics.textures(), file, colorSpace)
+                                        : name.endsWith(".dds")
+                                                ? graphics.textures()
+                                                        .load(DdsFile.read(file), colorSpace)
+                                                : graphics.textures()
+                                                        .load(
+                                                                file.toString(),
+                                                                colorSpace,
+                                                                TextureWrap.REPEAT,
+                                                                filterFor(file));
                         post(
                                 () -> {
                                     loaded.accept(texture);
@@ -1549,16 +1566,6 @@ public class Workbench {
                                                         sceneView.setTextureProgress(progress);
                                                     }
                                                 })));
-    }
-
-    /**
-     * The path of the image the viewer shows, for the material editor to use as a texture.
-     *
-     * @return The image's path, or null if no image is shown.
-     */
-    private @Nullable Path shownImage() {
-        final TextureViewer shown = host.viewer(TextureViewer.class);
-        return shown == null ? null : shown.getImage().path();
     }
 
     /**

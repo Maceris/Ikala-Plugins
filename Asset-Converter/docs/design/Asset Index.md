@@ -75,6 +75,19 @@ linear light without cut-out pixels, opaque, and given as sRGB, as base colors a
 faces looks wrong wrapped on a ball; the average is a quick reference to the color instead. One no look uses is
 shown plain. A render that fails isn't asked for again until its key changes.
 
+## Slots
+
+A slot (`AssetSlot`) is the widget for an asset reference, drawn in place by panels that draw with IkGui each frame,
+like the material editor. It shows the file it names with its thumbnail, or the loaded texture, and its name; a file
+that isn't there is named in red with a red outline. It takes a file dragged from the Assets panel, one found with
+its picker (a fuzzy search of the index), or the Assets panel's selection (the `<` arrow), and only files of its
+types in the index. Open opens the file in the workbench, and Clear empties the slot.
+
+The material editor's four texture slots take textures and images. A texture file holds a normal map beside its
+colors, so the normal slot names a texture file with the `#normal` mark, as looks do. The editor keeps the file each
+slot names apart from the texture loaded, so a texture that is missing or fails to load still shows, and saving keeps
+its name. A material saved on another drive than its textures names them by file name only, as no path leads there.
+
 ## The References panel
 
 The References panel (`ReferenceViewer`) answers "what uses this" and "what does this use" for one file at a time,

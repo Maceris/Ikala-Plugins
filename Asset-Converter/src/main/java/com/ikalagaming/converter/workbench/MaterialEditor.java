@@ -1,6 +1,8 @@
 package com.ikalagaming.converter.workbench;
 
 import com.ikalagaming.converter.AssetConvert;
+import com.ikalagaming.converter.content.BlockContent;
+import com.ikalagaming.converter.index.EditorTypes;
 import com.ikalagaming.converter.scene.ImportedScene.Node;
 import com.ikalagaming.converter.scene.ScenePlacement;
 import com.ikalagaming.graphics.ColorSpace;
@@ -16,6 +18,7 @@ import com.ikalagaming.graphics.gui.flags.SliderFlags;
 import com.ikalagaming.graphics.ui.UiFrame;
 
 import lombok.NonNull;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
@@ -24,16 +27,16 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 import javax.annotation.Nullable;
 
 /**
  * Edits the materials of a scene in the workbench: pick one, or make a new one or a copy, change
- * its colors and factors, put textures in its slots from the image last opened, and put it on the
- * selected mesh. Changes show at once, since materials are written to the GPU every frame.
- * Materials open from and save to files of their own, binary ({@code .ika}) or text ({@code
+ * its colors and factors, fill its texture slots ({@link AssetSlot}s) from the asset index, and put
+ * it on the selected mesh. Changes show at once, since materials are written to the GPU every
+ * frame. Materials open from and save to files of their own, binary ({@code .ika}) or text ({@code
  * .material.yml}), naming their textures by paths relative to the file. Render thread only.
  */
 @Slf4j
@@ -47,8 +50,8 @@ public class MaterialEditor {
     /** The extension the file dialogs list for a material's text form. */
     private static final String TEXT_EXTENSION = "yml";
 
-    /** The size of a texture slot's thumbnail. */
-    private static final float THUMBNAIL = 48;
+    /** What a texture slot takes: texture files and images. */
+    private static final Set<String> TEXTURE_TYPES = Set.of(EditorTypes.TEXTURE, EditorTypes.IMAGE);
 
     /** Loads a texture from a file, handing it over on the render thread. */
     @FunctionalInterface
@@ -120,8 +123,14 @@ public class MaterialEditor {
     /** How the last open or save went, or empty. */
     private String fileStatus = "";
 
-    /** The image the workbench opened last, which slots can take. */
-    private final Supplier<Path> openImage;
+    /**
+     * The file each material's texture slots name, by slot, kept apart from the textures loaded so
+     * a missing file still shows, red, and is saved.
+     */
+    private final Map<Material, Path[]> slotFiles = new HashMap<>();
+
+    /** Draws the texture slots, or null where the editor is never drawn. */
+    @Setter private @Nullable AssetSlot slots;
 
     /** The material being edited, an index into the scene's materials, or -1. */
     private int selected = -1;
@@ -146,13 +155,10 @@ public class MaterialEditor {
      *
      * @param ui Shows file dialogs.
      * @param loader Loads textures for the slots.
-     * @param openImage The image the workbench opened last, or null if none.
      */
-    public MaterialEditor(
-            @NonNull UI ui, @NonNull TextureLoader loader, @NonNull Supplier<Path> openImage) {
+    public MaterialEditor(@NonNull UI ui, @NonNull TextureLoader loader) {
         this.ui = ui;
         this.loader = loader;
-        this.openImage = openImage;
     }
 
     /**
@@ -164,12 +170,28 @@ public class MaterialEditor {
         selected = index;
     }
 
+    /**
+     * Save the material being edited to a file, as Save file does.
+     *
+     * @param placement The scene.
+     * @param file The file.
+     * @return Whether a material was being edited.
+     */
+    public boolean saveSelected(@NonNull ScenePlacement placement, @NonNull Path file) {
+        if (selected < 0 || selected >= placement.getMaterials().size()) {
+            return false;
+        }
+        save(placement, placement.getMaterials().get(selected), file);
+        return true;
+    }
+
     /** Forget the material being edited, when the scene closes. */
     public void clear() {
         selected = -1;
         named = -1;
         texturePaths.clear();
         materialFiles.clear();
+        slotFiles.clear();
         fileStatus = "";
     }
 
@@ -349,12 +371,10 @@ public class MaterialEditor {
         }
 
         IkGui.separatorText("Textures");
-        final Path image = openImage.get();
-        for (Slot slot : Slot.values()) {
-            drawSlot(placement, material, slot, image);
-        }
-        if (image == null) {
-            IkGui.textDisabled("Open an image in the file list to put it in a slot");
+        if (slots != null) {
+            for (Slot slot : Slot.values()) {
+                drawSlot(slots, placement, material, slot);
+            }
         }
     }
 
@@ -392,52 +412,72 @@ public class MaterialEditor {
     }
 
     /**
-     * Draw one texture slot: its thumbnail, and buttons to clear it or put the open image in it.
+     * Draw one texture slot, and load what it is given: a texture file's map for the slot, or an
+     * image.
+     *
+     * @param slots Draws the slot.
+     * @param placement The scene, which keeps textures loaded here.
+     * @param material The material.
+     * @param slot The slot.
+     */
+    private void drawSlot(AssetSlot slots, ScenePlacement placement, Material material, Slot slot) {
+        final TextureHandle texture = slot.getter.apply(material);
+        Path file = filesOf(material)[slot.ordinal()];
+        if (file == null && texture != null) {
+            file = texturePaths.get(texture);
+        }
+        final AssetSlot.Change change = slots.draw(slot.label, TEXTURE_TYPES, file, texture);
+        if (change != null) {
+            assign(placement, material, slot, change.file());
+        }
+    }
+
+    /**
+     * Put a file in a texture slot, or empty it, loading its texture.
      *
      * @param placement The scene, which keeps textures loaded here.
      * @param material The material.
      * @param slot The slot.
-     * @param image The image the workbench opened last, or null.
+     * @param file The texture file or image, or null to empty the slot.
      */
-    private void drawSlot(ScenePlacement placement, Material material, Slot slot, Path image) {
-        IkGui.pushID(slot.name());
-        final TextureHandle texture = slot.getter.apply(material);
-        if (texture != null) {
-            IkGui.image(texture, THUMBNAIL, THUMBNAIL);
-        } else {
-            IkGui.dummy(THUMBNAIL, THUMBNAIL);
+    private void assign(
+            ScenePlacement placement, Material material, Slot slot, @Nullable Path file) {
+        if (file == null) {
+            filesOf(material)[slot.ordinal()] = null;
+            slot.setter.accept(material, null);
+            return;
         }
-        IkGui.sameLine();
-        IkGui.beginGroup();
-        IkGui.text(slot.label);
-        if (texture != null) {
-            IkGui.textDisabled(placement.textureName(texture));
-            if (IkGui.button("Clear")) {
-                slot.setter.accept(material, null);
-            }
-        } else {
-            IkGui.textDisabled("empty");
-        }
-        if (image != null) {
-            if (texture != null) {
-                IkGui.sameLine();
-            }
-            if (IkGui.button("Use " + image.getFileName())) {
-                loader.load(
-                        image,
-                        slot.colorSpace,
-                        loaded -> {
-                            placement.adoptTexture(loaded, image.getFileName().toString());
-                            texturePaths.put(loaded, image.toAbsolutePath());
-                            slot.setter.accept(material, loaded);
-                            if (slot == Slot.BASE_COLOR) {
-                                material.getBaseColor().set(1, 1, 1, material.getBaseColor().w);
-                            }
-                        });
-            }
-        }
-        IkGui.endGroup();
-        IkGui.popID();
+        // A texture file holds a normal map beside its colors, which the normal slot takes
+        final Path wanted =
+                slot == Slot.NORMAL && file.toString().endsWith(AssetFormat.EXTENSION)
+                        ? Path.of(file + BlockContent.NORMAL_MAP)
+                        : file;
+        filesOf(material)[slot.ordinal()] = wanted;
+        loader.load(
+                wanted,
+                slot.colorSpace,
+                loaded -> {
+                    if (!wanted.equals(filesOf(material)[slot.ordinal()])) {
+                        // Changed again while this one loaded
+                        return;
+                    }
+                    placement.adoptTexture(loaded, file.getFileName().toString());
+                    texturePaths.put(loaded, wanted);
+                    slot.setter.accept(material, loaded);
+                    if (slot == Slot.BASE_COLOR) {
+                        material.getBaseColor().set(1, 1, 1, material.getBaseColor().w);
+                    }
+                });
+    }
+
+    /**
+     * The files a material's texture slots name.
+     *
+     * @param material The material.
+     * @return Its files by slot, null where a slot names none; changes write through.
+     */
+    private Path[] filesOf(Material material) {
+        return slotFiles.computeIfAbsent(material, m -> new Path[Slot.values().length]);
     }
 
     /**
@@ -515,6 +555,8 @@ public class MaterialEditor {
             }
             final Slot slot = slots[i];
             final Path image = file.toAbsolutePath().resolveSibling(names[i]).normalize();
+            // Kept even if it can't load, so the slot shows it missing and saving keeps it
+            filesOf(material)[i] = image;
             loader.load(
                     image,
                     slot.colorSpace,
@@ -541,14 +583,19 @@ public class MaterialEditor {
         final Slot[] slots = Slot.values();
         final String[] names = new String[slots.length];
         boolean guessed = false;
+        final Path[] named = filesOf(material);
         for (int i = 0; i < slots.length; ++i) {
             final TextureHandle texture = slots[i].getter.apply(material);
-            if (texture == null) {
+            if (texture == null && named[i] == null) {
                 continue;
             }
-            final Path source = texturePaths.get(texture);
+            final Path source = named[i] != null ? named[i] : texturePaths.get(texture);
             if (source != null && source.getRoot().equals(folder.getRoot())) {
                 names[i] = folder.relativize(source).toString().replace('\\', '/');
+            } else if (source != null) {
+                // On another drive, so no path leads there from the file; a mark is kept
+                names[i] = source.getFileName().toString();
+                guessed = true;
             } else {
                 // From an imported scene, which only knows its name
                 names[i] = placement.textureName(texture);
@@ -571,7 +618,8 @@ public class MaterialEditor {
                 "Saved "
                         + file.getFileName()
                         + (guessed
-                                ? "; textures from the imported scene are named by file name only"
+                                ? "; some textures are named by file name only, as no path"
+                                        + " leads to them from there"
                                 : "");
     }
 

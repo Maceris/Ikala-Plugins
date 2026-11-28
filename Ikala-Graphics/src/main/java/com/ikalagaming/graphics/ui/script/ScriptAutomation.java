@@ -645,6 +645,19 @@ public final class ScriptAutomation {
     }
 
     /**
+     * Save the main window as it is next shown to a PNG file in a folder, as {@link
+     * #saveWindow(String)} does, for scripts given a folder as their arguments.
+     *
+     * @param folder The folder; made as needed.
+     * @param name The file's name in it, a .png file.
+     * @return The tag to await, which resumes once the file is written.
+     * @throws IllegalArgumentException If the path isn't a local .png file.
+     */
+    public String saveWindow(@NonNull String folder, @NonNull String name) {
+        return saveWindow(Path.of(folder, name).toString());
+    }
+
+    /**
      * A tag that resumes the calling script once a frame is saved, or stops it if saving fails.
      *
      * @param path The path the script gave, for messages.

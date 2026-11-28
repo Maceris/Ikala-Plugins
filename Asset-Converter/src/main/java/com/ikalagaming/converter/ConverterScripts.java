@@ -194,6 +194,16 @@ public final class ConverterScripts {
     }
 
     /**
+     * Open the workbench on a file in a folder, as {@link #openWorkbench(String)} does.
+     *
+     * @param folder The folder.
+     * @param name The file's path in it.
+     */
+    public static void openWorkbench(String folder, String name) {
+        openWorkbench(Path.of(folder, name).toString());
+    }
+
+    /**
      * Save the workbench's preview views to PNG files once they settle, logging "Script: Saved the
      * previews" when done, for checks of preview rendering.
      *
@@ -1016,6 +1026,100 @@ public final class ConverterScripts {
                         case "log" -> logReferences(viewer, rest);
                         case "grep" -> grepLooks(workbench, viewer);
                         default -> log.warn("Script: no references command {}", words[0]);
+                    }
+                });
+    }
+
+    /**
+     * Drive the asset slots, logging "Script: Slots ..." with what they show: "log", or an action
+     * on a slot by its label, done the next frame it draws, as if by hand.
+     *
+     * @param action "log".
+     */
+    public static void slot(String action) {
+        onWorkbench(
+                workbench -> {
+                    if (!"log".equals(action)) {
+                        log.warn("Script: no slot command {}", action);
+                        return;
+                    }
+                    log.info(
+                            "Script: Slots {}",
+                            workbench.getAssetSlots().shown().stream()
+                                    .map(
+                                            shown ->
+                                                    shown.label()
+                                                            + "="
+                                                            + (shown.file() == null
+                                                                    ? "empty"
+                                                                    : shown.file().getFileName()
+                                                                            + (shown.missing()
+                                                                                    ? " (missing)"
+                                                                                    : "")))
+                                    .toList());
+                });
+    }
+
+    /**
+     * Act on a slot by its label: "pick text" takes the picker's first match, "use" the Assets
+     * panel's selection, "clear" empties it.
+     *
+     * @param action The action.
+     * @param label The slot's label.
+     * @param argument The search text for "pick"; ignored otherwise.
+     */
+    public static void slot(String action, String label, String argument) {
+        onWorkbench(workbench -> workbench.getAssetSlots().request(label, action, argument));
+    }
+
+    /**
+     * Act on a slot by its label: "use" the Assets panel's selection, or "clear".
+     *
+     * @param action The action.
+     * @param label The slot's label.
+     */
+    public static void slot(String action, String label) {
+        slot(action, label, "");
+    }
+
+    /**
+     * Drop a file in a folder on a slot, as a drag from the Assets panel does, if the slot takes
+     * it.
+     *
+     * @param label The slot's label.
+     * @param folder The folder.
+     * @param name The file's path in it.
+     */
+    public static void slotDrop(String label, String folder, String name) {
+        slot("drop", label, Path.of(folder, name).toString());
+    }
+
+    /**
+     * Save the material the 3D view's material editor edits to a file, and log its text, as
+     * "Script: Material saved ...".
+     *
+     * @param folder The folder.
+     * @param name The file name, ending in .material.yml for text.
+     */
+    public static void materialSave(String folder, String name) {
+        onWorkbench(
+                workbench -> {
+                    final SceneView view = workbench.getSceneView();
+                    final var placement = view.getPlacement();
+                    final Path file = Path.of(folder, name);
+                    if (placement == null || !view.getMaterials().saveSelected(placement, file)) {
+                        log.info("Script: Material saved nothing, as none is edited");
+                        return;
+                    }
+                    try {
+                        log.info(
+                                "Script: Material saved {}: {}",
+                                name,
+                                java.nio.file.Files.readString(file)
+                                        .replace("\r", "")
+                                        .replace('\n', '|'));
+                    } catch (java.io.IOException e) {
+                        log.info("Script: Material saved {}, unreadable: {}", name, e.getMessage());
                     }
                 });
     }

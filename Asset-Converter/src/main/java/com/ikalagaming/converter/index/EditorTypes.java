@@ -31,6 +31,9 @@ public final class EditorTypes {
     /** The texture type's name. */
     public static final String TEXTURE = "texture";
 
+    /** An image file's type: a PNG, JPEG, TGA or HDR picture, under any root. */
+    public static final String IMAGE = "image";
+
     /** The model type's name. */
     public static final String MODEL = "model";
 
@@ -235,7 +238,7 @@ public final class EditorTypes {
     private static final class Images implements AssetType {
         @Override
         public String name() {
-            return "image";
+            return IMAGE;
         }
 
         @Override
