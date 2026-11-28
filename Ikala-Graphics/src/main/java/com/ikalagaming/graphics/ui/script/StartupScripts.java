@@ -54,6 +54,19 @@ public final class StartupScripts {
     }
 
     /**
+     * End the run because its startup script couldn't start, if {@value #EXIT_PROPERTY} is set,
+     * exiting with 1, rather than leave it open with nothing to do.
+     */
+    public static void couldNotStart() {
+        if (exitAfterScript()) {
+            log.warn("The startup script couldn't start; shutting down");
+            final Thread later = new Thread(() -> end(FAILED), "StartupScriptExit");
+            later.setDaemon(true);
+            later.start();
+        }
+    }
+
+    /**
      * Shut the app down once a startup script ends, if {@value #EXIT_PROPERTY} is set, exiting with
      * 1 if a UI check in it failed.
      *

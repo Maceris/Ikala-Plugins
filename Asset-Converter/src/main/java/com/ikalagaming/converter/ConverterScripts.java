@@ -834,6 +834,104 @@ public final class ConverterScripts {
     }
 
     /**
+     * Drive the workbench's asset index, logging "Script: Index ..." with what it did: "roots",
+     * listing them; "add folder" and "remove folder", changing them; "scan", reading them now and
+     * waiting; "uses file" and "usedby file", listing a file's references; "problems"; "go n",
+     * showing the n-th root, from 0, in the file list.
+     *
+     * @param command The command and its words, separated by spaces; a path is the rest.
+     */
+    public static void index(String command) {
+        onWorkbench(
+                workbench -> {
+                    final var assets = workbench.getAssets();
+                    assets.start();
+                    final String[] words = command.trim().split("\\s+");
+                    final String rest = rest(words, 1);
+                    switch (words[0]) {
+                        case "roots" -> log.info("Script: Index roots {}", assets.getRoots());
+                        case "add" ->
+                                log.info("Script: Index added {}", assets.addRoot(Path.of(rest)));
+                        case "remove" ->
+                                log.info(
+                                        "Script: Index removed {}",
+                                        assets.removeRoot(Path.of(rest)));
+                        case "scan" -> {
+                            final var snapshot = assets.scan().join();
+                            log.info(
+                                    "Script: Index read {} files, {} problems",
+                                    snapshot.entries().size(),
+                                    snapshot.problems().size());
+                        }
+                        case "uses" ->
+                                log.info(
+                                        "Script: Index {} uses {}",
+                                        Path.of(rest).getFileName(),
+                                        assets.getSnapshot().uses(Path.of(rest)).stream()
+                                                .map(
+                                                        link ->
+                                                                link.label()
+                                                                        + " "
+                                                                        + link.name()
+                                                                        + (link.file() == null
+                                                                                ? " (missing)"
+                                                                                : ""))
+                                                .toList());
+                        case "usedby" ->
+                                log.info(
+                                        "Script: Index {} is used by {}",
+                                        Path.of(rest).getFileName(),
+                                        assets.getSnapshot().usedBy(Path.of(rest)).stream()
+                                                .map(link -> link.file().getFileName().toString())
+                                                .sorted()
+                                                .toList());
+                        case "problems" ->
+                                log.info(
+                                        "Script: Index problems {}",
+                                        assets.getSnapshot().problems().stream()
+                                                .map(
+                                                        problem ->
+                                                                problem.file().getFileName()
+                                                                        + ": "
+                                                                        + problem.label()
+                                                                        + " "
+                                                                        + problem.name())
+                                                .toList());
+                        case "go" -> {
+                            workbench.showRoot(Integer.parseInt(words[1]));
+                            log.info(
+                                    "Script: Index showing {}",
+                                    workbench.getBrowser().getDirectory());
+                        }
+                        default -> log.warn("Script: no index command {}", words[0]);
+                    }
+                });
+    }
+
+    /**
+     * Drive the workbench's asset index with a folder, as {@link #index(String)} does with the
+     * command and the folder.
+     *
+     * @param command The command.
+     * @param folder The folder.
+     */
+    public static void index(String command, String folder) {
+        index(command + " " + folder);
+    }
+
+    /**
+     * Drive the workbench's asset index with a file in a folder, as {@link #index(String)} does
+     * with the command and the file's path.
+     *
+     * @param command The command.
+     * @param folder The folder.
+     * @param name The file's path in it.
+     */
+    public static void index(String command, String folder, String name) {
+        index(command + " " + Path.of(folder, name));
+    }
+
+    /**
      * Save the workbench's graph to a file, logging "Script: Graph saved" with it.
      *
      * @param folder The folder.

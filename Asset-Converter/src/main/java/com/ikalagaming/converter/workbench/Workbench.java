@@ -111,6 +111,19 @@ public class Workbench {
     /** The ID of the graph panel. */
     static final String GRAPH_ID = "converter/workbench-graph";
 
+    /** The ID of the panel listing the asset index's problems. */
+    static final String PROBLEMS_ID = "converter/workbench-problems";
+
+    /** The height of the asset roots strip in the files panel. */
+    private static final float ROOTS_HEIGHT = 56;
+
+    /** The most problems listed, so a broken folder can't fill the panel for ever. */
+    private static final int MAX_PROBLEMS = 500;
+
+    /** A missing reference's text, if the theme has no {@code converter.error} token. */
+    private static final int MISSING_COLOR =
+            com.ikalagaming.graphics.gui.util.Color.rgba(1.0f, 0.35f, 0.35f, 1.0f);
+
     /** Every surface and panel, for showing and hiding them together. */
     private static final List<String> SURFACES =
             List.of(
@@ -122,7 +135,8 @@ public class Workbench {
                     VIEWER_ID,
                     SCENE_ID,
                     GRAPH_ID,
-                    PREVIEWS_ID);
+                    PREVIEWS_ID,
+                    PROBLEMS_ID);
 
     /** The height of the top bar: one row, for going back, the layout and the status. */
     private static final float TOP_HEIGHT = 36;
@@ -134,7 +148,7 @@ public class Workbench {
     private static final DockLayout LAYOUT =
             new DockLayout()
                     .split(DockLayout.Side.LEFT, 0.17f, FILES_ID)
-                    .splitPrevious(DockLayout.Side.BOTTOM, 0.35f, OUTLINER_ID)
+                    .splitPrevious(DockLayout.Side.BOTTOM, 0.35f, OUTLINER_ID, PROBLEMS_ID)
                     .split(DockLayout.Side.RIGHT, 0.25f, PROPERTIES_ID)
                     .center(VIEWER_ID, SCENE_ID, GRAPH_ID, PREVIEWS_ID);
 
@@ -171,7 +185,14 @@ public class Workbench {
     private final Runnable back;
 
     /** What is being browsed. */
-    private final FileBrowser browser;
+    @Getter private final FileBrowser browser;
+
+    /**
+     * The asset index of the roots, read in the background. -- GETTER -- The asset index.
+     *
+     * @return The index service.
+     */
+    @Getter private final AssetIndexService assets = new AssetIndexService();
 
     /**
      * Shows the open file, unless it is a scene. -- GETTER -- The preview host.
@@ -421,6 +442,8 @@ public class Workbench {
                                 where,
                                 tools,
                                 drives,
+                                new Immediate("asset-roots", this::drawAssetRoots)
+                                        .height(Sizing.fixed(ROOTS_HEIGHT)),
                                 new Scroll("list")
                                         .border(true)
                                         .height(Sizing.grow())
@@ -462,6 +485,12 @@ public class Workbench {
                                                 .height(Sizing.fixed(0)),
                                         graphTool.content()));
         panel(PREVIEWS_ID, "Previews", previewPanel.content());
+        panel(
+                PROBLEMS_ID,
+                "Problems",
+                new Column("problems-root")
+                        .align(Align.STRETCH)
+                        .add(new Immediate("problems", this::drawProblems)));
         for (String surface : SURFACES) {
             ui.setVisible(surface, false);
         }
@@ -591,6 +620,209 @@ public class Workbench {
      * @param frame The current frame.
      */
     private void drawProperties(UiFrame frame) {
+        drawFileProperties(frame);
+        drawReferences(frame);
+    }
+
+    /**
+     * Draw the asset roots: jumping to one in the file list, adding or removing the folder shown,
+     * and how much is indexed.
+     *
+     * @param frame The current frame.
+     */
+    private void drawAssetRoots(UiFrame frame) {
+        assets.start();
+        final List<Path> roots = assets.getRoots();
+        IkGui.setNextItemWidth(-110);
+        if (IkGui.beginCombo("##asset-roots", "Go to an asset root")) {
+            for (Path root : roots) {
+                if (IkGui.selectable(rootLabel(root) + "##" + root)) {
+                    frame.fire(() -> navigate(root));
+                }
+                if (IkGui.isItemHovered()) {
+                    IkGui.setTooltip(root.toString());
+                }
+            }
+            IkGui.endCombo();
+        }
+        IkGui.sameLine();
+        final Path shown = browser.getDirectory().toAbsolutePath().normalize();
+        final boolean isRoot = roots.contains(shown);
+        if (IkGui.button(isRoot ? "Remove root" : "Add as root")) {
+            frame.fire(
+                    () -> {
+                        if (isRoot) {
+                            assets.removeRoot(shown);
+                        } else {
+                            assets.addRoot(shown);
+                        }
+                    });
+        }
+        IkGui.setItemTooltip(
+                isRoot
+                        ? "Stop indexing this folder."
+                        : "Index this folder's files and their references: a plugin's data folder,"
+                                + " whose files have IDs, or a folder of sources like art.");
+        final com.ikalagaming.converter.index.AssetIndex.Snapshot snapshot = assets.getSnapshot();
+        IkGui.textDisabled(
+                String.format(
+                        "%d files in %d roots indexed, %d problems%s",
+                        snapshot.entries().size(),
+                        roots.size(),
+                        snapshot.problems().size(),
+                        assets.isScanning() ? "; reading..." : ""));
+    }
+
+    /**
+     * Show one of the asset roots in the file list.
+     *
+     * @param index Which, from 0.
+     */
+    public void showRoot(int index) {
+        final List<Path> roots = assets.getRoots();
+        if (index >= 0 && index < roots.size()) {
+            navigate(roots.get(index));
+        }
+    }
+
+    /**
+     * A root's name in the list: its folder's name, after its parent's.
+     *
+     * @param root The root.
+     * @return The name.
+     */
+    private static String rootLabel(Path root) {
+        final Path name = root.getFileName();
+        final Path parent = root.getParent();
+        if (name == null) {
+            return root.toString();
+        }
+        return parent == null || parent.getFileName() == null
+                ? name.toString()
+                : parent.getFileName() + "/" + name;
+    }
+
+    /**
+     * Draw the asset index's problems: each reference that resolves to nothing, and each file that
+     * couldn't be read, with its file; a click opens the file.
+     *
+     * @param frame The current frame.
+     */
+    private void drawProblems(UiFrame frame) {
+        assets.start();
+        final List<com.ikalagaming.converter.index.AssetIndex.Problem> problems =
+                assets.getSnapshot().problems();
+        if (problems.isEmpty()) {
+            IkGui.textDisabled(
+                    assets.getRoots().isEmpty()
+                            ? "No asset roots: add folders in the file list to index them."
+                            : "No problems: every reference resolves.");
+            return;
+        }
+        int shown = 0;
+        for (com.ikalagaming.converter.index.AssetIndex.Problem problem : problems) {
+            if (++shown > MAX_PROBLEMS) {
+                IkGui.textDisabled((problems.size() - MAX_PROBLEMS) + " more");
+                break;
+            }
+            final Path file = problem.file();
+            if (IkGui.selectable(
+                    file.getFileName()
+                            + ": "
+                            + problem.label()
+                            + " "
+                            + problem.name()
+                            + "##problem"
+                            + shown)) {
+                frame.fire(() -> open(file));
+            }
+            if (IkGui.isItemHovered()) {
+                IkGui.setTooltip(file.toString());
+            }
+        }
+    }
+
+    /**
+     * Draw what the open file references and what references it, from the asset index; a click
+     * opens one.
+     *
+     * @param frame The current frame.
+     */
+    private void drawReferences(UiFrame frame) {
+        if (openFile == null) {
+            return;
+        }
+        IkGui.separator();
+        if (!IkGui.collapsingHeader(
+                "References", com.ikalagaming.graphics.gui.flags.TreeNodeFlags.DEFAULT_OPEN)) {
+            return;
+        }
+        final com.ikalagaming.converter.index.AssetIndex.Snapshot snapshot = assets.getSnapshot();
+        final com.ikalagaming.converter.index.AssetIndex.Entry entry = snapshot.entry(openFile);
+        if (entry == null) {
+            IkGui.textDisabled(
+                    assets.isScanning()
+                            ? "Reading the asset roots..."
+                            : "Not under an asset root; add its folder as one to see its"
+                                    + " references.");
+            return;
+        }
+        IkGui.textUnformatted(entry.type() + (entry.id() == null ? "" : ", " + entry.id()));
+        final List<Path> providers = snapshot.providers(openFile);
+        if (providers.size() > 1) {
+            IkGui.textUnformatted("Provided by " + providers.size() + " folders, the last wins:");
+            for (int i = 0; i < providers.size(); ++i) {
+                final Path provider = providers.get(i);
+                link(
+                        frame,
+                        "provider" + i,
+                        provider,
+                        provider + (i == providers.size() - 1 ? "  (wins)" : ""));
+            }
+        }
+        final List<com.ikalagaming.converter.index.AssetIndex.Link> uses = snapshot.uses(openFile);
+        IkGui.textUnformatted(uses.isEmpty() ? "Uses nothing" : "Uses:");
+        final int missing = frame.theme().color("converter.error", MISSING_COLOR);
+        for (int i = 0; i < uses.size(); ++i) {
+            final com.ikalagaming.converter.index.AssetIndex.Link use = uses.get(i);
+            if (use.file() == null) {
+                IkGui.textColored(missing, "  " + use.label() + ": " + use.name() + " (missing)");
+            } else {
+                link(frame, "use" + i, use.file(), use.label() + ": " + use.name());
+            }
+        }
+        final List<com.ikalagaming.converter.index.AssetIndex.Link> usedBy =
+                snapshot.usedBy(openFile);
+        IkGui.textUnformatted(usedBy.isEmpty() ? "Used by nothing" : "Used by:");
+        for (int i = 0; i < usedBy.size(); ++i) {
+            final com.ikalagaming.converter.index.AssetIndex.Link user = usedBy.get(i);
+            link(frame, "user" + i, user.file(), user.label() + " in " + user.file().getFileName());
+        }
+    }
+
+    /**
+     * A reference as a line that opens its file when clicked.
+     *
+     * @param frame The current frame.
+     * @param id Its ID, unique in the section.
+     * @param file The file.
+     * @param text What it shows.
+     */
+    private void link(UiFrame frame, String id, Path file, String text) {
+        if (IkGui.selectable("  " + text + "##" + id)) {
+            frame.fire(() -> open(file));
+        }
+        if (IkGui.isItemHovered()) {
+            IkGui.setTooltip(file.toString());
+        }
+    }
+
+    /**
+     * Draw the open file's own properties, by what shows it.
+     *
+     * @param frame The current frame.
+     */
+    private void drawFileProperties(UiFrame frame) {
         if (propertiesForGraph()) {
             graphTool.drawProperties(frame);
             return;
@@ -1469,6 +1701,7 @@ public class Workbench {
      * Safe from any thread.
      */
     public void stop() {
+        assets.close();
         requests.incrementAndGet();
         scenes.incrementAndGet();
         loader.shutdownNow();

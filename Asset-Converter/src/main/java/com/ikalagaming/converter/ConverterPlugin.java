@@ -139,7 +139,10 @@ public class ConverterPlugin extends Plugin {
                                     .global("args", System.getProperty(SCRIPT_ARGS_PROPERTY, "")))
                     .ifPresentOrElse(
                             runtime -> StartupScripts.exitWhenDone(runtime, getName()),
-                            () -> log.warn("Could not start the startup script {}", script));
+                            () -> {
+                                log.warn("Could not start the startup script {}", script);
+                                StartupScripts.couldNotStart();
+                            });
         }
         return true;
     }
