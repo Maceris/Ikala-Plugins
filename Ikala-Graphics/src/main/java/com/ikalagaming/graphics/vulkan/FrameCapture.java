@@ -32,6 +32,9 @@ import javax.imageio.ImageIO;
  * window being in front. A frame is copied right after the scene goes to its window, before the GUI
  * is drawn over it, so panels never show. Requests wait for the next frame that draws the scene,
  * one per frame, and their files are written on another thread once the GPU is done.
+ *
+ * <p>Window requests instead save the main window as it is shown, GUI and all, copied after its GUI
+ * pass; they are served on any frame, scene or not.
  */
 @Slf4j
 public class FrameCapture {
@@ -53,11 +56,14 @@ public class FrameCapture {
      */
     private record InFlight(Request request, int width, int height, boolean bgra) {}
 
-    /** Guards {@link #waiting}, which other threads add to. */
+    /** Guards {@link #waiting} and {@link #waitingWindow}, which other threads add to. */
     private final ReentrantLock lock = new ReentrantLock();
 
     /** Requests no frame has taken yet, oldest first. */
     private final Queue<Request> waiting = new ArrayDeque<>();
+
+    /** Window requests no frame has taken yet, oldest first. */
+    private final Queue<Request> waitingWindow = new ArrayDeque<>();
 
     /** The copy each frame index has in flight, or null. */
     private final InFlight[] inFlight = new InFlight[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
@@ -127,10 +133,31 @@ public class FrameCapture {
      * @return Completed with the path once the file is written.
      */
     public CompletableFuture<Path> request(@NonNull Path path) {
+        return add(waiting, path);
+    }
+
+    /**
+     * Ask for the main window to be saved as it is next shown, with its GUI.
+     *
+     * @param path Where the PNG goes; folders are made as needed.
+     * @return Completed with the path once the file is written.
+     */
+    public CompletableFuture<Path> requestWindow(@NonNull Path path) {
+        return add(waitingWindow, path);
+    }
+
+    /**
+     * Queue a request.
+     *
+     * @param queue Which kind of request.
+     * @param path Where the PNG goes.
+     * @return Completed with the path once the file is written.
+     */
+    private CompletableFuture<Path> add(Queue<Request> queue, Path path) {
         CompletableFuture<Path> done = new CompletableFuture<>();
         lock.lock();
         try {
-            waiting.add(new Request(path, done));
+            queue.add(new Request(path, done));
         } finally {
             lock.unlock();
         }
@@ -145,21 +172,41 @@ public class FrameCapture {
     public boolean isWaiting() {
         lock.lock();
         try {
-            return !waiting.isEmpty();
+            return !waiting.isEmpty() || !waitingWindow.isEmpty();
         } finally {
             lock.unlock();
         }
     }
 
     /**
-     * Take the oldest request, if any.
+     * Whether a window request could be copied this frame: one waits and the frame index has no
+     * copy in flight.
      *
-     * @return The request, or null.
+     * @param state The Vulkan state.
+     * @return True if the main window's image should be left ready to copy.
      */
-    private Request take() {
+    public boolean wantsWindow(@NonNull VulkanState state) {
+        if (inFlight[state.frameIndex] != null) {
+            return false;
+        }
         lock.lock();
         try {
-            return waiting.poll();
+            return !waitingWindow.isEmpty();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Take the oldest request of a kind, if any.
+     *
+     * @param queue Which kind.
+     * @return The request, or null.
+     */
+    private Request take(Queue<Request> queue) {
+        lock.lock();
+        try {
+            return queue.poll();
         } finally {
             lock.unlock();
         }
@@ -202,11 +249,52 @@ public class FrameCapture {
             int width,
             int height,
             boolean bgra) {
+        record(waiting, commandBuffer, state, image, width, height, bgra);
+    }
+
+    /**
+     * Copy the main window's image, GUI drawn, for the next waiting window request, if there is one
+     * and this frame index is free. The image must be a transfer source.
+     *
+     * @param commandBuffer The frame's command buffer.
+     * @param state The Vulkan state.
+     * @param image The window's image, blue first as swapchain images are.
+     * @param width Its width in pixels.
+     * @param height Its height in pixels.
+     */
+    public void recordWindow(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull VulkanState state,
+            long image,
+            int width,
+            int height) {
+        record(waitingWindow, commandBuffer, state, image, width, height, true);
+    }
+
+    /**
+     * Copy an image for the next request of a kind.
+     *
+     * @param queue Which kind of request.
+     * @param commandBuffer The frame's command buffer.
+     * @param state The Vulkan state.
+     * @param image The image, a transfer source.
+     * @param width The width to copy, in pixels.
+     * @param height The height to copy, in pixels.
+     * @param bgra Whether its bytes are blue first.
+     */
+    private void record(
+            Queue<Request> queue,
+            VkCommandBuffer commandBuffer,
+            VulkanState state,
+            long image,
+            int width,
+            int height,
+            boolean bgra) {
         final int index = state.frameIndex;
         if (inFlight[index] != null || width <= 0 || height <= 0) {
             return;
         }
-        final Request request = take();
+        final Request request = take(queue);
         if (request == null) {
             return;
         }
@@ -373,7 +461,10 @@ public class FrameCapture {
             destroyBuffer(state, i);
         }
         Request left;
-        while ((left = take()) != null) {
+        while ((left = take(waiting)) != null) {
+            left.done().cancel(false);
+        }
+        while ((left = take(waitingWindow)) != null) {
             left.done().cancel(false);
         }
     }

@@ -156,13 +156,16 @@ public class GuiRender {
      *     starts out cleared.
      * @param drawData The window's draw data, which must have been prepared this frame, or null to
      *     draw no GUI in it.
+     * @param toCopy Whether to leave the image ready to copy from for a window capture, after which
+     *     {@link #readyToPresent} must follow, rather than ready to present.
      */
     public void recordWindow(
             @NonNull VkCommandBuffer commandBuffer,
             @NonNull VulkanState vulkanState,
             @NonNull Presentation presentation,
             boolean sceneCopied,
-            DrawData drawData) {
+            DrawData drawData,
+            boolean toCopy) {
         recordImage(
                 commandBuffer,
                 vulkanState,
@@ -172,8 +175,41 @@ public class GuiRender {
                 presentation.swapchainHeight,
                 sceneCopied,
                 drawData,
-                false,
+                toCopy,
                 presentation);
+    }
+
+    /**
+     * Ready a swapchain image that was copied from, after {@link #recordWindow} left it ready to
+     * copy, for presenting.
+     *
+     * @param commandBuffer The command buffer to record into.
+     * @param image The swapchain image, in the transfer source layout.
+     */
+    public static void readyToPresent(@NonNull VkCommandBuffer commandBuffer, long image) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkImageMemoryBarrier2.Buffer barriers = VkImageMemoryBarrier2.calloc(1, stack);
+            // Presenting waits on the render complete semaphore, as after the GUI pass
+            barriers.get(0)
+                    .sType$Default()
+                    .srcStageMask(VK_PIPELINE_STAGE_2_TRANSFER_BIT)
+                    .srcAccessMask(VK_ACCESS_2_NONE)
+                    .dstStageMask(VK_PIPELINE_STAGE_2_NONE)
+                    .dstAccessMask(VK_ACCESS_2_NONE)
+                    .oldLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+                    .newLayout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+                    .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                    .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                    .image(image)
+                    .subresourceRange(
+                            range ->
+                                    range.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                                            .levelCount(1)
+                                            .layerCount(1));
+            vkCmdPipelineBarrier2(
+                    commandBuffer,
+                    VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barriers));
+        }
     }
 
     /**

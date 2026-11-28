@@ -16,6 +16,7 @@ import org.lwjgl.glfw.GLFW;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -36,6 +37,7 @@ import java.util.function.Supplier;
  * await(ui.test().clickItem("tools//lod", "Show cells"));
  * await(ui.test().typeItem("tools//materials", "Roughness", "0.5", true));
  * await(ui.test().saveFrame("shots/front.png"));
+ * await(ui.test().saveWindow("shots/editor.png"));
  * await(ui.test().mouseClickAt("graph//graph-canvas", "node add1", "right"));
  * await(ui.test().waitForTooltip("isn't linked"));
  * </pre>
@@ -624,25 +626,48 @@ public final class ScriptAutomation {
      */
     public String saveFrame(@NonNull String path) {
         final Path file = frameFile(path);
+        return awaitSaved(path, GraphicsManager.getRenderInstance().saveFrame(file));
+    }
+
+    /**
+     * Save the main window as it is next shown to a PNG file: the GUI's panels, popups and tooltips
+     * over the scene, as on screen. Windows popped out of the main one aren't in it. The window
+     * doesn't have to be in front, but a minimized window draws nothing to save. Headless, it is
+     * the same as {@link #saveFrame} with the GUI drawn.
+     *
+     * @param path Where the file goes, a .png file on this machine; folders are made as needed.
+     * @return The tag to await, which resumes once the file is written.
+     * @throws IllegalArgumentException If the path isn't a local .png file.
+     */
+    public String saveWindow(@NonNull String path) {
+        final Path file = frameFile(path);
+        return awaitSaved(path, GraphicsManager.getRenderInstance().saveWindow(file));
+    }
+
+    /**
+     * A tag that resumes the calling script once a frame is saved, or stops it if saving fails.
+     *
+     * @param path The path the script gave, for messages.
+     * @param saving The save.
+     * @return The tag to await.
+     */
+    private String awaitSaved(String path, CompletableFuture<Path> saving) {
         final ScriptRuntime runtime = currentRuntime();
         final String tag = TAG_PREFIX + NEXT_TAG.incrementAndGet();
-        GraphicsManager.getRenderInstance()
-                .saveFrame(file)
-                .whenComplete(
-                        (saved, error) -> {
-                            if (error == null) {
-                                ScriptManager.resume(runtime, tag, true);
-                                return;
-                            }
-                            log.warn(
-                                    "Saving a frame to {} failed in a script from {}, stopping it:"
-                                            + " {}",
-                                    path,
-                                    owner.getOwner(),
-                                    error.getMessage());
-                            StartupScripts.failed(owner.getOwner());
-                            ScriptManager.terminate(runtime);
-                        });
+        saving.whenComplete(
+                (saved, error) -> {
+                    if (error == null) {
+                        ScriptManager.resume(runtime, tag, true);
+                        return;
+                    }
+                    log.warn(
+                            "Saving a frame to {} failed in a script from {}, stopping it:" + " {}",
+                            path,
+                            owner.getOwner(),
+                            error.getMessage());
+                    StartupScripts.failed(owner.getOwner());
+                    ScriptManager.terminate(runtime);
+                });
         return tag;
     }
 

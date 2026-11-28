@@ -94,8 +94,20 @@ public class Presentation {
     /** The swapchain image height in pixels, which might not match the window. */
     public int swapchainHeight;
 
+    /** Whether the swapchain images can be copied from, for window captures. */
+    private boolean copyable;
+
     /** If we need to update the swapchain. */
     public boolean updateSwapchain = false;
+
+    /**
+     * Whether the swapchain images can be copied from, for window captures.
+     *
+     * @return True if they were made as transfer sources.
+     */
+    public boolean canCopyFrom() {
+        return copyable;
+    }
 
     /** The time (in millis) when the window was last resized. */
     public long lastResize;
@@ -324,6 +336,8 @@ public class Presentation {
             }
 
             final long oldSwapchain = swapchainHandle;
+            // Copied from for window captures, where the surface allows it
+            copyable = (capabilities.supportedUsageFlags() & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0;
 
             /*
              * NOTE(ches) The swapchain is BGRA as that's guaranteed to be everywhere, though our app generally operates
@@ -342,7 +356,8 @@ public class Presentation {
                             .imageArrayLayers(1)
                             .imageUsage(
                                     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
-                                            | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+                                            | VK_IMAGE_USAGE_TRANSFER_DST_BIT
+                                            | (copyable ? VK_IMAGE_USAGE_TRANSFER_SRC_BIT : 0))
                             .imageSharingMode(VK_SHARING_MODE_EXCLUSIVE)
                             .preTransform(capabilities.currentTransform())
                             .compositeAlpha(selectCompositeAlpha(capabilities))

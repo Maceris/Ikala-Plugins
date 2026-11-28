@@ -397,6 +397,19 @@ public class VulkanInstance {
         return state.frameCapture.request(path);
     }
 
+    /**
+     * Save the main window to a PNG file as it is next shown, GUI and all: panels, popups and the
+     * scene under them. Windows popped out of the main one aren't in it. Rendering headless, it is
+     * the frame as the window would show it.
+     *
+     * @param path Where the file goes; folders are made as needed.
+     * @return Completed with the path once the file is written, or cancelled if the renderer stops
+     *     first.
+     */
+    public CompletableFuture<Path> saveWindow(@NonNull Path path) {
+        return state.frameCapture.requestWindow(path);
+    }
+
     /** Clean up all the rendering resources. */
     public void cleanup() {
         checkError(vkDeviceWaitIdle(state.device.logical));
@@ -2083,13 +2096,29 @@ public class VulkanInstance {
         final GuiRender guiRender = pipelineManager.getGuiRender();
         guiRender.prepare(commandBuffer, state, gui.values());
         for (Presentation presentation : acquired) {
-            // Readies every image to present, even in windows with nothing drawn yet
+            // Readies every image to present, even in windows with nothing drawn yet; the main
+            // window's goes by way of a copy when a window capture waits
+            final boolean capture =
+                    presentation == sceneTarget
+                            && presentation.canCopyFrom()
+                            && state.frameCapture.wantsWindow(state);
             guiRender.recordWindow(
                     commandBuffer,
                     state,
                     presentation,
                     sceneCopied && presentation == sceneTarget,
-                    gui.get(presentation.getWindow()));
+                    gui.get(presentation.getWindow()),
+                    capture);
+            if (capture) {
+                final long image = presentation.swapchainImages[presentation.currentSwapchainIndex];
+                state.frameCapture.recordWindow(
+                        commandBuffer,
+                        state,
+                        image,
+                        presentation.swapchainWidth,
+                        presentation.swapchainHeight);
+                GuiRender.readyToPresent(commandBuffer, image);
+            }
         }
         if (drawScene) {
             state.frameTimings.mark(commandBuffer, state.frameIndex, "GuiRender");
@@ -2158,6 +2187,13 @@ public class VulkanInstance {
                         true,
                         "the headless frame");
                 state.frameCapture.record(commandBuffer, state, image.texture, width, height, true);
+                // The stand-in has the GUI over it already, so window captures take it as is
+                state.frameCapture.recordWindow(
+                        commandBuffer,
+                        state,
+                        image.texture,
+                        state.realSize.width(),
+                        state.realSize.height());
             }
             checkError(vkEndCommandBuffer(commandBuffer));
 
