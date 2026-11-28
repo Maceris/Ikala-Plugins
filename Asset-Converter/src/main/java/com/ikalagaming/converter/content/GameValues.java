@@ -3,9 +3,15 @@ package com.ikalagaming.converter.content;
 import com.ikalagaming.converter.index.AssetIndex;
 import com.ikalagaming.converter.index.AssetValues;
 import com.ikalagaming.factory.kvt.KvtSchemas;
+import com.ikalagaming.factory.kvt.Node;
 import com.ikalagaming.factory.kvt.NodeType;
 import com.ikalagaming.factory.kvt.TreeStringSerialization;
 import com.ikalagaming.factory.registry.ContentSchemas;
+import com.ikalagaming.factory.world.gen.data.Kind;
+import com.ikalagaming.factory.world.gen.data.WorldgenFields;
+import com.ikalagaming.factory.world.gen.data.WorldgenSchemas;
+import com.ikalagaming.factory.world.gen.data.WorldgenTypes;
+import com.ikalagaming.util.schema.Field;
 import com.ikalagaming.util.schema.Schema;
 
 import lombok.NonNull;
@@ -17,6 +23,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import javax.annotation.Nullable;
 
 /**
  * The game's content files' values, read and written through the schemas Factory-Core declares
@@ -41,14 +48,22 @@ public final class GameValues implements AssetValues {
     private final NodeType numbers;
 
     /**
+     * The field a whole file is, as a world generation file is one value, or null when the file's
+     * keys are the schema's fields.
+     */
+    private final @Nullable Field root;
+
+    /**
      * Read and write files of a kind.
      *
      * @param schema The kind's schema.
      * @param numbers How new numbers are stored.
+     * @param root The field the whole file is, or null.
      */
-    private GameValues(Schema schema, NodeType numbers) {
+    private GameValues(Schema schema, NodeType numbers, @Nullable Field root) {
         this.schema = schema;
         this.numbers = numbers;
+        this.root = root;
     }
 
     /**
@@ -78,7 +93,19 @@ public final class GameValues implements AssetValues {
                         ContentSchemas.WATER_LOOKS_FOLDER.equals(folder)
                                 ? NodeType.FLOAT
                                 : NodeType.DOUBLE;
-                return Optional.of(new GameValues(schema, numbers));
+                return Optional.of(new GameValues(schema, numbers, null));
+            }
+        }
+        // A world generation file is one value: its kind's root field
+        for (Kind kind : Kind.values()) {
+            if (relative.startsWith(WorldgenFields.folder(kind) + "/")) {
+                WorldgenTypes.ensureRegistered();
+                final Field field = WorldgenSchemas.root(kind);
+                return Optional.of(
+                        new GameValues(
+                                Schema.of(kind.getFolder().replace('_', ' '), field),
+                                NodeType.DOUBLE,
+                                field));
             }
         }
         return Optional.empty();
@@ -91,18 +118,57 @@ public final class GameValues implements AssetValues {
 
     @Override
     public Schema.Values read(@NonNull Path file) throws IOException {
-        final String text = Files.readString(file, StandardCharsets.UTF_8);
-        return KvtSchemas.read(
-                TreeStringSerialization.fromString(text)
-                        .orElseThrow(() -> new IOException(file.getFileName() + " isn't KVT")),
-                schema);
+        return read(Files.readString(file, StandardCharsets.UTF_8), file);
     }
 
+    /**
+     * Read a file's text.
+     *
+     * @param text The text.
+     * @param file The file, for messages.
+     * @return The values.
+     * @throws IOException If it isn't KVT.
+     */
+    private Schema.Values read(String text, Path file) throws IOException {
+        final Node tree =
+                TreeStringSerialization.fromString(text)
+                        .orElseThrow(() -> new IOException(file.getFileName() + " isn't KVT"));
+        return root == null
+                ? KvtSchemas.read(tree, schema)
+                : schema.read(Map.of(root.name(), KvtSchemas.raw(tree)));
+    }
+
+    /**
+     * Write by editing the file's text in place: only what changed from what the file holds now is
+     * written, keeping its layout and comments.
+     *
+     * @param file The file.
+     * @param values The new values.
+     * @throws IOException If it can't be read or written.
+     */
     @Override
     public void write(@NonNull Path file, @NonNull Map<String, Object> values) throws IOException {
-        final String original =
-                Files.isRegularFile(file) ? Files.readString(file, StandardCharsets.UTF_8) : null;
-        Files.writeString(
-                file, KvtSchemas.write(original, schema, values, numbers), StandardCharsets.UTF_8);
+        if (!Files.isRegularFile(file)) {
+            Files.writeString(
+                    file, KvtSchemas.write(null, schema, values, numbers), StandardCharsets.UTF_8);
+            return;
+        }
+        final String original = Files.readString(file, StandardCharsets.UTF_8);
+        final Schema.Values now = read(original, file);
+        final String edited;
+        try {
+            edited =
+                    root == null
+                            ? KvtSchemas.edit(original, schema, now.given(), values, numbers)
+                            : KvtSchemas.edit(
+                                    original,
+                                    root,
+                                    now.given().get(root.name()),
+                                    values.get(root.name()),
+                                    numbers);
+        } catch (IllegalArgumentException e) {
+            throw new IOException(e.getMessage(), e);
+        }
+        Files.writeString(file, edited, StandardCharsets.UTF_8);
     }
 }

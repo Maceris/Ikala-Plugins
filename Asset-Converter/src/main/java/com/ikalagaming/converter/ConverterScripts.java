@@ -1123,9 +1123,11 @@ public final class ConverterScripts {
     /**
      * Drive the Details panel, logging "Script: Details ..." with what it shows: "log label" (the
      * files shown, their kind, each field's value, mixed ones marked, and whether they changed),
-     * "set field value" (on every file shown, as its control does: a number, true or false, a list
-     * as comma separated words), "reset field" (back to its default), "show" (the panel in front),
-     * "save" or "revert".
+     * "path path value" and "append path value" (a nested value of the one file shown, as in {@code
+     * density.args[0].points[1].y}, or an entry added to a list; a value is a number, true or
+     * false, "none", {@code x=2, y=100} for an object, or text), "set field value" (on every file
+     * shown, as its control does: a number, true or false, a list as comma separated words), "reset
+     * field" (back to its default), "show" (the panel in front), "save" or "revert".
      *
      * @param command The command and its words, separated by spaces.
      */
@@ -1152,6 +1154,15 @@ public final class ConverterScripts {
                         }
                         case "reset" -> panel.set(rest(words, 1), null);
                         case "show" -> workbench.showDetails();
+                        case "path", "append" ->
+                                log.info(
+                                        "Script: Details {} {} {}",
+                                        words[0],
+                                        words[1],
+                                        panel.setPath(
+                                                words[1],
+                                                guessValue(rest(words, 2)),
+                                                "append".equals(words[0])));
                         case "save" -> log.info("Script: Details saved {}", panel.save(shown));
                         case "revert" -> panel.revert(shown);
                         default -> log.warn("Script: no details command {}", words[0]);
@@ -1211,6 +1222,35 @@ public final class ConverterScripts {
                 schema.name(),
                 shown.stream().anyMatch(DetailsPanel.Edited::dirty),
                 fields);
+    }
+
+    /**
+     * A nested value from a script's text, by its look: "none" for none, true or false, a number,
+     * {@code x=2, y=100} for an object of numbers, else text.
+     *
+     * @param text The text.
+     * @return The value.
+     */
+    private static Object guessValue(String text) {
+        if ("none".equals(text)) {
+            return null;
+        }
+        if ("true".equals(text) || "false".equals(text)) {
+            return Boolean.parseBoolean(text);
+        }
+        if (text.contains("=")) {
+            final java.util.Map<String, Object> map = new java.util.LinkedHashMap<>();
+            for (String pair : text.split(",")) {
+                final String[] parts = pair.split("=", 2);
+                map.put(parts[0].trim(), guessValue(parts[1].trim()));
+            }
+            return map;
+        }
+        try {
+            return Double.parseDouble(text);
+        } catch (NumberFormatException e) {
+            return text;
+        }
     }
 
     /**

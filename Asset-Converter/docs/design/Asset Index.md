@@ -124,6 +124,18 @@ value other than its default has a Reset. Save writes each changed file with onl
 differ from the defaults; edits wait, unsaved, while other files are selected, and the panel says
 how many. Problems found reading the files, like unknown fields, are listed under the fields.
 
+World generation files are one value each, their kind's root field from Factory-Core's
+`WorldgenSchemas`, and show as a collapsible tree: objects, lists and maps open to their fields, a
+typed node has a Type combo that swaps its fields, a union (a density as a number, a file's ID or a
+node) picks which it is, lists add and remove entries, and maps add keys. Any value can go back to
+its default or be taken out where it may be left out. Nested fields edit one file at a time.
+
+Content files save in place (`KvtSchemas.edit` on `KvtText`, which knows where each value is in the
+text): only the values that changed are written, a value replaced where it is, a key added before
+its object's closing brace or taken out with its comma, a list whose length changed rewritten in
+its place, and numbers keep how they were written (a float stays `0.5F`). Hand-laid-out files keep
+their layout and comments.
+
 ## The References panel
 
 The References panel (`ReferenceViewer`) answers "what uses this" and "what does this use" for one file at a time,

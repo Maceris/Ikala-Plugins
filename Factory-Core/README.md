@@ -75,7 +75,9 @@ Each kind's fields are declared once, in `ContentSchemas`, as a `Schema` (Ikala-
 unknown field is a warning. Block looks (`looks/block`) and water looks (`looks/water`) are read by
 Factory-Client but declared here, where the asset editor, which doesn't load the client, makes its
 forms from the same schemas. `KvtSchemas.write` writes a file back with only the values that differ
-from their defaults, keeping its leading comment, its other keys and the number types it used.
+from their defaults, keeping its leading comment, its other keys and the number types it used;
+`KvtSchemas.edit` changes an existing file in place, through `KvtText`, which knows where each value
+is in the text, so only the changed values' text changes and hand-laid-out files keep their layout.
 
 The determinism tests compare a fixed set of chunks against
 `src/test/resources/worldgen/golden-hashes.txt`. When generation changes on purpose, regenerate it

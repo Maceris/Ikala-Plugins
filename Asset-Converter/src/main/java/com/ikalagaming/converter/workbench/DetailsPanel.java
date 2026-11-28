@@ -10,6 +10,7 @@ import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.IkString;
 import com.ikalagaming.graphics.gui.flags.HoveredFlags;
 import com.ikalagaming.graphics.gui.flags.InputTextFlags;
+import com.ikalagaming.graphics.gui.flags.TreeNodeFlags;
 import com.ikalagaming.graphics.ui.UiFrame;
 import com.ikalagaming.util.schema.Field;
 import com.ikalagaming.util.schema.Schema;
@@ -264,6 +265,10 @@ public final class DetailsPanel {
      * @param shown The files.
      */
     private void drawField(Field field, List<Edited> shown) {
+        if (nested(field)) {
+            drawNestedField(field, shown);
+            return;
+        }
         final Object first = shown.getFirst().value(field);
         boolean mixed = false;
         for (Edited state : shown) {
@@ -321,6 +326,333 @@ public final class DetailsPanel {
      * @param change Gets the new value, null to take the field out.
      * @return Whether it was changed.
      */
+    /** What a nested value's drawing gives when the value is taken out. */
+    private static final Object REMOVED = new Object();
+
+    /**
+     * Whether a field holds other fields, and so is drawn as a tree.
+     *
+     * @param field The field.
+     * @return True for objects, lists, maps, typed objects and unions.
+     */
+    static boolean nested(Field field) {
+        return switch (field.kind()) {
+            case OBJECT, LIST, MAP, TYPED, UNION -> true;
+            default -> false;
+        };
+    }
+
+    /**
+     * Draw a field holding other fields as a tree, for one file.
+     *
+     * @param field The field.
+     * @param shown The files shown.
+     */
+    private void drawNestedField(Field field, List<Edited> shown) {
+        if (shown.size() > 1) {
+            IkGui.textDisabled(words(field.name()) + ": select one file to edit it");
+            return;
+        }
+        final Edited state = shown.getFirst();
+        final Object old = state.current().get(field.name());
+        final Object now = drawChild(field, old);
+        if (now != old) {
+            if (now == null || now == REMOVED) {
+                state.current().remove(field.name());
+            } else {
+                state.current().put(field.name(), now);
+            }
+        }
+    }
+
+    /**
+     * Draw one field's value inside a tree, with Reset or Remove, or Add when it has none.
+     *
+     * @param field The field.
+     * @param value Its value, or null if it has none.
+     * @return The same value if unchanged, the new one, or null when it was taken out.
+     */
+    private @Nullable Object drawChild(Field field, @Nullable Object value) {
+        final String label = words(field.name());
+        IkGui.pushID(field.name());
+        try {
+            if (value == null && field.defaultValue() == null) {
+                // Nothing to show: offer one, if it may be left out
+                IkGui.textDisabled(label + (field.required() ? ": missing" : ": none"));
+                IkGui.sameLine();
+                if (IkGui.button("Add")) {
+                    return defaultFor(field);
+                }
+                return value;
+            }
+            final Object shownValue = value == null ? field.defaultValue() : value;
+            final Object now = drawValue(field, shownValue, label);
+            if (now == REMOVED) {
+                return null;
+            }
+            if (now != shownValue) {
+                return now;
+            }
+            if (value != null && !field.required() && !field.isDefault(value)) {
+                IkGui.sameLine();
+                if (IkGui.button(field.defaultValue() == null ? "Remove" : "Reset")) {
+                    return null;
+                }
+            }
+            return value;
+        } finally {
+            IkGui.popID();
+        }
+    }
+
+    /**
+     * Draw a value of any kind: a control for a plain one, a collapsible section for one holding
+     * others.
+     *
+     * @param field Its field.
+     * @param value The value.
+     * @param label Its label.
+     * @return The same value if unchanged, the new one, or {@link #REMOVED}.
+     */
+    private Object drawValue(Field field, Object value, String label) {
+        final Field.Shape shape = field.shape();
+        switch (field.kind()) {
+            case OBJECT -> {
+                if (!IkGui.treeNodeEx("node", TreeNodeFlags.DEFAULT_OPEN, label)) {
+                    return value;
+                }
+                final Object now = drawObject(shape.objectSchema().fields(), asMap(value), null);
+                IkGui.treePop();
+                return now;
+            }
+            case TYPED -> {
+                final Map<String, Object> map = asMap(value);
+                final String key = shape.variants().key();
+                final String type = String.valueOf(map.get(key));
+                if (!IkGui.treeNodeEx("node", TreeNodeFlags.DEFAULT_OPEN, label + ": " + type)) {
+                    return value;
+                }
+                Object now = value;
+                if (IkGui.beginCombo("Type", type)) {
+                    for (String name : shape.variants().names()) {
+                        if (IkGui.selectable(name, name.equals(type)) && !name.equals(type)) {
+                            // A new type has new fields: only its type, until they are set
+                            final Map<String, Object> fresh = new LinkedHashMap<>();
+                            fresh.put(key, name);
+                            now = fresh;
+                        }
+                    }
+                    IkGui.endCombo();
+                }
+                if (now == value) {
+                    final Schema schema = shape.variants().schemaOf(type).orElse(null);
+                    if (schema != null) {
+                        now = drawObject(schema.fields(), map, key);
+                    }
+                }
+                IkGui.treePop();
+                return now;
+            }
+            case UNION -> {
+                final List<Field> alternatives = shape.alternatives();
+                int index = 0;
+                for (int i = 0; i < alternatives.size(); ++i) {
+                    if (fits(alternatives.get(i), value)) {
+                        index = i;
+                        break;
+                    }
+                }
+                text.set("");
+                IkGui.setNextItemWidth(IkGui.getFrameHeight() * 7);
+                if (IkGui.beginCombo("##as", alternatives.get(index).description())) {
+                    for (int i = 0; i < alternatives.size(); ++i) {
+                        if (IkGui.selectable(alternatives.get(i).description(), i == index)
+                                && i != index) {
+                            IkGui.endCombo();
+                            return defaultFor(alternatives.get(i));
+                        }
+                    }
+                    IkGui.endCombo();
+                }
+                IkGui.sameLine();
+                return drawValue(alternatives.get(index).named(field.name()), value, label);
+            }
+            case LIST -> {
+                final List<?> list = value instanceof List<?> l ? l : List.of();
+                if (!IkGui.treeNodeEx(
+                        "node", TreeNodeFlags.DEFAULT_OPEN, label + " (" + list.size() + ")")) {
+                    return value;
+                }
+                Object now = value;
+                for (int i = 0; i < list.size(); ++i) {
+                    IkGui.pushID("entry" + i);
+                    // Before the entry, as its header can't be followed on its line
+                    final boolean removed = IkGui.button("x##remove");
+                    if (IkGui.isItemHovered()) {
+                        IkGui.setTooltip("Remove entry " + (i + 1));
+                    }
+                    IkGui.sameLine();
+                    final Object element =
+                            drawValue(
+                                    shape.element().named(field.name()),
+                                    list.get(i),
+                                    "Entry " + (i + 1));
+                    if (removed) {
+                        final List<Object> copy = new ArrayList<>(list);
+                        copy.remove(i);
+                        now = List.copyOf(copy);
+                    } else if (element != list.get(i) && element != REMOVED) {
+                        final List<Object> copy = new ArrayList<>(list);
+                        copy.set(i, element);
+                        now = List.copyOf(copy);
+                    }
+                    IkGui.popID();
+                }
+                if (IkGui.button("Add entry")) {
+                    final List<Object> copy = new ArrayList<>(list);
+                    copy.add(defaultFor(shape.element()));
+                    now = List.copyOf(copy);
+                }
+                IkGui.treePop();
+                return now;
+            }
+            case MAP -> {
+                final Map<String, Object> map = asMap(value);
+                if (!IkGui.treeNodeEx("node", TreeNodeFlags.DEFAULT_OPEN, label)) {
+                    return value;
+                }
+                Object now = value;
+                for (Map.Entry<String, Object> entry : map.entrySet()) {
+                    final Object child =
+                            drawChild(shape.element().named(entry.getKey()), entry.getValue());
+                    if (child != entry.getValue()) {
+                        final Map<String, Object> copy = new LinkedHashMap<>(map);
+                        if (child == null) {
+                            copy.remove(entry.getKey());
+                        } else {
+                            copy.put(entry.getKey(), child);
+                        }
+                        now = copy;
+                    }
+                }
+                text.set("");
+                if (IkGui.inputTextWithHint(
+                                "##key", "add a key", text, InputTextFlags.ENTER_RETURNS_TRUE)
+                        && !text.get().isBlank()) {
+                    final Map<String, Object> copy = new LinkedHashMap<>(map);
+                    copy.put(text.get().trim(), defaultFor(shape.element()));
+                    now = copy;
+                }
+                IkGui.treePop();
+                return now;
+            }
+            default -> {
+                final Object[] change = {null};
+                if (drawControl(field.named(field.name()), value, false, change)) {
+                    return change[0] == null ? REMOVED : change[0];
+                }
+                if (IkGui.isItemHovered()) {
+                    IkGui.setTooltip(field.description());
+                }
+                return value;
+            }
+        }
+    }
+
+    /**
+     * Draw an object's fields.
+     *
+     * @param fields Its fields.
+     * @param map Its values.
+     * @param skip A key that isn't one of the fields, like a typed object's type, or null.
+     * @return The same map if unchanged, or a new one.
+     */
+    private Object drawObject(List<Field> fields, Map<String, Object> map, @Nullable String skip) {
+        Map<String, Object> now = map;
+        for (Field child : fields) {
+            if (child.name().equals(skip)) {
+                continue;
+            }
+            final Object old = map.get(child.name());
+            final Object value = drawChild(child, old);
+            if (value != old) {
+                if (now == map) {
+                    now = new LinkedHashMap<>(map);
+                }
+                if (value == null) {
+                    now.remove(child.name());
+                } else {
+                    now.put(child.name(), value);
+                }
+            }
+        }
+        return now;
+    }
+
+    /**
+     * A new value for a field: its default, or an empty one of its kind.
+     *
+     * @param field The field.
+     * @return The value.
+     */
+    static Object defaultFor(Field field) {
+        if (field.defaultValue() != null) {
+            return field.defaultValue();
+        }
+        final Field.Shape shape = field.shape();
+        return switch (field.kind()) {
+            case NUMBER -> 0.0;
+            case INTEGER -> 0L;
+            case FLAG -> false;
+            case TEXT, REFERENCE -> "";
+            case CHOICE -> field.choices().isEmpty() ? "" : field.choices().getFirst();
+            case TEXT_LIST, LIST -> List.of();
+            case NUMBER_LIST -> {
+                final List<Double> zeros = new ArrayList<>();
+                for (int i = 0; i < field.min(); ++i) {
+                    zeros.add(0.0);
+                }
+                yield List.copyOf(zeros);
+            }
+            case OBJECT, MAP -> new LinkedHashMap<String, Object>();
+            case TYPED -> {
+                final Map<String, Object> map = new LinkedHashMap<>();
+                map.put(shape.variants().key(), shape.variants().names().first());
+                yield map;
+            }
+            case UNION -> defaultFor(shape.alternatives().getFirst());
+        };
+    }
+
+    /**
+     * Whether a value has the shape a union's alternative takes.
+     *
+     * @param alternative The alternative.
+     * @param value The value.
+     * @return True if it fits.
+     */
+    private static boolean fits(Field alternative, Object value) {
+        return switch (alternative.kind()) {
+            case NUMBER, INTEGER -> value instanceof Number;
+            case FLAG -> value instanceof Boolean;
+            case TEXT, CHOICE, REFERENCE -> value instanceof String;
+            case TEXT_LIST, NUMBER_LIST, LIST -> value instanceof List<?>;
+            case OBJECT, TYPED, MAP -> value instanceof Map<?, ?>;
+            case UNION -> false;
+        };
+    }
+
+    /**
+     * A value as a map, empty if it isn't one.
+     *
+     * @param value The value.
+     * @return The map.
+     */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> asMap(Object value) {
+        return value instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
+    }
+
     private boolean drawControl(
             Field field, @Nullable Object value, boolean mixed, Object[] change) {
         final String label = words(field.name());
@@ -660,6 +992,87 @@ public final class DetailsPanel {
             }
         }
         return true;
+    }
+
+    /**
+     * Change a nested value of the one file shown, by its path, as editing it in the tree does, for
+     * scripts: {@code density.args[0].points[1].y}. Setting a {@code type} gives its object that
+     * type alone, as choosing it does.
+     *
+     * @param path The value's path, starting with a field's name.
+     * @param value The new value, or null to take it out.
+     * @param append Whether to add the value to the end of the list at the path instead.
+     * @return Whether the path led somewhere.
+     */
+    public boolean setPath(@NonNull String path, @Nullable Object value, boolean append) {
+        final List<Edited> shown = shown();
+        if (shown.size() != 1) {
+            return false;
+        }
+        final List<Object> steps = new ArrayList<>();
+        final java.util.regex.Matcher matcher =
+                java.util.regex.Pattern.compile("([^.\\[\\]]+)|\\[(\\d+)]").matcher(path);
+        while (matcher.find()) {
+            steps.add(
+                    matcher.group(1) != null
+                            ? matcher.group(1)
+                            : (Object) Integer.parseInt(matcher.group(2)));
+        }
+        if (steps.isEmpty() || !(steps.getFirst() instanceof String field)) {
+            return false;
+        }
+        final Map<String, Object> current = shown.getFirst().current();
+        try {
+            final Object changed = changeAt(current.get(field), steps, 1, value, append);
+            current.put(field, changed);
+            return true;
+        } catch (RuntimeException e) {
+            log.debug("No value at {}: {}", path, e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * A copy of a value with a value deep in it changed.
+     *
+     * @param at The value.
+     * @param steps The path's keys and indices.
+     * @param index The step to take next.
+     * @param value The new value, or null to take it out.
+     * @param append Whether to add to the list at the end of the path instead.
+     * @return The changed copy.
+     */
+    private static Object changeAt(
+            Object at, List<Object> steps, int index, @Nullable Object value, boolean append) {
+        if (index == steps.size()) {
+            if (append) {
+                final List<Object> list = new ArrayList<>((List<?>) at);
+                list.add(value);
+                return List.copyOf(list);
+            }
+            return value;
+        }
+        final Object step = steps.get(index);
+        if (step instanceof Integer i) {
+            final List<Object> list = new ArrayList<>((List<?>) at);
+            list.set(i, changeAt(list.get(i), steps, index + 1, value, append));
+            return List.copyOf(list);
+        }
+        final Map<String, Object> map = new LinkedHashMap<>(asMap(at));
+        final String key = (String) step;
+        if ("type".equals(key) && index == steps.size() - 1 && !append) {
+            // A new type: its object starts over with it alone
+            final Map<String, Object> fresh = new LinkedHashMap<>();
+            fresh.put(key, value);
+            return fresh;
+        }
+        final Object changed = changeAt(map.get(key), steps, index + 1, value, append);
+        if (changed == null) {
+            map.remove(key);
+        } else {
+            map.put(key, changed);
+        }
+        return map;
     }
 
     /**
