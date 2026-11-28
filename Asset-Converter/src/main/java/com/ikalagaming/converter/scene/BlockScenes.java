@@ -53,11 +53,13 @@ public final class BlockScenes {
      *     null where there is none; set them on the placed materials, whose textures come from the
      *     scene.
      * @param missing The blocks that couldn't be found, drawn gray.
+     * @param subject The material index of the block looked at, or -1 if the scene has none.
      */
     public record Built(
             @NonNull ImportedScene scene,
             @NonNull List<Material> values,
-            @NonNull List<String> missing) {}
+            @NonNull List<String> missing,
+            int subject) {}
 
     /**
      * Build a context scene around the block a look file describes, or with gray stand-ins where
@@ -146,7 +148,11 @@ public final class BlockScenes {
                         1,
                         List.of(),
                         0);
-        return new Built(scene, values, List.copyOf(missing));
+        return new Built(
+                scene,
+                values,
+                List.copyOf(missing),
+                subject == null ? -1 : kinds.getOrDefault(ContextScene.SUBJECT, -1));
     }
 
     /**

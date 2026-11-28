@@ -56,6 +56,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import javax.annotation.Nullable;
 
 /**
@@ -237,6 +238,12 @@ public class SceneView implements Viewer {
 
     /** How much of half its longest side a thumbnail's subject is framed by, a little margin. */
     private static final double THUMBNAIL_FILL = 0.6;
+
+    /** Draws above the picture while a scene shows, like the look editor's slots, or null. */
+    @Setter private @Nullable Consumer<UiFrame> header;
+
+    /** Whether the next scene shown keeps the camera and lighting, as a rebuild of the same one. */
+    private boolean keepView;
 
     /** Whether it renders thumbnails: a fixed size, never drawn in a panel, no debug drawing. */
     private boolean thumbnails;
@@ -451,6 +458,13 @@ public class SceneView implements Viewer {
     }
 
     /**
+     * Keep the camera and lighting when the next scene shows, as when it is the same one rebuilt.
+     */
+    public void keepViewOnNextShow() {
+        keepView = true;
+    }
+
+    /**
      * Show a scene, placing it in the preview, made the first time, and framing it.
      *
      * @param newPlacement The scene, ready to place.
@@ -461,9 +475,13 @@ public class SceneView implements Viewer {
         newPlacement.placeIn(view, previewLights);
         placement = newPlacement;
         outlinerText.clear();
-        applyPreset();
-        useFileSun();
-        frame(newPlacement.getImported().root());
+        if (keepView) {
+            keepView = false;
+        } else {
+            applyPreset();
+            useFileSun();
+            frame(newPlacement.getImported().root());
+        }
         if (PreviewShapes.PARTICLE_STAGE.equals(newPlacement.getImported().file())) {
             particles.start(view);
         }
@@ -1368,6 +1386,9 @@ public class SceneView implements Viewer {
             IkGui.textDisabled(
                     "Pick a scene above, or open a model, a material, a look or a container");
             return;
+        }
+        if (header != null) {
+            header.accept(frame);
         }
         IkGui.getCursorScreenPos(viewOrigin);
         IkGui.getContentRegionAvailable(viewSize);

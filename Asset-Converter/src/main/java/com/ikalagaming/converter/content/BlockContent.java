@@ -93,6 +93,19 @@ public final class BlockContent {
     }
 
     /**
+     * Learn a content folder, so the IDs in it resolve, after the installed ones and those learned
+     * before, as the asset index's content roots are.
+     *
+     * @param folder The content folder, like a plugin's {@code data} folder.
+     */
+    public static void learn(@NonNull Path folder) {
+        final Path normal = folder.toAbsolutePath().normalize();
+        if (!OPENED.contains(normal)) {
+            OPENED.add(normal);
+        }
+    }
+
+    /**
      * The content folder a file is in, and the file's ID in it, learning the folder for later
      * lookups.
      *

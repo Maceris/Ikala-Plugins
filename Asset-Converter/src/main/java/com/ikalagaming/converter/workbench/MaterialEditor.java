@@ -322,7 +322,23 @@ public class MaterialEditor {
         if (IkGui.inputText("Name", name)) {
             placement.rename(selected, name.get());
         }
+        drawValues(material);
 
+        IkGui.separatorText("Textures");
+        if (slots != null) {
+            for (Slot slot : Slot.values()) {
+                drawSlot(slots, placement, material, slot);
+            }
+        }
+    }
+
+    /**
+     * Draw a material's values: its colors, factors and switches, changed in place, so the scenes
+     * drawing it show changes at once.
+     *
+     * @param material The material.
+     */
+    public void drawValues(@NonNull Material material) {
         final Vector4f base = material.getBaseColor();
         color4[0] = base.x;
         color4[1] = base.y;
@@ -368,13 +384,6 @@ public class MaterialEditor {
         }
         if (IkGui.checkbox("Packed map's red is occlusion", material.isPackedOcclusion())) {
             material.setPackedOcclusion(!material.isPackedOcclusion());
-        }
-
-        IkGui.separatorText("Textures");
-        if (slots != null) {
-            for (Slot slot : Slot.values()) {
-                drawSlot(slots, placement, material, slot);
-            }
         }
     }
 

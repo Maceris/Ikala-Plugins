@@ -118,10 +118,30 @@ public final class AssetSlot {
             @NonNull Set<String> types,
             @Nullable Path file,
             @Nullable TextureHandle texture) {
+        return draw(label, types, file, texture, false);
+    }
+
+    /**
+     * Draw a slot that may take only files with content IDs, as references by ID do.
+     *
+     * @param label What the slot is, shown above its file and unique among the slots drawn.
+     * @param types The asset types it takes.
+     * @param file The file it names, or null when empty.
+     * @param texture What to show as its picture, or null to show the file's thumbnail.
+     * @param needsId Whether it takes only files with an ID, in a content folder.
+     * @return What it was changed to this frame, or null if it wasn't.
+     */
+    public @Nullable Change draw(
+            @NonNull String label,
+            @NonNull Set<String> types,
+            @Nullable Path file,
+            @Nullable TextureHandle texture,
+            boolean needsId) {
+        final Kind kind = new Kind(types, needsId);
         final AssetIndex.Snapshot snapshot = index.get();
         final boolean missing = file != null && !Files.isRegularFile(withoutMark(file));
         shown.put(label, new Shown(label, file, missing));
-        Change change = scripted(label, types, file, snapshot);
+        Change change = scripted(label, kind, file, snapshot);
 
         IkGui.pushID(label);
         IkGui.beginGroup();
@@ -145,7 +165,7 @@ public final class AssetSlot {
             IkGui.setTooltip(file.toString());
         }
         final Path picked = selection.get();
-        final boolean canUse = picked != null && accepts(snapshot, types, picked);
+        final boolean canUse = picked != null && accepts(snapshot, kind, picked);
         IkGui.beginDisabled(!canUse);
         // Named apart for scripts; it reads "<" on screen
         if (IkGui.button("<##" + label)) {
@@ -181,11 +201,11 @@ public final class AssetSlot {
         if (missing) {
             outline();
         }
-        final Change dropped = dropTarget(snapshot, types);
+        final Change dropped = dropTarget(snapshot, kind);
         if (dropped != null) {
             change = dropped;
         }
-        final Change chosen = drawPicker(snapshot, types);
+        final Change chosen = drawPicker(snapshot, kind);
         if (chosen != null) {
             change = chosen;
         }
@@ -229,8 +249,38 @@ public final class AssetSlot {
      * @return True if it does.
      */
     static boolean accepts(AssetIndex.Snapshot snapshot, Set<String> types, Path file) {
+        return accepts(snapshot, new Kind(types, false), file);
+    }
+
+    /**
+     * Whether a slot takes a file: one in the asset index of its kind.
+     *
+     * @param snapshot The index.
+     * @param kind What the slot takes.
+     * @param file The file.
+     * @return True if it does.
+     */
+    static boolean accepts(AssetIndex.Snapshot snapshot, Kind kind, Path file) {
         final AssetIndex.Entry entry = snapshot.entry(file);
-        return entry != null && types.contains(entry.type());
+        return entry != null && kind.takes(entry);
+    }
+
+    /**
+     * What files a slot takes.
+     *
+     * @param types The asset types.
+     * @param needsId Whether only files with a content ID.
+     */
+    record Kind(Set<String> types, boolean needsId) {
+        /**
+         * Whether a file's entry is of this kind.
+         *
+         * @param entry The entry.
+         * @return True if a slot of this kind takes it.
+         */
+        boolean takes(AssetIndex.Entry entry) {
+            return types.contains(entry.type()) && (!needsId || entry.id() != null);
+        }
     }
 
     /**
@@ -243,10 +293,22 @@ public final class AssetSlot {
      */
     static List<AssetIndex.Entry> candidates(
             AssetIndex.Snapshot snapshot, Set<String> types, String text) {
+        return candidates(snapshot, new Kind(types, false), text);
+    }
+
+    /**
+     * The files the picker lists: those of the slot's kind matching the search, best first.
+     *
+     * @param snapshot The index.
+     * @param kind What the slot takes.
+     * @param text The search.
+     * @return The files, at most {@link #PICKER_ROWS}.
+     */
+    static List<AssetIndex.Entry> candidates(AssetIndex.Snapshot snapshot, Kind kind, String text) {
         final List<AssetIndex.Entry> found = new ArrayList<>();
         for (AssetIndex.Entry entry :
                 AssetSearch.find(snapshot, new AssetSearch.Query(text, null, null, null), null)) {
-            if (types.contains(entry.type())) {
+            if (kind.takes(entry)) {
                 found.add(entry);
                 if (found.size() == PICKER_ROWS) {
                     break;
@@ -260,13 +322,13 @@ public final class AssetSlot {
      * Do the change a script asked for, if any.
      *
      * @param label The slot.
-     * @param types Its types.
+     * @param kind What it takes.
      * @param file What it names now.
      * @param snapshot The index.
      * @return The change, or null.
      */
     private @Nullable Change scripted(
-            String label, Set<String> types, @Nullable Path file, AssetIndex.Snapshot snapshot) {
+            String label, Kind kind, @Nullable Path file, AssetIndex.Snapshot snapshot) {
         final Request request;
         lock.lock();
         try {
@@ -280,21 +342,19 @@ public final class AssetSlot {
         return switch (request.action()) {
             case "drop" -> {
                 final Path dropped = Path.of(request.argument()).toAbsolutePath().normalize();
-                yield accepts(snapshot, types, dropped) ? new Change(dropped) : null;
+                yield accepts(snapshot, kind, dropped) ? new Change(dropped) : null;
             }
             case "pick" -> {
                 final List<AssetIndex.Entry> found =
                         candidates(
                                 snapshot,
-                                types,
+                                kind,
                                 request.argument() == null ? "" : request.argument());
                 yield found.isEmpty() ? null : new Change(found.getFirst().file());
             }
             case "use" -> {
                 final Path picked = selection.get();
-                yield picked != null && accepts(snapshot, types, picked)
-                        ? new Change(picked)
-                        : null;
+                yield picked != null && accepts(snapshot, kind, picked) ? new Change(picked) : null;
             }
             case "clear" -> file == null ? null : new Change(null);
             default -> null;
@@ -313,16 +373,16 @@ public final class AssetSlot {
      * Take a file dragged from the Assets panel onto the slot just drawn, if it is one it takes.
      *
      * @param snapshot The index.
-     * @param types The slot's types.
+     * @param kind What the slot takes.
      * @return The change, or null.
      */
-    private static @Nullable Change dropTarget(AssetIndex.Snapshot snapshot, Set<String> types) {
+    private static @Nullable Change dropTarget(AssetIndex.Snapshot snapshot, Kind kind) {
         if (!IkGui.beginDragDropTarget()) {
             return null;
         }
         Change change = null;
         final Object dropped = IkGui.acceptDragDropPayload(AssetBrowser.DRAG_TYPE);
-        if (dropped instanceof Path file && accepts(snapshot, types, file)) {
+        if (dropped instanceof Path file && accepts(snapshot, kind, file)) {
             change = new Change(file);
         }
         IkGui.endDragDropTarget();
@@ -330,13 +390,13 @@ public final class AssetSlot {
     }
 
     /**
-     * Draw the search picker, if open: a search box and the matching files of the slot's types.
+     * Draw the search picker, if open: a search box and the matching files of the slot's kind.
      *
      * @param snapshot The index.
-     * @param types The slot's types.
+     * @param kind What the slot takes.
      * @return The file picked, or null.
      */
-    private @Nullable Change drawPicker(AssetIndex.Snapshot snapshot, Set<String> types) {
+    private @Nullable Change drawPicker(AssetIndex.Snapshot snapshot, Kind kind) {
         if (!IkGui.beginPopup("picker")) {
             return null;
         }
@@ -345,7 +405,7 @@ public final class AssetSlot {
             IkGui.setKeyboardFocusHere();
         }
         IkGui.inputTextWithHint("##search", "Search", query);
-        final List<AssetIndex.Entry> found = candidates(snapshot, types, query.get());
+        final List<AssetIndex.Entry> found = candidates(snapshot, kind, query.get());
         if (found.isEmpty()) {
             IkGui.textDisabled("Nothing of this kind matches");
         }

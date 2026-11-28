@@ -8,6 +8,7 @@ import com.ikalagaming.converter.workbench.AssetBrowser;
 import com.ikalagaming.converter.workbench.Comparison;
 import com.ikalagaming.converter.workbench.ContainerViewer;
 import com.ikalagaming.converter.workbench.GraphTool;
+import com.ikalagaming.converter.workbench.LookEditor;
 import com.ikalagaming.converter.workbench.PreviewHost;
 import com.ikalagaming.converter.workbench.ReferenceViewer;
 import com.ikalagaming.converter.workbench.SceneView;
@@ -1058,6 +1059,80 @@ public final class ConverterScripts {
                                                                                     : "")))
                                     .toList());
                 });
+    }
+
+    /**
+     * Drive the look editor, logging "Script: Look ..." with what it did: "log label" (the look as
+     * edited, what changed, and its material's roughness), "choose model|texture|material" (the
+     * piece whose details show), "roughness value" (on the live material, as its slider does),
+     * "files" (the look's text and its material's roughness as saved), "save" or "revert".
+     *
+     * @param command The command and its words, separated by spaces.
+     */
+    public static void look(String command) {
+        onWorkbench(
+                workbench -> {
+                    final LookEditor editor = workbench.getLookEditor();
+                    final String[] words = command.trim().split("\\s+");
+                    final String rest = rest(words, 1);
+                    switch (words[0]) {
+                        case "log" -> {
+                            final var look = editor.getEdited();
+                            final var live = editor.getLive();
+                            log.info(
+                                    "Script: Look {}: {} showing {}, model {}, texture {},"
+                                            + " material {}, changed {}, roughness {}",
+                                    rest,
+                                    look == null ? "none" : look.id(),
+                                    editor.isShowing(),
+                                    look == null ? null : look.model(),
+                                    look == null ? null : look.texture(),
+                                    look == null ? null : look.material(),
+                                    editor.isDirty(),
+                                    live == null ? null : live.getRoughness());
+                        }
+                        case "choose" ->
+                                editor.choose(
+                                        LookEditor.Piece.valueOf(
+                                                rest.toUpperCase(java.util.Locale.ROOT)));
+                        case "roughness" -> {
+                            final var live = editor.getLive();
+                            if (live != null) {
+                                live.setRoughness(Float.parseFloat(rest));
+                            }
+                        }
+                        case "save" -> log.info("Script: Look saved {}", editor.save());
+                        case "files" -> logLookFiles(editor);
+                        case "revert" -> editor.revert();
+                        default -> log.warn("Script: no look command {}", words[0]);
+                    }
+                });
+    }
+
+    /**
+     * Log the look file's text and its render material file's roughness, as saved.
+     *
+     * @param editor The look editor.
+     */
+    private static void logLookFiles(LookEditor editor) {
+        final Path file = editor.getFile();
+        final var look = editor.getEdited();
+        if (file == null || look == null) {
+            log.info("Script: Look files: none open");
+            return;
+        }
+        try {
+            final Path material =
+                    com.ikalagaming.converter.content.BlockContent.materialFile(look).orElse(null);
+            log.info(
+                    "Script: Look files: {} | material roughness {}",
+                    Files.readString(file).strip(),
+                    material == null
+                            ? null
+                            : AssetConvert.readMaterial(material).material().getRoughness());
+        } catch (IOException | RuntimeException e) {
+            log.info("Script: Look files unreadable: {}", e.getMessage());
+        }
     }
 
     /**

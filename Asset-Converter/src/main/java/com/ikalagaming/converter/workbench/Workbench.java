@@ -225,6 +225,13 @@ public class Workbench {
      */
     @Getter private final AssetSlot assetSlots;
 
+    /**
+     * Edits the look shown in a context scene. -- GETTER -- The look editor.
+     *
+     * @return The editor.
+     */
+    @Getter private final LookEditor lookEditor;
+
     /** The panel the reference viewer is in. */
     private Panel referencesPanel;
 
@@ -345,6 +352,16 @@ public class Workbench {
                         assetBrowser::getSelected,
                         this::open);
         materialEditor.setSlots(assetSlots);
+        lookEditor =
+                new LookEditor(
+                        assetSlots,
+                        assets::getSnapshot,
+                        assetBrowser::thumbnail,
+                        this::open,
+                        this::rebuildLook,
+                        materialEditor,
+                        this::showStatus);
+        sceneView.setHeader(lookEditor::drawStrip);
         assetBrowser.setStudio(
                 new ThumbnailStudio(
                         graphics,
@@ -898,6 +915,7 @@ public class Workbench {
             return;
         }
         if (propertiesForScene()) {
+            lookEditor.drawDetails(frame);
             sceneHost.drawProperties(frame);
             if (host.getViewer() != null) {
                 IkGui.separator();
@@ -1192,11 +1210,16 @@ public class Workbench {
     private void openContext(ContextScene context) {
         final int request = requests.incrementAndGet();
         final Path look = subjectLook;
+        // The look as edited, if the look editor has it, so changes show before they are saved
+        final var subject = lookEditor.editedFor(look);
         status.text("Making " + context.name() + "...");
         loader.execute(
                 () -> {
                     try {
-                        final BlockScenes.Built built = BlockScenes.build(context, look);
+                        final BlockScenes.Built built =
+                                subject != null
+                                        ? BlockScenes.build(context.name(), context, subject)
+                                        : BlockScenes.build(context, look);
                         final ScenePlacement placement =
                                 ScenePlacement.prepare(graphics, built.scene());
                         post(
@@ -1213,6 +1236,9 @@ public class Workbench {
                                         if (values != null && i < materials.size()) {
                                             materials.get(i).setValues(values);
                                         }
+                                    }
+                                    if (subject != null) {
+                                        lookEditor.shown(placement, built);
                                     }
                                     status.text(
                                             built.missing().isEmpty()
@@ -1232,6 +1258,28 @@ public class Workbench {
     }
 
     /**
+     * Say something in the status line.
+     *
+     * @param text What to say.
+     */
+    private void showStatus(String text) {
+        status.text(text);
+    }
+
+    /**
+     * Build the context scene shown again from the look as edited, keeping the camera and lighting.
+     */
+    private void rebuildLook() {
+        final int context = sceneShown - BUILT_IN_SCENES.size();
+        final List<ContextScene> all = contexts();
+        if (context < 0 || context >= all.size()) {
+            return;
+        }
+        sceneView.keepViewOnNextShow();
+        openContext(all.get(context));
+    }
+
+    /**
      * Open a block's look: show it in the first context scene that has a place for it.
      *
      * @param file The look file.
@@ -1246,6 +1294,16 @@ public class Workbench {
                     file.getFileName()
                             + " isn't a block's look: those are in a content folder's"
                             + " looks/block folder");
+            return;
+        }
+        // The index's content roots, so a look's IDs resolve in any of them
+        for (var root : assets.getSnapshot().roots()) {
+            if (root.content()) {
+                BlockContent.learn(root.folder());
+            }
+        }
+        if (!lookEditor.open(file)) {
+            status.text("Can't read the look " + file.getFileName());
             return;
         }
         subjectLook = file;
@@ -1544,6 +1602,8 @@ public class Workbench {
             return;
         }
         final int scene = scenes.incrementAndGet();
+        // Told again if this is the look, once its material is known
+        lookEditor.hidden();
         sceneView.show(placement);
         sceneHost.show(sceneView);
         showScene();

@@ -223,6 +223,33 @@ public final class MaterialText {
     }
 
     /**
+     * Write a material as YAML, only the keys whose values differ from {@link #defaults()}, in
+     * order, as hand-written materials are: what a reader would otherwise assume is left out.
+     *
+     * @param material The material's values.
+     * @param textures The names of its textures.
+     * @return The YAML, empty if everything is a default.
+     */
+    public static String writeDiffering(
+            @NonNull Material material, @NonNull MaterialSection.Textures textures) {
+        final java.util.Set<String> plain =
+                new java.util.HashSet<>(
+                        java.util.Arrays.asList(
+                                write(
+                                                defaults(),
+                                                new MaterialSection.Textures(
+                                                        null, null, null, null))
+                                        .split("\n")));
+        final StringBuilder text = new StringBuilder();
+        for (String line : write(material, textures).split("\n")) {
+            if (!plain.contains(line)) {
+                text.append(line).append('\n');
+            }
+        }
+        return text.toString();
+    }
+
+    /**
      * Write a material as YAML, every key in order.
      *
      * @param material The material's values.

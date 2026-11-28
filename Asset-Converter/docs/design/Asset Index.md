@@ -88,6 +88,23 @@ colors, so the normal slot names a texture file with the `#normal` mark, as look
 slot names apart from the texture loaded, so a texture that is missing or fails to load still shows, and saving keeps
 its name. A material saved on another drive than its textures names them by file name only, as no path leads there.
 
+## The look editor
+
+Opening a block's look shows it in its context scene in the 3D view, with a strip above the picture (`LookEditor`):
+the look's model, texture and render material in slots side by side, and Save and Revert. Those slots take only files
+with a content ID, which the look names. A change builds the scene again from the look as edited, keeping the camera
+and lighting, so it shows before it is saved. Each slot's Details button picks what the Look section of the properties
+shows: the model's ID and file; the texture's picture, and Open graph when a texture graph makes it; or the render
+material's values, edited on the material the scene draws, so they show at once. Unsaved values are kept when the
+scene is built again with the same material.
+
+Saving writes only the look's keys that changed, in place, keeping its layout, comments and the keys as written (a
+fluid's `model:"fluid"` is read as the default cube but stays as it is). An edited render material is written to its
+`.ika`, and to the art source that makes it, if one does, with only the values that differ from the defaults, as
+hand-written sources are. Thumbnails follow on save, as their keys change with the files. Opening a look teaches the
+game's content lookup the index's content roots, so a look's IDs resolve in any of them, not only installed plugins
+and folders files were opened from.
+
 ## The References panel
 
 The References panel (`ReferenceViewer`) answers "what uses this" and "what does this use" for one file at a time,
