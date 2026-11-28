@@ -46,6 +46,9 @@ public final class EditorTypes {
     /** The texture instance type's name. */
     public static final String TEXTURE_INSTANCE = "texture instance";
 
+    /** A shared parameter file's type: parameters graphs read by name. */
+    public static final String SHARED_PARAMETERS = "shared parameters";
+
     /** A shipped file's extension. */
     private static final String IKA = ".ika";
 
@@ -74,7 +77,7 @@ public final class EditorTypes {
                 shipped(RENDER_MATERIAL, "render_materials", List.of(IKA)),
                 new TextureGraphs(),
                 new Instances(),
-                suffix("shared parameters", SharedParameters.SUFFIX),
+                suffix(SHARED_PARAMETERS, SharedParameters.SUFFIX),
                 new Sources(
                         "material source", ".material.yml", "render_materials", RENDER_MATERIAL),
                 new ModelSources(),

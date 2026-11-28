@@ -173,7 +173,7 @@ public final class KvtSchemas {
             Field field, Object value, Optional<NodeType> had, NodeType numbers) {
         return switch (field.kind()) {
             case OBJECT, LIST, TYPED, UNION, MAP -> nestedText(field, value, numbers);
-            case TEXT, CHOICE, REFERENCE ->
+            case TEXT, CHOICE, REFERENCE, COLOR ->
                     new ValueNode<>(NodeType.STRING, (String) value).toString();
             case FLAG -> value.toString();
             case NUMBER -> {
@@ -335,7 +335,7 @@ public final class KvtSchemas {
                     switch (alternative.kind()) {
                         case NUMBER, INTEGER -> value instanceof Number;
                         case FLAG -> value instanceof Boolean;
-                        case TEXT, CHOICE, REFERENCE -> value instanceof String;
+                        case TEXT, CHOICE, REFERENCE, COLOR -> value instanceof String;
                         case TEXT_LIST, NUMBER_LIST, LIST -> value instanceof List<?>;
                         case OBJECT, TYPED, MAP -> value instanceof Map<?, ?>;
                         case UNION -> false;

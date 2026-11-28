@@ -130,6 +130,16 @@ typed node has a Type combo that swaps its fields, a union (a density as a numbe
 node) picks which it is, lists add and remove entries, and maps add keys. Any value can go back to
 its default or be taken out where it may be left out. Nested fields edit one file at a time.
 
+Texture instances and shared parameter files take their fields from graph parameters
+(`GraphValues`): a scalar is a number with its slider's range, a switch a flag, a seed a whole
+number, a choice a choice, a texture text, and a color a color picker (`COLOR`). An instance's
+fields are its settings (parent, seed, texture, model, content and maps folders) and every parameter
+its graph reads, own or shared, each defaulting to its parent's value, resolved down the chain of
+instances above it; Reset takes an override out, so the parent's value shows through, and saving
+writes the instance's own format, only what it overrides. Instances of one parent edit together. A
+shared parameter file's fields are its parameters' values, Reset going back to the kind's starting
+value; a parameter's kind, range and options stay the Graph panel's to change.
+
 Content files save in place (`KvtSchemas.edit` on `KvtText`, which knows where each value is in the
 text): only the values that changed are written, a value replaced where it is, a key added before
 its object's closing brace or taken out with its comma, a list whose length changed rewritten in

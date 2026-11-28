@@ -5,6 +5,7 @@ import com.ikalagaming.converter.content.GameValues;
 import com.ikalagaming.converter.index.AssetIndex;
 import com.ikalagaming.converter.index.AssetValues;
 import com.ikalagaming.converter.index.EditorTypes;
+import com.ikalagaming.converter.index.GraphValues;
 import com.ikalagaming.converter.index.MaterialValues;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.IkString;
@@ -135,6 +136,17 @@ public final class DetailsPanel {
         if (EditorTypes.RENDER_MATERIAL.equals(entry.type())
                 || "material source".equals(entry.type())) {
             return Optional.of(MaterialValues.of(entry, snapshot));
+        }
+        try {
+            if (EditorTypes.TEXTURE_INSTANCE.equals(entry.type())) {
+                return Optional.of(GraphValues.ofInstance(entry.file()));
+            }
+            if (EditorTypes.SHARED_PARAMETERS.equals(entry.type())) {
+                return Optional.of(GraphValues.ofShared(entry.file()));
+            }
+        } catch (IOException | RuntimeException e) {
+            log.debug("No values for {}: {}", entry.file(), e.getMessage());
+            return Optional.empty();
         }
         return GameContent.available() ? GameValues.of(entry, snapshot) : Optional.empty();
     }
@@ -294,7 +306,8 @@ public final class DetailsPanel {
         for (Edited state : shown) {
             differs |= !field.isDefault(state.value(field));
         }
-        if (differs) {
+        // A required field has no default to go back to
+        if (differs && !field.required()) {
             IkGui.sameLine();
             if (IkGui.button("Reset")) {
                 for (Edited state : shown) {
@@ -605,6 +618,7 @@ public final class DetailsPanel {
             case INTEGER -> 0L;
             case FLAG -> false;
             case TEXT, REFERENCE -> "";
+            case COLOR -> "#808080";
             case CHOICE -> field.choices().isEmpty() ? "" : field.choices().getFirst();
             case TEXT_LIST, LIST -> List.of();
             case NUMBER_LIST -> {
@@ -635,7 +649,7 @@ public final class DetailsPanel {
         return switch (alternative.kind()) {
             case NUMBER, INTEGER -> value instanceof Number;
             case FLAG -> value instanceof Boolean;
-            case TEXT, CHOICE, REFERENCE -> value instanceof String;
+            case TEXT, CHOICE, REFERENCE, COLOR -> value instanceof String;
             case TEXT_LIST, NUMBER_LIST, LIST -> value instanceof List<?>;
             case OBJECT, TYPED, MAP -> value instanceof Map<?, ?>;
             case UNION -> false;
@@ -657,6 +671,30 @@ public final class DetailsPanel {
             Field field, @Nullable Object value, boolean mixed, Object[] change) {
         final String label = words(field.name());
         switch (field.kind()) {
+            case COLOR -> {
+                final String hex = value instanceof String s ? s : "#808080";
+                final boolean alpha = hex.length() == 9;
+                for (int i = 0; i < 4; ++i) {
+                    floats[i] =
+                            i < 3 || alpha
+                                    ? Integer.parseInt(hex.substring(1 + 2 * i, 3 + 2 * i), 16)
+                                            / 255f
+                                    : 1;
+                }
+                if (alpha ? IkGui.colorEdit4(label, floats) : IkGui.colorEdit3(label, floats)) {
+                    final StringBuilder out = new StringBuilder("#");
+                    for (int i = 0; i < (alpha ? 4 : 3); ++i) {
+                        out.append(
+                                String.format(
+                                        Locale.ROOT,
+                                        "%02x",
+                                        Math.round(Math.clamp(floats[i], 0, 1) * 255)));
+                    }
+                    change[0] = out.toString();
+                    return true;
+                }
+                return false;
+            }
             case TEXT -> {
                 text.set(mixed || value == null ? "" : value.toString());
                 if (IkGui.inputTextWithHint(label, mixed ? "mixed" : "", text)) {
@@ -1082,7 +1120,9 @@ public final class DetailsPanel {
      * @param name The name.
      * @return The words.
      */
-    static String words(@NonNull String name) {
+    static String words(@NonNull String key) {
+        // Keys apart from others start with an underscore, which isn't shown
+        final String name = key.replaceFirst("^_+", "");
         final StringBuilder out = new StringBuilder();
         for (int i = 0; i < name.length(); ++i) {
             final char c = name.charAt(i);
