@@ -30,7 +30,7 @@ public class Node implements KVT {
      * @param key The key.
      * @return The key, escaped if necessary.
      */
-    private static String formatKey(final @NonNull String key) {
+    static String formatKey(final @NonNull String key) {
         if (TreeStringSerialization.NORMAL_KEY_PATTERN.matcher(key).matches()
                 && !TreeStringSerialization.LITERAL_KEY_PATTERN.matcher(key).matches()) {
             return key;

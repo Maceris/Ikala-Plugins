@@ -7,6 +7,7 @@ import com.ikalagaming.converter.scene.SceneImporter;
 import com.ikalagaming.converter.workbench.AssetBrowser;
 import com.ikalagaming.converter.workbench.Comparison;
 import com.ikalagaming.converter.workbench.ContainerViewer;
+import com.ikalagaming.converter.workbench.DetailsPanel;
 import com.ikalagaming.converter.workbench.GraphTool;
 import com.ikalagaming.converter.workbench.LookEditor;
 import com.ikalagaming.converter.workbench.PreviewHost;
@@ -49,6 +50,9 @@ import javax.annotation.Nullable;
  */
 @Slf4j
 public final class ConverterScripts {
+    /** Splits a command into words. */
+    private static final String SPACES = "\\s+";
+
     /** The name scripts use. */
     public static final String GLOBAL = "converter";
 
@@ -955,6 +959,13 @@ public final class ConverterScripts {
                             log.info("Script: Browser selected {}", file);
                         }
                         case "save" -> assets.saveSearch(rest);
+                        case "also" -> {
+                            final Path file = shownNamed(assets, rest);
+                            if (file != null) {
+                                assets.toggle(file);
+                            }
+                            log.info("Script: Browser selection {}", assets.getSelection().size());
+                        }
                         case "pick" -> {
                             if (assets.getSelected() != null) {
                                 assets.pick(rest, assets.getSelected());
@@ -1107,6 +1118,121 @@ public final class ConverterScripts {
                         default -> log.warn("Script: no look command {}", words[0]);
                     }
                 });
+    }
+
+    /**
+     * Drive the Details panel, logging "Script: Details ..." with what it shows: "log label" (the
+     * files shown, their kind, each field's value, mixed ones marked, and whether they changed),
+     * "set field value" (on every file shown, as its control does: a number, true or false, a list
+     * as comma separated words), "reset field" (back to its default), "show" (the panel in front),
+     * "save" or "revert".
+     *
+     * @param command The command and its words, separated by spaces.
+     */
+    public static void details(String command) {
+        onWorkbench(
+                workbench -> {
+                    final DetailsPanel panel = workbench.getDetailsPanel();
+                    final String[] words = command.trim().split(SPACES);
+                    final var shown = panel.shown();
+                    switch (words[0]) {
+                        case "log" -> logDetails(rest(words, 1), shown);
+                        case "set" -> {
+                            if (shown.isEmpty() || words.length < 3) {
+                                log.info("Script: Details set nothing");
+                                return;
+                            }
+                            final var field = shown.getFirst().format().schema().field(words[1]);
+                            log.info(
+                                    "Script: Details set {} {}",
+                                    words[1],
+                                    field != null
+                                            && panel.set(
+                                                    words[1], parseValue(field, rest(words, 2))));
+                        }
+                        case "reset" -> panel.set(rest(words, 1), null);
+                        case "show" -> workbench.showDetails();
+                        case "save" -> log.info("Script: Details saved {}", panel.save(shown));
+                        case "revert" -> panel.revert(shown);
+                        default -> log.warn("Script: no details command {}", words[0]);
+                    }
+                });
+    }
+
+    /**
+     * Log a text file's lines, joined by " | ", as "Script: File name: text", to check what was
+     * saved.
+     *
+     * @param folder The folder.
+     * @param name The file's path in it.
+     */
+    public static void logFile(String folder, String name) {
+        // In turn with the workbench's steps, so it sees what they saved
+        onWorkbench(
+                workbench -> {
+                    try {
+                        log.info(
+                                "Script: File {}: {}",
+                                name,
+                                String.join(" | ", Files.readAllLines(Path.of(folder, name))));
+                    } catch (IOException e) {
+                        log.info("Script: File {} unreadable: {}", name, e.getMessage());
+                    }
+                });
+    }
+
+    /**
+     * Log what the Details panel shows.
+     *
+     * @param label What to call this point in the log.
+     * @param shown The files shown.
+     */
+    private static void logDetails(String label, java.util.List<DetailsPanel.Edited> shown) {
+        if (shown.isEmpty()) {
+            log.info("Script: Details {} shows nothing", label);
+            return;
+        }
+        final var schema = shown.getFirst().format().schema();
+        final java.util.List<String> fields = new java.util.ArrayList<>();
+        for (var field : schema.fields()) {
+            final Object first = shown.getFirst().value(field);
+            final boolean mixed =
+                    shown.stream()
+                            .anyMatch(
+                                    state ->
+                                            !String.valueOf(state.value(field))
+                                                    .equals(String.valueOf(first)));
+            fields.add(field.name() + "=" + (mixed ? "mixed" : first));
+        }
+        log.info(
+                "Script: Details {}: {} {} files, changed {}: {}",
+                label,
+                shown.size(),
+                schema.name(),
+                shown.stream().anyMatch(DetailsPanel.Edited::dirty),
+                fields);
+    }
+
+    /**
+     * A field's value from a script's text.
+     *
+     * @param field The field.
+     * @param text The text.
+     * @return The value, of the field's Java type.
+     */
+    private static Object parseValue(com.ikalagaming.util.schema.Field field, String text) {
+        return switch (field.kind()) {
+            case NUMBER -> Double.parseDouble(text);
+            case INTEGER -> Long.parseLong(text);
+            case FLAG -> Boolean.parseBoolean(text);
+            case TEXT_LIST -> java.util.Arrays.stream(text.split(",")).map(String::trim).toList();
+            case NUMBER_LIST ->
+                    java.util.Arrays.stream(text.split(","))
+                            .map(String::trim)
+                            .map(Double::parseDouble)
+                            .toList();
+            default -> text;
+        };
     }
 
     /**

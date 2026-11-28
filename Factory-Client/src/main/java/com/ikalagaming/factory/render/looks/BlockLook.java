@@ -1,9 +1,13 @@
 package com.ikalagaming.factory.render.looks;
 
+import com.ikalagaming.factory.kvt.KvtSchemas;
 import com.ikalagaming.factory.kvt.Node;
 import com.ikalagaming.factory.kvt.TreeStringSerialization;
+import com.ikalagaming.factory.registry.ContentSchemas;
+import com.ikalagaming.util.schema.Schema;
 
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.Optional;
 
@@ -22,6 +26,7 @@ import java.util.Optional;
  * @param texture The texture's name, or null for none.
  * @param material The material's name, or null for the default matte one.
  */
+@Slf4j
 public record BlockLook(@NonNull String model, String texture, String material) {
 
     /** The key for the model. */
@@ -34,10 +39,10 @@ public record BlockLook(@NonNull String model, String texture, String material) 
     public static final String KEY_MATERIAL = "material";
 
     /** The model of a fluid, whose shape is made in code. */
-    public static final String FLUID = "fluid";
+    public static final String FLUID = ContentSchemas.FLUID_MODEL;
 
     /** The model when a look doesn't say: a full block with the whole texture on every face. */
-    public static final String DEFAULT_MODEL = "lotomation:block/cube_all";
+    public static final String DEFAULT_MODEL = ContentSchemas.DEFAULT_MODEL;
 
     /**
      * Whether it is a fluid.
@@ -67,26 +72,14 @@ public record BlockLook(@NonNull String model, String texture, String material) 
      * @throws IllegalArgumentException If a value isn't text.
      */
     private static BlockLook fromTree(@NonNull Node root) {
-        final String named = text(root, KEY_MODEL);
-        return new BlockLook(
-                named == null ? DEFAULT_MODEL : named,
-                text(root, KEY_TEXTURE),
-                text(root, KEY_MATERIAL));
-    }
-
-    /**
-     * Text in a tree.
-     *
-     * @param node The tree.
-     * @param key The key.
-     * @return The text, or null if it is missing.
-     * @throws IllegalArgumentException If it isn't text.
-     */
-    private static String text(@NonNull Node node, @NonNull String key) {
-        final Object value = node.hasChild(key) ? node.get(key) : null;
-        if (value == null || value instanceof String) {
-            return (String) value;
+        final Schema.Values values = KvtSchemas.read(root, ContentSchemas.LOOK);
+        for (Schema.Problem problem : values.problems()) {
+            if (problem.error()) {
+                throw new IllegalArgumentException(problem.message());
+            }
+            log.warn("Look: {}", problem.message());
         }
-        throw new IllegalArgumentException(key + " must be text");
+        return new BlockLook(
+                values.text(KEY_MODEL), values.text(KEY_TEXTURE), values.text(KEY_MATERIAL));
     }
 }

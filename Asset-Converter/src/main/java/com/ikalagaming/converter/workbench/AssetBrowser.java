@@ -37,6 +37,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -172,6 +173,9 @@ public final class AssetBrowser implements AutoCloseable {
      * @return The file, or null.
      */
     @Getter private @Nullable Path selected;
+
+    /** Every file selected, the one clicked last among them, in the order picked. */
+    private final Set<Path> selection = new LinkedHashSet<>();
 
     /** Each shown thumbnail's texture, by file. */
     private final Map<Path, TextureHandle> loaded = new HashMap<>();
@@ -479,8 +483,8 @@ public final class AssetBrowser implements AutoCloseable {
                                                 + entry.type()
                                                 + (entry.id() == null ? "" : "    " + entry.id())
                                         : name)
-                        .selected(file.equals(selected))
-                        .onClick(() -> select(file))
+                        .selected(selection.contains(file))
+                        .onClick(() -> click(file))
                         .onDoubleClick(() -> open.accept(file))
                         .tooltip(file + (entry.id() == null ? "" : "\n" + entry.id()))
                         .contextMenu(menu(file))
@@ -494,7 +498,7 @@ public final class AssetBrowser implements AutoCloseable {
                                 .texture(() -> thumbnail(entry))
                                 .size(THUMBNAIL, THUMBNAIL)
                                 .pixelSharp(true)
-                                .onClick(() -> select(file))
+                                .onClick(() -> click(file))
                         : new Label("asset-type" + index, entry.type()).classes("muted");
         return new Column("asset-tile" + index).align(Align.CENTER).add(picture, label);
     }
@@ -626,7 +630,76 @@ public final class AssetBrowser implements AutoCloseable {
      */
     public void select(@Nullable Path file) {
         selected = file == null ? null : file.toAbsolutePath().normalize();
+        selection.clear();
+        if (selected != null) {
+            selection.add(selected);
+        }
         dirty = true;
+    }
+
+    /**
+     * Add a file to the selection, or take it out if it is in it, as a ctrl-click does.
+     *
+     * @param file The file.
+     */
+    public void toggle(@NonNull Path file) {
+        final Path normal = file.toAbsolutePath().normalize();
+        if (selection.remove(normal)) {
+            selected = selection.isEmpty() ? null : List.copyOf(selection).getLast();
+        } else {
+            selection.add(normal);
+            selected = normal;
+        }
+        dirty = true;
+    }
+
+    /**
+     * Select the shown files from the one clicked last to another, as a shift-click does.
+     *
+     * @param file The file at the range's other end.
+     */
+    public void selectRange(@NonNull Path file) {
+        final Path normal = file.toAbsolutePath().normalize();
+        final List<Path> files = shown.stream().map(AssetIndex.Entry::file).toList();
+        final int from = selected == null ? -1 : files.indexOf(selected);
+        final int to = files.indexOf(normal);
+        if (from < 0 || to < 0) {
+            select(normal);
+            return;
+        }
+        final Path anchor = selected;
+        selection.clear();
+        for (int i = Math.min(from, to); i <= Math.max(from, to); ++i) {
+            selection.add(files.get(i));
+        }
+        // The anchor stays, so another shift-click measures from it
+        selected = anchor;
+        dirty = true;
+    }
+
+    /**
+     * A tile clicked: with ctrl, toggled in the selection; with shift, a range; else selected.
+     *
+     * @param file The tile's file.
+     */
+    private void click(Path file) {
+        final var io = com.ikalagaming.graphics.gui.IkGui.getIO();
+        if (io.keyCtrl) {
+            toggle(file);
+        } else if (io.keyShift) {
+            selectRange(file);
+        } else {
+            select(file);
+        }
+    }
+
+    /**
+     * Every file selected.
+     *
+     * @return The files, in the order picked.
+     */
+    public List<Path> getSelection() {
+        return List.copyOf(selection);
     }
 
     /**

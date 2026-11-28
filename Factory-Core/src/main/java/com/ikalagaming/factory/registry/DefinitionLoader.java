@@ -2,10 +2,12 @@ package com.ikalagaming.factory.registry;
 
 import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.factory.item.ItemDefinition;
+import com.ikalagaming.factory.kvt.KvtSchemas;
 import com.ikalagaming.factory.kvt.Node;
 import com.ikalagaming.factory.kvt.TreeStringSerialization;
 import com.ikalagaming.factory.world.BlockDefinition;
 import com.ikalagaming.factory.world.Collision;
+import com.ikalagaming.util.schema.Schema;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -117,25 +119,16 @@ public class DefinitionLoader {
             try {
                 final String modName = id.substring(0, id.indexOf(':'));
                 final String name = id.substring(id.indexOf(':') + 1);
-                final String material = text(root.get(), KEY_MATERIAL);
-                final List<String> tags = strings(root.get(), KEY_TAGS);
-                final String collisionName = text(root.get(), KEY_COLLISION);
+                // An unknown collision only warns, and the block is full
+                final Schema.Values values =
+                        values(root.get(), ContentSchemas.BLOCK, id, KEY_COLLISION);
+                final String material = values.text(KEY_MATERIAL);
+                final List<String> tags = values.texts(KEY_TAGS);
                 final Collision collision =
-                        collisionName == null
-                                ? Collision.FULL
-                                : Collision.named(collisionName)
-                                        .orElseGet(
-                                                () -> {
-                                                    log.warn(
-                                                            "Block {} has unknown collision '{}';"
-                                                                    + " it will be full",
-                                                            id,
-                                                            collisionName);
-                                                    return Collision.FULL;
-                                                });
+                        Collision.named(values.text(KEY_COLLISION)).orElse(Collision.FULL);
                 blockRegistry.register(
                         id, new BlockDefinition(modName, name, material, tags, collision));
-                if (flag(root.get(), KEY_ITEM, true)) {
+                if (values.flag(KEY_ITEM)) {
                     itemRegistry.register(
                             id, new ItemDefinition(modName, name, material, new ArrayList<>(tags)));
                 }
@@ -167,13 +160,14 @@ public class DefinitionLoader {
                 continue;
             }
             try {
+                final Schema.Values values = values(root.get(), ContentSchemas.ITEM, id);
                 itemRegistry.register(
                         id,
                         new ItemDefinition(
                                 id.substring(0, id.indexOf(':')),
                                 id.substring(id.indexOf(':') + 1),
-                                text(root.get(), KEY_MATERIAL),
-                                strings(root.get(), KEY_TAGS)));
+                                values.text(KEY_MATERIAL),
+                                values.texts(KEY_TAGS)));
             } catch (IllegalArgumentException e) {
                 log.warn(
                         "{} {}: {}",
@@ -196,8 +190,9 @@ public class DefinitionLoader {
         final Map<String, Node> materials = shared(folders, MATERIALS_FOLDER);
         for (String name : parentsFirst(materials)) {
             try {
-                final Node root = materials.get(name);
-                materialRegistry.addMaterial(name, strings(root, KEY_TAGS), text(root, KEY_PARENT));
+                final Schema.Values values =
+                        values(materials.get(name), ContentSchemas.MATERIAL, name);
+                materialRegistry.addMaterial(name, values.texts(KEY_TAGS), values.text(KEY_PARENT));
             } catch (IllegalArgumentException e) {
                 log.warn(
                         "{} {}: {}",
@@ -219,7 +214,8 @@ public class DefinitionLoader {
         final Map<String, Node> tags = shared(folders, TAGS_FOLDER);
         for (String name : parentsFirst(tags)) {
             try {
-                tagRegistry.addTag(name, text(tags.get(name), KEY_PARENT));
+                tagRegistry.addTag(
+                        name, values(tags.get(name), ContentSchemas.TAG, name).text(KEY_PARENT));
             } catch (IllegalArgumentException e) {
                 log.warn("Tag {} is malformed: {}", name, e.getMessage());
             }
@@ -326,57 +322,33 @@ public class DefinitionLoader {
     }
 
     /**
-     * Text in a tree.
+     * A definition's values, read through its schema, warning about unknown fields.
      *
-     * @param node The tree.
-     * @param key The key.
-     * @return The text, or null if it is missing.
-     * @throws IllegalArgumentException If it isn't text.
+     * @param root The definition's tree.
+     * @param schema Its kind's schema.
+     * @param name The definition, for warnings.
+     * @param lenient Fields whose bad values only warn, the default used in their place.
+     * @return The values.
+     * @throws IllegalArgumentException If another field's value is bad or a required one missing.
      */
-    private static String text(@NonNull Node node, @NonNull String key) {
-        final Object value = node.hasChild(key) ? node.get(key) : null;
-        if (value == null || value instanceof String) {
-            return (String) value;
+    private static Schema.Values values(
+            @NonNull Node root,
+            @NonNull Schema schema,
+            @NonNull String name,
+            @NonNull String... lenient) {
+        final Schema.Values values = KvtSchemas.read(root, schema);
+        final List<String> errors = new ArrayList<>();
+        for (Schema.Problem problem : values.problems()) {
+            if (!problem.error() || List.of(lenient).contains(problem.field())) {
+                log.warn("{} {}: {}", schema.name(), name, problem.message());
+            } else {
+                errors.add(problem.message());
+            }
         }
-        throw new IllegalArgumentException(key + " must be text");
-    }
-
-    /**
-     * A list of text in a tree.
-     *
-     * @param node The tree.
-     * @param key The key.
-     * @return The text, empty if it is missing.
-     * @throws IllegalArgumentException If it isn't a list of text.
-     */
-    private static List<String> strings(@NonNull Node node, @NonNull String key) {
-        if (!node.hasChild(key)) {
-            return new ArrayList<>();
+        if (!errors.isEmpty()) {
+            throw new IllegalArgumentException(String.join("; ", errors));
         }
-        final Object value = node.get(key);
-        if (value instanceof List<?> list && list.stream().allMatch(String.class::isInstance)) {
-            return new ArrayList<>(list.stream().map(String.class::cast).toList());
-        }
-        throw new IllegalArgumentException(key + " must be a list of text, like [T;\"solid\"]");
-    }
-
-    /**
-     * A true or false value in a tree.
-     *
-     * @param node The tree.
-     * @param key The key.
-     * @param fallback The value when it is missing.
-     * @return The value.
-     * @throws IllegalArgumentException If it isn't true or false.
-     */
-    private static boolean flag(@NonNull Node node, @NonNull String key, boolean fallback) {
-        if (!node.hasChild(key)) {
-            return fallback;
-        }
-        if (node.get(key) instanceof Boolean value) {
-            return value;
-        }
-        throw new IllegalArgumentException(key + " must be true or false");
+        return values;
     }
 
     /** Private constructor so that this class is not instantiated. */

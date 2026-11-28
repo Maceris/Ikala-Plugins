@@ -1,6 +1,8 @@
 package com.ikalagaming.graphics.asset;
 
 import com.ikalagaming.graphics.graph.Material;
+import com.ikalagaming.util.schema.Field;
+import com.ikalagaming.util.schema.Schema;
 
 import lombok.NonNull;
 import org.yaml.snakeyaml.LoaderOptions;
@@ -220,6 +222,145 @@ public final class MaterialText {
                             name(named, TEXTURE_EMISSIVE));
         }
         return new MaterialSection.Stored(material, textures);
+    }
+
+    /** The material's values as a schema, for editors, with the defaults above. */
+    public static final Schema SCHEMA =
+            Schema.of(
+                    "render material",
+                    Field.choice(
+                            KEY_TRANSPARENCY,
+                            "opaque",
+                            "How light gets through: opaque, cutout holes, or translucent like"
+                                    + " glass",
+                            "opaque",
+                            "cutout",
+                            "translucent"),
+                    Field.numbers(
+                            KEY_BASE_COLOR,
+                            List.of(1.0, 1.0, 1.0, 1.0),
+                            "sRGB red, green, blue and opacity; a texture's color stands in for it"),
+                    Field.numbers(
+                            KEY_EMISSIVE,
+                            List.of(0.0, 0.0, 0.0),
+                            "Light given off, in cd/m^2, linear, times the emissive texture if any"),
+                    Field.number(KEY_ROUGHNESS, DEFAULT_ROUGHNESS, 0, 1, "0 polished to 1 matte"),
+                    Field.number(KEY_METALLIC, 0, 0, 1, "0 non-metal to 1 metal"),
+                    Field.number(
+                            KEY_SPECULAR,
+                            DEFAULT_SPECULAR,
+                            0,
+                            1,
+                            "A non-metal's reflection head on: 0.5 is 4%, 1 is 8%"),
+                    Field.number(
+                            KEY_SPECULAR_TINT, 0, 0, 1, "How much that takes on the base color"),
+                    Field.number(
+                            KEY_SUBSURFACE,
+                            0,
+                            0,
+                            1,
+                            "Flattens the diffuse light, as light under the surface does"),
+                    Field.number(KEY_SHEEN, 0, 0, 1, "A soft glow at grazing angles, for cloth"),
+                    Field.number(
+                            KEY_SHEEN_TINT, 0, 0, 1, "How much the sheen takes on the base color"),
+                    Field.number(KEY_CLEARCOAT, 0, 0, 1, "A clear varnish layer on top"),
+                    Field.number(
+                            KEY_CLEARCOAT_GLOSS,
+                            DEFAULT_CLEARCOAT_GLOSS,
+                            0,
+                            1,
+                            "How glossy the varnish is"),
+                    Field.number(KEY_ANISOTROPIC, 0, 0, 1, "How much the highlight stretches"),
+                    Field.flag(
+                            KEY_NORMAL_GREEN_DOWN,
+                            false,
+                            "The normal map's green points down, as DirectX has it"),
+                    Field.flag(KEY_PACKED_OCCLUSION, false, "The packed map's red is occlusion"),
+                    Field.flag(
+                            KEY_TRIPLANAR,
+                            false,
+                            "Level of detail projects the texture along each axis"));
+
+    /**
+     * A material's values as {@link #SCHEMA} has them.
+     *
+     * @param material The material.
+     * @return The values by key, every field given.
+     */
+    public static Map<String, Object> values(@NonNull Material material) {
+        final Map<String, Object> values = new java.util.LinkedHashMap<>();
+        values.put(KEY_TRANSPARENCY, material.getTransparency().name().toLowerCase(Locale.ROOT));
+        values.put(
+                KEY_BASE_COLOR,
+                List.of(
+                        (double) material.getBaseColor().x,
+                        (double) material.getBaseColor().y,
+                        (double) material.getBaseColor().z,
+                        (double) material.getBaseColor().w));
+        values.put(
+                KEY_EMISSIVE,
+                List.of(
+                        (double) material.getEmissive().x,
+                        (double) material.getEmissive().y,
+                        (double) material.getEmissive().z));
+        values.put(KEY_ROUGHNESS, (double) material.getRoughness());
+        values.put(KEY_METALLIC, (double) material.getMetallic());
+        values.put(KEY_SPECULAR, (double) material.getSpecular());
+        values.put(KEY_SPECULAR_TINT, (double) material.getSpecularTint());
+        values.put(KEY_SUBSURFACE, (double) material.getSubsurface());
+        values.put(KEY_SHEEN, (double) material.getSheen());
+        values.put(KEY_SHEEN_TINT, (double) material.getSheenTint());
+        values.put(KEY_CLEARCOAT, (double) material.getClearcoat());
+        values.put(KEY_CLEARCOAT_GLOSS, (double) material.getClearcoatGloss());
+        values.put(KEY_ANISOTROPIC, (double) material.getAnisotropic());
+        values.put(KEY_NORMAL_GREEN_DOWN, material.isNormalGreenDown());
+        values.put(KEY_PACKED_OCCLUSION, material.isPackedOcclusion());
+        values.put(KEY_TRIPLANAR, material.isTriplanar());
+        return values;
+    }
+
+    /**
+     * A material from values as {@link #SCHEMA} has them, defaults where one is missing.
+     *
+     * @param values The values by key.
+     * @return The material, with no textures.
+     */
+    public static Material fromValues(@NonNull Map<String, Object> values) {
+        final Schema.Values read = SCHEMA.read(values);
+        final Material material = new Material();
+        material.setTransparency(
+                Material.Transparency.valueOf(
+                        read.text(KEY_TRANSPARENCY).toUpperCase(Locale.ROOT)));
+        final List<?> base = (List<?>) read.get(KEY_BASE_COLOR);
+        material.getBaseColor()
+                .set(number(base, 0), number(base, 1), number(base, 2), number(base, 3));
+        final List<?> emissive = (List<?>) read.get(KEY_EMISSIVE);
+        material.getEmissive().set(number(emissive, 0), number(emissive, 1), number(emissive, 2));
+        material.setRoughness((float) read.number(KEY_ROUGHNESS));
+        material.setMetallic((float) read.number(KEY_METALLIC));
+        material.setSpecular((float) read.number(KEY_SPECULAR));
+        material.setSpecularTint((float) read.number(KEY_SPECULAR_TINT));
+        material.setSubsurface((float) read.number(KEY_SUBSURFACE));
+        material.setSheen((float) read.number(KEY_SHEEN));
+        material.setSheenTint((float) read.number(KEY_SHEEN_TINT));
+        material.setClearcoat((float) read.number(KEY_CLEARCOAT));
+        material.setClearcoatGloss((float) read.number(KEY_CLEARCOAT_GLOSS));
+        material.setAnisotropic((float) read.number(KEY_ANISOTROPIC));
+        material.setNormalGreenDown(read.flag(KEY_NORMAL_GREEN_DOWN));
+        material.setPackedOcclusion(read.flag(KEY_PACKED_OCCLUSION));
+        material.setTriplanar(read.flag(KEY_TRIPLANAR));
+        return material;
+    }
+
+    /**
+     * A number in a list, as a float.
+     *
+     * @param list The list.
+     * @param index Which number.
+     * @return The number.
+     */
+    private static float number(List<?> list, int index) {
+        return ((Number) list.get(index)).floatValue();
     }
 
     /**

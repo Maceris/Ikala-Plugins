@@ -59,6 +59,14 @@ Blocks and items are namespaced, `lotomation:stone`. Tag and gameplay material n
 every plugin, so mods agree on what `solid` means. The server, the client and the tools all read
 them the same way.
 
+Each kind's fields are declared once, in `ContentSchemas`, as a `Schema` (Ikala-Core's
+`util.schema`): each field's name, kind, default, range and meaning. The readers read through them
+(`KvtSchemas`), so a value of the wrong kind or out of range is an error naming the field, and an
+unknown field is a warning. Block looks (`looks/block`) and water looks (`looks/water`) are read by
+Factory-Client but declared here, where the asset editor, which doesn't load the client, makes its
+forms from the same schemas. `KvtSchemas.write` writes a file back with only the values that differ
+from their defaults, keeping its leading comment, its other keys and the number types it used.
+
 The determinism tests compare a fixed set of chunks against
 `src/test/resources/worldgen/golden-hashes.txt`. When generation changes on purpose, regenerate it
 with `./gradlew test -Dworldgen.updateGolden=true` and commit the new file.

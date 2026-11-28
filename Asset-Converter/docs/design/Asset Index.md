@@ -105,6 +105,25 @@ hand-written sources are. Thumbnails follow on save, as their keys change with t
 game's content lookup the index's content roots, so a look's IDs resolve in any of them, not only installed plugins
 and folders files were opened from.
 
+## The Details panel
+
+The Details panel, a tab beside Properties, edits the values of the files selected in the Assets
+panel, where ctrl-click and shift-click pick several. Each kind of file with values has a `Schema`
+(Ikala-Core's `util.schema`): its fields, their kinds, defaults, ranges and meanings. The game's
+content kinds (tags, game materials, blocks, items, block looks, water looks) are declared in
+Factory-Core's `ContentSchemas`, beside the readers that read through them, so the game and the
+editor read files the same way; render materials' are `MaterialText.SCHEMA`. An `AssetValues` reads
+and writes a kind: `GameValues` through `KvtSchemas` for content files, `MaterialValues` for render
+materials in either form, writing the other form the index links it to by "makes" too.
+
+The panel makes a control per field from its kind: text, a choice, a flag, a slider for a number
+with a range or a box without one, a list with its entries and a picker of IDs of the kind it names
+(names shared by every plugin for tags and game materials), and a row of numbers for a color. Files
+of one kind show each field once, with a dash where they differ; an edit sets it on all of them. A
+value other than its default has a Reset. Save writes each changed file with only the values that
+differ from the defaults; edits wait, unsaved, while other files are selected, and the panel says
+how many. Problems found reading the files, like unknown fields, are listed under the fields.
+
 ## The References panel
 
 The References panel (`ReferenceViewer`) answers "what uses this" and "what does this use" for one file at a time,

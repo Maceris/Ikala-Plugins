@@ -1,8 +1,11 @@
 package com.ikalagaming.factory.render.looks;
 
+import com.ikalagaming.factory.kvt.KvtSchemas;
 import com.ikalagaming.factory.kvt.Node;
 import com.ikalagaming.factory.kvt.TreeStringSerialization;
+import com.ikalagaming.factory.registry.ContentSchemas;
 import com.ikalagaming.graphics.scene.WaterBody;
+import com.ikalagaming.util.schema.Schema;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -117,32 +120,17 @@ public final class WaterLooks {
      * @throws IllegalArgumentException If a value isn't a number.
      */
     static WaterBody parse(@NonNull Node tree) {
+        final Schema.Values values = KvtSchemas.read(tree, ContentSchemas.WATER_LOOK);
+        for (Schema.Problem problem : values.problems()) {
+            if (problem.error()) {
+                throw new IllegalArgumentException(problem.message());
+            }
+            log.warn("Water look: {}", problem.message());
+        }
         return new WaterBody(
-                        number(tree, KEY_CHLOROPHYLL, 0),
-                        number(tree, KEY_CDOM, 0),
-                        number(tree, KEY_SEDIMENT, 0))
-                .withWind(
-                        WIND_SPEED,
-                        WIND_DIRECTION,
-                        number(tree, KEY_FETCH, Float.POSITIVE_INFINITY));
-    }
-
-    /**
-     * A number in a tree.
-     *
-     * @param tree The tree.
-     * @param key The key.
-     * @param fallback The number if it is missing.
-     * @return The number.
-     * @throws IllegalArgumentException If it isn't a number.
-     */
-    private static float number(@NonNull Node tree, @NonNull String key, float fallback) {
-        if (!tree.hasChild(key)) {
-            return fallback;
-        }
-        if (tree.get(key) instanceof Number n) {
-            return n.floatValue();
-        }
-        throw new IllegalArgumentException(key + " must be a number");
+                        (float) values.number(KEY_CHLOROPHYLL),
+                        (float) values.number(KEY_CDOM),
+                        (float) values.number(KEY_SEDIMENT))
+                .withWind(WIND_SPEED, WIND_DIRECTION, (float) values.number(KEY_FETCH));
     }
 }

@@ -118,6 +118,9 @@ public class Workbench {
     /** The ID of the panel listing the asset index's problems. */
     static final String PROBLEMS_ID = "converter/workbench-problems";
 
+    /** The ID of the Details panel, the selected files' values. */
+    static final String DETAILS_ID = "converter/workbench-details";
+
     /** The ID of the reference viewer's panel. */
     static final String REFERENCES_ID = "converter/workbench-references";
 
@@ -145,7 +148,8 @@ public class Workbench {
                     PREVIEWS_ID,
                     PROBLEMS_ID,
                     ASSETS_ID,
-                    REFERENCES_ID);
+                    REFERENCES_ID,
+                    DETAILS_ID);
 
     /** The height of the top bar: one row, for going back, the layout and the status. */
     private static final float TOP_HEIGHT = 36;
@@ -158,7 +162,7 @@ public class Workbench {
             new DockLayout()
                     .split(DockLayout.Side.LEFT, 0.17f, FILES_ID)
                     .splitPrevious(DockLayout.Side.BOTTOM, 0.35f, OUTLINER_ID, PROBLEMS_ID)
-                    .split(DockLayout.Side.RIGHT, 0.25f, PROPERTIES_ID)
+                    .split(DockLayout.Side.RIGHT, 0.25f, PROPERTIES_ID, DETAILS_ID)
                     .split(DockLayout.Side.BOTTOM, 0.3f, ASSETS_ID)
                     .center(VIEWER_ID, SCENE_ID, GRAPH_ID, REFERENCES_ID, PREVIEWS_ID);
 
@@ -231,6 +235,24 @@ public class Workbench {
      * @return The editor.
      */
     @Getter private final LookEditor lookEditor;
+
+    /**
+     * The Details panel: the values of the files selected in the Assets panel. -- GETTER -- The
+     * Details panel.
+     *
+     * @return The panel's state.
+     */
+    @Getter private final DetailsPanel detailsPanel;
+
+    /** The panel the Details panel's state draws in. */
+    private Panel detailsPanelNode;
+
+    /** Bring the Details panel to the front. */
+    public void showDetails() {
+        if (detailsPanelNode != null) {
+            detailsPanelNode.bringToFront();
+        }
+    }
 
     /** The panel the reference viewer is in. */
     private Panel referencesPanel;
@@ -345,6 +367,8 @@ public class Workbench {
         referenceViewer =
                 new ReferenceViewer(assets::getSnapshot, assetBrowser::thumbnail, this::open);
         assetBrowser.setShowReferences(this::showReferences);
+        detailsPanel =
+                new DetailsPanel(assets::getSnapshot, assetBrowser::getSelection, this::showStatus);
         assetSlots =
                 new AssetSlot(
                         assets::getSnapshot,
@@ -554,6 +578,13 @@ public class Workbench {
                                                 .height(Sizing.fixed(0)),
                                         graphTool.content()));
         referencesPanel = panel(REFERENCES_ID, "References", referenceViewer.content());
+        detailsPanelNode =
+                panel(
+                        DETAILS_ID,
+                        "Details",
+                        new Column("details-root")
+                                .align(Align.STRETCH)
+                                .add(new Immediate("details", detailsPanel::draw)));
         panel(PREVIEWS_ID, "Previews", previewPanel.content());
         panel(ASSETS_ID, "Assets", assetBrowser.content());
         panel(
