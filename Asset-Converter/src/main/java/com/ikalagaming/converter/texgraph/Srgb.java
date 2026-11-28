@@ -6,7 +6,7 @@ package com.ikalagaming.converter.texgraph;
  */
 public final class Srgb {
     /** The largest 8-bit value. */
-    static final int MAX_BYTE = 255;
+    public static final int MAX_BYTE = 255;
 
     /** Linear values of each 8-bit sRGB value. */
     private static final float[] TO_LINEAR = new float[MAX_BYTE + 1];

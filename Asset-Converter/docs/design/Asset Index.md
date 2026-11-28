@@ -59,5 +59,15 @@ Textures and images have thumbnails (`Thumbnails`), made on the CPU in the backg
 3x3 at a whole-number scale, pixel-sharp, so seams show, or one tile shrunk when that is too big. A thumbnail's file
 name hashes the file's path, size and time, those of what it uses, and a version, so a change makes a new one; using
 one marks it, and the folder keeps under 64 MiB by dropping the least recently used. Tiles upload their thumbnail
-when first drawn, and a new search lets go of those no longer shown. Materials, models and looks get rendered
-thumbnails in E7b2; until then their tiles show their type.
+when first drawn, and a new search lets go of those no longer shown.
+
+Materials, models and looks are rendered (`ThumbnailStudio`): a second `SceneView`, never drawn in a panel, at the
+thumbnail's size, supersampled and without the debug outline, shows one file at a time from a queue (the newest asked
+first, a tile scrolled away dropping its request) and captures it into the same cache once its textures are in. A
+thumbnail frames its subject, not the floor around it. A model stands on its floor and a look is its block. A render
+material holds only how a surface reflects, its color coming from the texture a look pairs it with, so it is shown on
+the sphere, untextured, in the average color of the texture of a look that uses it (found in the index): averaged in
+linear light without cut-out pixels, opaque, and given as sRGB, as base colors are. A texture laid out for a block's
+faces looks wrong wrapped on a ball; the average is a quick reference to the color instead. One no look uses is
+shown plain. A render
+that fails isn't asked for again until its key changes.

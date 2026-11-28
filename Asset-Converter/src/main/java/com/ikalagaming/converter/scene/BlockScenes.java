@@ -136,7 +136,16 @@ public final class BlockScenes {
         }
         final ImportedScene scene =
                 new ImportedScene(
-                        Path.of(name), meshes, materials, root, List.of(), 1, 1, List.of(), 0);
+                        // A block's ID has a colon, which a file name can't on Windows
+                        Path.of(name.replace(':', '_')),
+                        meshes,
+                        materials,
+                        root,
+                        List.of(),
+                        1,
+                        1,
+                        List.of(),
+                        0);
         return new Built(scene, values, List.copyOf(missing));
     }
 

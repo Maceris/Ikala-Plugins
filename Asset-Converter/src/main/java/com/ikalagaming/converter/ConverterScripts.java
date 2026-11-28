@@ -916,8 +916,9 @@ public final class ConverterScripts {
      * text", "type name|any", "folder path|all", "collection name|none", "mode list|tiles", "select
      * file name", "save name" (the search shown as a collection), "pick name" (the selected file
      * into a set), "list" (what is shown), "cached file name" (whether its thumbnail is in the
-     * cache), "thumbnails" (waits for the shown files' thumbnails), "uploaded file name" (whether
-     * its thumbnail is shown).
+     * cache), "renders label" (how many shown files have thumbnails and how many renders wait),
+     * "thumbnails" (waits for the shown files' thumbnails), "uploaded file name" (whether its
+     * thumbnail is shown).
      *
      * @param command The command and its words, separated by spaces; a name or path is the rest.
      */
@@ -960,6 +961,14 @@ public final class ConverterScripts {
                                         "Script: Browser has {} thumbnails, {} made this run",
                                         assets.awaitThumbnails(),
                                         assets.thumbnailsMade());
+                        case "renders" ->
+                                log.info(
+                                        "Script: Browser {} {} files: {} cached, {} renders"
+                                                + " left",
+                                        rest,
+                                        assets.getShown().size(),
+                                        assets.cachedCount(),
+                                        assets.rendersLeft());
                         case "cached" -> {
                             final Path file = shownNamed(assets, rest);
                             log.info(

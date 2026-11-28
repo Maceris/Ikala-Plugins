@@ -38,8 +38,10 @@ import com.ikalagaming.graphics.ui.UiFrame;
 import com.ikalagaming.graphics.vulkan.FilterView;
 import com.ikalagaming.launcher.PluginFolder;
 
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 import org.joml.Matrix3d;
 import org.joml.Quaterniond;
 import org.joml.Vector2f;
@@ -229,6 +231,19 @@ public class SceneView implements Viewer {
     /** Whether the view is supersampled, kept across previews. */
     private boolean supersample;
 
+    /** How much of half its longest side a thumbnail's subject is framed by, a little margin. */
+    private static final double THUMBNAIL_FILL = 0.6;
+
+    /** Whether it renders thumbnails: a fixed size, never drawn in a panel, no debug drawing. */
+    private boolean thumbnails;
+
+    /**
+     * Whether the next thumbnail is a material's ball, framed by its longest side so it fills the
+     * square. Anything else is framed by its corners' sphere, as a box's corners reach past that.
+     */
+    @Setter(AccessLevel.PACKAGE)
+    private boolean framingBall;
+
     /** What the view shows, an index into {@link #VIEW_MODES}. */
     private final IkInt viewMode = new IkInt(0);
 
@@ -322,6 +337,18 @@ public class SceneView implements Viewer {
         particles = new ParticleViewer(graphics);
         overlays = new SceneOverlays(graphics);
         comparison = new Comparison(graphics.textures(), graphics.ui());
+    }
+
+    /**
+     * Render thumbnails rather than show in a panel: a square of a fixed size, supersampled so a
+     * still has no jitter, without the debug outline. Before anything is shown.
+     *
+     * @param size The side, in pixels.
+     */
+    void useForThumbnails(int size) {
+        thumbnails = true;
+        supersample = true;
+        viewSize.set(size, size);
     }
 
     /**
@@ -656,8 +683,8 @@ public class SceneView implements Viewer {
             return preview;
         }
         final PreviewView view = graphics.previews().create((int) viewSize.x, (int) viewSize.y);
-        // The debug stage draws the selection's outline
-        view.setDrawsDebug(true);
+        // The debug stage draws the selection's outline, which thumbnails leave out
+        view.setDrawsDebug(!thumbnails);
         view.setFilterView(VIEW_MODES.get(viewMode.get()));
         view.setSupersampled(supersample);
         previewLights = graphics.previews().lights(view);
@@ -756,17 +783,50 @@ public class SceneView implements Viewer {
     }
 
     /**
-     * Point the camera at a node and everything below it.
+     * The bounds a thumbnail frames into {@link #min} and {@link #max}: everything in the scene but
+     * the floor, so a preview shape or model fills the square rather than the floor around it.
+     *
+     * @param scene The scene.
+     * @return Whether there is anything but the floor.
+     */
+    private boolean subjectBounds(ImportedScene scene) {
+        final Vector3d partMin = new Vector3d();
+        final Vector3d partMax = new Vector3d();
+        min.set(Double.POSITIVE_INFINITY);
+        max.set(Double.NEGATIVE_INFINITY);
+        boolean any = false;
+        for (Node child : scene.root().children()) {
+            if (!"Floor".equals(child.name()) && scene.bounds(child, partMin, partMax)) {
+                min.min(partMin);
+                max.max(partMax);
+                any = true;
+            }
+        }
+        return any;
+    }
+
+    /**
+     * Point the camera at a node and everything below it; for a thumbnail, at everything in the
+     * scene but the floor.
      *
      * @param node The node.
      */
     private void frame(@NonNull Node node) {
         final ScenePlacement shown = placement;
-        if (shown == null || !shown.getImported().bounds(node, min, max)) {
+        if (shown == null
+                || !(thumbnails && subjectBounds(shown.getImported())
+                        || shown.getImported().bounds(node, min, max))) {
             return;
         }
         final Vector3d center = new Vector3d(min).add(max).mul(0.5);
-        final double radius = Math.max(0.01, max.distance(min) / 2);
+        // A material's ball fills its square: its longest side is its diameter, so it can't clip
+        final double radius =
+                Math.max(
+                        0.01,
+                        thumbnails && framingBall
+                                ? Math.max(max.x - min.x, Math.max(max.y - min.y, max.z - min.z))
+                                        * THUMBNAIL_FILL
+                                : max.distance(min) / 2);
         final var camera = scene().getCamera();
         if (camera.getRotation().x < 0.05f) {
             // Looking level or up, so tip down to see the ground the scene stands on

@@ -315,6 +315,16 @@ public class Workbench {
         sceneView.setCloseScene(this::closeScene);
         browser = new FileBrowser(Path.of(""));
         assetBrowser = new AssetBrowser(assets, graphics.textures(), this::open);
+        assetBrowser.setStudio(
+                new ThumbnailStudio(
+                        graphics,
+                        assetBrowser.getThumbnails(),
+                        new MaterialEditor(
+                                graphics.ui(),
+                                (file, colorSpace, loaded) ->
+                                        loadTexture(file, colorSpace, loaded, false),
+                                () -> null),
+                        this::post));
         sceneView.getParticles().setFolder(browser::getDirectory);
         sceneView.getParticles().setSaved(saved -> refresh());
         path = new TextInput("path", "").onSubmit(this::openPath).width(Sizing.grow());
@@ -1365,7 +1375,23 @@ public class Workbench {
      * @param loaded Given the texture on the render thread.
      */
     private void loadTexture(Path file, ColorSpace colorSpace, Consumer<TextureHandle> loaded) {
-        status.text("Loading " + file.getFileName() + "...");
+        loadTexture(file, colorSpace, loaded, true);
+    }
+
+    /**
+     * Load a texture in the background, handing it over on the render thread, saying so in the
+     * status line or not.
+     *
+     * @param file The image.
+     * @param colorSpace The color space to read it in.
+     * @param loaded Given the texture on the render thread.
+     * @param report Whether to say what happened, as the thumbnail studio doesn't.
+     */
+    private void loadTexture(
+            Path file, ColorSpace colorSpace, Consumer<TextureHandle> loaded, boolean report) {
+        if (report) {
+            status.text("Loading " + file.getFileName() + "...");
+        }
         loader.execute(
                 () -> {
                     try {
@@ -1382,11 +1408,15 @@ public class Workbench {
                         post(
                                 () -> {
                                     loaded.accept(texture);
-                                    status.text("Loaded " + file.getFileName());
+                                    if (report) {
+                                        status.text("Loaded " + file.getFileName());
+                                    }
                                 });
                     } catch (IOException | RuntimeException e) {
                         log.warn("Could not load texture {}", file, e);
-                        post(() -> status.text("Can't load " + file.getFileName()));
+                        if (report) {
+                            post(() -> status.text("Can't load " + file.getFileName()));
+                        }
                     }
                 });
     }

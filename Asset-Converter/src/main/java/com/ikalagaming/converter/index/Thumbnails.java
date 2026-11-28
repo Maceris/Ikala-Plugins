@@ -41,7 +41,7 @@ import javax.imageio.ImageIO;
 @Slf4j
 public final class Thumbnails implements AutoCloseable {
     /** Raised when the way thumbnails look changes, so old ones are made again. */
-    public static final int VERSION = 1;
+    public static final int VERSION = 6;
 
     /** The most pixels across a thumbnail. */
     public static final int SIZE = 128;
@@ -169,6 +169,41 @@ public final class Thumbnails implements AutoCloseable {
     }
 
     /**
+     * Where a file's thumbnail goes, for one made elsewhere, like a render.
+     *
+     * @param entry The file's entry.
+     * @param snapshot The index.
+     * @return The thumbnail file.
+     */
+    public Path fileFor(AssetIndex.@NonNull Entry entry, AssetIndex.@NonNull Snapshot snapshot) {
+        return folder.resolve(key(entry, snapshot) + ".png");
+    }
+
+    /**
+     * Take in a thumbnail made elsewhere, like a render: move it into place, then keep the folder
+     * under its size.
+     *
+     * @param made The image made.
+     * @param target Where it goes, from {@link #fileFor}.
+     * @throws IOException If it can't be moved.
+     */
+    public void adopt(@NonNull Path made, @NonNull Path target) throws IOException {
+        Files.createDirectories(folder);
+        Files.move(made, target, StandardCopyOption.REPLACE_EXISTING);
+        this.made.incrementAndGet();
+        trim();
+    }
+
+    /**
+     * The cache folder, where renders are written before {@link #adopt}.
+     *
+     * @return The folder.
+     */
+    public Path getFolder() {
+        return folder;
+    }
+
+    /**
      * Whether a file's thumbnail is in the cache, without making it.
      *
      * @param entry The file's entry.
@@ -246,7 +281,7 @@ public final class Thumbnails implements AutoCloseable {
      * @return The image.
      * @throws IOException If it can't be read.
      */
-    static BufferedImage read(Path source) throws IOException {
+    public static BufferedImage read(Path source) throws IOException {
         if (source.toString().toLowerCase(Locale.ROOT).endsWith(".ika")) {
             final TextureSection.Stored stored = TextureSection.read(AssetFile.open(source));
             final byte[] pixels =

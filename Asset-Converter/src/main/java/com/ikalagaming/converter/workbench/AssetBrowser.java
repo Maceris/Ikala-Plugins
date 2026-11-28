@@ -3,6 +3,8 @@ package com.ikalagaming.converter.workbench;
 import com.ikalagaming.converter.index.AssetCollections;
 import com.ikalagaming.converter.index.AssetIndex;
 import com.ikalagaming.converter.index.AssetSearch;
+import com.ikalagaming.converter.index.EditorTypes;
+import com.ikalagaming.converter.index.GameTypes;
 import com.ikalagaming.converter.index.Thumbnails;
 import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.Textures;
@@ -30,6 +32,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -83,7 +86,15 @@ public final class AssetBrowser implements AutoCloseable {
     /** Opens a file in the workbench. */
     private final Consumer<Path> open;
 
-    /** Makes and keeps thumbnails. */
+    /** Renders thumbnails of materials, models and looks, or null without one. */
+    private @Nullable ThumbnailStudio studio;
+
+    /**
+     * Makes and keeps thumbnails. -- GETTER -- The thumbnail cache.
+     *
+     * @return The cache.
+     */
+    @Getter
     private final Thumbnails thumbnails =
             new Thumbnails(AppPaths.cache().resolve("thumbnails"), Thumbnails.DEFAULT_CAP);
 
@@ -220,6 +231,25 @@ public final class AssetBrowser implements AutoCloseable {
     }
 
     /**
+     * Render thumbnails of materials, models and looks with a studio.
+     *
+     * @param renders The studio, closed with this panel.
+     */
+    public void setStudio(@NonNull ThumbnailStudio renders) {
+        studio = renders;
+    }
+
+    /**
+     * Whether a file gets a thumbnail: made here, or rendered.
+     *
+     * @param entry The file's entry.
+     * @return True if it does.
+     */
+    private boolean hasPicture(AssetIndex.Entry entry) {
+        return Thumbnails.canMake(entry) || studio != null && ThumbnailStudio.canRender(entry);
+    }
+
+    /**
      * The panel's content.
      *
      * @return The content.
@@ -272,6 +302,9 @@ public final class AssetBrowser implements AutoCloseable {
      */
     private void sync(UiFrame frame) {
         assets.start();
+        if (studio != null) {
+            studio.update();
+        }
         final AssetIndex.Snapshot snapshot = assets.getSnapshot();
         if (snapshot != shownFrom) {
             refreshChoices(snapshot);
@@ -384,7 +417,22 @@ public final class AssetBrowser implements AutoCloseable {
                             return true;
                         });
         grid.releaseAll();
-        grid.items(shown.size(), this::cell);
+        grid.items(
+                shown.size(),
+                new VirtualGrid.Factory() {
+                    @Override
+                    public Node<?> create(int index) {
+                        return cell(index);
+                    }
+
+                    @Override
+                    public void release(int index, @NonNull Node<?> node) {
+                        // A render not started for a tile scrolled away isn't wanted now
+                        if (studio != null && index < shown.size()) {
+                            studio.cancel(shown.get(index).file());
+                        }
+                    }
+                });
     }
 
     /** Lay the grid out for tiles or rows. */
@@ -437,7 +485,7 @@ public final class AssetBrowser implements AutoCloseable {
             return label;
         }
         final Node<?> picture =
-                Thumbnails.canMake(entry)
+                hasPicture(entry)
                         ? new Image("asset-thumb" + index)
                                 .texture(() -> thumbnail(entry))
                                 .size(THUMBNAIL, THUMBNAIL)
@@ -482,7 +530,20 @@ public final class AssetBrowser implements AutoCloseable {
             return known;
         }
         final AssetIndex.Snapshot snapshot = shownFrom;
-        final Path made = snapshot == null ? null : thumbnails.get(entry, snapshot);
+        if (snapshot == null) {
+            return null;
+        }
+        Path made = null;
+        if (Thumbnails.canMake(entry)) {
+            made = thumbnails.get(entry, snapshot);
+        } else if (studio != null && ThumbnailStudio.canRender(entry)) {
+            final Path target = thumbnails.fileFor(entry, snapshot);
+            if (Files.isRegularFile(target)) {
+                made = target;
+            } else {
+                studio.request(entry, target, lookUsing(entry, snapshot));
+            }
+        }
         if (made == null) {
             return null;
         }
@@ -494,6 +555,38 @@ public final class AssetBrowser implements AutoCloseable {
             log.debug("Can't upload the thumbnail {}", made, e);
             return null;
         }
+    }
+
+    /**
+     * A look that uses a render material, directly or through the material a source makes, for the
+     * texture to show it with.
+     *
+     * @param entry The material, or its source.
+     * @param snapshot The index.
+     * @return The first such look, or null.
+     */
+    private static @Nullable Path lookUsing(AssetIndex.Entry entry, AssetIndex.Snapshot snapshot) {
+        Path material = entry.file();
+        if (!EditorTypes.RENDER_MATERIAL.equals(entry.type())) {
+            material = null;
+            for (AssetIndex.Link link : snapshot.uses(entry.file())) {
+                if ("makes".equals(link.label()) && link.file() != null) {
+                    material = link.file();
+                }
+            }
+            if (material == null) {
+                return null;
+            }
+        }
+        for (AssetIndex.Link user : snapshot.usedBy(material)) {
+            final AssetIndex.Entry look = snapshot.entry(user.file());
+            if ("material".equals(user.label())
+                    && look != null
+                    && GameTypes.LOOK.equals(look.type())) {
+                return look.file();
+            }
+        }
+        return null;
     }
 
     /**
@@ -719,8 +812,40 @@ public final class AssetBrowser implements AutoCloseable {
         return made;
     }
 
+    /**
+     * Wait for the shown files' rendered thumbnails, for checks. Render thread, so this only says
+     * how many are left; the frames go on while a check waits.
+     *
+     * @return How many renders wait.
+     */
+    public int rendersLeft() {
+        return studio == null ? 0 : studio.pending();
+    }
+
+    /**
+     * How many shown files have a thumbnail in the cache.
+     *
+     * @return The count.
+     */
+    public int cachedCount() {
+        final AssetIndex.Snapshot snapshot = shownFrom;
+        if (snapshot == null) {
+            return 0;
+        }
+        int count = 0;
+        for (AssetIndex.Entry entry : shown) {
+            if (hasPicture(entry) && Files.isRegularFile(thumbnails.fileFor(entry, snapshot))) {
+                ++count;
+            }
+        }
+        return count;
+    }
+
     @Override
     public void close() {
+        if (studio != null) {
+            studio.close();
+        }
         thumbnails.close();
         loaded.values().forEach(textures::release);
         loaded.clear();
