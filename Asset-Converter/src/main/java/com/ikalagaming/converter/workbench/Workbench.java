@@ -117,6 +117,9 @@ public class Workbench {
     /** The ID of the panel listing the asset index's problems. */
     static final String PROBLEMS_ID = "converter/workbench-problems";
 
+    /** The ID of the reference viewer's panel. */
+    static final String REFERENCES_ID = "converter/workbench-references";
+
     /** The height of the asset roots strip in the files panel. */
     private static final float ROOTS_HEIGHT = 56;
 
@@ -140,7 +143,8 @@ public class Workbench {
                     GRAPH_ID,
                     PREVIEWS_ID,
                     PROBLEMS_ID,
-                    ASSETS_ID);
+                    ASSETS_ID,
+                    REFERENCES_ID);
 
     /** The height of the top bar: one row, for going back, the layout and the status. */
     private static final float TOP_HEIGHT = 36;
@@ -155,7 +159,7 @@ public class Workbench {
                     .splitPrevious(DockLayout.Side.BOTTOM, 0.35f, OUTLINER_ID, PROBLEMS_ID)
                     .split(DockLayout.Side.RIGHT, 0.25f, PROPERTIES_ID)
                     .split(DockLayout.Side.BOTTOM, 0.3f, ASSETS_ID)
-                    .center(VIEWER_ID, SCENE_ID, GRAPH_ID, PREVIEWS_ID);
+                    .center(VIEWER_ID, SCENE_ID, GRAPH_ID, REFERENCES_ID, PREVIEWS_ID);
 
     /** The dock space the panels dock into. */
     private final DockSpace dockSpace = new DockSpace("dock", LAYOUT);
@@ -205,6 +209,16 @@ public class Workbench {
      * @return The asset browser.
      */
     @Getter private final AssetBrowser assetBrowser;
+
+    /**
+     * The References panel. -- GETTER -- The reference viewer.
+     *
+     * @return The reference viewer.
+     */
+    @Getter private final ReferenceViewer referenceViewer;
+
+    /** The panel the reference viewer is in. */
+    private Panel referencesPanel;
 
     /**
      * Shows the open file, unless it is a scene. -- GETTER -- The preview host.
@@ -315,6 +329,9 @@ public class Workbench {
         sceneView.setCloseScene(this::closeScene);
         browser = new FileBrowser(Path.of(""));
         assetBrowser = new AssetBrowser(assets, graphics.textures(), this::open);
+        referenceViewer =
+                new ReferenceViewer(assets::getSnapshot, assetBrowser::thumbnail, this::open);
+        assetBrowser.setShowReferences(this::showReferences);
         assetBrowser.setStudio(
                 new ThumbnailStudio(
                         graphics,
@@ -507,6 +524,7 @@ public class Workbench {
                                         new Immediate("graph-seen", this::noteGraphDrawn)
                                                 .height(Sizing.fixed(0)),
                                         graphTool.content()));
+        referencesPanel = panel(REFERENCES_ID, "References", referenceViewer.content());
         panel(PREVIEWS_ID, "Previews", previewPanel.content());
         panel(ASSETS_ID, "Assets", assetBrowser.content());
         panel(
@@ -572,6 +590,18 @@ public class Workbench {
         }
         final boolean othersShow = now - sceneDrawn <= 1 || now - viewerDrawn <= 1;
         return !othersShow || mode == Mode.GRAPH;
+    }
+
+    /**
+     * Show a file's references in the References panel, bringing it to the front.
+     *
+     * @param file The file.
+     */
+    public void showReferences(@NonNull Path file) {
+        referenceViewer.show(file);
+        if (referencesPanel != null) {
+            referencesPanel.bringToFront();
+        }
     }
 
     /** Bring the graph panel to the front. */
@@ -792,6 +822,10 @@ public class Workbench {
             return;
         }
         IkGui.textUnformatted(entry.type() + (entry.id() == null ? "" : ", " + entry.id()));
+        if (IkGui.button("Show references")) {
+            final Path shown = openFile;
+            frame.fire(() -> showReferences(shown));
+        }
         final List<Path> providers = snapshot.providers(openFile);
         if (providers.size() > 1) {
             IkGui.textUnformatted("Provided by " + providers.size() + " folders, the last wins:");

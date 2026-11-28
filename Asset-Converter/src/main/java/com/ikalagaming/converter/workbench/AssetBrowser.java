@@ -30,6 +30,7 @@ import com.ikalagaming.launcher.AppPaths;
 
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.file.Files;
@@ -85,6 +86,9 @@ public final class AssetBrowser implements AutoCloseable {
 
     /** Opens a file in the workbench. */
     private final Consumer<Path> open;
+
+    /** Shows a file's references, from a tile's menu, or null for no such item. */
+    @Setter private @Nullable Consumer<Path> showReferences;
 
     /** Renders thumbnails of materials, models and looks, or null without one. */
     private @Nullable ThumbnailStudio studio;
@@ -504,6 +508,10 @@ public final class AssetBrowser implements AutoCloseable {
     private MenuItem[] menu(Path file) {
         final List<MenuItem> items = new ArrayList<>();
         items.add(new MenuItem("Open", () -> open.accept(file)));
+        final Consumer<Path> references = showReferences;
+        if (references != null) {
+            items.add(new MenuItem("Show references", () -> references.accept(file)));
+        }
         for (AssetCollections.Collection set : collections.all()) {
             if (set.isSearch()) {
                 continue;
@@ -524,7 +532,7 @@ public final class AssetBrowser implements AutoCloseable {
      * @param entry The tile's file.
      * @return The texture, or null until made.
      */
-    private @Nullable TextureHandle thumbnail(AssetIndex.Entry entry) {
+    @Nullable TextureHandle thumbnail(AssetIndex.Entry entry) {
         final TextureHandle known = loaded.get(entry.file());
         if (known != null) {
             return known;

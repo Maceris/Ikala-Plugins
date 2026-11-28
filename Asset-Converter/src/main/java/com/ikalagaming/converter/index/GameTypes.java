@@ -22,6 +22,12 @@ public final class GameTypes {
     /** The look type's name. */
     public static final String LOOK = "look";
 
+    /**
+     * The name of a water look: how water looks in a biome, under {@code looks/water}. It names no
+     * other file, and isn't a block look.
+     */
+    public static final String WATER_LOOK = "water look";
+
     /** The block type's name. */
     public static final String BLOCK = "block";
 
@@ -41,18 +47,27 @@ public final class GameTypes {
      */
     public static List<AssetType> all() {
         return List.of(
+                // Before block looks, which would take its folder, as the first type to match wins
+                new Kvt(WATER_LOOK, "looks/water") {
+                    @Override
+                    List<AssetIndex.Ref> references(Node root, String namespace) {
+                        return List.of();
+                    }
+                },
                 new Kvt(LOOK, "looks") {
                     @Override
                     List<AssetIndex.Ref> references(Node root, String namespace) {
                         final List<AssetIndex.Ref> refs = new ArrayList<>();
+                        // As the game reads it: no model is the default; a fluid's shape is
+                        // made in code, so it names none
                         final String model = text(root, "model");
-                        refs.add(
-                                AssetIndex.Ref.id(
-                                        EditorTypes.MODEL,
-                                        EditorTypes.MODEL,
-                                        model == null || BlockContent.FLUID.equals(model)
-                                                ? BlockContent.DEFAULT_MODEL
-                                                : model));
+                        if (!BlockContent.FLUID.equals(model)) {
+                            refs.add(
+                                    AssetIndex.Ref.id(
+                                            EditorTypes.MODEL,
+                                            EditorTypes.MODEL,
+                                            model == null ? BlockContent.DEFAULT_MODEL : model));
+                        }
                         final String texture = text(root, "texture");
                         if (texture != null) {
                             refs.add(

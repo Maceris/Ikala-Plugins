@@ -46,8 +46,11 @@ public final class AssetIndex {
     /** The type of files no registered type matches. */
     public static final String FILE = "file";
 
-    /** The cache file's format. */
-    private static final int FORMAT = 1;
+    /**
+     * The cache file's format, raised when the types read files differently, so every file is read
+     * again.
+     */
+    private static final int FORMAT = 2;
 
     /** Folders never indexed. */
     private static final Set<String> SKIPPED = Set.of(".git", ".gradle", "build", "out");

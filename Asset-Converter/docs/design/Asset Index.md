@@ -22,9 +22,11 @@ read, so saved state read then is always empty.
 An `AssetType` matches files, says where IDs of it live (`kind()` and `extensions()`), and reads a file's references.
 `EditorTypes` are the editor's own: textures, models and render materials, the sources that make them
 (`.material.yml`, model files), texture graphs and instances, shared parameter files and images. `GameTypes` read the
-game's content through Factory-Core, and are registered only while it is loaded: looks, blocks (their game material,
+game's content through Factory-Core, and are registered only while it is loaded: water looks (`looks/water`, a
+biome's water optics, naming nothing), block looks (their model as the game reads it, `cube_all` when none is named
+and none for a fluid, whose shape is made in code; their texture and render material), blocks (their game material,
 and the look of the same ID), game materials (their parent) and every other content file. The first type matching
-a file wins; files none matches are of type `file`.
+a file wins, so water looks come before block looks; files none matches are of type `file`.
 
 A reference is by ID, resolved through the content roots as `ContentFolders.find` does (last root first, its own
 files or its `overrides/<ns>/`); by path, as a graph names its subgraphs, shared files and images; or a file a source
@@ -64,10 +66,24 @@ when first drawn, and a new search lets go of those no longer shown.
 Materials, models and looks are rendered (`ThumbnailStudio`): a second `SceneView`, never drawn in a panel, at the
 thumbnail's size, supersampled and without the debug outline, shows one file at a time from a queue (the newest asked
 first, a tile scrolled away dropping its request) and captures it into the same cache once its textures are in. A
-thumbnail frames its subject, not the floor around it. A model stands on its floor and a look is its block. A render
+thumbnail frames its subject, not the floor around it: a material's ball fills the square, and anything else is
+framed whole, by its bounding sphere, so a box's corners aren't cut off. A model stands on its floor and a look is its
+block. A render
 material holds only how a surface reflects, its color coming from the texture a look pairs it with, so it is shown on
 the sphere, untextured, in the average color of the texture of a look that uses it (found in the index): averaged in
 linear light without cut-out pixels, opaque, and given as sRGB, as base colors are. A texture laid out for a block's
 faces looks wrong wrapped on a ball; the average is a quick reference to the color instead. One no look uses is
-shown plain. A render
-that fails isn't asked for again until its key changes.
+shown plain. A render that fails isn't asked for again until its key changes.
+
+## The References panel
+
+The References panel (`ReferenceViewer`) answers "what uses this" and "what does this use" for one file at a time,
+picked with Show references on a tile's menu or in an open file's properties. It is a read-only graph in the graph
+editor: the file in the middle, what uses it on the left, what it uses on the right, each a node with its thumbnail.
+The middle node has a pin per reference, named by what the reference is (`model`, `texture`, `material`, numbered when
+one repeats), as an input takes one link; the other nodes' pin says what kind of file they are. Users are sorted by
+type, so looks sit together, and a side longer than 8 wraps into more columns, out from the middle; past 40 a side,
+the toolbar counts the rest. A click on a node puts its file in the middle, Back returns to the one before, and Open
+opens the middle file in the workbench. A missing reference is a red node titled with the name that failed to
+resolve. A file several folders provide says in a bubble which it overrides, or which overrides it. The graph is
+rebuilt when the index changes, and framed to fit the panel when a file is shown or the panel changes size.

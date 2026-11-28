@@ -9,6 +9,7 @@ import com.ikalagaming.converter.workbench.Comparison;
 import com.ikalagaming.converter.workbench.ContainerViewer;
 import com.ikalagaming.converter.workbench.GraphTool;
 import com.ikalagaming.converter.workbench.PreviewHost;
+import com.ikalagaming.converter.workbench.ReferenceViewer;
 import com.ikalagaming.converter.workbench.SceneView;
 import com.ikalagaming.converter.workbench.Swatch;
 import com.ikalagaming.converter.workbench.TextureViewer;
@@ -989,6 +990,148 @@ public final class ConverterScripts {
     }
 
     /**
+     * Drive the workbench's References panel, logging "Script: References ..." with what it shows:
+     * "show path" (a file in the middle, the panel in front), "select title" (a node, as a click
+     * would, so its file becomes the middle), "back", "log label" (the middle, its users and uses,
+     * missing names and bubbles), "grep" (whether the looks using the middle are the looks whose
+     * text names its ID).
+     *
+     * @param command The command and its words, separated by spaces; a name or path is the rest.
+     */
+    public static void references(String command) {
+        onWorkbench(
+                workbench -> {
+                    workbench.getAssets().start();
+                    final ReferenceViewer viewer = workbench.getReferenceViewer();
+                    final String[] words = command.trim().split("\\s+");
+                    final String rest = rest(words, 1);
+                    switch (words[0]) {
+                        case "show" -> workbench.showReferences(Path.of(rest));
+                        case "select" ->
+                                log.info(
+                                        "Script: References selected {} {}",
+                                        rest,
+                                        viewer.selectTitled(rest));
+                        case "back" -> viewer.goBack();
+                        case "log" -> logReferences(viewer, rest);
+                        case "grep" -> grepLooks(workbench, viewer);
+                        default -> log.warn("Script: no references command {}", words[0]);
+                    }
+                });
+    }
+
+    /**
+     * Log what the References panel shows.
+     *
+     * @param viewer The panel.
+     * @param label What to call this point in the log.
+     */
+    private static void logReferences(ReferenceViewer viewer, String label) {
+        final ReferenceViewer.Around around = viewer.getAround();
+        final ReferenceViewer.Built built = viewer.getBuilt();
+        if (around == null || built == null) {
+            log.info("Script: References {} shows nothing", label);
+            return;
+        }
+        final java.util.List<String> comments = new java.util.ArrayList<>();
+        for (var node : built.graph().nodes()) {
+            if (node.getComment() != null) {
+                comments.add(node.getComment());
+            }
+        }
+        log.info(
+                "Script: References {} of {}: used by {}, uses {}, missing {}, bubbles {}, canvas"
+                        + " {}",
+                label,
+                around.center().getFileName(),
+                names(around.users()),
+                names(around.uses()),
+                built.errors().values(),
+                comments,
+                rectText(viewer.getEditor().getCanvas().getRect()));
+    }
+
+    /**
+     * A rectangle as text, its corners in pixels.
+     *
+     * @param rect The rectangle.
+     * @return The text.
+     */
+    private static String rectText(com.ikalagaming.graphics.gui.util.RectFloat rect) {
+        return String.format(
+                java.util.Locale.ROOT,
+                "(%.0f, %.0f)-(%.0f, %.0f)",
+                rect.getLeft(),
+                rect.getTop(),
+                rect.getRight(),
+                rect.getBottom());
+    }
+
+    /**
+     * The names of the files beside the middle, or what a missing one names.
+     *
+     * @param sides The files.
+     * @return The names.
+     */
+    private static java.util.List<String> names(java.util.List<ReferenceViewer.Side> sides) {
+        return sides.stream()
+                .map(
+                        side ->
+                                side.file() == null
+                                        ? side.name()
+                                        : side.file().getFileName().toString())
+                .toList();
+    }
+
+    /**
+     * Log whether the looks shown using the middle file are the looks, under the asset roots, whose
+     * text names its ID: a search of the looks, as by hand.
+     *
+     * @param workbench The workbench.
+     * @param viewer The References panel.
+     */
+    private static void grepLooks(Workbench workbench, ReferenceViewer viewer) {
+        final ReferenceViewer.Around around = viewer.getAround();
+        final var snapshot = workbench.getAssets().getSnapshot();
+        final var entry = around == null ? null : snapshot.entry(around.center());
+        if (entry == null || entry.id() == null) {
+            log.info("Script: References grep has no ID to search for");
+            return;
+        }
+        final java.util.Set<Path> grep = new java.util.TreeSet<>();
+        for (var other : snapshot.entries()) {
+            if (!other.file().toString().endsWith(".kvt")
+                    || !other.file().toString().replace('\\', '/').contains("/looks/")) {
+                continue;
+            }
+            try {
+                final String text = java.nio.file.Files.readString(other.file());
+                if (text.contains("\"" + entry.id() + "\"")
+                        || text.contains("\"" + entry.id() + "#")) {
+                    grep.add(other.file());
+                }
+            } catch (java.io.IOException e) {
+                log.warn("Script: References grep can't read {}", other.file());
+            }
+        }
+        final java.util.Set<Path> shown = new java.util.TreeSet<>();
+        for (ReferenceViewer.Side side : around.users()) {
+            if (side.file() != null && grep.contains(side.file())) {
+                shown.add(side.file());
+            } else if (side.file() != null
+                    && side.file().toString().replace('\\', '/').contains("/looks/")) {
+                shown.add(side.file());
+            }
+        }
+        log.info(
+                "Script: References grep of {}: {} looks name it, {} shown, same {}",
+                entry.id(),
+                grep.size(),
+                shown.size(),
+                grep.equals(shown));
+    }
+
+    /**
      * A shown file with a name.
      *
      * @param assets The Assets panel.
@@ -1024,6 +1167,18 @@ public final class ConverterScripts {
      */
     public static void index(String command, String folder, String name) {
         index(command + " " + Path.of(folder, name));
+    }
+
+    /**
+     * Drive the workbench's References panel with a file in a folder, as {@link
+     * #references(String)} does with the command and the file's path.
+     *
+     * @param command The command.
+     * @param folder The folder.
+     * @param name The file's path in it.
+     */
+    public static void references(String command, String folder, String name) {
+        references(command + " " + Path.of(folder, name));
     }
 
     /**
